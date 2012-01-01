@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>ExifReader Example</title>
+    <script src="../../js/ExifReader.js"></script>
+    <script src="main.js"></script>
+  </head>
+  <body>
+    <form>
+      <label for="file">
+        Choose a file from your computer:<br />
+        <input type="file" id="file" name="file" />
+      </label>
+    </form>
+    <table style="margin-top: 12px;">
+      <thead>
+        <tr>
+          <th>Tag name</th>
+          <th>Tag value</th>
+        </tr>
+      </thead>
+      <tbody id="exif-table-body">
+      </tbody>
+    </table>
+  </body>
+</html>
