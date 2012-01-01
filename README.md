@@ -40,5 +40,5 @@ Issues
 Changelog
 ---------
 
-* **January ?, 2012**:
+* **January 1, 2012**:
   * First release.
