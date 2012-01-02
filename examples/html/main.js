@@ -1,6 +1,6 @@
 (function () {
 	// Check that the browser supports the FileReader API.
-	if (typeof FileReader === 'undefined') {
+	if (!window.FileReader) {
 		document.write('<strong>Sorry, your web browser does not support the FileReader API.</strong>');
 		return;
 	}
