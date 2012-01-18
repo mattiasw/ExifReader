@@ -59,7 +59,7 @@ fs.readFile(path, function (err, data) {
 		// Output the tags.
 		var tags = exif.getAllTags();
 		for (name in tags)
-			console.log(name + ': ' + tags[name]);
+			console.log(name + ': ' + tags[name].description);
 	}
 	catch (error) {
 		console.log(error);

@@ -88,21 +88,21 @@
     ExifReader.prototype._readExifIfd = function() {
       var ifdOffset;
       if (this._tags['Exif IFD Pointer'] != null) {
-        ifdOffset = this._tiffHeaderOffset + this._tags['Exif IFD Pointer'];
+        ifdOffset = this._tiffHeaderOffset + this._tags['Exif IFD Pointer'].value;
         return this._readIfd('exif', ifdOffset);
       }
     };
     ExifReader.prototype._readGpsIfd = function() {
       var ifdOffset;
       if (this._tags['GPS Info IFD Pointer'] != null) {
-        ifdOffset = this._tiffHeaderOffset + this._tags['GPS Info IFD Pointer'];
+        ifdOffset = this._tiffHeaderOffset + this._tags['GPS Info IFD Pointer'].value;
         return this._readIfd('gps', ifdOffset);
       }
     };
     ExifReader.prototype._readInteroperabilityIfd = function() {
       var ifdOffset;
       if (this._tags['Interoperability IFD Pointer'] != null) {
-        ifdOffset = this._tiffHeaderOffset + this._tags['Interoperability IFD Pointer'];
+        ifdOffset = this._tiffHeaderOffset + this._tags['Interoperability IFD Pointer'].value;
         return this._readIfd('interoperability', ifdOffset);
       }
     };
@@ -113,13 +113,16 @@
       _results = [];
       for (fieldIndex = 0; 0 <= numberOfFields ? fieldIndex < numberOfFields : fieldIndex > numberOfFields; 0 <= numberOfFields ? fieldIndex++ : fieldIndex--) {
         tag = this._readTag(ifdType, offset);
-        this._tags[tag.name] = tag.value;
+        this._tags[tag.name] = {
+          'value': tag.value,
+          'description': tag.description
+        };
         _results.push(offset += 12);
       }
       return _results;
     };
     ExifReader.prototype._readTag = function(ifdType, offset) {
-      var tagCode, tagCount, tagType, tagValue, tagValueOffset;
+      var tagCode, tagCount, tagDescription, tagName, tagType, tagValue, tagValueOffset;
       tagCode = this._getShortAt(offset);
       tagType = this._getShortAt(offset + 2);
       tagCount = this._getLongAt(offset + 4);
@@ -129,15 +132,31 @@
         tagValueOffset = this._getLongAt(offset + 8);
         tagValue = this._getTagValue(this._tiffHeaderOffset + tagValueOffset, tagType, tagCount);
       }
+      if (tagType === this._tagTypes['ASCII']) {
+        tagValue = this._splitNullSeparatedAsciiString(tagValue);
+      }
       if (this._tagNames[ifdType][tagCode] != null) {
+        if ((this._tagNames[ifdType][tagCode]['name'] != null) && (this._tagNames[ifdType][tagCode]['description'] != null)) {
+          tagName = this._tagNames[ifdType][tagCode]['name'];
+          tagDescription = this._tagNames[ifdType][tagCode]['description'](tagValue);
+        } else {
+          tagName = this._tagNames[ifdType][tagCode];
+          if (tagValue instanceof Array) {
+            tagDescription = tagValue.join(', ');
+          } else {
+            tagDescription = tagValue;
+          }
+        }
         return {
-          'name': this._tagNames[ifdType][tagCode],
-          'value': tagValue
+          'name': tagName,
+          'value': tagValue,
+          'description': tagDescription
         };
       } else {
         return {
           'name': "undefined-" + tagCode,
-          'value': tagValue
+          'value': tagValue,
+          'description': tagValue
         };
       }
     };
@@ -162,19 +181,15 @@
     };
     ExifReader.prototype._getAsciiValue = function(charArray) {
       var char, newCharArray;
-      newCharArray = (function() {
+      return newCharArray = (function() {
         var _i, _len, _results;
         _results = [];
         for (_i = 0, _len = charArray.length; _i < _len; _i++) {
           char = charArray[_i];
-          if (char === 0x00) {
-            break;
-          }
           _results.push(String.fromCharCode(char));
         }
         return _results;
       })();
-      return newCharArray.join('');
     };
     ExifReader.prototype._getByteAt = function(offset) {
       return this._dataView.getUint8(offset);
@@ -199,6 +214,23 @@
     };
     ExifReader.prototype._getSrationalAt = function(offset) {
       return this._getSlongAt(offset) / this._getSlongAt(offset + 4);
+    };
+    ExifReader.prototype._splitNullSeparatedAsciiString = function(string) {
+      var char, i, tagValue, _i, _len;
+      tagValue = [];
+      i = 0;
+      for (_i = 0, _len = string.length; _i < _len; _i++) {
+        char = string[_i];
+        if (char === '\x00') {
+          i++;
+          continue;
+        }
+        if (!(tagValue[i] != null)) {
+          tagValue[i] = '';
+        }
+        tagValue[i] += char;
+      }
+      return tagValue;
     };
     ExifReader.prototype._typeSizes = {
       1: 1,
@@ -231,14 +263,50 @@
         0x010f: 'Make',
         0x0110: 'Model',
         0x0111: 'StripOffsets',
-        0x0112: 'Orientation',
+        0x0112: {
+          'name': 'Orientation',
+          'description': function(value) {
+            switch (value) {
+              case 1:
+                return 'top-left';
+              case 2:
+                return 'top-right';
+              case 3:
+                return 'bottom-right';
+              case 4:
+                return 'bottom-left';
+              case 5:
+                return 'left-top';
+              case 6:
+                return 'right-top';
+              case 7:
+                return 'right-bottom';
+              case 8:
+                return 'left-bottom';
+              default:
+                return 'Undefined';
+            }
+          }
+        },
         0x0115: 'SamplesPerPixel',
         0x0116: 'RowsPerStrip',
         0x0117: 'StripByteCounts',
         0x011a: 'XResolution',
         0x011b: 'YResolution',
         0x011c: 'PlanarConfiguration',
-        0x0128: 'ResolutionUnit',
+        0x0128: {
+          'name': 'ResolutionUnit',
+          'description': function(value) {
+            switch (value) {
+              case 2:
+                return 'inches';
+              case 3:
+                return 'centimeters';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0x012d: 'TransferFunction',
         0x0131: 'Software',
         0x0132: 'DateTime',
@@ -249,23 +317,111 @@
         0x0202: 'JPEGInterchangeFormatLength',
         0x0211: 'YCbCrCoefficients',
         0x0212: 'YCbCrSubSampling',
-        0x0213: 'YCbCrPositioning',
+        0x0213: {
+          'name': 'YCbCrPositioning',
+          'description': function(value) {
+            switch (value) {
+              case 1:
+                return 'centered';
+              case 2:
+                return 'co-sited';
+              default:
+                return 'undefied ' + value;
+            }
+          }
+        },
         0x0214: 'ReferenceBlackWhite',
-        0x8298: 'Copyright',
+        0x8298: {
+          'name': 'Copyright',
+          'description': function(value) {
+            return value.join('; ');
+          }
+        },
         0x8769: 'Exif IFD Pointer',
         0x8825: 'GPS Info IFD Pointer'
       },
       'exif': {
         0x829a: 'ExposureTime',
         0x829d: 'FNumber',
-        0x8822: 'ExposureProgram',
+        0x8822: {
+          'name': 'ExposureProgram',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Undefined';
+              case 1:
+                return 'Manual';
+              case 2:
+                return 'Normal program';
+              case 3:
+                return 'Aperture priority';
+              case 4:
+                return 'Shutter priority';
+              case 5:
+                return 'Creative program';
+              case 6:
+                return 'Action program';
+              case 7:
+                return 'Portrait mode';
+              case 8:
+                return 'Landscape mode';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0x8824: 'SpectralSensitivity',
         0x8827: 'ISOSpeedRatings',
-        0x8828: 'OECF',
-        0x9000: 'ExifVersion',
+        0x8828: {
+          'name': 'OECF',
+          'description': function(value) {
+            return '[Raw OECF table data]';
+          }
+        },
+        0x9000: {
+          'name': 'ExifVersion',
+          'description': function(value) {
+            var char, string, _i, _len;
+            string = '';
+            for (_i = 0, _len = value.length; _i < _len; _i++) {
+              char = value[_i];
+              string += String.fromCharCode(char);
+            }
+            return string;
+          }
+        },
         0x9003: 'DateTimeOriginal',
         0x9004: 'DateTimeDigitized',
-        0x9101: 'ComponentsConfiguration',
+        0x9101: {
+          'name': 'ComponentsConfiguration',
+          'description': function(value) {
+            var char, string, _i, _len;
+            string = '';
+            for (_i = 0, _len = value.length; _i < _len; _i++) {
+              char = value[_i];
+              switch (char) {
+                case 0x31:
+                  string += 'Y';
+                  break;
+                case 0x32:
+                  string += 'Cb';
+                  break;
+                case 0x33:
+                  string += 'Cr';
+                  break;
+                case 0x34:
+                  string += 'R';
+                  break;
+                case 0x35:
+                  string += 'G';
+                  break;
+                case 0x36:
+                  string += 'B';
+              }
+            }
+            return string;
+          }
+        },
         0x9102: 'CompressedBitsPerPixel',
         0x9201: 'ShutterSpeedValue',
         0x9202: 'ApertureValue',
@@ -273,45 +429,452 @@
         0x9204: 'ExposureBiasValue',
         0x9205: 'MaxApertureValue',
         0x9206: 'SubjectDistance',
-        0x9207: 'MeteringMode',
-        0x9208: 'LightSource',
-        0x9209: 'Flash',
+        0x9207: {
+          'name': 'MeteringMode',
+          'description': function(value) {
+            switch (value) {
+              case 1:
+                return 'Average';
+              case 2:
+                return 'CenterWeightedAverage';
+              case 3:
+                return 'Spot';
+              case 4:
+                return 'MultiSpot';
+              case 5:
+                return 'Pattern';
+              case 6:
+                return 'Partial';
+              case 255:
+                return 'Other';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x9208: {
+          'name': 'LightSource',
+          'description': function(value) {
+            switch (value) {
+              case 1:
+                return 'Daylight';
+              case 2:
+                return 'Fluorescent';
+              case 3:
+                return 'Tungsten (incandescent light)';
+              case 4:
+                return 'Flash';
+              case 9:
+                return 'Fine weather';
+              case 10:
+                return 'Cloudy weather';
+              case 11:
+                return 'Shade';
+              case 12:
+                return 'Daylight fluorescent (D 5700 – 7100K)';
+              case 13:
+                return 'Day white fluorescent (N 4600 – 5400K)';
+              case 14:
+                return 'Cool white fluorescent (W 3900 – 4500K)';
+              case 15:
+                return 'White fluorescent (WW 3200 – 3700K)';
+              case 17:
+                return 'Standard light A';
+              case 18:
+                return 'Standard light B';
+              case 19:
+                return 'Standard light C';
+              case 20:
+                return 'D55';
+              case 21:
+                return 'D65';
+              case 22:
+                return 'D75';
+              case 23:
+                return 'D50';
+              case 24:
+                return 'ISO studio tungsten';
+              case 255:
+                return 'Other light source';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x9209: {
+          'name': 'Flash',
+          'description': function(value) {
+            switch (value) {
+              case 0x00:
+                return 'Flash did not fire';
+              case 0x01:
+                return 'Flash fired';
+              case 0x05:
+                return 'Strobe return light not detected';
+              case 0x07:
+                return 'Strobe return light detected';
+              case 0x09:
+                return 'Flash fired, compulsory flash mode';
+              case 0x0d:
+                return 'Flash fired, compulsory flash mode, return light not detected';
+              case 0x0f:
+                return 'Flash fired, compulsory flash mode, return light detected';
+              case 0x10:
+                return 'Flash did not fire, compulsory flash mode';
+              case 0x18:
+                return 'Flash did not fire, auto mode';
+              case 0x19:
+                return 'Flash fired, auto mode';
+              case 0x1d:
+                return 'Flash fired, auto mode, return light not detected';
+              case 0x1f:
+                return 'Flash fired, auto mode, return light detected';
+              case 0x20:
+                return 'No flash function';
+              case 0x41:
+                return 'Flash fired, red-eye reduction mode';
+              case 0x45:
+                return 'Flash fired, red-eye reduction mode, return light not detected';
+              case 0x47:
+                return 'Flash fired, red-eye reduction mode, return light detected';
+              case 0x49:
+                return 'Flash fired, compulsory flash mode, red-eye reduction mode';
+              case 0x4d:
+                return 'Flash fired, compulsory flash mode, red-eye reduction mode, return light not detected';
+              case 0x4f:
+                return 'Flash fired, compulsory flash mode, red-eye reduction mode, return light detected';
+              case 0x59:
+                return 'Flash fired, auto mode, red-eye reduction mode';
+              case 0x5d:
+                return 'Flash fired, auto mode, return light not detected, red-eye reduction mode';
+              case 0x5f:
+                return 'Flash fired, auto mode, return light detected, red-eye reduction mode';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0x920a: 'FocalLength',
-        0x9214: 'SubjectArea',
-        0x927c: 'MakerNote',
-        0x9286: 'UserComment',
+        0x9214: {
+          'name': 'SubjectArea',
+          'description': function(value) {
+            switch (value.length) {
+              case 2:
+                return "Location; X: " + value[0] + ", Y: " + value[1];
+                break;
+              case 3:
+                return "Circle; X: " + value[0] + ", Y: " + value[1] + ", diameter: " + value[2];
+                break;
+              case 4:
+                return "Rectangle; X: " + value[0] + ", Y: " + value[1] + ", width: " + value[2] + ", height: " + value[3];
+                break;
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x927c: {
+          'name': 'MakerNote',
+          'description': function(value) {
+            return '[Raw maker note data]';
+          }
+        },
+        0x9286: {
+          'name': 'UserComment',
+          'description': function(value) {
+            switch (value.slice(0, 8).map(function(byte) {
+                  return String.fromCharCode(byte);
+                }).join('')) {
+              case 'ASCII\x00\x00\x00':
+                return value.slice(8, value.length).map(function(byte) {
+                  return String.fromCharCode(byte);
+                }).join('');
+              case 'JIS\x00\x00\x00\x00\x00':
+                return 'JIS encoded text';
+              case 'UNICODE\x00':
+                return 'Unicode encoded text';
+              case '\x00\x00\x00\x00\x00\x00\x00\x00':
+                return 'Undefined encoding';
+            }
+          }
+        },
         0x9290: 'SubSecTime',
         0x9291: 'SubSecTimeOriginal',
         0x9292: 'SubSecTimeDigitized',
-        0xa000: 'FlashpixVersion',
-        0xa001: 'ColorSpace',
+        0xa000: {
+          'name': 'FlashpixVersion',
+          'description': function(value) {
+            var char, string, _i, _len;
+            string = '';
+            for (_i = 0, _len = value.length; _i < _len; _i++) {
+              char = value[_i];
+              string += String.fromCharCode(char);
+            }
+            return string;
+          }
+        },
+        0xa001: {
+          'name': 'ColorSpace',
+          'description': function(value) {
+            switch (value) {
+              case 1:
+                return 'sRGB';
+              case 0xffff:
+                return 'Uncalibrated';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0xa002: 'PixelXDimension',
         0xa003: 'PixelYDimension',
         0xa004: 'RelatedSoundFile',
         0xa005: 'Interoperability IFD Pointer',
         0xa20b: 'FlashEnergy',
-        0xa20c: 'SpatialFrequencyResponse',
+        0xa20c: {
+          'name': 'SpatialFrequencyResponse',
+          'description': function(value) {
+            return '[Raw SFR table data]';
+          }
+        },
         0xa20e: 'FocalPlaneXResolution',
         0xa20f: 'FocalPlaneYResolution',
-        0xa210: 'FocalPlaneResolutionUnit',
-        0xa214: 'SubjectLocation',
+        0xa210: {
+          'name': 'FocalPlaneResolutionUnit',
+          'description': function(value) {
+            switch (value) {
+              case 2:
+                return 'inches';
+              case 3:
+                return 'centimeters';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa214: {
+          'name': 'SubjectLocation',
+          'description': function(value) {
+            return "X: " + value[0] + ", Y: " + value[1];
+          }
+        },
         0xa215: 'ExposureIndex',
-        0xa217: 'SensingMethod',
-        0xa300: 'FileSource',
-        0xa301: 'SceneType',
-        0xa302: 'CFAPattern',
-        0xa401: 'CustomRendered',
-        0xa402: 'ExposureMode',
-        0xa403: 'WhiteBalance',
-        0xa404: 'DigitalZoomRatio',
-        0xa405: 'FocalLengthIn35mmFilm',
-        0xa406: 'SceneCaptureType',
-        0xa407: 'GainControl',
-        0xa408: 'Contrast',
-        0xa409: 'Saturation',
-        0xa40a: 'Sharpness',
-        0xa40b: 'DeviceSettingDescription',
-        0xa40c: 'SubjectDistanceRange',
+        0xa217: {
+          'name': 'SensingMethod',
+          'description': function(value) {
+            switch (value) {
+              case 1:
+                return 'Undefined';
+              case 2:
+                return 'One-chip color area sensor';
+              case 3:
+                return 'Two-chip color area sensor';
+              case 4:
+                return 'Three-chip color area sensor';
+              case 5:
+                return 'Color sequential area sensor';
+              case 7:
+                return 'Trilinear sensor';
+              case 8:
+                return 'Color sequential linear sensor';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa300: {
+          'name': 'FileSource',
+          'description': function(value) {
+            switch (value) {
+              case 3:
+                return 'DSC';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa301: {
+          'name': 'SceneType',
+          'description': function(value) {
+            switch (value) {
+              case 1:
+                return 'A directly photographed image';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa302: {
+          'name': 'CFAPattern',
+          'description': function(value) {
+            return '[Raw CFA pattern table data]';
+          }
+        },
+        0xa401: {
+          'name': 'CustomRendered',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Normal process';
+              case 1:
+                return 'Custom process';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa402: {
+          'name': 'ExposureMode',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Auto exposure';
+              case 1:
+                return 'Manual exposure';
+              case 2:
+                return 'Auto bracket';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa403: {
+          'name': 'WhiteBalance',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Auto white balance';
+              case 1:
+                return 'Manual white balance';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa404: {
+          'name': 'DigitalZoomRatio',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Digital zoom was not used';
+              default:
+                return value;
+            }
+          }
+        },
+        0xa405: {
+          'name': 'FocalLengthIn35mmFilm',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Unknown';
+              default:
+                return value;
+            }
+          }
+        },
+        0xa406: {
+          'name': 'SceneCaptureType',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Standard';
+              case 1:
+                return 'Landscape';
+              case 2:
+                return 'Portrait';
+              case 3:
+                return 'Night scene';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa407: {
+          'name': 'GainControl',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'None';
+              case 1:
+                return 'Low gain up';
+              case 2:
+                return 'High gain up';
+              case 3:
+                return 'Low gain down';
+              case 4:
+                return 'High gain down';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa408: {
+          'name': 'Contrast',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Normal';
+              case 1:
+                return 'Soft';
+              case 2:
+                return 'Hard';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa409: {
+          'name': 'Saturation',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Normal';
+              case 1:
+                return 'Low saturation';
+              case 2:
+                return 'High saturation';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa40a: {
+          'name': 'Sharpness',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Normal';
+              case 1:
+                return 'Soft';
+              case 2:
+                return 'Hard';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0xa40b: {
+          'name': 'DeviceSettingDescription',
+          'description': function(value) {
+            return '[Raw device settings table data]';
+          }
+        },
+        0xa40c: {
+          'name': 'SubjectDistanceRange',
+          'description': function(value) {
+            switch (value) {
+              case 1:
+                return 'Macro';
+              case 2:
+                return 'Close view';
+              case 3:
+                return 'Distant view';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0xa420: 'ImageUniqueID'
       },
       'gps': {
@@ -359,12 +922,27 @@
       #
       # name string The name of the tag to get the value of
       #
+      # Returns the value of the tag with the given name if it exists,
+      # otherwise throws "Undefined".
+      */
+    ExifReader.prototype.getTagValue = function(name) {
+      if (this._tags[name] != null) {
+        return this._tags[name].value;
+      } else {
+        throw 'Undefined';
+      }
+    };
+    /*
+      # Gets the image's description of the tag with the given name.
+      #
+      # name string The name of the tag to get the description of
+      #
       # Returns the description of the tag with the given name if it exists,
       # otherwise throws "Undefined".
       */
     ExifReader.prototype.getTagDescription = function(name) {
       if (this._tags[name] != null) {
-        return this._tags[name];
+        return this._tags[name].description;
       } else {
         throw 'Undefined';
       }

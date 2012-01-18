@@ -20,9 +20,8 @@
 				var tags = exif.getAllTags();
 				var tableBody = document.getElementById('exif-table-body');
 				for (var name in tags) {
-					var tag = {'name': name, 'description': tags[name]};
 					var row = document.createElement('tr');
-					row.innerHTML = '<td>' + tag.name + '</td><td>' + tag.description + '</td>';
+					row.innerHTML = '<td>' + name + '</td><td>' + tags[name].description + '</td>';
 					tableBody.appendChild(row);
 				}
 			}
