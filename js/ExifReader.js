@@ -590,11 +590,11 @@
                   return String.fromCharCode(byte);
                 }).join('');
               case 'JIS\x00\x00\x00\x00\x00':
-                return 'JIS encoded text';
+                return '[JIS encoded text]';
               case 'UNICODE\x00':
-                return 'Unicode encoded text';
+                return '[Unicode encoded text]';
               case '\x00\x00\x00\x00\x00\x00\x00\x00':
-                return 'Undefined encoding';
+                return '[Undefined encoding]';
             }
           }
         },
@@ -878,37 +878,285 @@
         0xa420: 'ImageUniqueID'
       },
       'gps': {
-        0x0000: 'GPSVersionID',
-        0x0001: 'GPSLatitudeRef',
-        0x0002: 'GPSLatitude',
-        0x0003: 'GPSLongitudeRef',
-        0x0004: 'GPSLongitude',
-        0x0005: 'GPSAltitudeRef',
-        0x0006: 'GPSAltitude',
-        0x0007: 'GPSTimeStamp',
+        0x0000: {
+          'name': 'GPSVersionID',
+          'description': function(value) {
+            var _ref, _ref2;
+            if ((value[0] === (_ref = value[1]) && _ref === 2) && (value[2] === (_ref2 = value[3]) && _ref2 === 0)) {
+              return 'Version 2.2';
+            } else {
+              return 'Unknown';
+            }
+          }
+        },
+        0x0001: {
+          'name': 'GPSLatitudeRef',
+          'description': function(value) {
+            switch (value.join('')) {
+              case 'N':
+                return 'North latitude';
+              case 'S':
+                return 'South latitude';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x0002: {
+          'name': 'GPSLatitude',
+          'description': function(value) {
+            return value[0] + value[1] / 60 + value[2] / 3600;
+          }
+        },
+        0x0003: {
+          'name': 'GPSLongitudeRef',
+          'description': function(value) {
+            switch (value.join('')) {
+              case 'E':
+                return 'East longitude';
+              case 'W':
+                return 'West longitude';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x0004: {
+          'name': 'GPSLongitude',
+          'description': function(value) {
+            return value[0] + value[1] / 60 + value[2] / 3600;
+          }
+        },
+        0x0005: {
+          'name': 'GPSAltitudeRef',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Sea level';
+              case 1:
+                return 'Sea level reference (negative value)';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x0006: {
+          'name': 'GPSAltitude',
+          'description': function(value) {
+            return value + ' m';
+          }
+        },
+        0x0007: {
+          'name': 'GPSTimeStamp',
+          'description': function(value) {
+            var padZero;
+            padZero = function(num) {
+              var i;
+              return ((function() {
+                var _ref, _results;
+                _results = [];
+                for (i = 0, _ref = 2 - ('' + Math.floor(num)).length; 0 <= _ref ? i < _ref : i > _ref; 0 <= _ref ? i++ : i--) {
+                  _results.push('0');
+                }
+                return _results;
+              })()) + num;
+            };
+            return value.map(padZero).join(':');
+          }
+        },
         0x0008: 'GPSSatellites',
-        0x0009: 'GPSStatus',
-        0x000a: 'GPSMeasureMode',
+        0x0009: {
+          'name': 'GPSStatus',
+          'description': function(value) {
+            switch (value.join('')) {
+              case 'A':
+                return 'Measurement in progress';
+              case 'V':
+                return 'Measurement Interoperability';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x000a: {
+          'name': 'GPSMeasureMode',
+          'description': function(value) {
+            switch (value.join('')) {
+              case '2':
+                return '2-dimensional measurement';
+              case '3':
+                return '3-dimensional measurement';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0x000b: 'GPSDOP',
-        0x000c: 'GPSSpeedRef',
+        0x000c: {
+          'name': 'GPSSpeedRef',
+          'description': function(value) {
+            switch (value.join('')) {
+              case 'K':
+                return 'Kilometers per hour';
+              case 'M':
+                return 'Miles per hour';
+              case 'N':
+                return 'Knots';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0x000d: 'GPSSpeed',
-        0x000e: 'GPSTrackRef',
+        0x000e: {
+          'name': 'GPSTrackRef',
+          'description': function(value) {
+            switch (value.join('')) {
+              case 'T':
+                return 'True direction';
+              case 'M':
+                return 'Magnetic direction';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0x000f: 'GPSTrack',
-        0x0010: 'GPSImgDirectionRef',
+        0x0010: {
+          'name': 'GPSImgDirectionRef',
+          'description': function(value) {
+            switch (value.join('')) {
+              case 'T':
+                return 'True direction';
+              case 'M':
+                return 'Magnetic direction';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0x0011: 'GPSImgDirection',
         0x0012: 'GPSMapDatum',
-        0x0013: 'GPSDestLatitudeRef',
-        0x0014: 'GPSDestLatitude',
-        0x0015: 'GPSDestLongitudeRef',
-        0x0016: 'GPSDestLongitude',
-        0x0017: 'GPSDestBearingRef',
+        0x0013: {
+          'name': 'GPSDestLatitudeRef',
+          'description': function(value) {
+            switch (value.join('')) {
+              case 'N':
+                return 'North latitude';
+              case 'S':
+                return 'South latitude';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x0014: {
+          'name': 'GPSDestLatitude',
+          'description': function(value) {
+            return value[0] + value[1] / 60 + value[2] / 3600;
+          }
+        },
+        0x0015: {
+          'name': 'GPSDestLongitudeRef',
+          'description': function(value) {
+            switch (value.join('')) {
+              case 'E':
+                return 'East longitude';
+              case 'W':
+                return 'West longitude';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x0016: {
+          'name': 'GPSDestLongitude',
+          'description': function(value) {
+            return value[0] + value[1] / 60 + value[2] / 3600;
+          }
+        },
+        0x0017: {
+          'name': 'GPSDestBearingRef',
+          'description': function(value) {
+            switch (value.join('')) {
+              case 'T':
+                return 'True direction';
+              case 'M':
+                return 'Magnetic direction';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0x0018: 'GPSDestBearing',
-        0x0019: 'GPSDestDistanceRef',
+        0x0019: {
+          'name': 'GPSDestDistanceRef',
+          'description': function(value) {
+            switch (value.join('')) {
+              case 'K':
+                return 'Kilometers';
+              case 'M':
+                return 'Miles';
+              case 'N':
+                return 'Knots';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
         0x001a: 'GPSDestDistance',
-        0x001b: 'GPSProcessingMethod',
-        0x001c: 'GPSAreaInformation',
+        0x001b: {
+          'name': 'GPSProcessingMethod',
+          'description': function(value) {
+            switch (value.slice(0, 8).map(function(byte) {
+                  return String.fromCharCode(byte);
+                }).join('')) {
+              case 'ASCII\x00\x00\x00':
+                return value.slice(8, value.length).map(function(byte) {
+                  return String.fromCharCode(byte);
+                }).join('');
+              case 'JIS\x00\x00\x00\x00\x00':
+                return '[JIS encoded text]';
+              case 'UNICODE\x00':
+                return '[Unicode encoded text]';
+              case '\x00\x00\x00\x00\x00\x00\x00\x00':
+                return '[Undefined encoding]';
+            }
+          }
+        },
+        0x001c: {
+          'name': 'GPSAreaInformation',
+          'description': function(value) {
+            switch (value.slice(0, 8).map(function(byte) {
+                  return String.fromCharCode(byte);
+                }).join('')) {
+              case 'ASCII\x00\x00\x00':
+                return value.slice(8, value.length).map(function(byte) {
+                  return String.fromCharCode(byte);
+                }).join('');
+              case 'JIS\x00\x00\x00\x00\x00':
+                return '[JIS encoded text]';
+              case 'UNICODE\x00':
+                return '[Unicode encoded text]';
+              case '\x00\x00\x00\x00\x00\x00\x00\x00':
+                return '[Undefined encoding]';
+            }
+          }
+        },
         0x001d: 'GPSDateStamp',
-        0x001e: 'GPSDifferential'
+        0x001e: {
+          'name': 'GPSDifferential',
+          'description': function(value) {
+            switch (value) {
+              case 0:
+                return 'Measurement without differential correction';
+              case 1:
+                return 'Differential correction applied';
+              default:
+                return 'Unknown';
+            }
+          }
+        }
       },
       'interoperability': {
         0x0001: 'InteroperabilityIndex',

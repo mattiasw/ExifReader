@@ -370,11 +370,11 @@ class (exports ? this).ExifReader
         '[Raw maker note data]'
       }
       0x9286: {'name': 'UserComment', 'description': (value) ->
-        switch value[0...8].map((byte) -> String.fromCharCode(byte)).join('')
-          when 'ASCII\x00\x00\x00' then value[8...value.length].map((byte) -> String.fromCharCode(byte)).join('')
-          when 'JIS\x00\x00\x00\x00\x00' then 'JIS encoded text'
-          when 'UNICODE\x00' then 'Unicode encoded text'
-          when '\x00\x00\x00\x00\x00\x00\x00\x00' then 'Undefined encoding'
+        switch value[0...8].map((byte) -> String.fromCharCode(byte)).join ''
+          when 'ASCII\x00\x00\x00' then value[8...value.length].map((byte) -> String.fromCharCode(byte)).join ''
+          when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
+          when 'UNICODE\x00' then '[Unicode encoded text]'
+          when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
       }
       0x9290: 'SubSecTime',
       0x9291: 'SubSecTimeOriginal',
@@ -515,37 +515,135 @@ class (exports ? this).ExifReader
       0xa420: 'ImageUniqueID'
     },
     'gps': {
-      0x0000: 'GPSVersionID',
-      0x0001: 'GPSLatitudeRef',
-      0x0002: 'GPSLatitude',
-      0x0003: 'GPSLongitudeRef',
-      0x0004: 'GPSLongitude',
-      0x0005: 'GPSAltitudeRef',
-      0x0006: 'GPSAltitude',
-      0x0007: 'GPSTimeStamp',
+      0x0000: {'name': 'GPSVersionID', 'description': (value) ->
+        if value[0] == value[1] == 2 and value[2] == value[3] == 0
+          'Version 2.2'
+        else
+          'Unknown'
+      }
+      0x0001: {'name': 'GPSLatitudeRef', 'description': (value) ->
+        switch value.join ''
+          when 'N' then 'North latitude'
+          when 'S' then 'South latitude'
+          else 'Unknown'
+      }
+      0x0002: {'name': 'GPSLatitude', 'description': (value) ->
+        value[0] + value[1] / 60 + value[2] / 3600
+      }
+      0x0003: {'name': 'GPSLongitudeRef', 'description': (value) ->
+        switch value.join ''
+          when 'E' then 'East longitude'
+          when 'W' then 'West longitude'
+          else 'Unknown'
+      }
+      0x0004: {'name': 'GPSLongitude', 'description': (value) ->
+        value[0] + value[1] / 60 + value[2] / 3600
+      }
+      0x0005: {'name': 'GPSAltitudeRef', 'description': (value) ->
+        switch value
+          when 0 then 'Sea level'
+          when 1 then 'Sea level reference (negative value)'
+          else 'Unknown'
+      }
+      0x0006: {'name': 'GPSAltitude', 'description': (value) ->
+        value + ' m'
+      }
+      0x0007: {'name': 'GPSTimeStamp', 'description': (value) ->
+        padZero = (num) ->
+          ('0' for i in [0...(2 - ('' + Math.floor(num)).length)]) + num
+        value.map(padZero).join ':'
+      }
       0x0008: 'GPSSatellites',
-      0x0009: 'GPSStatus',
-      0x000a: 'GPSMeasureMode',
+      0x0009: {'name': 'GPSStatus', 'description': (value) ->
+        switch value.join ''
+          when 'A' then 'Measurement in progress'
+          when 'V' then 'Measurement Interoperability'
+          else 'Unknown'
+      }
+      0x000a: {'name': 'GPSMeasureMode', 'description': (value) ->
+        switch value.join ''
+          when '2' then '2-dimensional measurement'
+          when '3' then '3-dimensional measurement'
+          else 'Unknown'
+      }
       0x000b: 'GPSDOP',
-      0x000c: 'GPSSpeedRef',
+      0x000c: {'name': 'GPSSpeedRef', 'description': (value) ->
+        switch value.join ''
+          when 'K' then 'Kilometers per hour'
+          when 'M' then 'Miles per hour'
+          when 'N' then 'Knots'
+          else 'Unknown'
+      }
       0x000d: 'GPSSpeed',
-      0x000e: 'GPSTrackRef',
+      0x000e: {'name': 'GPSTrackRef', 'description': (value) ->
+        switch value.join ''
+          when 'T' then 'True direction'
+          when 'M' then 'Magnetic direction'
+          else 'Unknown'
+      }
       0x000f: 'GPSTrack',
-      0x0010: 'GPSImgDirectionRef',
+      0x0010: {'name': 'GPSImgDirectionRef', 'description': (value) ->
+        switch value.join ''
+          when 'T' then 'True direction'
+          when 'M' then 'Magnetic direction'
+          else 'Unknown'
+      }
       0x0011: 'GPSImgDirection',
       0x0012: 'GPSMapDatum',
-      0x0013: 'GPSDestLatitudeRef',
-      0x0014: 'GPSDestLatitude',
-      0x0015: 'GPSDestLongitudeRef',
-      0x0016: 'GPSDestLongitude',
-      0x0017: 'GPSDestBearingRef',
+      0x0013: {'name': 'GPSDestLatitudeRef', 'description': (value) ->
+        switch value.join ''
+          when 'N' then 'North latitude'
+          when 'S' then 'South latitude'
+          else 'Unknown'
+      }
+      0x0014: {'name': 'GPSDestLatitude', 'description': (value) ->
+        value[0] + value[1] / 60 + value[2] / 3600
+      }
+      0x0015: {'name': 'GPSDestLongitudeRef', 'description': (value) ->
+        switch value.join ''
+          when 'E' then 'East longitude'
+          when 'W' then 'West longitude'
+          else 'Unknown'
+      }
+      0x0016: {'name': 'GPSDestLongitude', 'description': (value) ->
+        value[0] + value[1] / 60 + value[2] / 3600
+      }
+      0x0017: {'name': 'GPSDestBearingRef', 'description': (value) ->
+        switch value.join ''
+          when 'T' then 'True direction'
+          when 'M' then 'Magnetic direction'
+          else 'Unknown'
+      }
       0x0018: 'GPSDestBearing',
-      0x0019: 'GPSDestDistanceRef',
+      0x0019: {'name': 'GPSDestDistanceRef', 'description': (value) ->
+        switch value.join ''
+          when 'K' then 'Kilometers'
+          when 'M' then 'Miles'
+          when 'N' then 'Knots'
+          else 'Unknown'
+      }
       0x001a: 'GPSDestDistance',
-      0x001b: 'GPSProcessingMethod',
-      0x001c: 'GPSAreaInformation',
+      0x001b: {'name': 'GPSProcessingMethod', 'description': (value) ->
+        switch value[0...8].map((byte) -> String.fromCharCode(byte)).join ''
+          when 'ASCII\x00\x00\x00' then value[8...value.length].map((byte) -> String.fromCharCode(byte)).join ''
+          when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
+          when 'UNICODE\x00' then '[Unicode encoded text]'
+          when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
+      }
+      0x001c: {'name': 'GPSAreaInformation', 'description': (value) ->
+        switch value[0...8].map((byte) -> String.fromCharCode(byte)).join ''
+          when 'ASCII\x00\x00\x00' then value[8...value.length].map((byte) -> String.fromCharCode(byte)).join ''
+          when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
+          when 'UNICODE\x00' then '[Unicode encoded text]'
+          when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
+      }
       0x001d: 'GPSDateStamp',
-      0x001e: 'GPSDifferential'
+      0x001e: {'name': 'GPSDifferential', 'description': (value) ->
+        switch value
+          when 0 then 'Measurement without differential correction'
+          when 1 then 'Differential correction applied'
+          else 'Unknown'
+      }
     },
     'interoperability': {
       0x0001: 'InteroperabilityIndex'

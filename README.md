@@ -35,12 +35,12 @@ Testing is done with [jasmine-node](https://github.com/mhevery/jasmine-node/). U
 Issues
 ------
 
-* The description for UserComment is missing for other encodings than ASCII.
+* The descriptions for UserComment, GPSProcessingMethod and GPSAreaInformation are missing for other encodings than ASCII.
 
 Changelog
 ---------
 
-* **January ?, 2012**:
-  * Added descriptions for the tags.
+* **January 19, 2012**:
+  * Added text descriptions for the tags.
 * **January 1, 2012**:
   * First release.
