@@ -2,7 +2,7 @@ var ExifReader = require('../../js/ExifReader.js').ExifReader;
 var path = require('path');
 var fs = require('fs');
 
-// If you don't want to use a wrapper like jDataView, you can wrap Node.js's
+// If you don't want to use a wrapper like jDataView, you can wrap Node.js'
 // Buffer with the mandatory parts from the DataView interface.
 var DataView = (function() {
 	function DataView(_data) {
