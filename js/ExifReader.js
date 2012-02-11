@@ -39,7 +39,7 @@
     /*
       # Loads all the Exif tags from the specified image file buffer.
       #
-      # @_data ArrayBuffer Image file data
+      # data ArrayBuffer Image file data
       */
     ExifReader.prototype.load = function(data) {
       return this.loadView(new DataView(data));

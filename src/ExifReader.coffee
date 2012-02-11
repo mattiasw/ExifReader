@@ -24,7 +24,7 @@ class (exports ? this).ExifReader
   ###
   # Loads all the Exif tags from the specified image file buffer.
   #
-  # @_data ArrayBuffer Image file data
+  # data ArrayBuffer Image file data
   ###
   load: (data) ->
     @loadView(new DataView data)
