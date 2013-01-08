@@ -16,12 +16,12 @@ var allTags = exif.getAllTags();
 Support
 -------
 
-The library makes use of the DataView API which currently only seems to be supported in Chrome 9+. Therefore, if you want to support other browsers or Node.js, you should probably use a wrapper like [jDataView by Christopher Chedeau](https://github.com/vjeux/jDataView/).
+The library makes use of the DataView API which is supported in Chrome 9+, Firefox 15+ and Internet Explorer 10+. If you want to support a browser or Node.js that doesn't have DataView support, you should probably use a wrapper like [jDataView by Christopher Chedeau](https://github.com/vjeux/jDataView/).
 
 Examples
 --------
 
-A full HTML example page is located in the examples/html/ directory. Out of the box it only works in Chrome 9+ but with jDataView it should also work in Chrome 6+, Firefox 3.6+, Internet Explorer 10+ and Opera 11.1+. The example uses the FileReader API which as of this writing is not supported in Safari (version 5.1).
+A full HTML example page is located in the examples/html/ directory. The example uses the FileReader API which is supported by the latest versions of all the major browsers.
 
 Also, there is a Node.js example in the example/node/ directory that uses a simple wrapper for the DataView API.
 
@@ -40,6 +40,8 @@ Issues
 Changelog
 ---------
 
+* **January 8, 2013**:
+  * Updated text about browser support.
 * **January 19, 2012**:
   * Added text descriptions for the tags.
 * **January 1, 2012**:
