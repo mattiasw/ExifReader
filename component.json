@@ -1,0 +1,13 @@
+{
+  "name": "exifreader",
+  "repo": "mattiasw/ExifReader",
+  "description": "Client-side EXIF parser",
+  "version": "0.1.0",
+  "keywords": ["exif", "image", "png", "jpg", "jpeg", "meta"],
+  "dependencies": {},
+  "license": "GNU LGPL",
+  "main": "js/ExifReader.js",
+  "scripts": [
+    "js/ExifReader.js"
+  ]
+}
