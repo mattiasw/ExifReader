@@ -40,6 +40,8 @@ Issues
 Changelog
 ---------
 
+* **April 22, 2013**:
+  * Registered with [Bower](http://bower.io/).
 * **January 8, 2013**:
   * Updated text about browser support.
 * **January 19, 2012**:
