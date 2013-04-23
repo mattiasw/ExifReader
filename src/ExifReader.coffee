@@ -7,7 +7,6 @@
 ###
 
 class (exports ? this).ExifReader
-  _tiffHeaderOffset: 0x0c  # 2 bytes JPEG ID + 10 bytes APP1 header
 
   constructor: () ->
     @_getTagValueAt = {
@@ -49,7 +48,9 @@ class (exports ? this).ExifReader
   	# APP1 (0xe1) - Exif format
   	if dataView.getUint32(0, false) is 0xffd8ffe1
   	  # Length of field (2 bytes), "Exif", Null (0x00), padding (0x00)
-      return  if dataView.getUint32(6, false) is 0x45786966 and dataView.getUint16(10, false) is 0x0000
+      if dataView.getUint32(6, false) is 0x45786966 and dataView.getUint16(10, false) is 0x0000
+        @_tiffHeaderOffset = 0x0c  # 2 bytes JPEG ID + 10 bytes APP1 header
+        return
     # APP0 (0xe0) - JFIF format - check if hybrid JFIF-EXIF
     else if dataView.getUint32(0, false) is 0xffd8ffe0
       i = 10

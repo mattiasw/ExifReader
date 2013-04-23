@@ -10,8 +10,6 @@
 
 (function() {
   (typeof exports !== "undefined" && exports !== null ? exports : this).ExifReader = (function() {
-    ExifReader.prototype._tiffHeaderOffset = 0x0c;
-
     function ExifReader() {
       var _this = this;
 
@@ -79,6 +77,7 @@
       }
       if (dataView.getUint32(0, false) === 0xffd8ffe1) {
         if (dataView.getUint32(6, false) === 0x45786966 && dataView.getUint16(10, false) === 0x0000) {
+          this._tiffHeaderOffset = 0x0c;
           return;
         }
       } else if (dataView.getUint32(0, false) === 0xffd8ffe0) {
