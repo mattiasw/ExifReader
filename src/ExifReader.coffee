@@ -41,10 +41,28 @@ class (exports ? this).ExifReader
     @_readTags()
 
   _checkImageHeader: ->
-    # JPEG identifier (0xff 0xd8), Marker Prefix (0xff), APP1 (0xe1),
-    # Length of field (2 bytes), "Exif", Null (0x00), padding (0x00)
-    if @_dataView.byteLength < 12 or @_dataView.getUint32(0, false) != 0xffd8ffe1 or @_dataView.getUint32(6, false) != 0x45786966 or @_dataView.getUint16(10, false) != 0x0000
-      throw 'Invalid image format or no Exif data'
+  	dataView = @_dataView
+  	byteLength = dataView.byteLength
+  	throw "Data buffer too short"  if byteLength < 12
+
+  	# JPEG identifier (0xff 0xd8), Marker Prefix (0xff)
+  	# APP1 (0xe1) - Exif format
+  	if dataView.getUint32(0, false) is 0xffd8ffe1
+  	  # Length of field (2 bytes), "Exif", Null (0x00), padding (0x00)
+      return  if dataView.getUint32(6, false) is 0x45786966 and dataView.getUint16(10, false) is 0x0000
+    # APP0 (0xe0) - JFIF format - check if hybrid JFIF-EXIF
+    else if dataView.getUint32(0, false) is 0xffd8ffe0
+      i = 10
+      while i < byteLength
+        if dataView.getUint8(i, false) is 0x45 and dataView.getUint32(i, false) is 0x45786966 and dataView.getUint16(i + 4, false) is 0x0000
+          @_tiffHeaderOffset = i + 6
+          return
+
+        i++
+    else
+      throw "Invalid image format"
+
+    throw "No Exif data"
 
   _readTags: ->
     @_setByteOrder()
