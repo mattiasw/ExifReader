@@ -60,7 +60,7 @@ describe 'ExifReader', ->
     try
       @exif._checkImageHeader()
     catch error
-      expect(error).toEqual 'Invalid image format or no Exif data'
+      expect(error).toEqual 'Data buffer too short'
 
   it 'should set correct byte order for litte endian data', ->
     @exif._dataView = getDataView '\x49\x49'
