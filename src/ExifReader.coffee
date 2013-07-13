@@ -42,7 +42,7 @@ class (exports ? this).ExifReader
   _checkImageHeader: ->
   	dataView = @_dataView
   	byteLength = dataView.byteLength
-  	throw "Data buffer too short"  if byteLength < 12
+  	throw new Error 'Data buffer too short' if byteLength < 12
 
   	# JPEG identifier (0xff 0xd8), Marker Prefix (0xff)
   	# APP1 (0xe1) - Exif format
@@ -58,12 +58,10 @@ class (exports ? this).ExifReader
         if dataView.getUint8(i, false) is 0x45 and dataView.getUint32(i, false) is 0x45786966 and dataView.getUint16(i + 4, false) is 0x0000
           @_tiffHeaderOffset = i + 6
           return
-
         i++
     else
-      throw "Invalid image format"
-
-    throw "No Exif data"
+      throw new Error 'Invalid image format'
+    throw new Error 'No Exif data'
 
   _readTags: ->
     @_setByteOrder()
@@ -78,7 +76,7 @@ class (exports ? this).ExifReader
     else if @_dataView.getUint16(@_tiffHeaderOffset) == 0x4d4d
       @_littleEndian = false
     else
-      throw 'Illegal byte order value. Faulty image.'
+      throw new Error 'Illegal byte order value. Faulty image.'
 
   _read0thIfd: () ->
     ifdOffset = @_getIfdOffset()
@@ -684,7 +682,7 @@ class (exports ? this).ExifReader
     if @_tags[name]?
       return @_tags[name].value
     else
-      throw 'Undefined'
+      throw new Error 'Undefined'
 
   ###
   # Gets the image's description of the tag with the given name.
@@ -698,7 +696,7 @@ class (exports ? this).ExifReader
     if @_tags[name]?
       return @_tags[name].description
     else
-      throw 'Undefined'
+      throw new Error 'Undefined'
 
   ###
   # Gets all the image's tags.

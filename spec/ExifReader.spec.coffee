@@ -60,7 +60,28 @@ describe 'ExifReader', ->
     try
       @exif._checkImageHeader()
     catch error
-      expect(error).toEqual 'Data buffer too short'
+      expect(error.message).toEqual 'Data buffer too short'
+
+  it 'should fail for invalid image format', ->
+    @exif._dataView = getDataView '------------'
+    try
+      @exif._checkImageHeader()
+    catch error
+      expect(error.message).toEqual 'Invalid image format'
+
+  it 'should fail when no Exif header', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xe1--------'
+    try
+      @exif._checkImageHeader()
+    catch error
+      expect(error.message).toEqual 'No Exif data'
+
+  it 'should fail when no JFIF header', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xe0--------'
+    try
+      @exif._checkImageHeader()
+    catch error
+      expect(error.message).toEqual 'No Exif data'
 
   it 'should set correct byte order for litte endian data', ->
     @exif._dataView = getDataView '\x49\x49'
@@ -77,7 +98,7 @@ describe 'ExifReader', ->
     try
       @exif._setByteOrder()
     catch error
-      expect(error).toEqual 'Illegal byte order value. Faulty image.'
+      expect(error.message).toEqual 'Illegal byte order value. Faulty image.'
 
   it 'should correctly read offset of 0th IFD for little endian data', ->
     @exif._dataView = getDataView '\x49\x49\x00\x2a\x08\x00\x00\x00'
@@ -189,7 +210,7 @@ describe 'ExifReader', ->
     try
       @exif.getTagDescription('MyUndefinedTagName')
     catch error
-      expect(error).toEqual 'Undefined'
+      expect(error.message).toEqual 'Undefined'
 
   # Parsing tag descriptions.
 

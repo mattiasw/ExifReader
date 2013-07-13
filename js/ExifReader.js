@@ -73,7 +73,7 @@
       dataView = this._dataView;
       byteLength = dataView.byteLength;
       if (byteLength < 12) {
-        throw "Data buffer too short";
+        throw new Error('Data buffer too short');
       }
       if (dataView.getUint32(0, false) === 0xffd8ffe1) {
         if (dataView.getUint32(6, false) === 0x45786966 && dataView.getUint16(10, false) === 0x0000) {
@@ -90,9 +90,9 @@
           i++;
         }
       } else {
-        throw "Invalid image format";
+        throw new Error('Invalid image format');
       }
-      throw "No Exif data";
+      throw new Error('No Exif data');
     };
 
     ExifReader.prototype._readTags = function() {
@@ -109,7 +109,7 @@
       } else if (this._dataView.getUint16(this._tiffHeaderOffset) === 0x4d4d) {
         return this._littleEndian = false;
       } else {
-        throw 'Illegal byte order value. Faulty image.';
+        throw new Error('Illegal byte order value. Faulty image.');
       }
     };
 
@@ -1251,7 +1251,7 @@
       if (this._tags[name] != null) {
         return this._tags[name].value;
       } else {
-        throw 'Undefined';
+        throw new Error('Undefined');
       }
     };
 
@@ -1269,7 +1269,7 @@
       if (this._tags[name] != null) {
         return this._tags[name].description;
       } else {
-        throw 'Undefined';
+        throw new Error('Undefined');
       }
     };
 

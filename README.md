@@ -40,6 +40,10 @@ Issues
 Changelog
 ---------
 
+* **July 13, 2013**:
+  * Throw Error instead of just strings.
+* **April 23, 2013**:
+  * Support hybrid JFIF-EXIF image files.
 * **April 22, 2013**:
   * Registered with [Bower](http://bower.io/).
 * **January 8, 2013**:
