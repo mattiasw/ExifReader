@@ -1,12 +1,25 @@
 ###
 # ExifReader 0.1
 # http://github.com/mattiasw/exifreader
-# Copyright (C) 2011  Mattias Wallander <mattias@wallander.eu>
+# Copyright (C) 2011-2013  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
 # See license text at http://www.gnu.org/licenses/lgpl.txt
 ###
 
 class (exports ? this).ExifReader
+
+  _MIN_DATA_BUFFER_LENGTH:   2
+  _JPEG_ID_SIZE:             2
+  _JPEG_ID:                  0xffd8
+  _APP_MARKER_SIZE:          2
+  _APP0_MARKER:              0xffe0
+  _APP1_MARKER:              0xffe1
+  _APP9_MARKER:              0xffe9
+  _APP_ID_OFFSET:            4
+  _BYTES_Exif:               0x45786966
+  _TIFF_HEADER_OFFSET:       10  # From start of APP1 marker.
+  _BYTE_ORDER_BIG_ENDIAN:    0x4949
+  _BYTE_ORDER_LITTLE_ENDIAN: 0x4d4d
 
   constructor: () ->
     @_getTagValueAt = {
@@ -19,6 +32,7 @@ class (exports ? this).ExifReader
       9: (offset) => @_getSlongAt offset,
       10: (offset) => @_getSrationalAt offset
     }
+    @_tiffHeaderOffset = 0
 
   ###
   # Loads all the Exif tags from the specified image file buffer.
@@ -40,28 +54,36 @@ class (exports ? this).ExifReader
     @_readTags()
 
   _checkImageHeader: ->
-  	dataView = @_dataView
-  	byteLength = dataView.byteLength
-  	throw new Error 'Data buffer too short' if byteLength < 12
-
-  	# JPEG identifier (0xff 0xd8), Marker Prefix (0xff)
-  	# APP1 (0xe1) - Exif format
-  	if dataView.getUint32(0, false) is 0xffd8ffe1
-  	  # Length of field (2 bytes), "Exif", Null (0x00), padding (0x00)
-      if dataView.getUint32(6, false) is 0x45786966 and dataView.getUint16(10, false) is 0x0000
-        @_tiffHeaderOffset = 0x0c  # 2 bytes JPEG ID + 10 bytes APP1 header
-        return
-    # APP0 (0xe0) - JFIF format - check if hybrid JFIF-EXIF
-    else if dataView.getUint32(0, false) is 0xffd8ffe0
-      i = 10
-      while i < byteLength
-        if dataView.getUint8(i, false) is 0x45 and dataView.getUint32(i, false) is 0x45786966 and dataView.getUint16(i + 4, false) is 0x0000
-          @_tiffHeaderOffset = i + 6
-          return
-        i++
-    else
+    dataView = @_dataView
+    if dataView.byteLength < @_MIN_DATA_BUFFER_LENGTH or dataView.getUint16(0, false) isnt @_JPEG_ID
       throw new Error 'Invalid image format'
-    throw new Error 'No Exif data'
+    @_parseAppMarkers(dataView)
+    if not @_hasExifData()
+      throw new Error 'No Exif data'
+
+  _parseAppMarkers: (dataView) ->
+    appMarkerPosition = @_JPEG_ID_SIZE
+    loop
+      if dataView.byteLength < appMarkerPosition + @_APP_ID_OFFSET + 5
+        break
+      if @_isApp1ExifMarker(dataView, appMarkerPosition)
+        fieldLength = dataView.getUint16(appMarkerPosition + @_APP_MARKER_SIZE, false)
+        @_tiffHeaderOffset = appMarkerPosition + @_TIFF_HEADER_OFFSET
+      else if @_isAppMarker(dataView, appMarkerPosition)
+        fieldLength = dataView.getUint16(appMarkerPosition + @_APP_MARKER_SIZE, false)
+      else
+        break
+      appMarkerPosition += @_APP_MARKER_SIZE + fieldLength
+
+  _isApp1ExifMarker: (dataView, appMarkerPosition) ->
+    dataView.getUint16(appMarkerPosition, false) is @_APP1_MARKER and dataView.getUint32(appMarkerPosition + @_APP_ID_OFFSET, false) is @_BYTES_Exif and dataView.getUint8(appMarkerPosition + @_APP_ID_OFFSET + 4, false) is 0x00
+
+  _isAppMarker: (dataView, appMarkerPosition) ->
+    appMarker = dataView.getUint16(appMarkerPosition, false)
+    appMarker >= @_APP0_MARKER and appMarker <= @_APP9_MARKER
+
+  _hasExifData: ->
+    @_tiffHeaderOffset isnt 0
 
   _readTags: ->
     @_setByteOrder()
@@ -71,9 +93,9 @@ class (exports ? this).ExifReader
     @_readInteroperabilityIfd()
 
   _setByteOrder: () ->
-    if @_dataView.getUint16(@_tiffHeaderOffset) == 0x4949
+    if @_dataView.getUint16(@_tiffHeaderOffset) == @_BYTE_ORDER_BIG_ENDIAN
       @_littleEndian = true
-    else if @_dataView.getUint16(@_tiffHeaderOffset) == 0x4d4d
+    else if @_dataView.getUint16(@_tiffHeaderOffset) == @_BYTE_ORDER_LITTLE_ENDIAN
       @_littleEndian = false
     else
       throw new Error 'Illegal byte order value. Faulty image.'

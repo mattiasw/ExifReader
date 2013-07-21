@@ -1,14 +1,24 @@
 JPEG structure
 --------------
 
-Specification: http://www.exif.org/Exif2-2.PDF
+Specifications:
+- Exif: http://www.exif.org/Exif2-2.PDF
+- JFIF: http://www.w3.org/Graphics/JPEG/jfif3.pdf
 
 - JPEG identifier, page 64 (58) -
   Starts at 0x00. 2 bytes.
   Value: 0xff 0xd8
 
+- A number of APP markers -
+  Starts at 0x02.
+  Example APP markers:
+    APP1 Exif
+    APP0 JFIF
+    APP0 JFXX
+    APP2
+
 - APP1 Header, page 70 (64) -
-  Starts at 0x02. 10 bytes.
+  10 bytes.
   Value:
     Marker Prefix (0xff)
     APP1 (0xe1)
@@ -18,14 +28,14 @@ Specification: http://www.exif.org/Exif2-2.PDF
     Padding (0x00)
 
 - APP1 TIFF Header, page 16 (10) -
-  Starts at 0x0c. 8 bytes.
+  Starts at 0x0a from APP1 Header. 8 bytes.
   Value:
     Byte order (2 bytes)
     Fixed (0x002a) (2 bytes)
     Offset of 0th IFD from start of TIFF header (4 bytes)
 
 - IFD Structure, page 19 (13) -
-  Value of 0th IFD (TIFF) starts at 0x0c + offset of 0th IFD.
+  Value of 0th IFD (TIFF) starts at 0x0a from APP1 header + offset of 0th IFD.
     Number of fields (2 bytes)
     Field Interoperability arrays: 12 bytes each
       Bytes 0-1: Tag

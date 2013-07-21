@@ -2,7 +2,7 @@
 /*
 # ExifReader 0.1
 # http://github.com/mattiasw/exifreader
-# Copyright (C) 2011  Mattias Wallander <mattias@wallander.eu>
+# Copyright (C) 2011-2013  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
 # See license text at http://www.gnu.org/licenses/lgpl.txt
 */
@@ -10,6 +10,30 @@
 
 (function() {
   (typeof exports !== "undefined" && exports !== null ? exports : this).ExifReader = (function() {
+    ExifReader.prototype._MIN_DATA_BUFFER_LENGTH = 2;
+
+    ExifReader.prototype._JPEG_ID_SIZE = 2;
+
+    ExifReader.prototype._JPEG_ID = 0xffd8;
+
+    ExifReader.prototype._APP_MARKER_SIZE = 2;
+
+    ExifReader.prototype._APP0_MARKER = 0xffe0;
+
+    ExifReader.prototype._APP1_MARKER = 0xffe1;
+
+    ExifReader.prototype._APP9_MARKER = 0xffe9;
+
+    ExifReader.prototype._APP_ID_OFFSET = 4;
+
+    ExifReader.prototype._BYTES_Exif = 0x45786966;
+
+    ExifReader.prototype._TIFF_HEADER_OFFSET = 10;
+
+    ExifReader.prototype._BYTE_ORDER_BIG_ENDIAN = 0x4949;
+
+    ExifReader.prototype._BYTE_ORDER_LITTLE_ENDIAN = 0x4d4d;
+
     function ExifReader() {
       var _this = this;
 
@@ -39,6 +63,7 @@
           return _this._getSrationalAt(offset);
         }
       };
+      this._tiffHeaderOffset = 0;
     }
 
     /*
@@ -68,31 +93,53 @@
     };
 
     ExifReader.prototype._checkImageHeader = function() {
-      var byteLength, dataView, i;
+      var dataView;
 
       dataView = this._dataView;
-      byteLength = dataView.byteLength;
-      if (byteLength < 12) {
-        throw new Error('Data buffer too short');
-      }
-      if (dataView.getUint32(0, false) === 0xffd8ffe1) {
-        if (dataView.getUint32(6, false) === 0x45786966 && dataView.getUint16(10, false) === 0x0000) {
-          this._tiffHeaderOffset = 0x0c;
-          return;
-        }
-      } else if (dataView.getUint32(0, false) === 0xffd8ffe0) {
-        i = 10;
-        while (i < byteLength) {
-          if (dataView.getUint8(i, false) === 0x45 && dataView.getUint32(i, false) === 0x45786966 && dataView.getUint16(i + 4, false) === 0x0000) {
-            this._tiffHeaderOffset = i + 6;
-            return;
-          }
-          i++;
-        }
-      } else {
+      if (dataView.byteLength < this._MIN_DATA_BUFFER_LENGTH || dataView.getUint16(0, false) !== this._JPEG_ID) {
         throw new Error('Invalid image format');
       }
-      throw new Error('No Exif data');
+      this._parseAppMarkers(dataView);
+      if (!this._hasExifData()) {
+        throw new Error('No Exif data');
+      }
+    };
+
+    ExifReader.prototype._parseAppMarkers = function(dataView) {
+      var appMarkerPosition, fieldLength, _results;
+
+      appMarkerPosition = this._JPEG_ID_SIZE;
+      _results = [];
+      while (true) {
+        if (dataView.byteLength < appMarkerPosition + this._APP_ID_OFFSET + 5) {
+          break;
+        }
+        if (this._isApp1ExifMarker(dataView, appMarkerPosition)) {
+          fieldLength = dataView.getUint16(appMarkerPosition + this._APP_MARKER_SIZE, false);
+          this._tiffHeaderOffset = appMarkerPosition + this._TIFF_HEADER_OFFSET;
+        } else if (this._isAppMarker(dataView, appMarkerPosition)) {
+          fieldLength = dataView.getUint16(appMarkerPosition + this._APP_MARKER_SIZE, false);
+        } else {
+          break;
+        }
+        _results.push(appMarkerPosition += this._APP_MARKER_SIZE + fieldLength);
+      }
+      return _results;
+    };
+
+    ExifReader.prototype._isApp1ExifMarker = function(dataView, appMarkerPosition) {
+      return dataView.getUint16(appMarkerPosition, false) === this._APP1_MARKER && dataView.getUint32(appMarkerPosition + this._APP_ID_OFFSET, false) === this._BYTES_Exif && dataView.getUint8(appMarkerPosition + this._APP_ID_OFFSET + 4, false) === 0x00;
+    };
+
+    ExifReader.prototype._isAppMarker = function(dataView, appMarkerPosition) {
+      var appMarker;
+
+      appMarker = dataView.getUint16(appMarkerPosition, false);
+      return appMarker >= this._APP0_MARKER && appMarker <= this._APP9_MARKER;
+    };
+
+    ExifReader.prototype._hasExifData = function() {
+      return this._tiffHeaderOffset !== 0;
     };
 
     ExifReader.prototype._readTags = function() {
@@ -104,9 +151,9 @@
     };
 
     ExifReader.prototype._setByteOrder = function() {
-      if (this._dataView.getUint16(this._tiffHeaderOffset) === 0x4949) {
+      if (this._dataView.getUint16(this._tiffHeaderOffset) === this._BYTE_ORDER_BIG_ENDIAN) {
         return this._littleEndian = true;
-      } else if (this._dataView.getUint16(this._tiffHeaderOffset) === 0x4d4d) {
+      } else if (this._dataView.getUint16(this._tiffHeaderOffset) === this._BYTE_ORDER_LITTLE_ENDIAN) {
         return this._littleEndian = false;
       } else {
         throw new Error('Illegal byte order value. Faulty image.');
