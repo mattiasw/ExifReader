@@ -85,6 +85,11 @@ describe 'ExifReader', ->
     @exif._checkImageHeader()
     expect(@exif._tiffHeaderOffset).toEqual 30
 
+  it 'should handle unknown high ID APP markers', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xea\x00\x07XXXX\x00\xff\xe1\x47\x11Exif\x00\x00'
+    @exif._checkImageHeader()
+    expect(@exif._tiffHeaderOffset).toEqual 21
+
   it 'should handle reversed order of JFIF-Exif hybrid', ->
     @exif._dataView = getDataView '\xff\xd8\xff\xe1\x00\x08Exif\x00\x00\xff\xe0\x00\x07JFIF\x00'
     @exif._checkImageHeader()

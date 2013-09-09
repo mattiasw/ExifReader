@@ -22,7 +22,7 @@
 
     ExifReader.prototype._APP1_MARKER = 0xffe1;
 
-    ExifReader.prototype._APP9_MARKER = 0xffe9;
+    ExifReader.prototype._APP15_MARKER = 0xffef;
 
     ExifReader.prototype._APP_ID_OFFSET = 4;
 
@@ -135,7 +135,7 @@
       var appMarker;
 
       appMarker = dataView.getUint16(appMarkerPosition, false);
-      return appMarker >= this._APP0_MARKER && appMarker <= this._APP9_MARKER;
+      return appMarker >= this._APP0_MARKER && appMarker <= this._APP15_MARKER;
     };
 
     ExifReader.prototype._hasExifData = function() {

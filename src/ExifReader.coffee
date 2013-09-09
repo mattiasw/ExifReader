@@ -14,7 +14,7 @@ class (exports ? this).ExifReader
   _APP_MARKER_SIZE:          2
   _APP0_MARKER:              0xffe0
   _APP1_MARKER:              0xffe1
-  _APP9_MARKER:              0xffe9
+  _APP15_MARKER:             0xffef
   _APP_ID_OFFSET:            4
   _BYTES_Exif:               0x45786966
   _TIFF_HEADER_OFFSET:       10  # From start of APP1 marker.
@@ -80,7 +80,7 @@ class (exports ? this).ExifReader
 
   _isAppMarker: (dataView, appMarkerPosition) ->
     appMarker = dataView.getUint16(appMarkerPosition, false)
-    appMarker >= @_APP0_MARKER and appMarker <= @_APP9_MARKER
+    appMarker >= @_APP0_MARKER and appMarker <= @_APP15_MARKER
 
   _hasExifData: ->
     @_tiffHeaderOffset isnt 0
