@@ -40,7 +40,7 @@ Issues
 Changelog
 ---------
 
-* **September 8, 2013**:
+* **September 9, 2013**:
   * Make parsing of APP markers more robust. Fixes problems with some pictures.
 * **July 13, 2013**:
   * Throw Error instead of just strings.
