@@ -1,5 +1,5 @@
 ###
-# ExifReader 0.1
+# ExifReader 0.2
 # http://github.com/mattiasw/exifreader
 # Copyright (C) 2011-2013  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
@@ -14,10 +14,13 @@ class (exports ? this).ExifReader
   _APP_MARKER_SIZE:          2
   _APP0_MARKER:              0xffe0
   _APP1_MARKER:              0xffe1
+  _APP13_MARKER:             0xffed
   _APP15_MARKER:             0xffef
   _APP_ID_OFFSET:            4
   _BYTES_Exif:               0x45786966
+  _BYTES_8BIM:               0x3842494d
   _TIFF_HEADER_OFFSET:       10  # From start of APP1 marker.
+  _IPTC_DATA_OFFSET:         18  # From start of APP13 marker.
   _BYTE_ORDER_BIG_ENDIAN:    0x4949
   _BYTE_ORDER_LITTLE_ENDIAN: 0x4d4d
 
@@ -33,6 +36,7 @@ class (exports ? this).ExifReader
       10: (offset) => @_getSrationalAt offset
     }
     @_tiffHeaderOffset = 0
+    @_iptcDataOffset = 0
 
   ###
   # Loads all the Exif tags from the specified image file buffer.
@@ -49,26 +53,35 @@ class (exports ? this).ExifReader
   # @_dataView DataView Image file data view
   ###
   loadView: (@_dataView) ->
+    foundMetaData = false
     @_tags = {}
     @_checkImageHeader()
-    @_readTags()
+    if @_hasExifData()
+      foundMetaData = true
+      @_readTags()
+    if @_hasIptcData()
+      foundMetaData = true
+      @_readIptcTags()
+    if not foundMetaData
+      throw new Error 'No Exif data'
 
   _checkImageHeader: ->
     dataView = @_dataView
     if dataView.byteLength < @_MIN_DATA_BUFFER_LENGTH or dataView.getUint16(0, false) isnt @_JPEG_ID
       throw new Error 'Invalid image format'
     @_parseAppMarkers(dataView)
-    if not @_hasExifData()
-      throw new Error 'No Exif data'
 
   _parseAppMarkers: (dataView) ->
     appMarkerPosition = @_JPEG_ID_SIZE
     loop
-      if dataView.byteLength < appMarkerPosition + @_APP_ID_OFFSET + 5
+      if appMarkerPosition + @_APP_ID_OFFSET + 5 > dataView.byteLength
         break
       if @_isApp1ExifMarker(dataView, appMarkerPosition)
         fieldLength = dataView.getUint16(appMarkerPosition + @_APP_MARKER_SIZE, false)
         @_tiffHeaderOffset = appMarkerPosition + @_TIFF_HEADER_OFFSET
+      else if @_isApp13PhotoshopMarker(dataView, appMarkerPosition)
+        fieldLength = dataView.getUint16(appMarkerPosition + @_APP_MARKER_SIZE, false)
+        @_iptcDataOffset = appMarkerPosition + @_IPTC_DATA_OFFSET
       else if @_isAppMarker(dataView, appMarkerPosition)
         fieldLength = dataView.getUint16(appMarkerPosition + @_APP_MARKER_SIZE, false)
       else
@@ -78,12 +91,23 @@ class (exports ? this).ExifReader
   _isApp1ExifMarker: (dataView, appMarkerPosition) ->
     dataView.getUint16(appMarkerPosition, false) is @_APP1_MARKER and dataView.getUint32(appMarkerPosition + @_APP_ID_OFFSET, false) is @_BYTES_Exif and dataView.getUint8(appMarkerPosition + @_APP_ID_OFFSET + 4, false) is 0x00
 
+  _isApp13PhotoshopMarker: (dataView, appMarkerPosition) ->
+    dataView.getUint16(appMarkerPosition, false) is @_APP13_MARKER and @_getString(dataView, appMarkerPosition + @_APP_ID_OFFSET, 13) is 'Photoshop 3.0' and dataView.getUint8(appMarkerPosition + @_APP_ID_OFFSET + 13, false) is 0x00
+
+  _getString: (dataView, offset, length) ->
+    chars = for i in [0...length]
+      dataView.getUint8(offset + i, false)
+    @_getAsciiValue(chars).join('')
+
   _isAppMarker: (dataView, appMarkerPosition) ->
     appMarker = dataView.getUint16(appMarkerPosition, false)
     appMarker >= @_APP0_MARKER and appMarker <= @_APP15_MARKER
 
   _hasExifData: ->
     @_tiffHeaderOffset isnt 0
+
+  _hasIptcData: ->
+    @_iptcDataOffset isnt 0
 
   _readTags: ->
     @_setByteOrder()
@@ -208,6 +232,77 @@ class (exports ? this).ExifReader
       tagValue[i] += char
     tagValue
 
+  _readIptcTags: () ->
+    #throw new Error('here')
+    try
+      naaBlock = @_getIptcNaaResourceBlock()
+    catch error
+      return
+    @_parseIptcTags(naaBlock)
+
+  _getIptcNaaResourceBlock: () ->
+    dataView = @_dataView
+    loop
+      if @_iptcDataOffset + 12 > dataView.byteLength
+        break
+      block = @_getIptcResourceBlock()
+      if block['type'] is 0x0404
+        return block
+      else
+        padding = 0
+        if block['size'] % 2 isnt 0
+          padding = 1
+        @_iptcDataOffset += 12 + block['size'] + padding
+    throw new Error 'No IPTC NAA resource block.'
+
+  _getIptcResourceBlock: () ->
+    dataView = @_dataView
+    if dataView.getUint32(@_iptcDataOffset, false) isnt @_BYTES_8BIM
+      throw new Error 'Not an IPTC resource block.'
+    {
+      'type': dataView.getUint16(@_iptcDataOffset + 4, false),
+      'size': dataView.getUint16(@_iptcDataOffset + 10, false)
+    }
+
+  _parseIptcTags: (naaBlock) ->
+    @_iptcDataOffset += 12
+    endOfBlockOffset = @_iptcDataOffset + naaBlock['size']
+    loop
+      if @_iptcDataOffset >= endOfBlockOffset or @_iptcDataOffset >= @_dataView.byteLength
+        break
+      tag = @_readIptcTag()
+      @_tags[tag.name] = {'value': tag.value, 'description': tag.description}
+
+  _readIptcTag: () ->
+    dataView = @_dataView
+    if dataView.getUint8(@_iptcDataOffset, false) isnt 0x1c
+      throw new Error 'Not an IPTC NAA resource tag.'
+    tagCode = dataView.getUint16(@_iptcDataOffset + 1, false)
+    tagSize = dataView.getUint16(@_iptcDataOffset + 3, false)
+    tagValue = @_getIptcTagValue(@_iptcDataOffset + 5, tagSize)
+    if @_tagNames['iptc'][tagCode]?
+      if @_tagNames['iptc'][tagCode]['name']? and @_tagNames['iptc'][tagCode]['description']?
+        tagName = @_tagNames['iptc'][tagCode]['name']
+        tagDescription = @_tagNames['iptc'][tagCode]['description'](tagValue)
+      else
+        tagName = @_tagNames['iptc'][tagCode]
+        if tagValue instanceof Array
+          #tagDescription = tagValue.join ', '
+          tagDescription = tagValue.map((byte) -> String.fromCharCode(byte)).join ''
+        else
+          tagDescription = tagValue
+      tag = {'name': tagName, 'value': tagValue, 'description': tagDescription}
+    else
+      tag = {'name': "undefined-#{tagCode}", 'value': tagValue, 'description': tagValue}
+    @_iptcDataOffset += 5 + tagSize
+    tag
+
+  _getIptcTagValue: (offset, size) ->
+    dataView = @_dataView
+    value = for valueIndex in [0...size]
+      @_dataView.getUint8(offset + valueIndex)
+    value
+
   _typeSizes: {
     1: 1,  # BYTE
     2: 1,  # ASCII
@@ -310,10 +405,7 @@ class (exports ? this).ExifReader
         '[Raw OECF table data]'
       }
       0x9000: {'name': 'ExifVersion', 'description': (value) ->
-        string = ''
-        for char in value
-          string += String.fromCharCode char
-        string
+        value.map((byte) -> String.fromCharCode(byte)).join ''
       }
       0x9003: 'DateTimeOriginal',
       0x9004: 'DateTimeDigitized',
@@ -689,6 +781,29 @@ class (exports ? this).ExifReader
       0x0002: 'UnknownInteroperabilityTag0x0002'
       0x1001: 'UnknownInteroperabilityTag0x1001'
       0x1002: 'UnknownInteroperabilityTag0x1002'
+    },
+    'iptc': {
+      0x015a: {'name': 'Coded Character Set', 'description': (value) ->
+        switch value.map((byte) -> String.fromCharCode(byte)).join ''
+          when '\x1b%G' then 'UTF-8'
+          when '\x1b%/G' then 'UTF-8 Level 1'
+          when '\x1b%/H' then 'UTF-8 Level 2'
+          when '\x1b%/I' then 'UTF-8 Level 3'
+          else 'Unknown'
+      }
+      0x0200: {'name': 'Record Version', 'description': (value) ->
+        ((value[0] << 8) + value[1]).toString()
+      }
+      0x0203: 'Object Type Reference'
+      0x0204: 'Object Attribute Reference'
+      0x0205: 'Object Name'
+      0x0207: 'Edit Status'
+      0x0208: {'name': 'Editorial Update', 'description': (value) ->
+        switch value.map((byte) -> String.fromCharCode(byte)).join ''
+          when '01' then 'Additional Language'
+          else 'Unknown'
+      }
+      0x020a: 'Urgency'
     }
   }
 

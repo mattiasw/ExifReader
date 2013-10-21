@@ -1,7 +1,7 @@
 ###
-# ExifReader 0.1
+# ExifReader 0.2
 # http://github.com/mattiasw/exifreader
-# Copyright (C) 2011  Mattias Wallander <mattias@wallander.eu>
+# Copyright (C) 2011-2013  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
 # See license text at http://www.gnu.org/licenses/lgpl.txt
 ###
@@ -45,11 +45,19 @@ describe 'ExifReader', ->
   getDataView = (data) ->
     dataView = new DataView getArrayBuffer(data)
 
+  getDataViewForIptcDescription = (id, content) ->
+    if content.length > 0xff
+      length = String.fromCharCode(content.length >> 8) + String.fromCharCode(content.length % 0xff)
+    else
+      length = '\x00' + String.fromCharCode(content.length)
+    getDataView '\x1c\x02' + String.fromCharCode(id) + length + content
+
   beforeEach ->
     @exif = new ExifReader
     @exif._tags = {}
     @exif._littleEndian = false
     @exif._tiffHeaderOffset = 0
+    @exif._iptcDataOffset = 0
 
   it 'should fail for too short data buffer', ->
     exif = @exif
@@ -67,8 +75,7 @@ describe 'ExifReader', ->
 
   it 'should fail when no Exif identifier for APP1', ->
     exif = @exif
-    exif._dataView = getDataView '\xff\xd8\xff\xe1--------'
-    expect(-> exif._checkImageHeader()).toThrow(new Error 'No Exif data')
+    expect(-> exif.loadView(getDataView '\xff\xd8\xff\xe1--------')).toThrow(new Error 'No Exif data')
 
   it 'should handle APP2 markers', ->
     @exif._dataView = getDataView '\xff\xd8\xff\xe0\x00\x07JFIF\x00\xff\xe2\x00\x07XXXX\x00\xff\xe0\x00\x07JFXX\x00\xff\xe1\x47\x11Exif\x00\x00'
@@ -95,12 +102,15 @@ describe 'ExifReader', ->
     @exif._checkImageHeader()
     expect(@exif._tiffHeaderOffset).toEqual 12
 
+  it 'should handle IPTC APP13 markers', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x00'
+    @exif._checkImageHeader()
+    #expect(@exif._tiffHeaderOffset).toEqual 39
+
   it 'should fail gracefully for faulty APP markers', ->
     exif = @exif
-    exif._dataView = getDataView '\xff\xd8\xfe\xdc\x00\x6fJFIF\x65\x01\x01\x01\x00\x48'
     expect(->
-      exif._checkImageHeader()
-      exif._setByteOrder()
+      exif.loadView(getDataView '\xff\xd8\xfe\xdc\x00\x6fJFIF\x65\x01\x01\x01\x00\x48')
     ).toThrow(new Error 'No Exif data')
 
   it 'should find byte order data', ->
@@ -706,3 +716,163 @@ describe 'ExifReader', ->
     expect(@exif._readTag('gps', 0).description).toEqual '[Unicode encoded text]'
     @exif._dataView = getDataView '\x00\x1c\x00\x07\x00\x00\x00\x08\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00'
     expect(@exif._readTag('gps', 0).description).toEqual '[Undefined encoding]'
+
+  # Parsing IPTC data
+
+  it 'should recognize IPTC data', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x00'
+    @exif._checkImageHeader()
+    expect(@exif._iptcDataOffset).toEqual 20
+
+  it 'should read an IPTC resource block', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x008BIM\x04\x04\x00\x00\x00\x00\x00\x42'
+    @exif._checkImageHeader()
+    block = @exif._getIptcResourceBlock()
+    expect(block['type']).toEqual 0x0404
+    expect(block['size']).toEqual 0x42
+
+  it 'should fail for IPTC with faulty resource block', ->
+    exif = @exif
+    exif._dataView = getDataView '\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x00XXXX'
+    exif._checkImageHeader()
+    expect(-> exif._getIptcResourceBlock()).toThrow(new Error 'Not an IPTC resource block.')
+
+  it 'should find a single IPTC NAA resource block', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x008BIM\x04\x04\x00\x00\x00\x00\x00\x42'
+    @exif._checkImageHeader()
+    block = @exif._getIptcNaaResourceBlock()
+    expect(block['type']).toEqual 0x0404
+    expect(block['size']).toEqual 0x42
+
+  it 'should find the IPTC NAA resource block without previous padding', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x008BIM\x04\x05\x00\x00\x00\x00\x00\x02\x00\x008BIM\x04\x04\x00\x00\x00\x00\x00\x42'
+    @exif._checkImageHeader()
+    block = @exif._getIptcNaaResourceBlock()
+    expect(block['type']).toEqual 0x0404
+    expect(block['size']).toEqual 0x42
+
+  it 'should find the IPTC NAA resource block with previous padding', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x008BIM\x04\x05\x00\x00\x00\x00\x00\x01\x00\x008BIM\x04\x04\x00\x00\x00\x00\x00\x42'
+    @exif._checkImageHeader()
+    block = @exif._getIptcNaaResourceBlock()
+    expect(block['type']).toEqual 0x0404
+    expect(block['size']).toEqual 0x42
+
+  it 'should fail for IPTC header with no NAA resource block', ->
+    exif = @exif
+    exif._dataView = getDataView '\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x008BIM\x04\x05\x00\x00\x00\x00\x00\x42'
+    exif._checkImageHeader()
+    expect(-> exif._getIptcNaaResourceBlock()).toThrow(new Error 'No IPTC NAA resource block.')
+
+  it 'should fail for faulty IPTC NAA resource tag', ->
+    exif = @exif
+    exif._dataView = getDataView '\x00\x01\x5a\x00\x00'
+    expect(-> exif._readIptcTag()).toThrow(new Error 'Not an IPTC NAA resource tag.')
+
+  it 'should read IPTC NAA resource tag', ->
+    @exif._dataView = getDataView '\x1c\x47\x11\x00\x02BC'
+    @exif._tagNames['iptc'][0x4711] = 'MyIptcTag'
+    tag = @exif._readIptcTag()
+    delete @exif._tagNames['iptc'][0x4711]
+    expect(tag.name).toEqual 'MyIptcTag'
+    expect(tag.value).toEqual [0x42, 0x43]
+    expect(tag.description).toEqual 'BC'
+
+  it 'should read IPTC NAA resource tag with dynamic description', ->
+    @exif._dataView = getDataView '\x1c\x47\x11\x00\x01\x42'
+    @exif._tagNames['iptc'][0x4711] = {
+      'name': 'MyIptcTag',
+      'description': (value) ->
+        switch value[0]
+          when 0x42 then 1
+    }
+    tag = @exif._readIptcTag()
+    delete @exif._tagNames['iptc'][0x4711]
+    expect(tag.name).toEqual 'MyIptcTag'
+    expect(tag.value).toEqual [0x42]
+    expect(tag.description).toEqual 1
+
+  it 'should read undefined IPTC NAA resource tag', ->
+    @exif._dataView = getDataView '\x1c\x47\x11\x00\x02\x42\x43'
+    tag = @exif._readIptcTag()
+    expect(tag.name).toEqual 'undefined-18193'
+    expect(tag.value).toEqual [0x42, 0x43]
+    expect(tag.description).toEqual [0x42, 0x43]
+
+  it 'should read multiple IPTC NAA resource tags', ->
+    @exif._iptcDataOffset = 0
+    @exif._dataView = getDataView '\x1c\x47\x11\x00\x02BC' + '\x1c\x47\x12\x00\x02DE'
+    @exif._tagNames['iptc'][0x4711] = 'MyIptcTag1'
+    @exif._tagNames['iptc'][0x4712] = 'MyIptcTag2'
+    tag1 = @exif._readIptcTag()
+    tag2 = @exif._readIptcTag()
+    delete @exif._tagNames['iptc'][0x4711]
+    delete @exif._tagNames['iptc'][0x4712]
+    expect(tag1.name).toEqual 'MyIptcTag1'
+    expect(tag1.value).toEqual [0x42, 0x43]
+    expect(tag1.description).toEqual 'BC'
+    expect(tag2.name).toEqual 'MyIptcTag2'
+    expect(tag2.value).toEqual [0x44, 0x45]
+    expect(tag2.description).toEqual 'DE'
+
+  it 'should read IPTC tags', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x00' + '8BIM\x04\x04\x00\x00\x00\x00\x00\x0e' + '\x1c\x47\x11\x00\x02BC' + '\x1c\x47\x12\x00\x02DE'
+    @exif._tagNames['iptc'][0x4711] = 'MyIptcTag1'
+    @exif._tagNames['iptc'][0x4712] = 'MyIptcTag2'
+    @exif._checkImageHeader()
+    @exif._readIptcTags()
+    delete @exif._tagNames['iptc'][0x4711]
+    delete @exif._tagNames['iptc'][0x4712]
+    expect(@exif.getTagDescription('MyIptcTag1')).toEqual 'BC'
+    expect(@exif.getTagDescription('MyIptcTag2')).toEqual 'DE'
+
+  it 'should report correct IPTC description for Coded Character Set', ->
+    @exif._dataView = getDataView '\x1c\x01\x5a\x00\x03\x1b%G'
+    expect(@exif._readIptcTag().description).toEqual 'UTF-8'
+    @exif._iptcDataOffset = 0
+    @exif._dataView = getDataView '\x1c\x01\x5a\x00\x04\x1b%/G'
+    expect(@exif._readIptcTag().description).toEqual 'UTF-8 Level 1'
+    @exif._iptcDataOffset = 0
+    @exif._dataView = getDataView '\x1c\x01\x5a\x00\x04\x1b%/H'
+    expect(@exif._readIptcTag().description).toEqual 'UTF-8 Level 2'
+    @exif._iptcDataOffset = 0
+    @exif._dataView = getDataView '\x1c\x01\x5a\x00\x04\x1b%/I'
+    expect(@exif._readIptcTag().description).toEqual 'UTF-8 Level 3'
+
+  it 'should report correct IPTC description for Record Version', ->
+    @exif._dataView = getDataViewForIptcDescription(0, '\x00\x04')
+    expect(@exif._readIptcTag().description).toEqual '4'
+
+  it 'should report correct IPTC description for Object Type Reference', ->
+    @exif._dataView = getDataViewForIptcDescription(3, '01:News')
+    expect(@exif._readIptcTag().description).toEqual '01:News'
+
+  it 'should report correct IPTC description for Object Attribute Reference', ->
+    @exif._dataView = getDataViewForIptcDescription(4, '001:Current')
+    expect(@exif._readIptcTag().description).toEqual '001:Current'
+
+  it 'should report correct IPTC description for Object Name', ->
+    @exif._dataView = getDataViewForIptcDescription(5, 'MyObjectName')
+    expect(@exif._readIptcTag().description).toEqual 'MyObjectName'
+
+  it 'should report correct IPTC description for Edit Status', ->
+    @exif._dataView = getDataViewForIptcDescription(7, 'MyEditStatus')
+    expect(@exif._readIptcTag().description).toEqual 'MyEditStatus'
+
+  it 'should report correct IPTC description for Editorial Update', ->
+    @exif._dataView = getDataViewForIptcDescription(8, '01')
+    expect(@exif._readIptcTag().description).toEqual 'Additional Language'
+
+  it 'should report "Unknown" as IPTC description for unknown Editorial Update value', ->
+    @exif._dataView = getDataViewForIptcDescription(8, '02')
+    expect(@exif._readIptcTag().description).toEqual 'Unknown'
+
+  it 'should report correct IPTC description for Urgency', ->
+    @exif._dataView = getDataViewForIptcDescription(10, '7')
+    expect(@exif._readIptcTag().description).toEqual '7'
+
+  #it 'should report correct IPTC description for Subject Reference', ->
+  #  @exif._dataView = getDataViewForIptcDescription(10, '7')
+  #  expect(@exif._readIptcTag().description).toEqual '7'
+
+  #it 'should report correct IPTC description for repeated Subject Reference', ->
