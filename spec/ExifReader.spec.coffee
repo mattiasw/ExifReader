@@ -1,5 +1,5 @@
 ###
-# ExifReader 1.0.0
+# ExifReader 1.0.1
 # http://github.com/mattiasw/exifreader
 # Copyright (C) 2011  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later

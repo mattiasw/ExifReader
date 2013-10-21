@@ -2,7 +2,7 @@
   "name": "exifreader",
   "repo": "mattiasw/ExifReader",
   "description": "Client-side Exif parser",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "keywords": ["exif", "image", "png", "jpg", "jpeg", "meta"],
   "dependencies": {},
   "license": "GNU LGPL",

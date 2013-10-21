@@ -1,5 +1,5 @@
 ###
-# ExifReader 1.0.0
+# ExifReader 1.0.1
 # http://github.com/mattiasw/exifreader
 # Copyright (C) 2011-2013  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
@@ -169,8 +169,8 @@ class (exports ? this).ExifReader
     value
 
   _getAsciiValue: (charArray) ->
-    newCharArray = for char in charArray
-      String.fromCharCode char
+    newCharArray = for charCode in charArray
+      String.fromCharCode charCode
 
   _getByteAt: (offset) ->
     @_dataView.getUint8 offset
@@ -199,13 +199,13 @@ class (exports ? this).ExifReader
   _splitNullSeparatedAsciiString: (string) ->
     tagValue = []
     i = 0
-    for char in string
-      if char == '\x00'
+    for character in string
+      if character == '\x00'
         i++;
         continue
       if !tagValue[i]?
         tagValue[i] = ''
-      tagValue[i] += char
+      tagValue[i] += character
     tagValue
 
   _typeSizes: {
@@ -311,16 +311,16 @@ class (exports ? this).ExifReader
       }
       0x9000: {'name': 'ExifVersion', 'description': (value) ->
         string = ''
-        for char in value
-          string += String.fromCharCode char
+        for charCode in value
+          string += String.fromCharCode charCode
         string
       }
       0x9003: 'DateTimeOriginal',
       0x9004: 'DateTimeDigitized',
       0x9101: {'name': 'ComponentsConfiguration', 'description': (value) ->
         string = ''
-        for char in value
-          switch char
+        for character in value
+          switch character
             when 0x31 then string += 'Y'
             when 0x32 then string += 'Cb'
             when 0x33 then string += 'Cr'
@@ -409,8 +409,8 @@ class (exports ? this).ExifReader
         '[Raw maker note data]'
       }
       0x9286: {'name': 'UserComment', 'description': (value) ->
-        switch value[0...8].map((byte) -> String.fromCharCode(byte)).join ''
-          when 'ASCII\x00\x00\x00' then value[8...value.length].map((byte) -> String.fromCharCode(byte)).join ''
+        switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
+          when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
           when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
           when 'UNICODE\x00' then '[Unicode encoded text]'
           when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
@@ -420,8 +420,8 @@ class (exports ? this).ExifReader
       0x9292: 'SubSecTimeDigitized',
       0xa000: {'name': 'FlashpixVersion', 'description': (value) ->
         string = ''
-        for char in value
-          string += String.fromCharCode char
+        for charCode in value
+          string += String.fromCharCode charCode
         string
       }
       0xa001: {'name': 'ColorSpace', 'description': (value) ->
@@ -663,15 +663,15 @@ class (exports ? this).ExifReader
       }
       0x001a: 'GPSDestDistance',
       0x001b: {'name': 'GPSProcessingMethod', 'description': (value) ->
-        switch value[0...8].map((byte) -> String.fromCharCode(byte)).join ''
-          when 'ASCII\x00\x00\x00' then value[8...value.length].map((byte) -> String.fromCharCode(byte)).join ''
+        switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
+          when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
           when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
           when 'UNICODE\x00' then '[Unicode encoded text]'
           when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
       }
       0x001c: {'name': 'GPSAreaInformation', 'description': (value) ->
-        switch value[0...8].map((byte) -> String.fromCharCode(byte)).join ''
-          when 'ASCII\x00\x00\x00' then value[8...value.length].map((byte) -> String.fromCharCode(byte)).join ''
+        switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
+          when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
           when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
           when 'UNICODE\x00' then '[Unicode encoded text]'
           when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
