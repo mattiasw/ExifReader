@@ -1,5 +1,5 @@
 ###
-# ExifReader 0.1
+# ExifReader 1.0.0
 # http://github.com/mattiasw/exifreader
 # Copyright (C) 2011-2013  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
@@ -704,7 +704,7 @@ class (exports ? this).ExifReader
     if @_tags[name]?
       return @_tags[name].value
     else
-      throw new Error 'Undefined'
+      return undefined
 
   ###
   # Gets the image's description of the tag with the given name.
@@ -718,7 +718,7 @@ class (exports ? this).ExifReader
     if @_tags[name]?
       return @_tags[name].description
     else
-      throw new Error 'Undefined'
+      return undefined
 
   ###
   # Gets all the image's tags.
