@@ -1,5 +1,5 @@
 ###
-# ExifReader 0.2
+# ExifReader 1.0.1
 # http://github.com/mattiasw/exifreader
 # Copyright (C) 2011-2013  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
@@ -240,9 +240,13 @@ describe 'ExifReader', ->
     @exif._dataView = getDataView '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x0c\x41\x42\x43\x44\x45\x00'
     expect(@exif._readTag('0th', 0).description).toEqual 'ABCDE'
 
-  it 'should throw "Undefined" for undefined tag names', ->
+  it 'should return undefined value for undefined tag names', ->
     exif = @exif
-    expect(-> exif.getTagDescription('MyUndefinedTagName')).toThrow(new Error 'Undefined')
+    expect(exif.getTagValue('MyUndefinedTagName')).toBeUndefined()
+
+  it 'should return undefined description for undefined tag names', ->
+    exif = @exif
+    expect(exif.getTagDescription('MyUndefinedTagName')).toBeUndefined()
 
   # Parsing tag descriptions.
 
