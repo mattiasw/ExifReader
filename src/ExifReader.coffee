@@ -271,7 +271,12 @@ class (exports ? this).ExifReader
       if @_iptcDataOffset >= endOfBlockOffset or @_iptcDataOffset >= @_dataView.byteLength
         break
       tag = @_readIptcTag()
-      @_tags[tag.name] = {'value': tag.value, 'description': tag.description}
+      if not @_tags[tag.name]? or not tag['repeatable']?
+        @_tags[tag.name] = {'value': tag.value, 'description': tag.description}
+      else
+        if not (@_tags[tag.name] instanceof Array)
+          @_tags[tag.name] = [{'value': @_tags[tag.name].value, 'description': @_tags[tag.name].description}]
+        @_tags[tag.name].push({'value': tag.value, 'description': tag.description})
 
   _readIptcTag: () ->
     dataView = @_dataView
@@ -285,13 +290,14 @@ class (exports ? this).ExifReader
         tagName = @_tagNames['iptc'][tagCode]['name']
         tagDescription = @_tagNames['iptc'][tagCode]['description'](tagValue)
       else
-        tagName = @_tagNames['iptc'][tagCode]
+        tagName = @_tagNames['iptc'][tagCode]['name'] ? @_tagNames['iptc'][tagCode]
         if tagValue instanceof Array
-          #tagDescription = tagValue.join ', '
-          tagDescription = tagValue.map((byte) -> String.fromCharCode(byte)).join ''
+          tagDescription = tagValue.map((charCode) -> String.fromCharCode(charCode)).join ''
         else
           tagDescription = tagValue
       tag = {'name': tagName, 'value': tagValue, 'description': tagDescription}
+      if @_tagNames['iptc'][tagCode]['repeatable']?
+        tag['repeatable'] = true
     else
       tag = {'name': "undefined-#{tagCode}", 'value': tagValue, 'description': tagValue}
     @_iptcDataOffset += 5 + tagSize
@@ -302,6 +308,9 @@ class (exports ? this).ExifReader
     value = for valueIndex in [0...size]
       @_dataView.getUint8(offset + valueIndex)
     value
+
+  _getStringValue: (value) ->
+    value.map((charValue) -> String.fromCharCode(charValue)).join ''
 
   _typeSizes: {
     1: 1,  # BYTE
@@ -799,11 +808,51 @@ class (exports ? this).ExifReader
       0x0205: 'Object Name'
       0x0207: 'Edit Status'
       0x0208: {'name': 'Editorial Update', 'description': (value) ->
-        switch value.map((byte) -> String.fromCharCode(byte)).join ''
+        switch value.map((charCode) -> String.fromCharCode(charCode)).join ''
           when '01' then 'Additional Language'
           else 'Unknown'
       }
       0x020a: 'Urgency'
+      0x020c: {'name': 'Subject Reference', 'repeatable': true, 'description': (value) ->
+        parts = (value.map((charCode) -> String.fromCharCode(charCode)).join '').split(':')
+        parts[2] + (if parts[3] then '/' + parts[3] else '') + (if parts[4] then '/' + parts[4] else '')
+      }
+      0x020f: 'Category'
+      0x0214: {'name': 'Supplemental Category', 'repeatable': true}
+      0x0216: 'Fixture Identifier'
+      0x0219: {'name': 'Keywords', 'repeatable': true}
+      0x021a: {'name': 'Content Location Code', 'repeatable': true}
+      0x021b: {'name': 'Content Location Name', 'repeatable': true}
+      0x021e: 'Release Date'
+      0x0223: 'Release Time'
+      0x0225: 'Expiration Date'
+      0x0226: 'Expiration Time'
+      0x0228: 'Special Instructions'
+      0x022a: {'name': 'Action Advised', 'description': (value) ->
+        switch value.map((charCode) -> String.fromCharCode(charCode)).join ''
+          when '01' then 'Object Kill'
+          when '02' then 'Object Replace'
+          when '03' then 'Object Append'
+          when '04' then 'Object Reference'
+          else 'Unknown'
+      }
+      0x022d: {'name': 'Reference Service', 'repeatable': true}
+      0x022f: {'name': 'Reference Date', 'repeatable': true}
+      0x0232: {'name': 'Reference Number', 'repeatable': true}
+      0x0237: 'Date Created'
+      0x023c: 'Time Created'
+      0x023e: 'Digital Creation Date'
+      0x023f: 'Digital Creation Time'
+      0x0241: 'Originating Program'
+      0x0246: 'Program Version'
+      0x024b: {'name': 'Object Cycle', 'description': (value) ->
+        switch value.map((charCode) -> String.fromCharCode(charCode)).join ''
+          when 'a' then 'morning'
+          when 'p' then 'evening'
+          when 'b' then 'both'
+          else 'Unknown'
+      }
+      0x0250: {'name': 'By-line', 'repeatable': true}
     }
   }
 

@@ -52,12 +52,45 @@ describe 'ExifReader', ->
       length = '\x00' + String.fromCharCode(content.length)
     getDataView '\x1c\x02' + String.fromCharCode(id) + length + content
 
+  getDataViewForRepeatedIptcDescription = (tags) ->
+    contents = ''
+    for tag in tags
+      id = tag['id']
+      content = tag['content']
+      if content.length > 0xff
+        length = String.fromCharCode(content.length >> 8) + String.fromCharCode(content.length % 0xff)
+      else
+        length = '\x00' + String.fromCharCode(content.length)
+      contents += '\x1c\x02' + String.fromCharCode(id) + length + content
+    getDataView contents
+
   beforeEach ->
     @exif = new ExifReader
     @exif._tags = {}
     @exif._littleEndian = false
     @exif._tiffHeaderOffset = 0
     @exif._iptcDataOffset = 0
+
+  testIptcSingle = (exif, id, tagName, tagValue, tagDescription) ->
+    tagValue = 'ABC' if not tagValue?
+    tagDescription = tagValue if not tagDescription?
+    exif._iptcDataOffset = 0
+    exif._dataView = getDataViewForIptcDescription(id, tagValue)
+    tag = exif._readIptcTag()
+    expect(tag.name).toEqual tagName
+    expect(tag.description).toEqual tagDescription
+
+  testIptcRepeated = (exif, id, tagName, tagValues) ->
+    tagValues = ['ABC', 'DEF'] if not tagValues?
+    # Have to go to higher level than readIptcTag, i.e. parseIptcTags.
+    exif._dataView = getDataViewForRepeatedIptcDescription(
+      {'id': id, 'content': tagValue} for tagValue in tagValues
+    )
+    exif._iptcDataOffset = -12
+    naaBlock = {'type': 0x0404, 'size': exif._dataView.length}
+    exif._parseIptcTags(naaBlock)
+    for i in [0...tagValues.length]
+      expect(exif._tags[tagName][i].description).toEqual tagValues[i]
 
   it 'should fail for too short data buffer', ->
     exif = @exif
@@ -844,39 +877,113 @@ describe 'ExifReader', ->
     expect(@exif._readIptcTag().description).toEqual 'UTF-8 Level 3'
 
   it 'should report correct IPTC description for Record Version', ->
-    @exif._dataView = getDataViewForIptcDescription(0, '\x00\x04')
-    expect(@exif._readIptcTag().description).toEqual '4'
+    testIptcSingle(@exif, 0, 'Record Version', '\x00\x04', '4')
 
   it 'should report correct IPTC description for Object Type Reference', ->
-    @exif._dataView = getDataViewForIptcDescription(3, '01:News')
-    expect(@exif._readIptcTag().description).toEqual '01:News'
+    testIptcSingle(@exif, 3, 'Object Type Reference', '01:News')
 
   it 'should report correct IPTC description for Object Attribute Reference', ->
-    @exif._dataView = getDataViewForIptcDescription(4, '001:Current')
-    expect(@exif._readIptcTag().description).toEqual '001:Current'
+    testIptcSingle(@exif, 4, 'Object Attribute Reference', '001:Current')
 
   it 'should report correct IPTC description for Object Name', ->
-    @exif._dataView = getDataViewForIptcDescription(5, 'MyObjectName')
-    expect(@exif._readIptcTag().description).toEqual 'MyObjectName'
+    testIptcSingle(@exif, 5, 'Object Name', 'MyObjectName')
 
   it 'should report correct IPTC description for Edit Status', ->
-    @exif._dataView = getDataViewForIptcDescription(7, 'MyEditStatus')
-    expect(@exif._readIptcTag().description).toEqual 'MyEditStatus'
+    testIptcSingle(@exif, 7, 'Edit Status', 'MyEditStatus')
 
   it 'should report correct IPTC description for Editorial Update', ->
-    @exif._dataView = getDataViewForIptcDescription(8, '01')
-    expect(@exif._readIptcTag().description).toEqual 'Additional Language'
+    testIptcSingle(@exif, 8, 'Editorial Update', '01', 'Additional Language')
 
   it 'should report "Unknown" as IPTC description for unknown Editorial Update value', ->
-    @exif._dataView = getDataViewForIptcDescription(8, '02')
-    expect(@exif._readIptcTag().description).toEqual 'Unknown'
+    testIptcSingle(@exif, 8, 'Editorial Update', '02', 'Unknown')
 
   it 'should report correct IPTC description for Urgency', ->
-    @exif._dataView = getDataViewForIptcDescription(10, '7')
-    expect(@exif._readIptcTag().description).toEqual '7'
+    testIptcSingle(@exif, 10, 'Urgency', '7')
 
-  #it 'should report correct IPTC description for Subject Reference', ->
-  #  @exif._dataView = getDataViewForIptcDescription(10, '7')
-  #  expect(@exif._readIptcTag().description).toEqual '7'
+  it 'should report correct IPTC description for single Subject Reference', ->
+    testIptcSingle(@exif, 12, 'Subject Reference', 'IPTC:04001001:Economy, Business & Finance:Agriculture:Arable Farming', 'Economy, Business & Finance/Agriculture/Arable Farming')
 
-  #it 'should report correct IPTC description for repeated Subject Reference', ->
+  it 'should report correct IPTC descriptions for repeated Subject Reference', ->
+    # Have to go to higher level than readIptcTag, i.e. parseIptcTags.
+    @exif._dataView = getDataViewForRepeatedIptcDescription([
+      {'id': 12, 'content': 'IPTC:04001001:Economy, Business & Finance:Agriculture:Arable Farming'},
+      {'id': 12, 'content': 'IPTC:04002005:Economy, Business & Finance:Chemicals:Organic chemicals'}])
+    @exif._iptcDataOffset = -12
+    naaBlock = {'type': 0x0404, 'size': @exif._dataView.length}
+    @exif._parseIptcTags(naaBlock)
+    expect(@exif._tags['Subject Reference'][0].description).toEqual 'Economy, Business & Finance/Agriculture/Arable Farming'
+    expect(@exif._tags['Subject Reference'][1].description).toEqual 'Economy, Business & Finance/Chemicals/Organic chemicals'
+
+  it 'should report correct IPTC description for Category', ->
+    testIptcSingle(@exif, 15, 'Category');
+
+  it 'should report correct IPTC description for repeated Supplemental Category', ->
+    testIptcRepeated(@exif, 20, 'Supplemental Category')
+
+  it 'should report correct IPTC description for Fixture Identifier', ->
+    testIptcSingle(@exif, 22, 'Fixture Identifier', 'ABC');
+
+  it 'should report correct IPTC description for repeated Keywords', ->
+    testIptcRepeated(@exif, 25, 'Keywords')
+
+  it 'should report correct IPTC description for repeated Content Location Code', ->
+    testIptcRepeated(@exif, 26, 'Content Location Code')
+
+  it 'should report correct IPTC description for repeated Content Location Name', ->
+    testIptcRepeated(@exif, 27, 'Content Location Name')
+
+  it 'should report correct IPTC description for Release Date', ->
+    testIptcSingle(@exif, 30, 'Release Date', '19890317')
+
+  it 'should report correct IPTC description for Release Time', ->
+    testIptcSingle(@exif, 35, 'Release Time', '090102-0507')
+
+  it 'should report correct IPTC description for Expiration Date', ->
+    testIptcSingle(@exif, 37, 'Expiration Date', '19940317')
+
+  it 'should report correct IPTC description for Expiration Time', ->
+    testIptcSingle(@exif, 38, 'Expiration Time', '090102-0507')
+
+  it 'should report correct IPTC description for Special Instructions', ->
+    testIptcSingle(@exif, 40, 'Special Instructions')
+
+  it 'should report correct IPTC description for Action Advised', ->
+    testIptcSingle(@exif, 42, 'Action Advised', '01', 'Object Kill')
+    testIptcSingle(@exif, 42, 'Action Advised', '02', 'Object Replace')
+    testIptcSingle(@exif, 42, 'Action Advised', '03', 'Object Append')
+    testIptcSingle(@exif, 42, 'Action Advised', '04', 'Object Reference')
+
+  it 'should report correct IPTC description for repeated Reference Service', ->
+    testIptcRepeated(@exif, 45, 'Reference Service')
+
+  it 'should report correct IPTC description for repeated Reference Date', ->
+    testIptcRepeated(@exif, 47, 'Reference Date', ['19890412', '19900513'])
+
+  it 'should report correct IPTC description for repeated Reference Number', ->
+    testIptcRepeated(@exif, 50, 'Reference Number', ['012345678', '12345678'])
+
+  it 'should report correct IPTC description for Date Created', ->
+    testIptcSingle(@exif, 55, 'Date Created', '19900127')
+
+  it 'should report correct IPTC description for Time Created', ->
+    testIptcSingle(@exif, 60, 'Time Created', '133015+0100')
+
+  it 'should report correct IPTC description for Digital Creation Date', ->
+    testIptcSingle(@exif, 62, 'Digital Creation Date', '19900127')
+
+  it 'should report correct IPTC description for Digital Creation Time', ->
+    testIptcSingle(@exif, 63, 'Digital Creation Time', '133015+0100')
+
+  it 'should report correct IPTC description for Originating Program', ->
+    testIptcSingle(@exif, 65, 'Originating Program')
+
+  it 'should report correct IPTC description for Program Version', ->
+    testIptcSingle(@exif, 70, 'Program Version')
+
+  it 'should report correct IPTC description for Object Cycle', ->
+    testIptcSingle(@exif, 75, 'Object Cycle', 'a', 'morning')
+    testIptcSingle(@exif, 75, 'Object Cycle', 'p', 'evening')
+    testIptcSingle(@exif, 75, 'Object Cycle', 'b', 'both')
+
+  it 'should report correct IPTC description for By-line', ->
+    testIptcRepeated(@exif, 80, 'By-line')

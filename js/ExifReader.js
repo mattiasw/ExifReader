@@ -445,16 +445,31 @@
           break;
         }
         tag = this._readIptcTag();
-        _results.push(this._tags[tag.name] = {
-          'value': tag.value,
-          'description': tag.description
-        });
+        if ((this._tags[tag.name] == null) || (tag['repeatable'] == null)) {
+          _results.push(this._tags[tag.name] = {
+            'value': tag.value,
+            'description': tag.description
+          });
+        } else {
+          if (!(this._tags[tag.name] instanceof Array)) {
+            this._tags[tag.name] = [
+              {
+                'value': this._tags[tag.name].value,
+                'description': this._tags[tag.name].description
+              }
+            ];
+          }
+          _results.push(this._tags[tag.name].push({
+            'value': tag.value,
+            'description': tag.description
+          }));
+        }
       }
       return _results;
     };
 
     ExifReader.prototype._readIptcTag = function() {
-      var dataView, tag, tagCode, tagDescription, tagName, tagSize, tagValue;
+      var dataView, tag, tagCode, tagDescription, tagName, tagSize, tagValue, _ref;
 
       dataView = this._dataView;
       if (dataView.getUint8(this._iptcDataOffset, false) !== 0x1c) {
@@ -468,10 +483,10 @@
           tagName = this._tagNames['iptc'][tagCode]['name'];
           tagDescription = this._tagNames['iptc'][tagCode]['description'](tagValue);
         } else {
-          tagName = this._tagNames['iptc'][tagCode];
+          tagName = (_ref = this._tagNames['iptc'][tagCode]['name']) != null ? _ref : this._tagNames['iptc'][tagCode];
           if (tagValue instanceof Array) {
-            tagDescription = tagValue.map(function(byte) {
-              return String.fromCharCode(byte);
+            tagDescription = tagValue.map(function(charCode) {
+              return String.fromCharCode(charCode);
             }).join('');
           } else {
             tagDescription = tagValue;
@@ -482,6 +497,9 @@
           'value': tagValue,
           'description': tagDescription
         };
+        if (this._tagNames['iptc'][tagCode]['repeatable'] != null) {
+          tag['repeatable'] = true;
+        }
       } else {
         tag = {
           'name': "undefined-" + tagCode,
@@ -507,6 +525,12 @@
         return _results;
       }).call(this);
       return value;
+    };
+
+    ExifReader.prototype._getStringValue = function(value) {
+      return value.map(function(charValue) {
+        return String.fromCharCode(charValue);
+      }).join('');
     };
 
     ExifReader.prototype._typeSizes = {
@@ -1475,8 +1499,8 @@
         0x0208: {
           'name': 'Editorial Update',
           'description': function(value) {
-            switch (value.map(function(byte) {
-                  return String.fromCharCode(byte);
+            switch (value.map(function(charCode) {
+                  return String.fromCharCode(charCode);
                 }).join('')) {
               case '01':
                 return 'Additional Language';
@@ -1485,7 +1509,100 @@
             }
           }
         },
-        0x020a: 'Urgency'
+        0x020a: 'Urgency',
+        0x020c: {
+          'name': 'Subject Reference',
+          'repeatable': true,
+          'description': function(value) {
+            var parts;
+
+            parts = (value.map(function(charCode) {
+              return String.fromCharCode(charCode);
+            }).join('')).split(':');
+            return parts[2] + (parts[3] ? '/' + parts[3] : '') + (parts[4] ? '/' + parts[4] : '');
+          }
+        },
+        0x020f: 'Category',
+        0x0214: {
+          'name': 'Supplemental Category',
+          'repeatable': true
+        },
+        0x0216: 'Fixture Identifier',
+        0x0219: {
+          'name': 'Keywords',
+          'repeatable': true
+        },
+        0x021a: {
+          'name': 'Content Location Code',
+          'repeatable': true
+        },
+        0x021b: {
+          'name': 'Content Location Name',
+          'repeatable': true
+        },
+        0x021e: 'Release Date',
+        0x0223: 'Release Time',
+        0x0225: 'Expiration Date',
+        0x0226: 'Expiration Time',
+        0x0228: 'Special Instructions',
+        0x022a: {
+          'name': 'Action Advised',
+          'description': function(value) {
+            switch (value.map(function(charCode) {
+                  return String.fromCharCode(charCode);
+                }).join('')) {
+              case '01':
+                return 'Object Kill';
+              case '02':
+                return 'Object Replace';
+              case '03':
+                return 'Object Append';
+              case '04':
+                return 'Object Reference';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x022d: {
+          'name': 'Reference Service',
+          'repeatable': true
+        },
+        0x022f: {
+          'name': 'Reference Date',
+          'repeatable': true
+        },
+        0x0232: {
+          'name': 'Reference Number',
+          'repeatable': true
+        },
+        0x0237: 'Date Created',
+        0x023c: 'Time Created',
+        0x023e: 'Digital Creation Date',
+        0x023f: 'Digital Creation Time',
+        0x0241: 'Originating Program',
+        0x0246: 'Program Version',
+        0x024b: {
+          'name': 'Object Cycle',
+          'description': function(value) {
+            switch (value.map(function(charCode) {
+                  return String.fromCharCode(charCode);
+                }).join('')) {
+              case 'a':
+                return 'morning';
+              case 'p':
+                return 'evening';
+              case 'b':
+                return 'both';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x0250: {
+          'name': 'By-line',
+          'repeatable': true
+        }
       }
     };
 
