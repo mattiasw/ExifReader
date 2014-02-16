@@ -288,7 +288,7 @@ class (exports ? this).ExifReader
     if @_tagNames['iptc'][tagCode]?
       if @_tagNames['iptc'][tagCode]['name']? and @_tagNames['iptc'][tagCode]['description']?
         tagName = @_tagNames['iptc'][tagCode]['name']
-        tagDescription = @_tagNames['iptc'][tagCode]['description'](tagValue)
+        tagDescription = @_tagNames['iptc'][tagCode]['description'](tagValue, this)
       else
         tagName = @_tagNames['iptc'][tagCode]['name'] ? @_tagNames['iptc'][tagCode]
         if tagValue instanceof Array
@@ -413,8 +413,8 @@ class (exports ? this).ExifReader
       0x8828: {'name': 'OECF', 'description': (value) ->
         '[Raw OECF table data]'
       }
-      0x9000: {'name': 'ExifVersion', 'description': (value) ->
-        value.map((charCode) -> String.fromCharCode(charCode)).join ''
+      0x9000: {'name': 'ExifVersion', 'description': (value) =>
+        this::_getStringValue value
       }
       0x9003: 'DateTimeOriginal',
       0x9004: 'DateTimeDigitized',
@@ -792,8 +792,8 @@ class (exports ? this).ExifReader
       0x1002: 'UnknownInteroperabilityTag0x1002'
     },
     'iptc': {
-      0x015a: {'name': 'Coded Character Set', 'description': (value) ->
-        switch value.map((byte) -> String.fromCharCode(byte)).join ''
+      0x015a: {'name': 'Coded Character Set', 'description': (value) =>
+        switch this::_getStringValue value
           when '\x1b%G' then 'UTF-8'
           when '\x1b%/G' then 'UTF-8 Level 1'
           when '\x1b%/H' then 'UTF-8 Level 2'
@@ -807,14 +807,14 @@ class (exports ? this).ExifReader
       0x0204: 'Object Attribute Reference'
       0x0205: 'Object Name'
       0x0207: 'Edit Status'
-      0x0208: {'name': 'Editorial Update', 'description': (value) ->
-        switch value.map((charCode) -> String.fromCharCode(charCode)).join ''
+      0x0208: {'name': 'Editorial Update', 'description': (value) =>
+        switch this::_getStringValue value
           when '01' then 'Additional Language'
           else 'Unknown'
       }
       0x020a: 'Urgency'
-      0x020c: {'name': 'Subject Reference', 'repeatable': true, 'description': (value) ->
-        parts = (value.map((charCode) -> String.fromCharCode(charCode)).join '').split(':')
+      0x020c: {'name': 'Subject Reference', 'repeatable': true, 'description': (value) =>
+        parts = this::_getStringValue(value).split(':')
         parts[2] + (if parts[3] then '/' + parts[3] else '') + (if parts[4] then '/' + parts[4] else '')
       }
       0x020f: 'Category'
@@ -828,8 +828,8 @@ class (exports ? this).ExifReader
       0x0225: 'Expiration Date'
       0x0226: 'Expiration Time'
       0x0228: 'Special Instructions'
-      0x022a: {'name': 'Action Advised', 'description': (value) ->
-        switch value.map((charCode) -> String.fromCharCode(charCode)).join ''
+      0x022a: {'name': 'Action Advised', 'description': (value) =>
+        switch this::_getStringValue value
           when '01' then 'Object Kill'
           when '02' then 'Object Replace'
           when '03' then 'Object Append'
@@ -839,20 +839,157 @@ class (exports ? this).ExifReader
       0x022d: {'name': 'Reference Service', 'repeatable': true}
       0x022f: {'name': 'Reference Date', 'repeatable': true}
       0x0232: {'name': 'Reference Number', 'repeatable': true}
-      0x0237: 'Date Created'
-      0x023c: 'Time Created'
-      0x023e: 'Digital Creation Date'
-      0x023f: 'Digital Creation Time'
+      0x0237: {'name': 'Date Created', 'description': (value) =>
+        date = this::_getStringValue value
+        if (date.length >= 8)
+          date.substr(0, 4) + '-' + date.substr(4, 2) + '-' + date.substr(6, 2)
+        else
+          date
+      }
+      0x023c: {'name': 'Time Created', 'description': (value) =>
+        parsedTime = time = this::_getStringValue value
+        if (time.length >= 6)
+          parsedTime = time.substr(0, 2) + ':' + time.substr(2, 2) + ':' + time.substr(4, 2)
+          if (time.length == 11)
+            parsedTime += time.substr(6, 1) + time.substr(7, 2) + ':' + time.substr(9, 2)
+        parsedTime
+      }
+      0x023e: {'name': 'Digital Creation Date', 'description': (value) =>
+        date = this::_getStringValue value
+        if (date.length >= 8)
+          date.substr(0, 4) + '-' + date.substr(4, 2) + '-' + date.substr(6, 2)
+        else
+          date
+      }
+      0x023f: {'name': 'Digital Creation Time', 'description': (value) =>
+        parsedTime = time = this::_getStringValue value
+        if (time.length >= 6)
+          parsedTime = time.substr(0, 2) + ':' + time.substr(2, 2) + ':' + time.substr(4, 2)
+          if (time.length == 11)
+            parsedTime += time.substr(6, 1) + time.substr(7, 2) + ':' + time.substr(9, 2)
+        parsedTime
+      }
       0x0241: 'Originating Program'
       0x0246: 'Program Version'
-      0x024b: {'name': 'Object Cycle', 'description': (value) ->
-        switch value.map((charCode) -> String.fromCharCode(charCode)).join ''
+      0x024b: {'name': 'Object Cycle', 'description': (value) =>
+        switch this::_getStringValue value
           when 'a' then 'morning'
           when 'p' then 'evening'
           when 'b' then 'both'
           else 'Unknown'
       }
       0x0250: {'name': 'By-line', 'repeatable': true}
+      0x0255: {'name': 'By-line Title', 'repeatable': true}
+      0x025a: 'City'
+      0x025c: 'Sub-location'
+      0x025f: 'Province/State'
+      0x0264: 'Country/Primary Location Code'
+      0x0265: 'Country/Primary Location Name'
+      0x0267: 'Original Transmission Reference'
+      0x0269: 'Headline'
+      0x026e: 'Credit'
+      0x0273: 'Source'
+      0x0274: 'Copyright Notice'
+      0x0276: {'name': 'Contact', 'repeatable': true}
+      0x0278: 'Caption/Abstract'
+      0x027a: {'name': 'Writer/Editor', 'repeatable': true}
+      0x027d: {'name': 'Rasterized Caption', 'description': (value) -> value}
+      0x0282: 'Image Type'
+      0x0283: {'name': 'Image Orientation', 'description': (value) =>
+        switch this::_getStringValue value
+          when 'P' then 'Portrait'
+          when 'L' then 'Landscape'
+          when 'S' then 'Square'
+          else 'Unknown'
+      }
+      0x0287: 'Language Identifier'
+      0x0296: {'name': 'Audio Type', 'description': (value) =>
+        stringValue = this::_getStringValue value
+        description = ''
+        switch stringValue.charAt(0)
+          when '1' then description += 'Mono'
+          when '2' then description += 'Stereo'
+        switch stringValue.charAt(1)
+          when 'A' then description += ', actuality'
+          when 'C' then description += ', question and answer session'
+          when 'M' then description += ', music, transmitted by itself'
+          when 'Q' then description += ', response to a question'
+          when 'R' then description += ', raw sound'
+          when 'S' then description += ', scener'
+          when 'V' then description += ', voicer'
+          when 'W' then description += ', wrap'
+        if description != '' then description else stringValue
+      }
+      0x0297: {'name': 'Audio Sampling Rate', 'description': (value) =>
+        parseInt(this::_getStringValue value, 10) + ' Hz'
+      }
+      0x0298: {'name': 'Audio Sampling Resolution', 'description': (value) =>
+        bits = parseInt(this::_getStringValue value, 10)
+        bits + (if bits == 1 then ' bit' else ' bits')
+      }
+      0x0299: {'name': 'Audio Duration', 'description': (value) =>
+        duration = this::_getStringValue value
+        if (duration.length >= 6)
+          duration.substr(0, 2) + ':' + duration.substr(2, 2) + ':' + duration.substr(4, 2)
+        else
+          duration
+      }
+      0x029a: 'Audio Outcue'
+      0x02c8: {'name': 'ObjectData Preview File Format', 'description': (value) =>
+        stringValue = this::_getStringValue value
+        switch stringValue
+          when '00' then 'No ObjectData'
+          when '01' then 'IPTC-NAA Digital Newsphoto Parameter Record'
+          when '02' then 'IPTC7901 Recommended Message Format'
+          when '03' then 'Tagged Image File Format (Adobe/Aldus Image data)'
+          when '04' then 'Illustrator (Adobe Graphics data)'
+          when '05' then 'AppleSingle (Apple Computer Inc)'
+          when '06' then 'NAA 89-3 (ANPA 1312)'
+          when '07' then 'MacBinary II'
+          when '08' then 'IPTC Unstructured Character Oriented File Format (UCOFF)'
+          when '09' then 'United Press International ANPA 1312 variant'
+          when '10' then 'United Press International Down-Load Message'
+          when '11' then 'JPEG File Interchange (JFIF)'
+          when '12' then 'Photo-CD Image-Pac (Eastman Kodak)'
+          when '13' then 'Microsoft Bit Mapped Graphics File [*.BMP]'
+          when '14' then 'Digital Audio File [*.WAV] (Microsoft & Creative Labs)'
+          when '15' then 'Audio plus Moving Video [*.AVI] (Microsoft)'
+          when '16' then 'PC DOS/Windows Executable Files [*.COM][*.EXE]'
+          when '17' then 'Compressed Binary File [*.ZIP] (PKWare Inc)'
+          when '18' then 'Audio Interchange File Format AIFF (Apple Computer Inc)'
+          when '19' then 'RIFF Wave (Microsoft Corporation)'
+          when '20' then 'Freehand (Macromedia/Aldus)'
+          when '21' then 'Hypertext Markup Language "HTML" (The Internet Society)'
+          when '22' then 'MPEG 2 Audio Layer 2 (Musicom), ISO/IEC'
+          when '23' then 'MPEG 2 Audio Layer 3, ISO/IEC'
+          when '24' then 'Portable Document File (*.PDF) Adobe'
+          when '25' then 'News Industry Text Format (NITF)'
+          when '26' then 'Tape Archive (*.TAR)'
+          when '27' then 'Tidningarnas Telegrambyrå NITF version (TTNITF DTD)'
+          when '28' then 'Ritzaus Bureau NITF version (RBNITF DTD)'
+          when '29' then 'Corel Draw [*.CDR]'
+          else 'Unknown format ' + stringValue
+      }
+      0x02c9: {'name': 'ObjectData Preview File Format Version', 'description': (value, exif) =>
+        # Format ID, Version ID, Version Description
+        formatVersions = {
+          '00': {'00': '1'},
+          '01': {'01': '1', '02': '2', '03': '3', '04': '4'},
+          '02': {'04': '4'},
+          '03': {'01': '5.0', '02': '6.0'},
+          '04': {'01': '1.40'},
+          '05': {'01': '2'},
+          '06': {'01': '1'},
+          '11': {'01': '1.02'},
+          '20': {'01': '3.1', '02': '4.0', '03': '5.0', '04': '5.5'},
+          '21': {'02': '2.0'}
+        }
+        stringValue = this::_getStringValue value
+        if exif._tags['ObjectData Preview File Format']? and formatVersions[this::_getStringValue(exif._tags['ObjectData Preview File Format'].value)]?[stringValue]?
+          return formatVersions[this::_getStringValue(exif._tags['ObjectData Preview File Format'].value)][stringValue]
+        return stringValue
+      }
+      0x02ca: 'ObjectData Preview Data'
     }
   }
 

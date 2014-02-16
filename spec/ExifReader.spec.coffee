@@ -47,7 +47,7 @@ describe 'ExifReader', ->
 
   getDataViewForIptcDescription = (id, content) ->
     if content.length > 0xff
-      length = String.fromCharCode(content.length >> 8) + String.fromCharCode(content.length % 0xff)
+      length = String.fromCharCode(content.length >> 8) + String.fromCharCode(content.length % 256)
     else
       length = '\x00' + String.fromCharCode(content.length)
     getDataView '\x1c\x02' + String.fromCharCode(id) + length + content
@@ -58,7 +58,7 @@ describe 'ExifReader', ->
       id = tag['id']
       content = tag['content']
       if content.length > 0xff
-        length = String.fromCharCode(content.length >> 8) + String.fromCharCode(content.length % 0xff)
+        length = String.fromCharCode(content.length >> 8) + String.fromCharCode(content.length % 256)
       else
         length = '\x00' + String.fromCharCode(content.length)
       contents += '\x1c\x02' + String.fromCharCode(id) + length + content
@@ -80,8 +80,9 @@ describe 'ExifReader', ->
     expect(tag.name).toEqual tagName
     expect(tag.description).toEqual tagDescription
 
-  testIptcRepeated = (exif, id, tagName, tagValues) ->
+  testIptcRepeated = (exif, id, tagName, tagValues, tagDescriptions) ->
     tagValues = ['ABC', 'DEF'] if not tagValues?
+    tagDescriptions = tagValues if not tagDescriptions?
     # Have to go to higher level than readIptcTag, i.e. parseIptcTags.
     exif._dataView = getDataViewForRepeatedIptcDescription(
       {'id': id, 'content': tagValue} for tagValue in tagValues
@@ -90,7 +91,14 @@ describe 'ExifReader', ->
     naaBlock = {'type': 0x0404, 'size': exif._dataView.length}
     exif._parseIptcTags(naaBlock)
     for i in [0...tagValues.length]
-      expect(exif._tags[tagName][i].description).toEqual tagValues[i]
+      expect(exif._tags[tagName][i].description).toEqual tagDescriptions[i]
+
+  testIptcFileFormatVersion = (exif, formatId, versionNo, versionDesc) ->
+    exif._iptcDataOffset = 0
+    exif._dataView = getDataView '\x1c\x02' + String.fromCharCode(200) + '\x00\x02' + formatId + '\x1c\x02' + String.fromCharCode(201) + '\x00\x02' + versionNo
+    exif._tags['ObjectData Preview File Format'] = exif._readIptcTag()
+    tag = exif._readIptcTag()
+    expect(tag.description).toEqual versionDesc
 
   it 'should fail for too short data buffer', ->
     exif = @exif
@@ -904,15 +912,11 @@ describe 'ExifReader', ->
     testIptcSingle(@exif, 12, 'Subject Reference', 'IPTC:04001001:Economy, Business & Finance:Agriculture:Arable Farming', 'Economy, Business & Finance/Agriculture/Arable Farming')
 
   it 'should report correct IPTC descriptions for repeated Subject Reference', ->
-    # Have to go to higher level than readIptcTag, i.e. parseIptcTags.
-    @exif._dataView = getDataViewForRepeatedIptcDescription([
-      {'id': 12, 'content': 'IPTC:04001001:Economy, Business & Finance:Agriculture:Arable Farming'},
-      {'id': 12, 'content': 'IPTC:04002005:Economy, Business & Finance:Chemicals:Organic chemicals'}])
-    @exif._iptcDataOffset = -12
-    naaBlock = {'type': 0x0404, 'size': @exif._dataView.length}
-    @exif._parseIptcTags(naaBlock)
-    expect(@exif._tags['Subject Reference'][0].description).toEqual 'Economy, Business & Finance/Agriculture/Arable Farming'
-    expect(@exif._tags['Subject Reference'][1].description).toEqual 'Economy, Business & Finance/Chemicals/Organic chemicals'
+    testIptcRepeated(@exif, 12, 'Subject Reference',
+      ['IPTC:04001001:Economy, Business & Finance:Agriculture:Arable Farming',
+       'IPTC:04002005:Economy, Business & Finance:Chemicals:Organic chemicals'],
+      ['Economy, Business & Finance/Agriculture/Arable Farming',
+       'Economy, Business & Finance/Chemicals/Organic chemicals'])
 
   it 'should report correct IPTC description for Category', ->
     testIptcSingle(@exif, 15, 'Category');
@@ -963,16 +967,18 @@ describe 'ExifReader', ->
     testIptcRepeated(@exif, 50, 'Reference Number', ['012345678', '12345678'])
 
   it 'should report correct IPTC description for Date Created', ->
-    testIptcSingle(@exif, 55, 'Date Created', '19900127')
+    testIptcSingle(@exif, 55, 'Date Created', '19900127', '1990-01-27')
 
   it 'should report correct IPTC description for Time Created', ->
-    testIptcSingle(@exif, 60, 'Time Created', '133015+0100')
+    testIptcSingle(@exif, 60, 'Time Created', '133015', '13:30:15')
+    testIptcSingle(@exif, 60, 'Time Created', '133015+0100', '13:30:15+01:00')
 
   it 'should report correct IPTC description for Digital Creation Date', ->
-    testIptcSingle(@exif, 62, 'Digital Creation Date', '19900127')
+    testIptcSingle(@exif, 62, 'Digital Creation Date', '19900127', '1990-01-27')
 
   it 'should report correct IPTC description for Digital Creation Time', ->
-    testIptcSingle(@exif, 63, 'Digital Creation Time', '133015+0100')
+    testIptcSingle(@exif, 63, 'Digital Creation Time', '133015', '13:30:15')
+    testIptcSingle(@exif, 63, 'Digital Creation Time', '133015+0100', '13:30:15+01:00')
 
   it 'should report correct IPTC description for Originating Program', ->
     testIptcSingle(@exif, 65, 'Originating Program')
@@ -987,3 +993,273 @@ describe 'ExifReader', ->
 
   it 'should report correct IPTC description for By-line', ->
     testIptcRepeated(@exif, 80, 'By-line')
+
+  it 'should report correct IPTC description for By-line Title', ->
+    testIptcRepeated(@exif, 85, 'By-line Title')
+
+  it 'should report correct IPTC description for City', ->
+    testIptcSingle(@exif, 90, 'City')
+
+  it 'should report correct IPTC description for Sub-location', ->
+    testIptcSingle(@exif, 92, 'Sub-location')
+
+  it 'should report correct IPTC description for Province/State', ->
+    testIptcSingle(@exif, 95, 'Province/State')
+
+  it 'should report correct IPTC description for Country/Primary Location Code', ->
+    testIptcSingle(@exif, 100, 'Country/Primary Location Code')
+
+  it 'should report correct IPTC description for Country/Primary Location Name', ->
+    testIptcSingle(@exif, 101, 'Country/Primary Location Name')
+
+  it 'should report correct IPTC description for Original Transmission Reference', ->
+    testIptcSingle(@exif, 103, 'Original Transmission Reference')
+
+  it 'should report correct IPTC description for Headline', ->
+    testIptcSingle(@exif, 105, 'Headline')
+
+  it 'should report correct IPTC description for Credit', ->
+    testIptcSingle(@exif, 110, 'Credit')
+
+  it 'should report correct IPTC description for Source', ->
+    testIptcSingle(@exif, 115, 'Source')
+
+  it 'should report correct IPTC description for Copyright Notice', ->
+    testIptcSingle(@exif, 116, 'Copyright Notice')
+
+  it 'should report correct IPTC description for Contact', ->
+    testIptcRepeated(@exif, 118, 'Contact')
+
+  it 'should report correct IPTC description for Caption/Abstract', ->
+    testIptcSingle(@exif, 120, 'Caption/Abstract')
+
+  it 'should report correct IPTC description for Writer/Editor', ->
+    testIptcRepeated(@exif, 122, 'Writer/Editor')
+
+  it 'should report correct IPTC description for Rasterized Caption', ->
+    # This is always 7360 octets. Best to test it correctly.
+    value =
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX' +
+      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
+    description = value.split('').map((character) -> character.charCodeAt(0))
+    testIptcSingle(@exif, 125, 'Rasterized Caption', value, description)
+
+  it 'should report correct IPTC description for Image Type', ->
+    testIptcSingle(@exif, 130, 'Image Type', '0T')
+
+  it 'should report correct IPTC description for Image Orientation', ->
+    testIptcSingle(@exif, 131, 'Image Orientation', 'P', 'Portrait')
+    testIptcSingle(@exif, 131, 'Image Orientation', 'L', 'Landscape')
+    testIptcSingle(@exif, 131, 'Image Orientation', 'S', 'Square')
+
+  it 'should report correct IPTC description for Language Identifier', ->
+    testIptcSingle(@exif, 135, 'Language Identifier', 'eo')
+
+  it 'should report correct IPTC description for Audio Type', ->
+    testIptcSingle(@exif, 150, 'Audio Type', '0T')
+    testIptcSingle(@exif, 150, 'Audio Type', '1A', 'Mono, actuality')
+    testIptcSingle(@exif, 150, 'Audio Type', '2A', 'Stereo, actuality')
+    testIptcSingle(@exif, 150, 'Audio Type', '1C', 'Mono, question and answer session')
+    testIptcSingle(@exif, 150, 'Audio Type', '1M', 'Mono, music, transmitted by itself')
+    testIptcSingle(@exif, 150, 'Audio Type', '1Q', 'Mono, response to a question')
+    testIptcSingle(@exif, 150, 'Audio Type', '1R', 'Mono, raw sound')
+    testIptcSingle(@exif, 150, 'Audio Type', '1S', 'Mono, scener')
+    testIptcSingle(@exif, 150, 'Audio Type', '1V', 'Mono, voicer')
+    testIptcSingle(@exif, 150, 'Audio Type', '1W', 'Mono, wrap')
+
+  it 'should report correct IPTC description for Audio Sampling Rate', ->
+    testIptcSingle(@exif, 151, 'Audio Sampling Rate', '000000', '0 Hz')
+    testIptcSingle(@exif, 151, 'Audio Sampling Rate', '000001', '1 Hz')
+    testIptcSingle(@exif, 151, 'Audio Sampling Rate', '044100', '44100 Hz')
+    testIptcSingle(@exif, 151, 'Audio Sampling Rate', '176400', '176400 Hz')
+
+  it 'should report correct IPTC description for Audio Sampling Resolution', ->
+    testIptcSingle(@exif, 152, 'Audio Sampling Resolution', '00', '0 bits')
+    testIptcSingle(@exif, 152, 'Audio Sampling Resolution', '01', '1 bit')
+    testIptcSingle(@exif, 152, 'Audio Sampling Resolution', '02', '2 bits')
+    testIptcSingle(@exif, 152, 'Audio Sampling Resolution', '16', '16 bits')
+
+  it 'should report correct IPTC description for Audio Duration', ->
+    testIptcSingle(@exif, 153, 'Audio Duration', '120105', '12:01:05')
+
+  it 'should report correct IPTC description for Audio Outcue', ->
+    testIptcSingle(@exif, 154, 'Audio Outcue', '... better as a team')
+
+  it 'should report correct IPTC description for ObjectData Preview File Format', ->
+    fileFormats = {
+      '00': 'No ObjectData',
+      '01': 'IPTC-NAA Digital Newsphoto Parameter Record',
+      '02': 'IPTC7901 Recommended Message Format',
+      '03': 'Tagged Image File Format (Adobe/Aldus Image data)',
+      '04': 'Illustrator (Adobe Graphics data)',
+      '05': 'AppleSingle (Apple Computer Inc)',
+      '06': 'NAA 89-3 (ANPA 1312)',
+      '07': 'MacBinary II',
+      '08': 'IPTC Unstructured Character Oriented File Format (UCOFF)',
+      '09': 'United Press International ANPA 1312 variant',
+      '10': 'United Press International Down-Load Message',
+      '11': 'JPEG File Interchange (JFIF)',
+      '12': 'Photo-CD Image-Pac (Eastman Kodak)',
+      '13': 'Microsoft Bit Mapped Graphics File [*.BMP]',
+      '14': 'Digital Audio File [*.WAV] (Microsoft & Creative Labs)',
+      '15': 'Audio plus Moving Video [*.AVI] (Microsoft)',
+      '16': 'PC DOS/Windows Executable Files [*.COM][*.EXE]',
+      '17': 'Compressed Binary File [*.ZIP] (PKWare Inc)',
+      '18': 'Audio Interchange File Format AIFF (Apple Computer Inc)',
+      '19': 'RIFF Wave (Microsoft Corporation)',
+      '20': 'Freehand (Macromedia/Aldus)',
+      '21': 'Hypertext Markup Language "HTML" (The Internet Society)',
+      '22': 'MPEG 2 Audio Layer 2 (Musicom), ISO/IEC',
+      '23': 'MPEG 2 Audio Layer 3, ISO/IEC',
+      '24': 'Portable Document File (*.PDF) Adobe',
+      '25': 'News Industry Text Format (NITF)',
+      '26': 'Tape Archive (*.TAR)',
+      '27': 'Tidningarnas Telegrambyrå NITF version (TTNITF DTD)',
+      '28': 'Ritzaus Bureau NITF version (RBNITF DTD)',
+      '29': 'Corel Draw [*.CDR]'
+      '99': 'Unknown format 99'
+    }
+    for id, format of fileFormats
+      testIptcSingle(@exif, 200, 'ObjectData Preview File Format', id, format)
+
+  it 'should report correct IPTC description for ObjectData Preview File Format Version', ->
+    formatVersions = [
+      ['00', '00', '1'],
+      ['01', '01', '1'],
+      ['01', '02', '2'],
+      ['01', '03', '3'],
+      ['01', '04', '4'],
+      ['02', '04', '4'],
+      ['03', '01', '5.0'],
+      ['03', '02', '6.0'],
+      ['04', '01', '1.40'],
+      ['05', '01', '2'],
+      ['06', '01', '1'],
+      ['11', '01', '1.02'],
+      ['20', '01', '3.1'],
+      ['20', '02', '4.0'],
+      ['20', '03', '5.0'],
+      ['20', '04', '5.5'],
+      ['21', '02', '2.0']
+    ]
+    for version in formatVersions
+      testIptcFileFormatVersion(@exif, version[0], version[1], version[2])
+
+  it 'should report correct IPTC description for unknown ObjectData Preview File Format Version', ->
+    testIptcSingle(@exif, 201, 'ObjectData Preview File Format Version', '47')
+
+  it 'should report correct IPTC description for ', ->
+    testIptcSingle(@exif, 202, 'ObjectData Preview Data', 'ABC')
