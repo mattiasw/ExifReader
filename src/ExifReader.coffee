@@ -233,7 +233,6 @@ class (exports ? this).ExifReader
     tagValue
 
   _readIptcTags: () ->
-    #throw new Error('here')
     try
       naaBlock = @_getIptcNaaResourceBlock()
     catch error
