@@ -309,7 +309,7 @@ class (exports ? this).ExifReader
     value
 
   _getStringValue: (value) ->
-    value.map((charValue) -> String.fromCharCode(charValue)).join ''
+    String.fromCharCode.apply(null, value)
 
   _typeSizes: {
     1: 1,  # BYTE

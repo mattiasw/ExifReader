@@ -530,9 +530,7 @@
     };
 
     ExifReader.prototype._getStringValue = function(value) {
-      return value.map(function(charValue) {
-        return String.fromCharCode(charValue);
-      }).join('');
+      return String.fromCharCode.apply(null, value);
     };
 
     ExifReader.prototype._typeSizes = {
