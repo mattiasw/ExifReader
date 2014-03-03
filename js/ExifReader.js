@@ -10,6 +10,8 @@
 
 (function() {
   (typeof exports !== "undefined" && exports !== null ? exports : this).ExifReader = (function() {
+    var _this = this;
+
     ExifReader.prototype._MIN_DATA_BUFFER_LENGTH = 2;
 
     ExifReader.prototype._JPEG_ID_SIZE = 2;
@@ -481,7 +483,7 @@
       if (this._tagNames['iptc'][tagCode] != null) {
         if ((this._tagNames['iptc'][tagCode]['name'] != null) && (this._tagNames['iptc'][tagCode]['description'] != null)) {
           tagName = this._tagNames['iptc'][tagCode]['name'];
-          tagDescription = this._tagNames['iptc'][tagCode]['description'](tagValue);
+          tagDescription = this._tagNames['iptc'][tagCode]['description'](tagValue, this);
         } else {
           tagName = (_ref = this._tagNames['iptc'][tagCode]['name']) != null ? _ref : this._tagNames['iptc'][tagCode];
           if (tagValue instanceof Array) {
@@ -684,9 +686,7 @@
         0x9000: {
           'name': 'ExifVersion',
           'description': function(value) {
-            return value.map(function(charCode) {
-              return String.fromCharCode(charCode);
-            }).join('');
+            return ExifReader.prototype._getStringValue(value);
           }
         },
         0x9003: 'DateTimeOriginal',
@@ -1470,9 +1470,7 @@
         0x015a: {
           'name': 'Coded Character Set',
           'description': function(value) {
-            switch (value.map(function(byte) {
-                  return String.fromCharCode(byte);
-                }).join('')) {
+            switch (ExifReader.prototype._getStringValue(value)) {
               case '\x1b%G':
                 return 'UTF-8';
               case '\x1b%/G':
@@ -1499,9 +1497,7 @@
         0x0208: {
           'name': 'Editorial Update',
           'description': function(value) {
-            switch (value.map(function(charCode) {
-                  return String.fromCharCode(charCode);
-                }).join('')) {
+            switch (ExifReader.prototype._getStringValue(value)) {
               case '01':
                 return 'Additional Language';
               default:
@@ -1516,9 +1512,7 @@
           'description': function(value) {
             var parts;
 
-            parts = (value.map(function(charCode) {
-              return String.fromCharCode(charCode);
-            }).join('')).split(':');
+            parts = ExifReader.prototype._getStringValue(value).split(':');
             return parts[2] + (parts[3] ? '/' + parts[3] : '') + (parts[4] ? '/' + parts[4] : '');
           }
         },
@@ -1548,9 +1542,7 @@
         0x022a: {
           'name': 'Action Advised',
           'description': function(value) {
-            switch (value.map(function(charCode) {
-                  return String.fromCharCode(charCode);
-                }).join('')) {
+            switch (ExifReader.prototype._getStringValue(value)) {
               case '01':
                 return 'Object Kill';
               case '02':
@@ -1576,18 +1568,68 @@
           'name': 'Reference Number',
           'repeatable': true
         },
-        0x0237: 'Date Created',
-        0x023c: 'Time Created',
-        0x023e: 'Digital Creation Date',
-        0x023f: 'Digital Creation Time',
+        0x0237: {
+          'name': 'Date Created',
+          'description': function(value) {
+            var date;
+
+            date = ExifReader.prototype._getStringValue(value);
+            if (date.length >= 8) {
+              return date.substr(0, 4) + '-' + date.substr(4, 2) + '-' + date.substr(6, 2);
+            } else {
+              return date;
+            }
+          }
+        },
+        0x023c: {
+          'name': 'Time Created',
+          'description': function(value) {
+            var parsedTime, time;
+
+            parsedTime = time = ExifReader.prototype._getStringValue(value);
+            if (time.length >= 6) {
+              parsedTime = time.substr(0, 2) + ':' + time.substr(2, 2) + ':' + time.substr(4, 2);
+              if (time.length === 11) {
+                parsedTime += time.substr(6, 1) + time.substr(7, 2) + ':' + time.substr(9, 2);
+              }
+            }
+            return parsedTime;
+          }
+        },
+        0x023e: {
+          'name': 'Digital Creation Date',
+          'description': function(value) {
+            var date;
+
+            date = ExifReader.prototype._getStringValue(value);
+            if (date.length >= 8) {
+              return date.substr(0, 4) + '-' + date.substr(4, 2) + '-' + date.substr(6, 2);
+            } else {
+              return date;
+            }
+          }
+        },
+        0x023f: {
+          'name': 'Digital Creation Time',
+          'description': function(value) {
+            var parsedTime, time;
+
+            parsedTime = time = ExifReader.prototype._getStringValue(value);
+            if (time.length >= 6) {
+              parsedTime = time.substr(0, 2) + ':' + time.substr(2, 2) + ':' + time.substr(4, 2);
+              if (time.length === 11) {
+                parsedTime += time.substr(6, 1) + time.substr(7, 2) + ':' + time.substr(9, 2);
+              }
+            }
+            return parsedTime;
+          }
+        },
         0x0241: 'Originating Program',
         0x0246: 'Program Version',
         0x024b: {
           'name': 'Object Cycle',
           'description': function(value) {
-            switch (value.map(function(charCode) {
-                  return String.fromCharCode(charCode);
-                }).join('')) {
+            switch (ExifReader.prototype._getStringValue(value)) {
               case 'a':
                 return 'morning';
               case 'p':
@@ -1602,7 +1644,252 @@
         0x0250: {
           'name': 'By-line',
           'repeatable': true
-        }
+        },
+        0x0255: {
+          'name': 'By-line Title',
+          'repeatable': true
+        },
+        0x025a: 'City',
+        0x025c: 'Sub-location',
+        0x025f: 'Province/State',
+        0x0264: 'Country/Primary Location Code',
+        0x0265: 'Country/Primary Location Name',
+        0x0267: 'Original Transmission Reference',
+        0x0269: 'Headline',
+        0x026e: 'Credit',
+        0x0273: 'Source',
+        0x0274: 'Copyright Notice',
+        0x0276: {
+          'name': 'Contact',
+          'repeatable': true
+        },
+        0x0278: 'Caption/Abstract',
+        0x027a: {
+          'name': 'Writer/Editor',
+          'repeatable': true
+        },
+        0x027d: {
+          'name': 'Rasterized Caption',
+          'description': function(value) {
+            return value;
+          }
+        },
+        0x0282: 'Image Type',
+        0x0283: {
+          'name': 'Image Orientation',
+          'description': function(value) {
+            switch (ExifReader.prototype._getStringValue(value)) {
+              case 'P':
+                return 'Portrait';
+              case 'L':
+                return 'Landscape';
+              case 'S':
+                return 'Square';
+              default:
+                return 'Unknown';
+            }
+          }
+        },
+        0x0287: 'Language Identifier',
+        0x0296: {
+          'name': 'Audio Type',
+          'description': function(value) {
+            var description, stringValue;
+
+            stringValue = ExifReader.prototype._getStringValue(value);
+            description = '';
+            switch (stringValue.charAt(0)) {
+              case '1':
+                description += 'Mono';
+                break;
+              case '2':
+                description += 'Stereo';
+            }
+            switch (stringValue.charAt(1)) {
+              case 'A':
+                description += ', actuality';
+                break;
+              case 'C':
+                description += ', question and answer session';
+                break;
+              case 'M':
+                description += ', music, transmitted by itself';
+                break;
+              case 'Q':
+                description += ', response to a question';
+                break;
+              case 'R':
+                description += ', raw sound';
+                break;
+              case 'S':
+                description += ', scener';
+                break;
+              case 'V':
+                description += ', voicer';
+                break;
+              case 'W':
+                description += ', wrap';
+            }
+            if (description !== '') {
+              return description;
+            } else {
+              return stringValue;
+            }
+          }
+        },
+        0x0297: {
+          'name': 'Audio Sampling Rate',
+          'description': function(value) {
+            return parseInt(ExifReader.prototype._getStringValue(value, 10)) + ' Hz';
+          }
+        },
+        0x0298: {
+          'name': 'Audio Sampling Resolution',
+          'description': function(value) {
+            var bits;
+
+            bits = parseInt(ExifReader.prototype._getStringValue(value, 10));
+            return bits + (bits === 1 ? ' bit' : ' bits');
+          }
+        },
+        0x0299: {
+          'name': 'Audio Duration',
+          'description': function(value) {
+            var duration;
+
+            duration = ExifReader.prototype._getStringValue(value);
+            if (duration.length >= 6) {
+              return duration.substr(0, 2) + ':' + duration.substr(2, 2) + ':' + duration.substr(4, 2);
+            } else {
+              return duration;
+            }
+          }
+        },
+        0x029a: 'Audio Outcue',
+        0x02c8: {
+          'name': 'ObjectData Preview File Format',
+          'description': function(value) {
+            var stringValue;
+
+            stringValue = ExifReader.prototype._getStringValue(value);
+            switch (stringValue) {
+              case '00':
+                return 'No ObjectData';
+              case '01':
+                return 'IPTC-NAA Digital Newsphoto Parameter Record';
+              case '02':
+                return 'IPTC7901 Recommended Message Format';
+              case '03':
+                return 'Tagged Image File Format (Adobe/Aldus Image data)';
+              case '04':
+                return 'Illustrator (Adobe Graphics data)';
+              case '05':
+                return 'AppleSingle (Apple Computer Inc)';
+              case '06':
+                return 'NAA 89-3 (ANPA 1312)';
+              case '07':
+                return 'MacBinary II';
+              case '08':
+                return 'IPTC Unstructured Character Oriented File Format (UCOFF)';
+              case '09':
+                return 'United Press International ANPA 1312 variant';
+              case '10':
+                return 'United Press International Down-Load Message';
+              case '11':
+                return 'JPEG File Interchange (JFIF)';
+              case '12':
+                return 'Photo-CD Image-Pac (Eastman Kodak)';
+              case '13':
+                return 'Microsoft Bit Mapped Graphics File [*.BMP]';
+              case '14':
+                return 'Digital Audio File [*.WAV] (Microsoft & Creative Labs)';
+              case '15':
+                return 'Audio plus Moving Video [*.AVI] (Microsoft)';
+              case '16':
+                return 'PC DOS/Windows Executable Files [*.COM][*.EXE]';
+              case '17':
+                return 'Compressed Binary File [*.ZIP] (PKWare Inc)';
+              case '18':
+                return 'Audio Interchange File Format AIFF (Apple Computer Inc)';
+              case '19':
+                return 'RIFF Wave (Microsoft Corporation)';
+              case '20':
+                return 'Freehand (Macromedia/Aldus)';
+              case '21':
+                return 'Hypertext Markup Language "HTML" (The Internet Society)';
+              case '22':
+                return 'MPEG 2 Audio Layer 2 (Musicom), ISO/IEC';
+              case '23':
+                return 'MPEG 2 Audio Layer 3, ISO/IEC';
+              case '24':
+                return 'Portable Document File (*.PDF) Adobe';
+              case '25':
+                return 'News Industry Text Format (NITF)';
+              case '26':
+                return 'Tape Archive (*.TAR)';
+              case '27':
+                return 'Tidningarnas Telegrambyrå NITF version (TTNITF DTD)';
+              case '28':
+                return 'Ritzaus Bureau NITF version (RBNITF DTD)';
+              case '29':
+                return 'Corel Draw [*.CDR]';
+              default:
+                return 'Unknown format ' + stringValue;
+            }
+          }
+        },
+        0x02c9: {
+          'name': 'ObjectData Preview File Format Version',
+          'description': function(value, exif) {
+            var formatVersions, stringValue, _ref;
+
+            formatVersions = {
+              '00': {
+                '00': '1'
+              },
+              '01': {
+                '01': '1',
+                '02': '2',
+                '03': '3',
+                '04': '4'
+              },
+              '02': {
+                '04': '4'
+              },
+              '03': {
+                '01': '5.0',
+                '02': '6.0'
+              },
+              '04': {
+                '01': '1.40'
+              },
+              '05': {
+                '01': '2'
+              },
+              '06': {
+                '01': '1'
+              },
+              '11': {
+                '01': '1.02'
+              },
+              '20': {
+                '01': '3.1',
+                '02': '4.0',
+                '03': '5.0',
+                '04': '5.5'
+              },
+              '21': {
+                '02': '2.0'
+              }
+            };
+            stringValue = ExifReader.prototype._getStringValue(value);
+            if ((exif._tags['ObjectData Preview File Format'] != null) && (((_ref = formatVersions[ExifReader.prototype._getStringValue(exif._tags['ObjectData Preview File Format'].value)]) != null ? _ref[stringValue] : void 0) != null)) {
+              return formatVersions[ExifReader.prototype._getStringValue(exif._tags['ObjectData Preview File Format'].value)][stringValue];
+            }
+            return stringValue;
+          }
+        },
+        0x02ca: 'ObjectData Preview Data'
       }
     };
 
@@ -1655,6 +1942,6 @@
 
     return ExifReader;
 
-  })();
+  }).call(this);
 
 }).call(this);
