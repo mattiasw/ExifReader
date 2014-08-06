@@ -1,0 +1,19 @@
+{
+  "name": "exifreader",
+  "version": "1.0.1",
+  "homepage": "https://github.com/mattiasw/ExifReader",
+  "authors": [
+    "Mattias Wallander <mattias@wallander.eu>"
+  ],
+  "description": "Client-side Exif parser",
+  "main": "js/ExifReader.js",
+  "keywords": [
+    "exif",
+    "image",
+    "png",
+    "jpg",
+    "jpeg",
+    "meta"
+  ],
+  "license": "GNU LGPL"
+}
