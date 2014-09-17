@@ -56,6 +56,9 @@ fs.readFile(path, function (err, data) {
 		// Or, with jDataView you would use this:
 		//exif.loadView(new jDataView(data));
 
+		// The MakerNote tag can be really large. Remove it to lower memory usage.
+		exif.deleteTag('MakerNote');
+
 		// Output the tags.
 		var tags = exif.getAllTags();
 		for (name in tags)

@@ -16,6 +16,9 @@
 				// Or, with jDataView you would use this:
 				//exif.loadView(new jDataView(evt.target.result));
 
+				// The MakerNote tag can be really large. Remove it to lower memory usage.
+				exif.deleteTag('MakerNote');
+
 				// Output the tags on the page.
 				var tags = exif.getAllTags();
 				var tableBody = document.getElementById('exif-table-body');

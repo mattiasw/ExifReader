@@ -25,6 +25,11 @@ A full HTML example page is located in the examples/html/ directory. The example
 
 Also, there is a Node.js example in the example/node/ directory that uses a simple wrapper for the DataView API.
 
+Tips
+----
+
+* After parsing the tags, consider deleting the MakerNote tag if you know you will have a lot of ExifReader instances. It can be really large for some manufacturers. See the examples folder to see how you can do that.
+
 Testing
 -------
 
@@ -40,6 +45,9 @@ Issues
 Changelog
 ---------
 
+* **September 17, 2014**:
+  * Lower memory usage by unsetting the file data object after parsing.
+  * Add deleteTag method to be able to delete tags that use a lot of memory, e.g. MakerNote.
 * **September 9, 2013**:
   * Make parsing of APP markers more robust. Fixes problems with some pictures.
 * **July 13, 2013**:

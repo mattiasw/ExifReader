@@ -1,5 +1,5 @@
 ###
-# ExifReader 1.0.1
+# ExifReader 1.1.0
 # http://github.com/mattiasw/exifreader
 # Copyright (C) 2011  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
@@ -237,6 +237,14 @@ describe 'ExifReader', ->
   it 'should return undefined description for undefined tag names', ->
     exif = @exif
     expect(exif.getTagDescription('MyUndefinedTagName')).toBeUndefined()
+
+  it 'should delete tag', ->
+    @exif._dataView = getDataView '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00'
+    @exif._tagNames['0th'][0x4711] = 'MyDeletedTag'
+    @exif._readIfd '0th', 0
+    expect(@exif.getTagDescription('MyDeletedTag')).toEqual 0x42
+    @exif.deleteTag('MyDeletedTag');
+    expect(@exif.getTagDescription('MyDeletedTag')).toBeUndefined()
 
   # Parsing tag descriptions.
 

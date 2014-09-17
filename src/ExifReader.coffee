@@ -1,5 +1,5 @@
 ###
-# ExifReader 1.0.1
+# ExifReader 1.1.0
 # http://github.com/mattiasw/exifreader
 # Copyright (C) 2011-2013  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
@@ -727,3 +727,14 @@ class (exports ? this).ExifReader
   ###
   getAllTags: () ->
     return @_tags
+
+  ###
+  # Delete a tag.
+  #
+  # name string The name of the tag to delete
+  #
+  # Delete the tag with the given name. Can be used to lower memory usage.
+  # E.g., the MakerNote tag can be really large.
+  ###
+  deleteTag: (name) ->
+    delete @_tags[name]
