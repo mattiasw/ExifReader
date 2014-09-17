@@ -28,6 +28,7 @@ Also, there is a Node.js example in the example/node/ directory that uses a simp
 Tips
 ----
 
+* Only load part of the image file since the Exif info segment has a max size. I suggest 128 kB. See the examples folder for a way to do this.
 * After parsing the tags, consider deleting the MakerNote tag if you know you will have a lot of ExifReader instances. It can be really large for some manufacturers. See the examples folder to see how you can do that.
 
 Testing

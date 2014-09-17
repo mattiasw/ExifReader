@@ -32,7 +32,8 @@
 				alert(error);
 			}
 		};
-		reader.readAsArrayBuffer(files[0]);
+		// We only need the start of the file for the Exif info.
+		reader.readAsArrayBuffer(files[0].slice(0, 128 * 1024));
 	};
 	window.addEventListener("load", function () {
 		document.getElementById("file").addEventListener("change", handleFile, false);
