@@ -89,7 +89,8 @@
       this._dataView = _dataView;
       this._tags = {};
       this._checkImageHeader();
-      return this._readTags();
+      this._readTags();
+      return this._dataView = null;
     };
 
     ExifReader.prototype._checkImageHeader = function() {

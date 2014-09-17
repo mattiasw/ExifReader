@@ -52,6 +52,7 @@ class (exports ? this).ExifReader
     @_tags = {}
     @_checkImageHeader()
     @_readTags()
+    @_dataView = null
 
   _checkImageHeader: ->
     if @_dataView.byteLength < @_MIN_DATA_BUFFER_LENGTH or @_dataView.getUint16(0, false) isnt @_JPEG_ID
