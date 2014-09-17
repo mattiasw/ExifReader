@@ -13,6 +13,13 @@ var imageDate = exif.getTagDescription('DateTimeOriginal');
 var allTags = exif.getAllTags();
 ```
 
+Installation
+------------
+
+The easiest way is to use [Bower](http://bower.io/):
+
+    bower install exifreader
+
 Support
 -------
 
