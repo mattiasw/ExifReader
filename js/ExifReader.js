@@ -93,13 +93,10 @@
     };
 
     ExifReader.prototype._checkImageHeader = function() {
-      var dataView;
-
-      dataView = this._dataView;
-      if (dataView.byteLength < this._MIN_DATA_BUFFER_LENGTH || dataView.getUint16(0, false) !== this._JPEG_ID) {
+      if (this._dataView.byteLength < this._MIN_DATA_BUFFER_LENGTH || this._dataView.getUint16(0, false) !== this._JPEG_ID) {
         throw new Error('Invalid image format');
       }
-      this._parseAppMarkers(dataView);
+      this._parseAppMarkers(this._dataView);
       if (!this._hasExifData()) {
         throw new Error('No Exif data');
       }

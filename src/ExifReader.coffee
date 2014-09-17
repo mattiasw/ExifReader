@@ -54,10 +54,9 @@ class (exports ? this).ExifReader
     @_readTags()
 
   _checkImageHeader: ->
-    dataView = @_dataView
-    if dataView.byteLength < @_MIN_DATA_BUFFER_LENGTH or dataView.getUint16(0, false) isnt @_JPEG_ID
+    if @_dataView.byteLength < @_MIN_DATA_BUFFER_LENGTH or @_dataView.getUint16(0, false) isnt @_JPEG_ID
       throw new Error 'Invalid image format'
-    @_parseAppMarkers(dataView)
+    @_parseAppMarkers(@_dataView)
     if not @_hasExifData()
       throw new Error 'No Exif data'
 
