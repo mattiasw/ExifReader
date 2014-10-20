@@ -1,7 +1,7 @@
 ###
-# ExifReader 1.1.0
+# ExifReader 1.1.1
 # http://github.com/mattiasw/exifreader
-# Copyright (C) 2011  Mattias Wallander <mattias@wallander.eu>
+# Copyright (C) 2011-2014  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
 # See license text at http://www.gnu.org/licenses/lgpl.txt
 ###
@@ -230,6 +230,11 @@ describe 'ExifReader', ->
     @exif._dataView = getDataView '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x0c\x41\x42\x43\x44\x45\x00'
     expect(@exif._readTag('0th', 0).description).toEqual 'ABCDE'
 
+  it 'should be able to handle tag with faulty type', ->
+    @exif._tagNames['0th'][0x4711] = 'MyFaultyTypeTag'
+    @exif._dataView = getDataView '\x47\x11\x00\x08\x00\x00\x00\x00'
+    expect(@exif._readTag('0th', 0)).toBeUndefined()
+
   it 'should return undefined value for undefined tag names', ->
     exif = @exif
     expect(exif.getTagValue('MyUndefinedTagName')).toBeUndefined()
@@ -316,6 +321,14 @@ describe 'ExifReader', ->
     expect(@exif._readTag('exif', 0).description).toEqual '[Unicode encoded text]'
     @exif._dataView = getDataView '\x92\x86\x00\x07\x00\x00\x00\x08\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00'
     expect(@exif._readTag('exif', 0).description).toEqual '[Undefined encoding]'
+
+  it 'should report correct name for FNumber', ->
+    @exif._dataView = getDataView '\x82\x9d\x00\x05\x00\x00\x00\x01\x00\x00\x00\x0c\x00\x00\x01\x02\x00\x00\x03\x04'
+    expect(@exif._readTag('exif', 0).name).toEqual 'FNumber'
+
+  it 'should report correct description for FNumber', ->
+    @exif._dataView = getDataView '\x82\x9d\x00\x05\x00\x00\x00\x01\x00\x00\x00\x0c\x00\x00\x01\x02\x00\x00\x03\x04'
+    expect(@exif._readTag('exif', 0).description).toEqual 0x102 / 0x304
 
   it 'should report correct description for ExposureProgram', ->
     @exif._dataView = getDataView '\x88\x22\x00\x03\x00\x00\x00\x01\x00\x00\x00\x00'
@@ -583,6 +596,10 @@ describe 'ExifReader', ->
     @exif._dataView = getDataView '\x00\x00\x00\x01\x00\x00\x00\x04\x02\x02\x00\x00'
     expect(@exif._readTag('gps', 0).description).toEqual 'Version 2.2'
 
+  it 'should handle empty GPSVersionID', ->
+    @exif._dataView = getDataView '\x00\x00\x00\x01\x00\x00\x00\x01\x00'
+    expect(@exif._readTag('gps', 0).description).toEqual 'Unknown'
+
   it 'should report correct description for GPSLatitudeRef', ->
     @exif._dataView = getDataView '\x00\x01\x00\x02\x00\x00\x00\x02N\x00\x00\x00'
     expect(@exif._readTag('gps', 0).description).toEqual 'North latitude'
@@ -707,6 +724,10 @@ describe 'ExifReader', ->
     @exif._dataView = getDataView '\x00\x1b\x00\x07\x00\x00\x00\x08\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00'
     expect(@exif._readTag('gps', 0).description).toEqual '[Undefined encoding]'
 
+  it 'should handle empty GPSProcessingMethod', ->
+    @exif._dataView = getDataView '\x00\x1b\x00\x07\x00\x00\x00\x01\x00'
+    expect(@exif._readTag('gps', 0).description).toEqual 'Undefined'
+
   it 'should report correct text for ASCII GPSAreaInformation', ->
     @exif._dataView = getDataView '\x00\x1c\x00\x07\x00\x00\x00\x0b\x00\x00\x00\x0cASCII\x00\x00\x00ABC'
     expect(@exif._readTag('gps', 0).description).toEqual 'ABC'
@@ -718,3 +739,7 @@ describe 'ExifReader', ->
     expect(@exif._readTag('gps', 0).description).toEqual '[Unicode encoded text]'
     @exif._dataView = getDataView '\x00\x1c\x00\x07\x00\x00\x00\x08\x00\x00\x00\x0c\x00\x00\x00\x00\x00\x00\x00\x00'
     expect(@exif._readTag('gps', 0).description).toEqual '[Undefined encoding]'
+
+  it 'should handle empty GPSAreaInformation', ->
+    @exif._dataView = getDataView '\x00\x1c\x00\x07\x00\x00\x00\x01\x00'
+    expect(@exif._readTag('gps', 0).description).toEqual 'Undefined'

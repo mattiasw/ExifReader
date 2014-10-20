@@ -1,7 +1,7 @@
 ###
-# ExifReader 1.1.0
+# ExifReader 1.1.1
 # http://github.com/mattiasw/exifreader
-# Copyright (C) 2011-2013  Mattias Wallander <mattias@wallander.eu>
+# Copyright (C) 2011-2014  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
 # See license text at http://www.gnu.org/licenses/lgpl.txt
 ###
@@ -127,13 +127,16 @@ class (exports ? this).ExifReader
     offset += 2
     for fieldIndex in [0...numberOfFields]
       tag = @_readTag(ifdType, offset)
-      @_tags[tag.name] = {'value': tag.value, 'description': tag.description}
+      if tag != undefined
+        @_tags[tag.name] = {'value': tag.value, 'description': tag.description}
       offset += 12
 
   _readTag: (ifdType, offset) ->
     tagCode = @_getShortAt offset
     tagType = @_getShortAt(offset + 2)
     tagCount = @_getLongAt(offset + 4)
+    if @_typeSizes[tagType] == undefined
+      return undefined
     if @_typeSizes[tagType] * tagCount <= 4
       # If the value itself fits in four bytes, it is recorded instead of just
       # the offset.
@@ -663,18 +666,24 @@ class (exports ? this).ExifReader
       }
       0x001a: 'GPSDestDistance',
       0x001b: {'name': 'GPSProcessingMethod', 'description': (value) ->
-        switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
-          when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
-          when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
-          when 'UNICODE\x00' then '[Unicode encoded text]'
-          when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
+        if value == 0
+          'Undefined'
+        else
+          switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
+            when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
+            when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
+            when 'UNICODE\x00' then '[Unicode encoded text]'
+            when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
       }
       0x001c: {'name': 'GPSAreaInformation', 'description': (value) ->
-        switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
-          when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
-          when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
-          when 'UNICODE\x00' then '[Unicode encoded text]'
-          when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
+        if value == 0
+          'Undefined'
+        else
+          switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
+            when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
+            when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
+            when 'UNICODE\x00' then '[Unicode encoded text]'
+            when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
       }
       0x001d: 'GPSDateStamp',
       0x001e: {'name': 'GPSDifferential', 'description': (value) ->
