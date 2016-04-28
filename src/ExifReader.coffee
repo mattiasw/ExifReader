@@ -280,8 +280,6 @@ class (exports ? this).ExifReader
 
   _readIptcTag: () ->
     dataView = @_dataView
-    if dataView.getUint8(@_iptcDataOffset, false) isnt 0x1c
-      throw new Error 'Not an IPTC NAA resource tag.'
     tagCode = dataView.getUint16(@_iptcDataOffset + 1, false)
     tagSize = dataView.getUint16(@_iptcDataOffset + 3, false)
     tagValue = @_getIptcTagValue(@_iptcDataOffset + 5, tagSize)

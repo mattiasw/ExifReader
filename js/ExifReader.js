@@ -466,9 +466,6 @@
     ExifReader.prototype._readIptcTag = function() {
       var dataView, ref, tag, tagCode, tagDescription, tagName, tagSize, tagValue;
       dataView = this._dataView;
-      if (dataView.getUint8(this._iptcDataOffset, false) !== 0x1c) {
-        throw new Error('Not an IPTC NAA resource tag.');
-      }
       tagCode = dataView.getUint16(this._iptcDataOffset + 1, false);
       tagSize = dataView.getUint16(this._iptcDataOffset + 3, false);
       tagValue = this._getIptcTagValue(this._iptcDataOffset + 5, tagSize);
