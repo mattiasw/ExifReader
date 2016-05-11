@@ -149,8 +149,9 @@ describe 'ExifReader', ->
     #expect(@exif._tiffHeaderOffset).toEqual 39
 
   it 'should handle IPTC Comment markers', ->
-    @exif._dataView = getDataView '\xff\xd8\xff\xfe\x00+Optimized by JPEGmin'
-    @exif._checkImageHeader()
+    @exif._dataView = getDataView '\xff\xd8\xff\xe0\x00\x07JFIF\x00\xff\xfe\x00\x2bOptimized by JPEGmin\x00'
+    appMarkers = @exif._checkImageHeader()
+    expect(appMarkers.length).toBeGreaterThan(1);
 
   it 'should fail gracefully for faulty APP markers', ->
     exif = @exif
