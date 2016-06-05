@@ -148,6 +148,11 @@ describe 'ExifReader', ->
     @exif._checkImageHeader()
     #expect(@exif._tiffHeaderOffset).toEqual 39
 
+  it 'should handle IPTC Comment markers', ->
+    @exif._dataView = getDataView '\xff\xd8\xff\xe0\x00\x07JFIF\x00\xff\xfe\x00\x2bOptimized by JPEGmin\x00'
+    appMarkers = @exif._checkImageHeader()
+    expect(appMarkers.length).toBeGreaterThan(1);
+
   it 'should fail gracefully for faulty APP markers', ->
     exif = @exif
     expect(->
@@ -808,11 +813,6 @@ describe 'ExifReader', ->
     exif._dataView = getDataView '\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x008BIM\x04\x05\x00\x00\x00\x00\x00\x42'
     exif._checkImageHeader()
     expect(-> exif._getIptcNaaResourceBlock()).toThrow(new Error 'No IPTC NAA resource block.')
-
-  it 'should fail for faulty IPTC NAA resource tag', ->
-    exif = @exif
-    exif._dataView = getDataView '\x00\x01\x5a\x00\x00'
-    expect(-> exif._readIptcTag()).toThrow(new Error 'Not an IPTC NAA resource tag.')
 
   it 'should read IPTC NAA resource tag', ->
     @exif._dataView = getDataView '\x1c\x47\x11\x00\x02BC'

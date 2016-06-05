@@ -16,6 +16,7 @@ class (exports ? this).ExifReader
   _APP1_MARKER:              0xffe1
   _APP13_MARKER:             0xffed
   _APP15_MARKER:             0xffef
+  _COMMENT_MARKER:           0xfffe
   _APP_ID_OFFSET:            4
   _BYTES_Exif:               0x45786966
   _BYTES_8BIM:               0x3842494d
@@ -101,7 +102,7 @@ class (exports ? this).ExifReader
 
   _isAppMarker: (dataView, appMarkerPosition) ->
     appMarker = dataView.getUint16(appMarkerPosition, false)
-    appMarker >= @_APP0_MARKER and appMarker <= @_APP15_MARKER
+    appMarker >= @_APP0_MARKER and appMarker <= @_APP15_MARKER or appMarker == @_COMMENT_MARKER
 
   _hasExifData: ->
     @_tiffHeaderOffset isnt 0
@@ -279,8 +280,6 @@ class (exports ? this).ExifReader
 
   _readIptcTag: () ->
     dataView = @_dataView
-    if dataView.getUint8(@_iptcDataOffset, false) isnt 0x1c
-      throw new Error 'Not an IPTC NAA resource tag.'
     tagCode = dataView.getUint16(@_iptcDataOffset + 1, false)
     tagSize = dataView.getUint16(@_iptcDataOffset + 3, false)
     tagValue = @_getIptcTagValue(@_iptcDataOffset + 5, tagSize)
