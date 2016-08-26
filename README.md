@@ -16,14 +16,14 @@ var allTags = exif.getAllTags();
 Installation
 ------------
 
-The easiest way is to use [Bower](http://bower.io/):
+The easiest way is to use [Bower](https://bower.io/):
 
     bower install exifreader
 
 Support
 -------
 
-The library makes use of the DataView API which is supported in Chrome 9+, Firefox 15+ and Internet Explorer 10+. If you want to support a browser or Node.js that doesn't have DataView support, you should probably use a wrapper like [jDataView by Christopher Chedeau](https://github.com/vjeux/jDataView/).
+The library makes use of the DataView API which is supported in Chrome 9+, Firefox 15+ and Internet Explorer 10+. If you want to support a browser or Node.js that doesn't have DataView support, you should probably use a wrapper like [jDataView by Christopher Chedeau](https://github.com/jDataView/jDataView).
 
 Examples
 --------
