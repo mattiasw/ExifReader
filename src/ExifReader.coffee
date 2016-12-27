@@ -1,7 +1,7 @@
 ###
-# ExifReader 1.0.1
+# ExifReader 1.1.1
 # http://github.com/mattiasw/exifreader
-# Copyright (C) 2011-2013  Mattias Wallander <mattias@wallander.eu>
+# Copyright (C) 2011-2014  Mattias Wallander <mattias@wallander.eu>
 # Licensed under the GNU Lesser General Public License version 3 or later
 # See license text at http://www.gnu.org/licenses/lgpl.txt
 ###
@@ -65,12 +65,14 @@ class (exports ? this).ExifReader
       @_readIptcTags()
     if not foundMetaData
       throw new Error 'No Exif data'
+    @_dataView = null
 
   _checkImageHeader: ->
-    dataView = @_dataView
-    if dataView.byteLength < @_MIN_DATA_BUFFER_LENGTH or dataView.getUint16(0, false) isnt @_JPEG_ID
+    if @_dataView.byteLength < @_MIN_DATA_BUFFER_LENGTH or @_dataView.getUint16(0, false) isnt @_JPEG_ID
       throw new Error 'Invalid image format'
     @_parseAppMarkers(dataView)
+    if not @_hasExifData()
+      throw new Error 'No Exif data'
 
   _parseAppMarkers: (dataView) ->
     appMarkerPosition = @_JPEG_ID_SIZE
@@ -152,13 +154,16 @@ class (exports ? this).ExifReader
     offset += 2
     for fieldIndex in [0...numberOfFields]
       tag = @_readTag(ifdType, offset)
-      @_tags[tag.name] = {'value': tag.value, 'description': tag.description}
+      if tag != undefined
+        @_tags[tag.name] = {'value': tag.value, 'description': tag.description}
       offset += 12
 
   _readTag: (ifdType, offset) ->
     tagCode = @_getShortAt offset
     tagType = @_getShortAt(offset + 2)
     tagCount = @_getLongAt(offset + 4)
+    if @_typeSizes[tagType] == undefined
+      return undefined
     if @_typeSizes[tagType] * tagCount <= 4
       # If the value itself fits in four bytes, it is recorded instead of just
       # the offset.
@@ -762,18 +767,24 @@ class (exports ? this).ExifReader
       }
       0x001a: 'GPSDestDistance',
       0x001b: {'name': 'GPSProcessingMethod', 'description': (value) ->
-        switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
-          when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
-          when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
-          when 'UNICODE\x00' then '[Unicode encoded text]'
-          when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
+        if value == 0
+          'Undefined'
+        else
+          switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
+            when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
+            when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
+            when 'UNICODE\x00' then '[Unicode encoded text]'
+            when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
       }
       0x001c: {'name': 'GPSAreaInformation', 'description': (value) ->
-        switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
-          when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
-          when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
-          when 'UNICODE\x00' then '[Unicode encoded text]'
-          when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
+        if value == 0
+          'Undefined'
+        else
+          switch value[0...8].map((charCode) -> String.fromCharCode(charCode)).join ''
+            when 'ASCII\x00\x00\x00' then value[8...value.length].map((charCode) -> String.fromCharCode(charCode)).join ''
+            when 'JIS\x00\x00\x00\x00\x00' then '[JIS encoded text]'
+            when 'UNICODE\x00' then '[Unicode encoded text]'
+            when '\x00\x00\x00\x00\x00\x00\x00\x00' then '[Undefined encoding]'
       }
       0x001d: 'GPSDateStamp',
       0x001e: {'name': 'GPSDifferential', 'description': (value) ->
@@ -1026,3 +1037,14 @@ class (exports ? this).ExifReader
   ###
   getAllTags: () ->
     return @_tags
+
+  ###
+  # Delete a tag.
+  #
+  # name string The name of the tag to delete
+  #
+  # Delete the tag with the given name. Can be used to lower memory usage.
+  # E.g., the MakerNote tag can be really large.
+  ###
+  deleteTag: (name) ->
+    delete @_tags[name]
