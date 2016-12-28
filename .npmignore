@@ -2,9 +2,11 @@
 docs
 node_modules
 test
+.bowerrc
 .eslintignore
 .eslintrc.json
 .gitignore
+.npmignore
 bower.json
 webpack.config.js
 *.log
