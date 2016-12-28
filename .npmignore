@@ -1,0 +1,12 @@
+.git
+docs
+node_modules
+test
+.eslintignore
+.eslintrc.json
+.gitignore
+bower.json
+webpack.config.js
+*.log
+.tags
+.tags1
