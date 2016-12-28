@@ -64,41 +64,49 @@ function readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder) {
 }
 
 function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
+    const FIELD_COUNT_SIZE = Types.getTypeSize('SHORT');
+    const FIELD_SIZE = 12;
+
     const tags = {};
     const numberOfFields = Types.getShortAt(dataView, offset, byteOrder);
-    offset += 2;
+
+    offset += FIELD_COUNT_SIZE;
     for (let fieldIndex = 0; fieldIndex < numberOfFields; fieldIndex++) {
         const tag = readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder);
         if (tag !== undefined) {
             tags[tag.name] = {'value': tag.value, 'description': tag.description};
         }
-        offset += 12;
+        offset += FIELD_SIZE;
     }
 
     return tags;
 }
 
 function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
+    const TAG_TYPE_OFFSET = Types.getTypeSize('SHORT');
+    const TAG_COUNT_OFFSET = TAG_TYPE_OFFSET + Types.getTypeSize('SHORT');
+    const TAG_VALUE_OFFSET = TAG_COUNT_OFFSET + Types.getTypeSize('LONG');
+
     const tagCode = Types.getShortAt(dataView, offset, byteOrder);
-    const tagType = Types.getShortAt(dataView, offset + 2, byteOrder);
-    const tagCount = Types.getLongAt(dataView, offset + 4, byteOrder);
+    const tagType = Types.getShortAt(dataView, offset + TAG_TYPE_OFFSET, byteOrder);
+    const tagCount = Types.getLongAt(dataView, offset + TAG_COUNT_OFFSET, byteOrder);
     let tagValue;
 
     if (Types.typeSizes[tagType] === undefined) {
         return undefined;
     }
 
-    if (Types.typeSizes[tagType] * tagCount <= 4) {
-        // If the value itself fits in four bytes, it is recorded instead of just
-        // the offset.
-        tagValue = getTagValue(dataView, offset + 8, tagType, tagCount, byteOrder);
+    if (tagValueFitsInOffsetSlot(tagType, tagCount)) {
+        tagValue = getTagValue(dataView, offset + TAG_VALUE_OFFSET, tagType, tagCount, byteOrder);
     } else {
-        const tagValueOffset = Types.getLongAt(dataView, offset + 8, byteOrder);
+        const tagValueOffset = Types.getLongAt(dataView, offset + TAG_VALUE_OFFSET, byteOrder);
         tagValue = getTagValue(dataView, tiffHeaderOffset + tagValueOffset, tagType, tagCount, byteOrder);
     }
+
     if (tagType === Types.tagTypes['ASCII']) {
         tagValue = splitNullSeparatedAsciiString(tagValue);
     }
+
     if (TagNames[ifdType][tagCode] !== undefined) {
         let tagName, tagDescription;
 
@@ -125,6 +133,10 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
         value: tagValue,
         description: tagValue
     };
+}
+
+function tagValueFitsInOffsetSlot(tagType, tagCount) {
+    return Types.typeSizes[tagType] * tagCount <= Types.getTypeSize('LONG');
 }
 
 function getTagValue(dataView, offset, type, count, byteOrder) {

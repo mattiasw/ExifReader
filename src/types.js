@@ -33,7 +33,8 @@ export default {
     getSlongAt,
     getSrationalAt,
     typeSizes,
-    tagTypes
+    tagTypes,
+    getTypeSize
 };
 
 function getAsciiValue(charArray) {
@@ -70,4 +71,12 @@ function getSlongAt(dataView, offset, byteOrder) {
 
 function getSrationalAt(dataView, offset, byteOrder) {
     return getSlongAt(dataView, offset, byteOrder) / getSlongAt(dataView, offset + 4, byteOrder);
+}
+
+function getTypeSize(typeName) {
+    if (tagTypes[typeName] === undefined) {
+        throw new Error('No such type found.');
+    }
+
+    return typeSizes[tagTypes[typeName]];
 }

@@ -1,6 +1,10 @@
 import IptcTagNames from './iptc-tag-names';
 
 const BYTES_8BIM = 0x3842494d;
+const BYTES_8BIM_SIZE = 4;
+const RESOURCE_BLOCK_HEADER_SIZE = BYTES_8BIM_SIZE + 8;
+const NAA_RESOURCE_BLOCK_TYPE = 0x0404;
+const TAG_HEADER_SIZE = 5;
 
 export default {
     read
@@ -16,25 +20,31 @@ function read(dataView, dataOffset) {
 }
 
 function getNaaResourceBlock(dataView, dataOffset) {
-    while (dataOffset + 12 <= dataView.byteLength) {
-        const naaBlock = getResourceBlock(dataView, dataOffset);
-        if (naaBlock.type === 0x0404) {
-            return {naaBlock, dataOffset};
+    while (dataOffset + RESOURCE_BLOCK_HEADER_SIZE <= dataView.byteLength) {
+        const resourceBlock = getResourceBlock(dataView, dataOffset);
+        if (isNaaResourceBlock(resourceBlock)) {
+            return {naaBlock: resourceBlock, dataOffset};
         }
-        dataOffset += 12 + naaBlock.size + getBlockPadding(naaBlock.size);
+        dataOffset += RESOURCE_BLOCK_HEADER_SIZE + resourceBlock.size + getBlockPadding(resourceBlock.size);
     }
     throw new Error('No IPTC NAA resource block.');
 }
 
 function getResourceBlock(dataView, dataOffset) {
+    const RESOURCE_BLOCK_SIZE_OFFSET = 10;
+
     if (dataView.getUint32(dataOffset, false) !== BYTES_8BIM) {
         throw new Error('Not an IPTC resource block.');
     }
 
     return {
-        type: dataView.getUint16(dataOffset + 4, false),
-        size: dataView.getUint16(dataOffset + 10, false)
+        type: dataView.getUint16(dataOffset + BYTES_8BIM_SIZE, false),
+        size: dataView.getUint16(dataOffset + RESOURCE_BLOCK_SIZE_OFFSET, false)
     };
+}
+
+function isNaaResourceBlock(resourceBlock) {
+    return resourceBlock.type === NAA_RESOURCE_BLOCK_TYPE;
 }
 
 function getBlockPadding(blockSize) {
@@ -47,7 +57,7 @@ function getBlockPadding(blockSize) {
 function parseTags(dataView, naaBlock, dataOffset) {
     const tags = {};
 
-    dataOffset += 12;
+    dataOffset += RESOURCE_BLOCK_HEADER_SIZE;
     const endOfBlockOffset = dataOffset + naaBlock['size'];
 
     while ((dataOffset < endOfBlockOffset) && (dataOffset < dataView.byteLength)) {
@@ -71,16 +81,19 @@ function parseTags(dataView, naaBlock, dataOffset) {
             });
         }
 
-        dataOffset += 5 + tagSize;
+        dataOffset += TAG_HEADER_SIZE + tagSize;
     }
 
     return tags;
 }
 
 function readTag(dataView, dataOffset, tags) {
-    const tagCode = dataView.getUint16(dataOffset + 1, false);
-    const tagSize = dataView.getUint16(dataOffset + 3, false);
-    const tagValue = getTagValue(dataView, dataOffset + 5, tagSize);
+    const TAG_CODE_OFFSET = 1;
+    const TAG_SIZE_OFFSET = 3;
+
+    const tagCode = dataView.getUint16(dataOffset + TAG_CODE_OFFSET, false);
+    const tagSize = dataView.getUint16(dataOffset + TAG_SIZE_OFFSET, false);
+    const tagValue = getTagValue(dataView, dataOffset + TAG_HEADER_SIZE, tagSize);
     let tag;
 
     if (IptcTagNames['iptc'][tagCode] !== undefined) {

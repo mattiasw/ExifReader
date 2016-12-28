@@ -84,4 +84,19 @@ describe('types', () => {
         const stringValues = string.split('').map((character) => character.charCodeAt(0));
         expect(Types.getAsciiValue(stringValues).join('')).to.equal(string);
     });
+
+    it('should throw when trying to get unknown type size', () => {
+        expect(() => Types.getTypeSize('UNKNOWN_TYPE')).to.throw(/No such type found./);
+    });
+
+    it('should report correct type sizes', () => {
+        expect(Types.getTypeSize('BYTE')).to.equal(1);
+        expect(Types.getTypeSize('ASCII')).to.equal(1);
+        expect(Types.getTypeSize('SHORT')).to.equal(2);
+        expect(Types.getTypeSize('LONG')).to.equal(4);
+        expect(Types.getTypeSize('RATIONAL')).to.equal(8);
+        expect(Types.getTypeSize('UNDEFINED')).to.equal(1);
+        expect(Types.getTypeSize('SLONG')).to.equal(4);
+        expect(Types.getTypeSize('SRATIONAL')).to.equal(8);
+    });
 });
