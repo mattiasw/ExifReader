@@ -12,7 +12,6 @@
     "jpeg",
     "meta"
   ],
-  "dependencies": {},
   "license": "LGPL-3.0",
   "main": "dist/exif-reader.js",
   "moduleType": [
@@ -21,14 +20,14 @@
     "node"
   ],
   "ignore": [
-      "test",
-      ".babelrc",
-      ".eslintignore",
-      ".eslintrc.json",
-      ".gitignore",
-      "bower.json",
-      "package.json",
-      "README.md",
-      "webpack.config.js"
+    "docs",
+    "test",
+    ".babelrc",
+    ".eslintignore",
+    ".eslintrc.json",
+    ".gitignore",
+    ".npmignore",
+    "package.json",
+    "webpack.config.js"
   ]
 }

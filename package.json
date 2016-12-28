@@ -1,6 +1,6 @@
 {
   "name": "exifreader",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Library that parses Exif metadata in images.",
   "author": "Mattias Wallander <mattias@wallander.eu>",
   "repository": {
@@ -29,7 +29,6 @@
     "build": "$(npm bin)/webpack ./src/exif-reader.js ./dist/exif-reader.js",
     "lint": "$(npm bin)/eslint .",
     "precommit": "npm run lint && npm test",
-    "prepublish": "npm run lint && npm test && npm run build",
     "test": "BABEL_ENV=test $(npm bin)/mocha --compilers js:babel-register"
   }
 }
