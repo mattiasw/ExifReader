@@ -1,0 +1,35 @@
+{
+  "name": "exifreader",
+  "version": "2.0.0",
+  "description": "Library that parses Exif metadata in images.",
+  "author": "Mattias Wallander <mattias@wallander.eu>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mattiasw/ExifReader"
+  },
+  "bugs": "https://github.com/mattiasw/ExifReader/issues",
+  "license": "LGPL-3.0",
+  "main": "dist/exif-reader.js",
+  "devDependencies": {
+    "babel-core": "^6.17.0",
+    "babel-loader": "^6.2.8",
+    "babel-plugin-rewire": "^1.0.0",
+    "babel-plugin-transform-es2015-modules-umd": "^6.12.0",
+    "babel-plugin-transform-object-assign": "^6.8.0",
+    "babel-plugin-transform-object-rest-spread": "^6.16.0",
+    "babel-preset-es2015": "^6.16.0",
+    "chai": "^3.5.0",
+    "eslint": "^3.7.1",
+    "husky": "^0.12.0",
+    "jdataview": "^2.5.0",
+    "mocha": "^3.1.0",
+    "webpack": "^1.13.3"
+  },
+  "scripts": {
+    "build": "$(npm bin)/webpack ./src/exif-reader.js ./dist/exif-reader.js",
+    "lint": "$(npm bin)/eslint .",
+    "precommit": "npm run lint && npm test",
+    "prepublish": "npm run lint && npm test && npm run build",
+    "test": "BABEL_ENV=test $(npm bin)/mocha --compilers js:babel-register"
+  }
+}

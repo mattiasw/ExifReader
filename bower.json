@@ -1,12 +1,10 @@
 {
   "name": "exifreader",
-  "version": "1.1.1",
-  "homepage": "https://github.com/mattiasw/ExifReader",
-  "authors": [
-    "Mattias Wallander <mattias@wallander.eu>"
-  ],
-  "description": "Client-side Exif parser",
-  "main": "js/ExifReader.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/mattiasw/ExifReader.git"
+  },
+  "description": "Library that parses Exif metadata in images.",
   "keywords": [
     "exif",
     "image",
@@ -14,5 +12,23 @@
     "jpeg",
     "meta"
   ],
-  "license": "GNU LGPL"
+  "dependencies": {},
+  "license": "LGPL-3.0",
+  "main": "dist/exif-reader.js",
+  "moduleType": [
+    "amd",
+    "globals",
+    "node"
+  ],
+  "ignore": [
+      "test",
+      ".babelrc",
+      ".eslintignore",
+      ".eslintrc.json",
+      ".gitignore",
+      "bower.json",
+      "package.json",
+      "README.md",
+      "webpack.config.js"
+  ]
 }

@@ -1,27 +1,37 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <title>ExifReader Example</title>
-    <script src="../../js/ExifReader.js"></script>
-    <script src="main.js"></script>
-  </head>
-  <body>
-    <form>
-      <label for="file">
-        Choose a file from your computer:<br />
-        <input type="file" id="file" name="file" />
-      </label>
-    </form>
-    <table style="margin-top: 12px;">
-      <thead>
-        <tr>
-          <th>Tag name</th>
-          <th>Tag value</th>
-        </tr>
-      </thead>
-      <tbody id="exif-table-body">
-      </tbody>
-    </table>
-  </body>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="x-ua-compatible" content="ie=edge">
+        <title>ExifReader Example</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            .tags {
+                margin-top: 12px;
+            }
+            .tags th {
+                text-align: left;
+            }
+        </style>
+    </head>
+    <body>
+        <form>
+            <label>
+                Choose an image file from your computer:<br />
+                <input type="file" id="file" name="file" />
+            </label>
+        </form>
+        <table class="tags">
+            <thead>
+                <tr>
+                    <th>Tag name</th>
+                    <th>Tag description</th>
+                </tr>
+            </thead>
+            <tbody id="exif-table-body">
+            </tbody>
+        </table>
+        <script src="../../dist/exif-reader.js"></script>
+        <script src="main.js"></script>
+    </body>
 </html>
