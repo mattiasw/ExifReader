@@ -1,6 +1,6 @@
 import {expect} from 'chai';
 import TagNamesExifIfd from '../src/tag-names-exif-ifd';
-import {getCharacterArray} from './utils';
+import {getCharacterArray} from './test-utils';
 
 describe('tag-names-exif-ifd', () => {
     it('should have tag ExposureTime', () => {

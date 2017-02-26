@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 global.DataView = require('jdataview');
+global.DOMParser = require('xmldom').DOMParser;
 
 const ExifReader = require('../../dist/exif-reader');
 

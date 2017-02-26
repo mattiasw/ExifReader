@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import {getDataView} from './utils';
+import {getDataView} from './test-utils';
 import {getCharacterArray} from '../src/tag-names-utils';
 import IptcTags from '../src/iptc-tags';
 

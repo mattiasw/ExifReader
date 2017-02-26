@@ -80,12 +80,13 @@ npm test
 Issues
 ------
 
--   There is no support for IPTC XMP yet.
 -   The descriptions for UserComment, GPSProcessingMethod and GPSAreaInformation are missing for other encodings than ASCII.
 
 Changelog
 ---------
 
+-   **February, 2017**:
+    -   Add support for XMP tags.
 -   **December, 2016**:
     -   Merge IPTC branch.
     -   Convert project to JavaScript (ECMAScript 2015) from CoffeeScript, transpiling to ES5 using Babel.

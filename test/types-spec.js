@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import {getDataView} from './utils';
+import {getDataView} from './test-utils';
 import Types from '../src/types';
 import ByteOrder from '../src/byte-order';
 

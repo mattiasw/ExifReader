@@ -1,6 +1,6 @@
 import {expect} from 'chai';
 import TagNamesGpsIfd from '../src/tag-names-gps-ifd';
-import {getCharacterArray} from './utils';
+import {getCharacterArray} from './test-utils';
 
 describe('tag-names-gps-ifd', () => {
     it('should report correct name and description for GPSVersionID', () => {

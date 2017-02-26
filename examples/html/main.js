@@ -38,7 +38,9 @@
     }
 
     function listTags(tags) {
-        var tableBody, name, row;
+        var tableBody;
+        var name;
+        var row;
 
         tableBody = document.getElementById('exif-table-body');
         for (name in tags) {

@@ -3,7 +3,8 @@ import DataView from 'jdataview';
 export {
     getArrayBuffer,
     getDataView,
-    getCharacterArray
+    getCharacterArray,
+    getConsoleWarnSpy
 };
 
 function getArrayBuffer(data) {
@@ -20,4 +21,22 @@ function getDataView(data) {
 
 function getCharacterArray(string) {
     return string.split('').map((character) => character.charCodeAt(0));
+}
+
+function getConsoleWarnSpy() {
+    /* eslint-disable no-console */
+    const originalConsoleWarn = console.warn;
+
+    const warnSpy = function () {
+        warnSpy.hasWarned = true;
+    };
+    warnSpy.hasWarned = false;
+    warnSpy.reset = function () {
+        console.warn = originalConsoleWarn;
+    };
+
+    console.warn = warnSpy;
+
+    return warnSpy;
+    /* eslint-enable no-console */
 }

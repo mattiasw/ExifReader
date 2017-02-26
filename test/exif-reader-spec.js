@@ -1,15 +1,81 @@
 import {expect} from 'chai';
-import {getDataView} from './utils';
+import {getConsoleWarnSpy} from './test-utils';
+import {__RewireAPI__ as ExifReaderRewireAPI} from '../src/exif-reader';
 import * as ExifReader from '../src/exif-reader';
 
+const OFFSET_TEST_VALUE = 4711;
+const XMP_FIELD_LENGTH_TEST_VALUE = 47;
+
 describe('exif-reader', () => {
-    it('should fail when no Exif identifier for APP1', () => {
-        const dataView = getDataView('\xff\xd8\xff\xe1--------');
-        expect(() => ExifReader.loadView(dataView)).to.throw(/No Exif data/);
+    afterEach(() => {
+        ExifReaderRewireAPI.__ResetDependency__('ImageHeader');
+        ExifReaderRewireAPI.__ResetDependency__('Tags');
+        ExifReaderRewireAPI.__ResetDependency__('IptcTags');
+        ExifReaderRewireAPI.__ResetDependency__('XmpTags');
     });
 
-    it('should fail gracefully for faulty APP markers', () => {
-        const dataView = getDataView('\xff\xd8\xfe\xdc\x00\x6fJFIF\x65\x01\x01\x01\x00\x48');
-        expect(() => ExifReader.loadView(dataView)).to.throw(/No Exif data/);
+    it('should give a warning if a full DataView implementation is not available', () => {
+        const warnSpy = getConsoleWarnSpy();
+        const tags = ExifReader.load();
+        expect(warnSpy.hasWarned).to.be.true;
+        expect(tags).to.deep.equal({});
+        warnSpy.reset();
+    });
+
+    it('should fail when there is no Exif data', () => {
+        rewireImageHeader({
+            hasAppMarkers: false,
+            tiffHeaderOffset: undefined,
+            iptcDataOffset: undefined,
+            xmpDataOffset: undefined,
+            xmpFieldLength: undefined
+        });
+        expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+    });
+
+    it('should be able to find Exif APP segment', () => {
+        const myTags = {MyExifTag: 42};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
+    it('should be able to find IPTC APP segment', () => {
+        const myTags = {MyIptcTag: 42};
+        rewireForLoadView({iptcDataOffset: OFFSET_TEST_VALUE}, 'IptcTags', myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
+    it('should be able to find XMP APP segment', () => {
+        const myTags = {MyXmpTag: 42};
+        rewireForLoadView({xmpDataOffset: OFFSET_TEST_VALUE, xmpFieldLength: XMP_FIELD_LENGTH_TEST_VALUE}, 'XmpTags', myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 });
+
+function rewireForLoadView(appMarkersValue, tagsObject, tagsValue) {
+    rewireImageHeader(appMarkersValue);
+    rewireTagsRead(tagsObject, tagsValue);
+}
+
+function rewireImageHeader(appMarkersValue) {
+    ExifReaderRewireAPI.__Rewire__('ImageHeader', {
+        check() {
+            // Always succeed.
+        },
+        parseAppMarkers() {
+            return appMarkersValue;
+        }
+    });
+}
+
+function rewireTagsRead(tagsObject, tagsValue) {
+    ExifReaderRewireAPI.__Rewire__(tagsObject, {
+        read(dataView, offset, fieldLength) {
+            if ((offset !== OFFSET_TEST_VALUE)
+                || ((tagsObject === 'XmpTags') && (fieldLength !== XMP_FIELD_LENGTH_TEST_VALUE))) {
+                return {};
+            }
+            return tagsValue;
+        }
+    });
+}
