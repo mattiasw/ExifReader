@@ -1,8 +1,9 @@
 ExifReader
 ==========
 
-ExifReader is a JavaScript library that parses image files and extracts the Exif
-data. It can be used either in a browser or from Node.
+ExifReader is a JavaScript library that parses image files and extracts the
+metadata. It can be used either in a browser or from Node. Supports JPEG files
+with tags encoded using Exif, IPTC, and XMP.
 
 ExifReader supports module formats AMD, CommonJS and globals and can therefore
 easily be used from Webpack, RequireJS, Browserify, Node etc. Since it is
@@ -42,8 +43,8 @@ const imageDate = tags['DateTimeOriginal'].description;
 const unprocessedTagValue = tags['DateTimeOriginal'].value;
 ```
 
-Support
--------
+Client/Browser Support
+----------------------
 
 The library makes use of the DataView API which is supported in Chrome 9+,
 Firefox 15+, Internet Explorer 10+, Edge, Safari 5.1+, Opera 12.1+. If you want
