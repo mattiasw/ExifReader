@@ -103,7 +103,7 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
         tagValue = getTagValue(dataView, tiffHeaderOffset + tagValueOffset, tagType, tagCount, byteOrder);
     }
 
-    if (tagType === Types.tagTypes['ASCII']) {
+    if (tagValue instanceof Array && tagType === Types.tagTypes['ASCII']) {
         tagValue = splitNullSeparatedAsciiString(tagValue);
     }
 

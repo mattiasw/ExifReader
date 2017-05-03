@@ -81,7 +81,7 @@ export default {
     0x0214: 'ReferenceBlackWhite',
     0x8298: {
         name: 'Copyright',
-        description: (value) => value.join('; ')
+        description: (value) => value instanceof Array ? value.join('; ') : value
     },
     0x8769: 'Exif IFD Pointer',
     0x8825: 'GPS Info IFD Pointer'
