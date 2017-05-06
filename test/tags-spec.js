@@ -37,6 +37,11 @@ describe('tags', () => {
         expect(splitNullSeparatedAsciiString('ab\x00cd\x00')).to.deep.equal(['ab', 'cd']);
     });
 
+    it('should be able to get ASCII tag value of length 1', () => {
+        const dataView = getDataView('\x00');
+        expect(getTagValue(dataView, 0, Types.tagTypes.ASCII, 1, ByteOrder.LITTLE_ENDIAN)).to.deep.equal(['\x00']);
+    });
+
     it('should be able to get little endian tag value', () => {
         const dataView = getDataView('\x42\x00\x00\x00');
         expect(getTagValue(dataView, 0, Types.tagTypes.LONG, 1, ByteOrder.LITTLE_ENDIAN)).to.equal(0x42);

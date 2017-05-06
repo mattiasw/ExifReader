@@ -147,10 +147,10 @@ function getTagValue(dataView, offset, type, count, byteOrder) {
         offset += Types.typeSizes[type];
     }
 
-    if (value.length === 1) {
-        value = value[0];
-    } else if (type === Types.tagTypes['ASCII']) {
+    if (type === Types.tagTypes['ASCII']) {
         value = Types.getAsciiValue(value);
+    } else if (value.length === 1) {
+        value = value[0];
     }
 
     return value;
