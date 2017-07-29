@@ -2,8 +2,8 @@
 
 const path = require('path');
 const fs = require('fs');
-global.DataView = require('jdataview');
-global.DOMParser = require('xmldom').DOMParser;
+global.DataView = global.DataView || require('jdataview');
+global.DOMParser = global.DOMParser || require('xmldom').DOMParser;
 
 const ExifReader = require('../../dist/exif-reader');
 
@@ -21,7 +21,7 @@ fs.readFile(filePath, function (error, data) {
     }
 
     try {
-        const tags = ExifReader.load(data);
+        const tags = ExifReader.load(data.buffer);
 
         // The MakerNote tag can be really large. Remove it to lower memory
         // usage if you're parsing a lot of files and saving the tags.
