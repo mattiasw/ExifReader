@@ -1,0 +1,8 @@
+{
+    "globals": {
+        "ExifReader": true
+    },
+    "rules": {
+        "no-var": "off"
+    }
+}
