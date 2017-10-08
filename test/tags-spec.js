@@ -95,6 +95,12 @@ describe('tags', () => {
         expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN).description).to.equal('ABCDE');
     });
 
+    it('should be able to read encoded ASCII tag', () => {
+        Tags.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
+        const dataView = getDataView('\x47\x11\x00\x02\x00\x00\x00\x04\x41\xc3\xba\x43\x00');
+        expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN).description).to.equal('AúC');
+    });
+
     it('should be able to handle tag with faulty type', () => {
         const dataView = getDataView('\x47\x11\x00\x08\x00\x00\x00\x00');
         expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN)).to.be.undefined;

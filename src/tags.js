@@ -105,6 +105,7 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
 
     if (tagType === Types.tagTypes['ASCII']) {
         tagValue = splitNullSeparatedAsciiString(tagValue);
+        tagValue = decodeAsciiValue(tagValue);
     }
 
     if (TagNames[ifdType][tagCode] !== undefined) {
@@ -172,4 +173,12 @@ function splitNullSeparatedAsciiString(string) {
     }
 
     return tagValue;
+}
+
+function decodeAsciiValue(asciiValue) {
+    try {
+        return asciiValue.map((value) => decodeURIComponent(escape(value)));
+    } catch (error) {
+        return asciiValue;
+    }
 }
