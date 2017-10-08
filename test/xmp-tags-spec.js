@@ -55,6 +55,40 @@ describe('xmp-tags', () => {
         });
     });
 
+    it('should be able to read a UTF-8 value', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description>
+                <xmp:MyXMPTag0>abcÅÄÖáéí</xmp:MyXMPTag0>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        expect(tags).to.deep.equal({
+            MyXMPTag0: {
+                value: 'abcÅÄÖáéí',
+                attributes: {},
+                description: 'abcÅÄÖáéí'
+            }
+        });
+    });
+
+    it('should be able to read a non-ASCII, non-UTF-8 value', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description>
+                <xmp:MyXMPTag0>AÃºC</xmp:MyXMPTag0>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        expect(tags).to.deep.equal({
+            MyXMPTag0: {
+                value: 'AÃºC',
+                attributes: {},
+                description: 'AúC'
+            }
+        });
+    });
+
     it('should be able to read a nested rdf:Description with qualifier inside a normal simple value', () => {
         const xmlString = getXmlString(`
             <rdf:Description>

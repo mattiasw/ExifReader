@@ -176,7 +176,12 @@ function getDescription(value) {
     if (typeof value === 'object') {
         return getDescriptionOfObject(value);
     }
-    return value;
+
+    try {
+        return decodeURIComponent(escape(value));
+    } catch (error) {
+        return value;
+    }
 }
 
 function getDescriptionOfArray(value) {
