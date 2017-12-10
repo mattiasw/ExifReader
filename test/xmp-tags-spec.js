@@ -89,6 +89,23 @@ describe('xmp-tags', () => {
         });
     });
 
+    it('should translate value for presentation in description property', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description>
+                <tiff:Orientation>3</tiff:Orientation>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        expect(tags).to.deep.equal({
+            Orientation: {
+                value: '3',
+                attributes: {},
+                description: 'Rotate 180'
+            }
+        });
+    });
+
     it('should be able to read a nested rdf:Description with qualifier inside a normal simple value', () => {
         const xmlString = getXmlString(`
             <rdf:Description>

@@ -1,4 +1,5 @@
 import {getStringFromDataView} from './utils';
+import XmpTagNames from './xmp-tag-names';
 
 export default {
     read
@@ -149,7 +150,7 @@ function parseNodeAttributesAsTags(attributes) {
             tags[getLocalName(name)] = {
                 value: attributes[name],
                 attributes: {},
-                description: getDescription(attributes[name])
+                description: getDescription(attributes[name], name)
             };
         }
     }
@@ -169,7 +170,7 @@ function getLocalName(name) {
     return name.split(':')[1];
 }
 
-function getDescription(value) {
+function getDescription(value, name = undefined) {
     if (Array.isArray(value)) {
         return getDescriptionOfArray(value);
     }
@@ -178,6 +179,9 @@ function getDescription(value) {
     }
 
     try {
+        if ((name) && (typeof XmpTagNames[name] === 'function')) {
+            return XmpTagNames[name](value);
+        }
         return decodeURIComponent(escape(value));
     } catch (error) {
         return value;
@@ -236,24 +240,24 @@ function parseNodeChildrenAsTags(children) {
 
     for (const name in children) {
         if (!isNamespaceDefinition(name)) {
-            tags[getLocalName(name)] = parseNodeAsTag(children[name]);
+            tags[getLocalName(name)] = parseNodeAsTag(children[name], name);
         }
     }
 
     return tags;
 }
 
-function parseNodeAsTag(node) {
+function parseNodeAsTag(node, name) {
     if (hasNestedSimpleRdfDescription(node)) {
-        return parseNodeAsSimpleRdfDescription(node);
+        return parseNodeAsSimpleRdfDescription(node, name);
     } else if (hasNestedStructureRdfDescription(node)) {
-        return parseNodeAsStructureRdfDescription(node);
+        return parseNodeAsStructureRdfDescription(node, name);
     } else if (isCompactStructure(node)) {
-        return parseNodeAsCompactStructure(node);
+        return parseNodeAsCompactStructure(node, name);
     } else if (isArray(node)) {
-        return parseNodeAsArray(node);
+        return parseNodeAsArray(node, name);
     }
-    return parseNodeAsSimpleValue(node);
+    return parseNodeAsSimpleValue(node, name);
 }
 
 function hasNestedSimpleRdfDescription(node) {
@@ -261,7 +265,7 @@ function hasNestedSimpleRdfDescription(node) {
         || ((node.value['rdf:Description'] !== undefined) && (node.value['rdf:Description'].value['rdf:value'] !== undefined));
 }
 
-function parseNodeAsSimpleRdfDescription(node) {
+function parseNodeAsSimpleRdfDescription(node, name) {
     const attributes = parseNodeAttributes(node);
 
     if (node.value['rdf:Description'] !== undefined) {
@@ -275,7 +279,7 @@ function parseNodeAsSimpleRdfDescription(node) {
     return {
         value,
         attributes,
-        description: getDescription(value)
+        description: getDescription(value, name)
     };
 }
 
@@ -312,7 +316,7 @@ function hasNestedStructureRdfDescription(node) {
         || ((node.value['rdf:Description'] !== undefined) && (node.value['rdf:Description'].value['rdf:value'] === undefined));
 }
 
-function parseNodeAsStructureRdfDescription(node) {
+function parseNodeAsStructureRdfDescription(node, name) {
     const tag = {
         value: {},
         attributes: {}
@@ -326,7 +330,7 @@ function parseNodeAsStructureRdfDescription(node) {
 
     Object.assign(tag.value, parseNodeChildrenAsTags(node.value));
 
-    tag.description = getDescription(tag.value);
+    tag.description = getDescription(tag.value, name);
 
     return tag;
 }
@@ -336,13 +340,13 @@ function isCompactStructure(node) {
         && (node.attributes['rdf:resource'] === undefined);
 }
 
-function parseNodeAsCompactStructure(node) {
+function parseNodeAsCompactStructure(node, name) {
     const value = parseNodeAttributesAsTags(node.attributes);
 
     return {
         value,
         attributes: {},
-        description: getDescription(value)
+        description: getDescription(value, name)
     };
 }
 
@@ -354,7 +358,7 @@ function getArrayChild(value) {
     return value['rdf:Bag'] || value['rdf:Seq'] || value['rdf:Alt'];
 }
 
-function parseNodeAsArray(node) {
+function parseNodeAsArray(node, name) {
     let items = getArrayChild(node.value).value['rdf:li'];
     const attributes = parseNodeAttributes(node);
     const value = [];
@@ -370,7 +374,7 @@ function parseNodeAsArray(node) {
     return {
         value,
         attributes,
-        description: getDescription(value)
+        description: getDescription(value, name)
     };
 }
 
@@ -394,13 +398,13 @@ function hasNestedArrayValue(node) {
     return node.attributes['rdf:parseType'] === 'Resource';
 }
 
-function parseNodeAsSimpleValue(node) {
+function parseNodeAsSimpleValue(node, name) {
     const value = getURIValue(node) || parseXMPObject(node.value);
 
     return {
         value,
         attributes: parseNodeAttributes(node),
-        description: getDescription(value)
+        description: getDescription(value, name)
     };
 }
 
