@@ -52,6 +52,14 @@ pass in an options object with the property `expanded` set to `true`:
 const tags = ExifReader.load(fileBuffer, {expanded: true});
 ```
 
+Notes
+-----
+
+Some XMP tags have processed values as descriptions. That means that e.g. an
+`Orientation` value of `3` will have `Rotate 180` in the `description` property.
+If you would like more XMP tags to have a processed description, please file an
+issue or do a pull request.
+
 Client/Browser Support
 ----------------------
 
