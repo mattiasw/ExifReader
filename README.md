@@ -43,6 +43,15 @@ const imageDate = tags['DateTimeOriginal'].description;
 const unprocessedTagValue = tags['DateTimeOriginal'].value;
 ```
 
+By default, Exif, IPTC and XMP tags are grouped together. This means that if
+e.g. `Orientation` exists in both Exif and XMP, the first value (Exif) will be
+overwritten by the second (XMP). If you need to separate between these values,
+pass in an options object with the property `expanded` set to `true`:
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {expanded: true});
+```
+
 Client/Browser Support
 ----------------------
 
@@ -86,6 +95,8 @@ Issues
 Changelog
 ---------
 
+-   **December, 2017**:
+    -   Add option to separate different tag groups (Exif, IPTC and XMP).
 -   **February, 2017**:
     -   Add support for XMP tags.
 -   **December, 2016**:
