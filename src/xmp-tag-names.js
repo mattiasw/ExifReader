@@ -25,5 +25,20 @@ export default {
             return 'Rotate 270 CW';
         }
         return value;
-    }
+    },
+    'exif:GPSLatitude': calculateGPSValue,
+    'exif:GPSLongitude': calculateGPSValue
 };
+
+function calculateGPSValue(value) {
+    const [degreesString, minutesString] = value.split(',');
+    if ((degreesString !== undefined) && (minutesString !== undefined)) {
+        const degrees = parseFloat(degreesString);
+        const minutes = parseFloat(minutesString);
+        const ref = minutesString.charAt(minutesString.length - 1);
+        if ((!Number.isNaN(degrees)) && (!Number.isNaN(minutes))) {
+            return '' + (degrees + minutes / 60) + ref;
+        }
+    }
+    return value;
+}

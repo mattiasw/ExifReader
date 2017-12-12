@@ -13,4 +13,22 @@ describe('xmp-tag-names', () => {
         expect(XmpTagNames['tiff:Orientation']('8')).to.equal('Rotate 270 CW');
         expect(XmpTagNames['tiff:Orientation']('42')).to.equal('42');
     });
+
+    it('should report correct description for exif:GPSLatitude', () => {
+        expect(XmpTagNames['exif:GPSLatitude']('48,28.800000N')).to.equal('48.48N');
+    });
+
+    it('should handle faulty value for exif:GPSLatitude', () => {
+        expect(XmpTagNames['exif:GPSLatitude']('faulty')).to.equal('faulty');
+        expect(XmpTagNames['exif:GPSLatitude']('faulty0,faulty1')).to.equal('faulty0,faulty1');
+    });
+
+    it('should report correct description for exif:GPSLongitude', () => {
+        expect(XmpTagNames['exif:GPSLongitude']('17,18.600000E')).to.equal('17.31E');
+    });
+
+    it('should handle faulty value for exif:GPSLongitude', () => {
+        expect(XmpTagNames['exif:GPSLongitude']('faulty')).to.equal('faulty');
+        expect(XmpTagNames['exif:GPSLongitude']('faulty0,faulty1')).to.equal('faulty0,faulty1');
+    });
 });
