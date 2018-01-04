@@ -25,7 +25,7 @@ export default {
     0x0002: {
         'name': 'GPSLatitude',
         'description': (value) => {
-            return value[0] + value[1] / 60 + value[2] / 3600;
+            return parseFloat(value[0] + value[1] / 60 + value[2] / 3600);
         }
     },
     0x0003: {
@@ -43,7 +43,7 @@ export default {
     0x0004: {
         'name': 'GPSLongitude',
         'description': (value) => {
-            return value[0] + value[1] / 60 + value[2] / 3600;
+            return parseFloat(value[0] + value[1] / 60 + value[2] / 3600);
         }
     },
     0x0005: {
