@@ -8,7 +8,7 @@
     "url": "https://github.com/mattiasw/ExifReader"
   },
   "bugs": "https://github.com/mattiasw/ExifReader/issues",
-  "license": "LGPL-3.0",
+  "license": "MPL-2.0",
   "main": "dist/exif-reader.js",
   "module": "src/exif-reader.js",
   "devDependencies": {

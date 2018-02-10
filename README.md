@@ -100,9 +100,23 @@ Issues
 
 -   The descriptions for UserComment, GPSProcessingMethod and GPSAreaInformation are missing for other encodings than ASCII.
 
+
+License
+-------
+
+ExifReader uses the Mozilla Public License 2.0 (MPL-2.0). In short that means
+you can use this library in your project (open- or closed-source) as long as you
+mention the use of ExifReader and make any changes to ExifReader code available
+if you would to distribute your project. But please read the
+[full license text](https://mozilla.org/MPL/2.0/) to make sure your specific
+case is covered.
+
+
 Changelog
 ---------
 
+-   **February, 2018**:
+    -   Change license to Mozilla Public License 2.0 (MPL-2.0).
 -   **December, 2017**:
     -   Add option to separate different tag groups (Exif, IPTC and XMP).
 -   **February, 2017**:

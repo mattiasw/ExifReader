@@ -1,9 +1,10 @@
 /**
  * ExifReader
  * http://github.com/mattiasw/exifreader
- * Copyright (C) 2011-2017  Mattias Wallander <mattias@wallander.eu>
- * Licensed under the GNU Lesser General Public License version 3 or later
- * See license text at http://www.gnu.org/licenses/lgpl.txt
+ * Copyright (C) 2011-2018  Mattias Wallander <mattias@wallander.eu>
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
 import ImageHeader from './image-header';
