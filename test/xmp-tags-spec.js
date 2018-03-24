@@ -35,6 +35,22 @@ describe('xmp-tags', () => {
         expect(tags).to.deep.equal({});
     });
 
+    it('should be able to handle an empty rdf:Description element', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description xmp:MyXMPTag0="4711" xmlns:myNamespace="http://ns.example.com/xmp">
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        expect(tags).to.deep.equal({
+            MyXMPTag0: {
+                value: '4711',
+                attributes: {},
+                description: '4711'
+            }
+        });
+    });
+
     it('should be able to read a normal simple value and ignore namespace definitions', () => {
         const xmlString = getXmlString(`
             <rdf:Description xmp:MyXMPTag0="4711" xmlns:myNamespace="http://ns.example.com/xmp">

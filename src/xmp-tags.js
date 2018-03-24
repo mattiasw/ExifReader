@@ -139,7 +139,9 @@ function parseXMPObject(xmpObject) {
 
         nodes.forEach((node) => {
             Object.assign(tags, parseNodeAttributesAsTags(node.attributes));
-            Object.assign(tags, parseNodeChildrenAsTags(node.value));
+            if (typeof node.value === 'object') {
+                Object.assign(tags, parseNodeChildrenAsTags(node.value));
+            }
         });
     }
 
