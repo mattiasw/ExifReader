@@ -37,6 +37,28 @@ After that, the transpiled, concatenated and minified ES5 file will be in the
 Usage
 -----
 
+### Importing
+
+ES modules:
+
+```javascript
+import ExifReader from 'exifreader';
+```
+
+CommonJS/Node modules:
+
+```javascript
+const ExifReader = require('exifreader');
+```
+
+`script` tag:
+
+```html
+<script src="/path/to/exif-reader.js"></script>
+```
+
+### Loading tags
+
 ```javascript
 const tags = ExifReader.load(fileBuffer);
 const imageDate = tags['DateTimeOriginal'].description;

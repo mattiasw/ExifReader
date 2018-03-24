@@ -12,6 +12,8 @@ import Tags from './tags';
 import IptcTags from './iptc-tags';
 import XmpTags from './xmp-tags';
 
+export default {load, loadView};
+
 export function load(data, options = {expanded: false}) {
     let dataView;
 
