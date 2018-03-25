@@ -104,7 +104,11 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
         tagValue = getTagValue(dataView, offset + TAG_VALUE_OFFSET, tagType, tagCount, byteOrder);
     } else {
         const tagValueOffset = Types.getLongAt(dataView, offset + TAG_VALUE_OFFSET, byteOrder);
-        tagValue = getTagValue(dataView, tiffHeaderOffset + tagValueOffset, tagType, tagCount, byteOrder);
+        if (tagValueFitsInDataView(dataView, tiffHeaderOffset, tagValueOffset, tagType, tagCount)) {
+            tagValue = getTagValue(dataView, tiffHeaderOffset + tagValueOffset, tagType, tagCount, byteOrder);
+        } else {
+            tagValue = '<faulty value>';
+        }
     }
 
     if (tagType === Types.tagTypes['ASCII']) {
@@ -159,6 +163,10 @@ function getTagValue(dataView, offset, type, count, byteOrder) {
     }
 
     return value;
+}
+
+function tagValueFitsInDataView(dataView, tiffHeaderOffset, tagValueOffset, tagType, tagCount) {
+    return tiffHeaderOffset + tagValueOffset + Types.typeSizes[tagType] * tagCount <= dataView.byteLength;
 }
 
 function splitNullSeparatedAsciiString(string) {
