@@ -115,6 +115,7 @@ function readTag(dataView, dataOffset, tags) {
             }
             if (tagValue instanceof Array) {
                 tagDescription = tagValue.map((charCode) => String.fromCharCode(charCode)).join('');
+                tagDescription = decodeAsciiValue(tagDescription);
             } else {
                 tagDescription = tagValue;
             }
@@ -146,4 +147,12 @@ function getTagValue(dataView, offset, size) {
     }
 
     return value;
+}
+
+function decodeAsciiValue(asciiValue) {
+    try {
+        return decodeURIComponent(escape(asciiValue));
+    } catch (error) {
+        return asciiValue;
+    }
 }

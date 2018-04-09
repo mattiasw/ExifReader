@@ -65,6 +65,19 @@ describe('iptc-tags', () => {
         IptcTags.__set__('IptcTagNames', {'iptc': {}});
     });
 
+    it('should read encoded ASCII IPTC NAA resource tag', () => {
+        IptcTags.__set__('IptcTagNames', {
+            'iptc': {
+                0x4711: 'MyIptcTag'
+            }
+        });
+        const dataView = getDataView('\x1c\x47\x11\x00\x04\x41\xc3\xba\x43');
+        const {tag} = readTag(dataView, 0);
+        expect(tag.description).to.equal('AúC');
+
+        IptcTags.__set__('IptcTagNames', {'iptc': {}});
+    });
+
     it('should read IPTC NAA resource tag with dynamic description', () => {
         IptcTags.__set__('IptcTagNames', {
             'iptc': {
