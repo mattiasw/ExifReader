@@ -11,6 +11,10 @@
   "license": "MPL-2.0",
   "main": "dist/exif-reader.js",
   "module": "src/exif-reader.js",
+  "files": [
+    "dist/",
+    "src/"
+  ],
   "devDependencies": {
     "babel-core": "^6.17.0",
     "babel-loader": "^6.2.8",
