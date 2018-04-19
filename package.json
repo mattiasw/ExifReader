@@ -1,6 +1,6 @@
 {
   "name": "exifreader",
-  "version": "2.4.0",
+  "version": "2.4.2",
   "description": "Library that parses Exif metadata in images.",
   "author": "Mattias Wallander <mattias@wallander.eu>",
   "repository": {
