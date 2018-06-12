@@ -10,6 +10,7 @@ global.DataView = global.DataView || require('jdataview');
 global.DOMParser = global.DOMParser || require('xmldom').DOMParser;
 
 const ExifReader = require('../../dist/exif-reader');
+const exifErrors = ExifReader.errors;
 
 if (process.argv.length < 3) {
     console.log(`Usage: node ${path.basename(__filename)} <filename>`);
@@ -33,6 +34,10 @@ fs.readFile(filePath, function (error, data) {
 
         listTags(tags);
     } catch (error) {
+        if (error instanceof exifErrors.MetadataMissingError) {
+            console.log('No Exif data found');
+        }
+
         console.error(error);
         process.exit(1);
     }

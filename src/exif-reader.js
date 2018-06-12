@@ -11,8 +11,13 @@ import ImageHeader from './image-header';
 import Tags from './tags';
 import IptcTags from './iptc-tags';
 import XmpTags from './xmp-tags';
+import exifErrors from './errors';
 
-export default {load, loadView};
+export default {
+    load,
+    loadView,
+    errors: exifErrors,
+};
 
 export function load(data, options = {expanded: false}) {
     let dataView;
@@ -62,7 +67,7 @@ export function loadView(dataView, options = {expanded: false}) {
         }
     }
     if (!foundMetaData) {
-        throw new Error('No Exif data');
+        throw new exifErrors.MetadataMissingError();
     }
 
     return tags;

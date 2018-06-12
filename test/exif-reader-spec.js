@@ -6,6 +6,7 @@ import {expect} from 'chai';
 import {getConsoleWarnSpy} from './test-utils';
 import {__RewireAPI__ as ExifReaderRewireAPI} from '../src/exif-reader';
 import * as ExifReader from '../src/exif-reader';
+import exifErrors from '../src/errors';
 
 const OFFSET_TEST_VALUE = 4711;
 const XMP_FIELD_LENGTH_TEST_VALUE = 47;
@@ -34,7 +35,7 @@ describe('exif-reader', () => {
             xmpDataOffset: undefined,
             xmpFieldLength: undefined
         });
-        expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        expect(() => ExifReader.loadView()).to.throw(exifErrors.MetadataMissingError);
     });
 
     it('should be able to find Exif APP segment', () => {
