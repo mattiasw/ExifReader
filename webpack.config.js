@@ -4,29 +4,32 @@
 
 /* eslint-env node */
 
-const webpack = require('webpack');
+const path = require('path');
 
 module.exports = {
+    mode: 'production',
+    entry: {
+        'exif-reader': path.resolve('./src/exif-reader.js')
+    },
     output: {
+        path: path.resolve(__dirname, 'dist'),
         library: 'ExifReader',
-        libraryTarget: 'umd'
+        libraryTarget: 'umd',
+        globalObject: 'typeof self !== \'undefined\' ? self : this'
     },
     devtool: 'source-map',
     module: {
-        loaders: [
+        rules: [
             {
-                test: /.js$/,
-                loader: 'babel-loader',
-                query: {
-                    retainLines: true
-                }
+                test: /\.js$/,
+                exclude: /node_modules/,
+                use: [{
+                    loader: 'babel-loader',
+                    query: {
+                        retainLines: true
+                    }
+                }]
             }
         ]
-    },
-    plugins: [
-        new webpack.optimize.UglifyJsPlugin({
-            compress: {warnings: false},
-            mangle: true
-        })
-    ]
+    }
 };

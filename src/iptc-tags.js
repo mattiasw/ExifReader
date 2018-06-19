@@ -29,7 +29,7 @@ function getNaaResourceBlock(dataView, dataOffset) {
         if (isNaaResourceBlock(resourceBlock)) {
             return {naaBlock: resourceBlock, dataOffset};
         }
-        dataOffset += RESOURCE_BLOCK_HEADER_SIZE + resourceBlock.size + getBlockPadding(resourceBlock.size);
+        dataOffset += RESOURCE_BLOCK_HEADER_SIZE + resourceBlock.size + getBlockPadding(resourceBlock);
     }
     throw new Error('No IPTC NAA resource block.');
 }
@@ -51,8 +51,8 @@ function isNaaResourceBlock(resourceBlock) {
     return resourceBlock.type === NAA_RESOURCE_BLOCK_TYPE;
 }
 
-function getBlockPadding(blockSize) {
-    if (blockSize % 2 !== 0) {
+function getBlockPadding(resourceBlock) {
+    if (resourceBlock.size % 2 !== 0) {
         return 1;
     }
     return 0;
