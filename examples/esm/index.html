@@ -1,0 +1,39 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at https://mozilla.org/MPL/2.0/. -->
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="x-ua-compatible" content="ie=edge">
+        <title>ExifReader Native ES Module Example</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            .tags {
+                margin-top: 12px;
+            }
+            .tags th {
+                text-align: left;
+            }
+        </style>
+    </head>
+    <body>
+        <form>
+            <label>
+                Choose a JPEG image file from your computer:<br />
+                <input type="file" id="file" name="file" />
+            </label>
+        </form>
+        <table class="tags">
+            <thead>
+                <tr>
+                    <th>Tag name</th>
+                    <th>Tag description</th>
+                </tr>
+            </thead>
+            <tbody id="exif-table-body">
+            </tbody>
+        </table>
+        <script type="module" src="main.js"></script>
+    </body>
+</html>

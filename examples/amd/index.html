@@ -6,7 +6,7 @@
     <head>
         <meta charset="utf-8">
         <meta http-equiv="x-ua-compatible" content="ie=edge">
-        <title>ExifReader Example</title>
+        <title>ExifReader AMD Example</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
             .tags {
@@ -20,7 +20,7 @@
     <body>
         <form>
             <label>
-                Choose an image file from your computer:<br />
+                Choose a JPEG image file from your computer:<br />
                 <input type="file" id="file" name="file" />
             </label>
         </form>
@@ -34,7 +34,6 @@
             <tbody id="exif-table-body">
             </tbody>
         </table>
-        <script src="../../dist/exif-reader.js"></script>
-        <script src="main.js"></script>
+        <script data-main="main.js" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.5/require.min.js"></script>
     </body>
 </html>

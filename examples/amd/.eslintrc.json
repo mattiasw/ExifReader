@@ -1,0 +1,8 @@
+{
+    "globals": {
+        "requirejs": true
+    },
+    "rules": {
+        "no-var": "off"
+    }
+}
