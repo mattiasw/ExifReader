@@ -27,7 +27,7 @@
     "husky": "^0.14.3",
     "jdataview": "^2.5.0",
     "mocha": "^5.2.0",
-    "webpack": "^4.12.0",
+    "webpack": "^4.15.1",
     "webpack-cli": "^3.0.8",
     "xmldom": "^0.1.27"
   },
