@@ -5,10 +5,7 @@
     },
     "extends": "eslint:recommended",
     "parserOptions": {
-        "ecmaVersion": 2015,
-        "ecmaFeatures": {
-            "experimentalObjectRestSpread": true
-        },
+        "ecmaVersion": 2018,
         "sourceType": "module"
     },
     "rules": {
@@ -26,6 +23,13 @@
         "block-spacing": [
             "error"
         ],
+        "brace-style": [
+            "error"
+        ],
+        "comma-dangle": [
+            "error",
+            "only-multiline"
+        ],
         "comma-spacing": [
             "error",
             {
@@ -37,6 +41,16 @@
             "error",
             "never"
         ],
+        "curly": [
+            "error"
+        ],
+        "dot-location": [
+            "error",
+            "property"
+        ],
+        "eol-last": [
+            "error"
+        ],
         "eqeqeq": [
             "error",
             "always"
@@ -46,6 +60,10 @@
         ],
         "no-empty-function": [
             "error"
+        ],
+        "no-restricted-globals": [
+            "error",
+            "event"
         ],
         "no-spaced-func": [
             "error"
@@ -68,10 +86,6 @@
                 "after": true
             }
         ],
-        "linebreak-style": [
-            "error",
-            "unix"
-        ],
         "no-irregular-whitespace": [
             "error",
             {
@@ -86,14 +100,38 @@
         "no-multi-spaces": [
             "error"
         ],
+        "no-multiple-empty-lines": [
+            "error",
+            {
+                "max": 1,
+                "maxBOF": 0,
+                "maxEOF": 0
+            }
+        ],
+        "no-shadow": [
+            "error",
+            {
+                "allow": [ "error", "callback"]
+            }
+        ],
         "no-trailing-spaces": [
             "error"
         ],
         "no-var": [
             "error"
         ],
+        "no-warning-comments": [
+            "error",
+            {
+                "terms": ["todo", "to do", "fixme", "fix me"]
+            }
+        ],
         "no-whitespace-before-property": [
             "error"
+        ],
+        "multiline-ternary": [
+            "error",
+            "never"
         ],
         "object-curly-spacing": [
             "error",
@@ -102,12 +140,22 @@
         "object-shorthand": [
             "error"
         ],
+        "operator-linebreak": [
+            "error",
+            "before",
+            {
+                "overrides": {
+                    "=": "after"
+                }
+            }
+        ],
         "padded-blocks": [
             "error",
             "never"
         ],
         "prefer-const": [
-            "error", {
+            "error",
+            {
                 "destructuring": "any",
                 "ignoreReadBeforeAssign": false
             }

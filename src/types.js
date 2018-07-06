@@ -5,14 +5,14 @@
 import ByteOrder from './byte-order';
 
 const typeSizes = {
-    1: 1,  // BYTE
-    2: 1,  // ASCII
-    3: 2,  // SHORT
-    4: 4,  // LONG
-    5: 8,  // RATIONAL
-    7: 1,  // UNDEFINED
-    9: 4,  // SLONG
-    10: 8  // SRATIONAL
+    1: 1, // BYTE
+    2: 1, // ASCII
+    3: 2, // SHORT
+    4: 4, // LONG
+    5: 8, // RATIONAL
+    7: 1, // UNDEFINED
+    9: 4, // SLONG
+    10: 8 // SRATIONAL
 };
 
 const tagTypes = {

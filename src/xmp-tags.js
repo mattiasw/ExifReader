@@ -22,7 +22,7 @@ function read(dataView, dataOffset, metadataSize) {
 
 function getDocument(dataView, dataOffset, metadataSize) {
     if (typeof DOMParser === 'undefined') {
-        console.warn('Warning: DOMParser is not available. If you\'re using Node.js you probably want to do this:\n  1. Install a DOM parser, e.g. xmldom: npm install --save xmldom\n  2. Require that at the top of your script: global.DOMParser = require(\'xmldom\').DOMParser;\nSee an example of this in the ExifReader example directory.');  // eslint-disable-line no-console
+        console.warn('Warning: DOMParser is not available. If you\'re using Node.js you probably want to do this:\n  1. Install a DOM parser, e.g. xmldom: npm install --save xmldom\n  2. Require that at the top of your script: global.DOMParser = require(\'xmldom\').DOMParser;\nSee an example of this in the ExifReader example directory.'); // eslint-disable-line no-console
         throw new Error();
     }
 

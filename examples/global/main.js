@@ -22,9 +22,9 @@
         var files = event.target.files;
         var reader = new FileReader();
 
-        reader.onload = function (event) {
+        reader.onload = function (readerEvent) {
             try {
-                var tags = ExifReader.load(event.target.result);
+                var tags = ExifReader.load(readerEvent.target.result);
 
                 // The MakerNote tag can be really large. Remove it to lower
                 // memory usage if you're parsing a lot of files and saving the

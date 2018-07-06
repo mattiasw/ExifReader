@@ -12,9 +12,9 @@ export default {
 };
 
 function getByteOrder(dataView, tiffHeaderOffset) {
-    if (dataView.getUint16(tiffHeaderOffset) === LITTLE_ENDIAN)
+    if (dataView.getUint16(tiffHeaderOffset) === LITTLE_ENDIAN) {
         return LITTLE_ENDIAN;
-    else if (dataView.getUint16(tiffHeaderOffset) === BIG_ENDIAN) {
+    } else if (dataView.getUint16(tiffHeaderOffset) === BIG_ENDIAN) {
         return BIG_ENDIAN;
     }
     throw new Error('Illegal byte order value. Faulty image.');

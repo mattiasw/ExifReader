@@ -121,8 +121,8 @@ describe('tags', () => {
     it('should be able to read offsetted tag', () => {
         Tags.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
         const dataView = getDataView(
-            '\x00\x00\x00\x00' + '\x00\x00'  // Padding to test offset.
-            + '\x00\x01'  // Number of fields.
+            '\x00\x00\x00\x00' + '\x00\x00' // Padding to test offset.
+            + '\x00\x01' // Number of fields.
             + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x10\x41\x42\x43\x44\x45\x00');
         expect(readIfd(dataView, '0th', 4, 6, ByteOrder.BIG_ENDIAN)).to.deep.equal({
             MyAsciiTag: {
@@ -135,10 +135,10 @@ describe('tags', () => {
     it('should be able to handle tag with faulty offset (too large)', () => {
         Tags.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
         const dataView = getDataView(
-            '\x00\x00\x00\x00' + '\x00\x00'  // Padding to test offset.
-            + '\x00\x01'  // Number of fields.
+            '\x00\x00\x00\x00' + '\x00\x00' // Padding to test offset.
+            + '\x00\x01' // Number of fields.
             + '\x47\x11\x00\x02'
-            + '\x00\x00\x00\x07'  // Too large number of tag items.
+            + '\x00\x00\x00\x07' // Too large number of tag items.
             + '\x00\x00\x00\x10\x41\x42\x43\x44\x45\x00');
         expect(readIfd(dataView, '0th', 4, 6, ByteOrder.BIG_ENDIAN)).to.deep.equal({
             MyAsciiTag: {
