@@ -12,6 +12,14 @@ const APP_MARKER_SIZE = 2;
 const TIFF_HEADER_OFFSET = 10; // From start of APP1 marker.
 const IPTC_DATA_OFFSET = 18; // From start of APP13 marker.
 const XMP_DATA_OFFSET = 33; // From start of APP1 marker.
+
+const SOF0_MARKER = 0xffc0;
+const SOF2_MARKER = 0xffc2;
+const DHT_MARKER = 0xffc4;
+const DQT_MARKER = 0xffdb;
+const DRI_MARKER = 0xffdd;
+const SOS_MARKER = 0xffda;
+
 const APP0_MARKER = 0xffe0;
 const APP1_MARKER = 0xffe1;
 const APP13_MARKER = 0xffed;
@@ -95,5 +103,11 @@ function isApp13PhotoshopMarker(dataView, appMarkerPosition) {
 function isAppMarker(dataView, appMarkerPosition) {
     const appMarker = dataView.getUint16(appMarkerPosition, false);
     return ((appMarker >= APP0_MARKER) && (appMarker <= APP15_MARKER))
-        || (appMarker === COMMENT_MARKER);
+        || (appMarker === COMMENT_MARKER)
+        || (appMarker === SOF0_MARKER)
+        || (appMarker === SOF2_MARKER)
+        || (appMarker === DHT_MARKER)
+        || (appMarker === DQT_MARKER)
+        || (appMarker === DRI_MARKER)
+        || (appMarker === SOS_MARKER);
 }
