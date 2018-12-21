@@ -60,26 +60,40 @@ function getBlockPadding(resourceBlock) {
 
 function parseTags(dataView, naaBlock, dataOffset) {
     const tags = {};
+    let encoding = undefined;
 
     dataOffset += RESOURCE_BLOCK_HEADER_SIZE;
     const endOfBlockOffset = dataOffset + naaBlock['size'];
 
     while ((dataOffset < endOfBlockOffset) && (dataOffset < dataView.byteLength)) {
-        const {tag, tagSize} = readTag(dataView, dataOffset, tags);
+        const {tag, tagSize} = readTag(dataView, dataOffset, tags, encoding);
+
+        // 29/8/18 : if tag is null then it hasn't been parsed correctly
+        if (tag === null) {
+            break; // Don't attempt any further parsing if the data looks invalid
+        }
+
+        // If the tag just parsed specifies the text encoding, save it for decoding later strings
+        if ('encoding' in tag) {
+            encoding = tag.encoding;
+        }
 
         if ((tags[tag.name] === undefined) || (tag['repeatable'] === undefined)) {
             tags[tag.name] = {
+                id: tag.id,
                 value: tag.value,
                 description: tag.description
             };
         } else {
             if (!(tags[tag.name] instanceof Array)) {
                 tags[tag.name] = [{
+                    id: tag.id,
                     value: tags[tag.name].value,
                     description: tags[tag.name].description
                 }];
             }
             tags[tag.name].push({
+                id: tag.id,
                 value: tag.value,
                 description: tag.description
             });
@@ -91,9 +105,17 @@ function parseTags(dataView, naaBlock, dataOffset) {
     return tags;
 }
 
-function readTag(dataView, dataOffset, tags) {
+function readTag(dataView, dataOffset, tags, encoding) {
+    const TAG_LEAD_BYTE = 0x1C;
     const TAG_CODE_OFFSET = 1;
     const TAG_SIZE_OFFSET = 3;
+
+    // 29/8/18 : sanity check that the tag starts with 0x1C
+    const leadByte = dataView.getUint8(dataOffset);
+    if (leadByte !== TAG_LEAD_BYTE) {
+        const tag = null, tagSize = 0;
+        return {tag, tagSize};
+    }
 
     const tagCode = dataView.getUint16(dataOffset + TAG_CODE_OFFSET, false);
     const tagSize = dataView.getUint16(dataOffset + TAG_SIZE_OFFSET, false);
@@ -103,24 +125,42 @@ function readTag(dataView, dataOffset, tags) {
     if (IptcTagNames['iptc'][tagCode] !== undefined) {
         let tagName, tagDescription;
 
+        // Case that both 'name' and 'description' are defined for this code
         if ((IptcTagNames['iptc'][tagCode]['name'] !== undefined)
             && (IptcTagNames['iptc'][tagCode]['description'] !== undefined)) {
-            tagName = IptcTagNames['iptc'][tagCode]['name'];
+            // Case that 'name' is a function rather than a string
+            if (typeof (IptcTagNames['iptc'][tagCode]['name']) === 'function') {
+                tagName = IptcTagNames['iptc'][tagCode]['name'](tagValue);
+            } else {
+                // 'name' is a string
+                tagName = IptcTagNames['iptc'][tagCode]['name'];
+            }
             tagDescription = IptcTagNames['iptc'][tagCode]['description'](tagValue, tags);
         } else {
+            // Case that 'name' is defined (but not 'description')
             if (IptcTagNames['iptc'][tagCode]['name'] !== undefined) {
                 tagName = IptcTagNames['iptc'][tagCode]['name'];
             } else {
+                // Case that the entry is a single string => it's the name
                 tagName = IptcTagNames['iptc'][tagCode];
             }
             if (tagValue instanceof Array) {
-                tagDescription = tagValue.map((charCode) => String.fromCharCode(charCode)).join('');
-                tagDescription = decodeAsciiValue(tagDescription);
+                // If we have TextEncoder and an encoding
+                if ((typeof TextEncoder !== 'undefined') && (encoding !== undefined)) {
+                    // Decode the ArrayBuffer using the specified encoding
+                    const rawTagValue = dataView.buffer.slice(dataOffset + TAG_HEADER_SIZE, dataOffset + TAG_HEADER_SIZE + tagSize);
+                    tagDescription = new TextDecoder(encoding).decode(rawTagValue);
+                } else {
+                    tagDescription = tagValue.map((charCode) => String.fromCharCode(charCode)).join('');
+                    tagDescription = decodeAsciiValue(tagDescription);
+                }
             } else {
                 tagDescription = tagValue;
             }
         }
+        // console.log ("Name:" + tagName + ", ID:"  + tagCode + ", value:" + tagValue);
         tag = {
+            id: tagCode,
             name: tagName,
             value: tagValue,
             description: tagDescription
@@ -128,8 +168,14 @@ function readTag(dataView, dataOffset, tags) {
         if (IptcTagNames['iptc'][tagCode]['repeatable'] !== undefined) {
             tag['repeatable'] = true;
         }
+
+        // Optional 'encoding_name' from CCS
+        if (IptcTagNames['iptc'][tagCode]['encoding_name'] !== undefined) {
+            tag.encoding = IptcTagNames['iptc'][tagCode]['encoding_name'](tagValue);
+        }
     } else {
         tag = {
+            id: tagCode,
             name: `undefined-${tagCode}`,
             value: tagValue,
             description: tagValue
