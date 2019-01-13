@@ -28,18 +28,10 @@ export default {
                 return ((value[0] << 8) + value[1]).toString();
             }
         },
-        0x011E: {
-            'name': 'Service Identifier'
-        },
-        0x0128: {
-            'name': 'Envelope Number'
-        },
-        0x0132: {
-            'name': 'Product ID'
-        },
-        0x013C: {
-            'name': 'Envelope Priority'
-        },
+        0x011e: 'Service Identifier',
+        0x0128: 'Envelope Number',
+        0x0132: 'Product ID',
+        0x013c: 'Envelope Priority',
         0x0146: {
             'name': 'Date Sent',
             'description': getCreationDate
@@ -50,72 +42,17 @@ export default {
         },
         0x015a: {
             'name': 'Coded Character Set',
-            'description': (value) => {
-                const string = getStringValue(value);
-                if (string === '\x1b%G') {
-                    return 'UTF-8';
-                } else if (string === '\x1b%5') {
-                    return 'windows-1252';
-                } else if (string === '\x1b%/G') {
-                    return 'UTF-8 Level 1';
-                } else if (string === '\x1b%/H') {
-                    return 'UTF-8 Level 2';
-                } else if (string === '\x1b%/I') {
-                    return 'UTF-8 Level 3';
-                } else if (string === '\x1B/A') {
-                    return 'iso-8859-1';
-                } else if (string === '\x1B/B') {
-                    return 'iso-8859-2';
-                } else if (string === '\x1B/C') {
-                    return 'iso-8859-3';
-                } else if (string === '\x1B/D') {
-                    return 'iso-8859-4';
-                } else if (string === '\x1B/@') {
-                    return 'iso-8859-5';
-                } else if (string === '\x1B/G') {
-                    return 'iso-8859-6';
-                } else if (string === '\x1B/F') {
-                    return 'iso-8859-7';
-                } else if (string === '\x1B/H') {
-                    return 'iso-8859-8';
-                }
-                return 'Unknown';
-            },
-            'encoding_name': (value) => {
-                const string = getStringValue(value);
-                if (string === '\x1b%G') {
-                    return 'utf-8';
-                } else if (string === '\x1b%5') {
-                    return 'windows-1252';
-                } else if (string === '\x1B/A') {
-                    return 'iso-8859-1';
-                } else if (string === '\x1B/B') {
-                    return 'iso-8859-2';
-                } else if (string === '\x1B/C') {
-                    return 'iso-8859-3';
-                } else if (string === '\x1B/D') {
-                    return 'iso-8859-4';
-                } else if (string === '\x1B/@') {
-                    return 'iso-8859-5';
-                } else if (string === '\x1B/G') {
-                    return 'iso-8859-6';
-                } else if (string === '\x1B/F') {
-                    return 'iso-8859-7';
-                } else if (string === '\x1B/H') {
-                    return 'iso-8859-8';
-                }
-            }
+            'description': getEncodingName,
+            'encoding_name': getEncodingName,
         },
-        0x0164: {
-            'name': 'UNO'
-        },
+        0x0164: 'UNO',
         0x0178: {
             'name': 'ARM Identifier',
             'description': (value) => {
                 return ((value[0] << 8) + value[1]).toString();
             }
         },
-        0x017A: {
+        0x017a: {
             'name': 'ARM Version',
             'description': (value) => {
                 return ((value[0] << 8) + value[1]).toString();
@@ -339,6 +276,9 @@ export default {
             }
         },
         0x029a: 'Audio Outcue',
+        0x02ba: 'Short Document ID',
+        0x02bb: 'Unique Document ID',
+        0x02bc: 'Owner ID',
         0x02c8: {
             'name': (value) => {
                 return value.length === 2 ? 'ObjectData Preview File Format' : 'Record 2 destination';
@@ -407,10 +347,9 @@ export default {
                     } else if (intValue === 29) {
                         return 'Corel Draw [*.CDR]';
                     }
-                } else {
-                    const strValue = getStringValue(value);
-                    return strValue;
+                    return `Unknown format ${intValue}`;
                 }
+                return getStringValue(value);
             }
         },
         0x02c9: {
@@ -442,9 +381,6 @@ export default {
                 return stringValue;
             }
         },
-        0x02ba: 'ShortDocumentID',
-        0x02bb: 'UniqueDocumentID',
-        0x02bc: 'OwnerID',
         0x02ca: 'ObjectData Preview Data',
         0x070a: {
             'name': 'Size Mode',
@@ -459,7 +395,7 @@ export default {
                 for (let i = 0; i < value.length; i++) {
                     n = (n << 8) + value[i];
                 }
-                return n.toString();
+                return n;
             }
         },
         0x075a: {
@@ -469,10 +405,19 @@ export default {
                 for (let i = 0; i < value.length; i++) {
                     n = (n << 8) + value[i];
                 }
-                return n.toString();
+                return n;
+            }
+        },
+        0x075f: {
+            'name': 'Maximum ObjectData Size',
+            'description': (value) => {
+                let n = 0;
+                for (let i = 0; i < value.length; i++) {
+                    n = (n << 8) + value[i];
+                }
+                return n;
             }
         }
-
     }
 };
 
@@ -498,4 +443,36 @@ function getCreationTime(value) {
     }
 
     return parsedTime;
+}
+
+function getEncodingName(value) {
+    const string = getStringValue(value);
+    if (string === '\x1b%G') {
+        return 'UTF-8';
+    } else if (string === '\x1b%5') {
+        return 'Windows-1252';
+    } else if (string === '\x1b%/G') {
+        return 'UTF-8 Level 1';
+    } else if (string === '\x1b%/H') {
+        return 'UTF-8 Level 2';
+    } else if (string === '\x1b%/I') {
+        return 'UTF-8 Level 3';
+    } else if (string === '\x1B/A') {
+        return 'ISO-8859-1';
+    } else if (string === '\x1B/B') {
+        return 'ISO-8859-2';
+    } else if (string === '\x1B/C') {
+        return 'ISO-8859-3';
+    } else if (string === '\x1B/D') {
+        return 'ISO-8859-4';
+    } else if (string === '\x1B/@') {
+        return 'ISO-8859-5';
+    } else if (string === '\x1B/G') {
+        return 'ISO-8859-6';
+    } else if (string === '\x1B/F') {
+        return 'ISO-8859-7';
+    } else if (string === '\x1B/H') {
+        return 'ISO-8859-8';
+    }
+    return 'Unknown';
 }
