@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import IptcTagNames from './iptc-tag-names';
+import TagDecoder from './tag-decoder';
 
 const BYTES_8BIM = 0x3842494d;
 const BYTES_8BIM_SIZE = 4;
@@ -68,12 +69,10 @@ function parseTags(dataView, naaBlock, dataOffset) {
     while ((dataOffset < endOfBlockOffset) && (dataOffset < dataView.byteLength)) {
         const {tag, tagSize} = readTag(dataView, dataOffset, tags, encoding);
 
-        // 29/8/18 : if tag is null then it hasn't been parsed correctly
         if (tag === null) {
-            break; // Don't attempt any further parsing if the data looks invalid
+            break;
         }
 
-        // If the tag just parsed specifies the text encoding, save it for decoding later strings
         if ('encoding' in tag) {
             encoding = tag.encoding;
         }
@@ -87,7 +86,7 @@ function parseTags(dataView, naaBlock, dataOffset) {
         } else {
             if (!(tags[tag.name] instanceof Array)) {
                 tags[tag.name] = [{
-                    id: tag.id,
+                    id: tags[tag.name].id,
                     value: tags[tag.name].value,
                     description: tags[tag.name].description
                 }];
@@ -106,83 +105,36 @@ function parseTags(dataView, naaBlock, dataOffset) {
 }
 
 function readTag(dataView, dataOffset, tags, encoding) {
-    const TAG_LEAD_BYTE = 0x1C;
     const TAG_CODE_OFFSET = 1;
     const TAG_SIZE_OFFSET = 3;
 
-    // 29/8/18 : sanity check that the tag starts with 0x1C
-    const leadByte = dataView.getUint8(dataOffset);
-    if (leadByte !== TAG_LEAD_BYTE) {
-        const tag = null, tagSize = 0;
-        return {tag, tagSize};
+    if (leadByteIsMissing(dataView, dataOffset)) {
+        return {tag: null, tagSize: 0};
     }
 
     const tagCode = dataView.getUint16(dataOffset + TAG_CODE_OFFSET, false);
     const tagSize = dataView.getUint16(dataOffset + TAG_SIZE_OFFSET, false);
     const tagValue = getTagValue(dataView, dataOffset + TAG_HEADER_SIZE, tagSize);
-    let tag;
 
-    if (IptcTagNames['iptc'][tagCode] !== undefined) {
-        let tagName, tagDescription;
-
-        // Case that both 'name' and 'description' are defined for this code
-        if ((IptcTagNames['iptc'][tagCode]['name'] !== undefined)
-            && (IptcTagNames['iptc'][tagCode]['description'] !== undefined)) {
-            // Case that 'name' is a function rather than a string
-            if (typeof (IptcTagNames['iptc'][tagCode]['name']) === 'function') {
-                tagName = IptcTagNames['iptc'][tagCode]['name'](tagValue);
-            } else {
-                // 'name' is a string
-                tagName = IptcTagNames['iptc'][tagCode]['name'];
-            }
-            tagDescription = IptcTagNames['iptc'][tagCode]['description'](tagValue, tags);
-        } else {
-            // Case that 'name' is defined (but not 'description')
-            if (IptcTagNames['iptc'][tagCode]['name'] !== undefined) {
-                tagName = IptcTagNames['iptc'][tagCode]['name'];
-            } else {
-                // Case that the entry is a single string => it's the name
-                tagName = IptcTagNames['iptc'][tagCode];
-            }
-            if (tagValue instanceof Array) {
-                // If we have TextEncoder and an encoding
-                if ((typeof TextEncoder !== 'undefined') && (encoding !== undefined)) {
-                    // Decode the ArrayBuffer using the specified encoding
-                    const rawTagValue = dataView.buffer.slice(dataOffset + TAG_HEADER_SIZE, dataOffset + TAG_HEADER_SIZE + tagSize);
-                    tagDescription = new TextDecoder(encoding).decode(rawTagValue);
-                } else {
-                    tagDescription = tagValue.map((charCode) => String.fromCharCode(charCode)).join('');
-                    tagDescription = decodeAsciiValue(tagDescription);
-                }
-            } else {
-                tagDescription = tagValue;
-            }
-        }
-        // console.log ("Name:" + tagName + ", ID:"  + tagCode + ", value:" + tagValue);
-        tag = {
-            id: tagCode,
-            name: tagName,
-            value: tagValue,
-            description: tagDescription
-        };
-        if (IptcTagNames['iptc'][tagCode]['repeatable'] !== undefined) {
-            tag['repeatable'] = true;
-        }
-
-        // Optional 'encoding_name' from CCS
-        if (IptcTagNames['iptc'][tagCode]['encoding_name'] !== undefined) {
-            tag.encoding = IptcTagNames['iptc'][tagCode]['encoding_name'](tagValue);
-        }
-    } else {
-        tag = {
-            id: tagCode,
-            name: `undefined-${tagCode}`,
-            value: tagValue,
-            description: tagValue
-        };
+    const tag = {
+        id: tagCode,
+        name: getTagName(IptcTagNames['iptc'][tagCode], tagCode, tagValue),
+        value: tagValue,
+        description: getTagDescription(IptcTagNames['iptc'][tagCode], tagValue, tags, encoding)
+    };
+    if (tagIsRepeatable(tagCode)) {
+        tag['repeatable'] = true;
+    }
+    if (tagContainsEncoding(tagCode)) {
+        tag['encoding'] = IptcTagNames['iptc'][tagCode]['encoding_name'](tagValue);
     }
 
     return {tag, tagSize};
+}
+
+function leadByteIsMissing(dataView, dataOffset) {
+    const TAG_LEAD_BYTE = 0x1c;
+    return dataView.getUint8(dataOffset) !== TAG_LEAD_BYTE;
 }
 
 function getTagValue(dataView, offset, size) {
@@ -195,10 +147,49 @@ function getTagValue(dataView, offset, size) {
     return value;
 }
 
-function decodeAsciiValue(asciiValue) {
-    try {
-        return decodeURIComponent(escape(asciiValue));
-    } catch (error) {
-        return asciiValue;
+function getTagName(tag, tagCode, tagValue) {
+    if (!tag) {
+        return `undefined-${tagCode}`;
     }
+    if (tagIsName(tag)) {
+        return tag;
+    }
+    if (hasDynamicName(tag)) {
+        return tag['name'](tagValue);
+    }
+    return tag['name'];
+}
+
+function tagIsName(tag) {
+    return typeof tag === 'string';
+}
+
+function hasDynamicName(tag) {
+    return typeof (tag['name']) === 'function';
+}
+
+function getTagDescription(tag, tagValue, tags, encoding) {
+    if (hasDescriptionProperty(tag)) {
+        return tag['description'](tagValue, tags);
+    }
+    if (tagValueIsText(tag, tagValue)) {
+        return TagDecoder.decode(encoding, tagValue);
+    }
+    return tagValue;
+}
+
+function tagValueIsText(tag, tagValue) {
+    return tag && tagValue instanceof Array;
+}
+
+function hasDescriptionProperty(tag) {
+    return tag && tag['description'] !== undefined;
+}
+
+function tagIsRepeatable(tagCode) {
+    return IptcTagNames['iptc'][tagCode] && IptcTagNames['iptc'][tagCode]['repeatable'];
+}
+
+function tagContainsEncoding(tagCode) {
+    return IptcTagNames['iptc'][tagCode] && IptcTagNames['iptc'][tagCode]['encoding_name'] !== undefined;
 }
