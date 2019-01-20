@@ -14,7 +14,11 @@ export default {
 function decode(encoding, tagValue) {
     const Decoder = TextDecoder.get();
     if ((typeof Decoder !== 'undefined') && (encoding !== undefined)) {
-        return new Decoder(encoding).decode(Uint8Array.from(tagValue));
+        try {
+            return new Decoder(encoding).decode(Uint8Array.from(tagValue));
+        } catch (error) {
+            // Pass through and fall back to ASCII decoding.
+        }
     }
 
     const stringValue = tagValue.map((charCode) => String.fromCharCode(charCode)).join('');

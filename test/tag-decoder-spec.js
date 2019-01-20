@@ -41,4 +41,17 @@ describe('tag-decoder', () => {
         expect(encoding).to.equal('UTF-8');
         expect(Array.from(data)).to.deep.equal(Array.from(getDataView(TAG_VALUE_STRING).buffer));
     });
+
+    it('should still try to use value for non-ASCII string if decoding is not possible', () => {
+        TagDecoder.__set__('TextDecoder', {
+            get() {
+                return function () {
+                    throw new Error();
+                };
+            }
+        });
+        const tagValue = getCharacterArray(TAG_VALUE_STRING);
+
+        expect(TagDecoder.decode('UTF-8', tagValue)).to.equal(TAG_VALUE_STRING);
+    });
 });
