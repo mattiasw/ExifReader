@@ -474,16 +474,16 @@ describe('iptc-tag-names', () => {
 
     it('should report correct name and description for Max Subfile Size', () => {
         expect(IptcTagNames[0x0714].name).to.equal('Max Subfile Size');
-        expect(IptcTagNames[0x0714].description([0x47, 0x11])).to.equal(0x4711);
+        expect(IptcTagNames[0x0714].description([0x47, 0x11])).to.equal('' + 0x4711);
     });
 
     it('should report correct name and description for ObjectData Size Announced', () => {
         expect(IptcTagNames[0x075a].name).to.equal('ObjectData Size Announced');
-        expect(IptcTagNames[0x075a].description([0x47, 0x11])).to.equal(0x4711);
+        expect(IptcTagNames[0x075a].description([0x47, 0x11])).to.equal('' + 0x4711);
     });
 
     it('should report correct name and description for Maximum ObjectData Size', () => {
         expect(IptcTagNames[0x075f].name).to.equal('Maximum ObjectData Size');
-        expect(IptcTagNames[0x075f].description([0x47, 0x11])).to.equal(0x4711);
+        expect(IptcTagNames[0x075f].description([0x47, 0x11])).to.equal('' + 0x4711);
     });
 });

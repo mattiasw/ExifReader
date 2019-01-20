@@ -395,7 +395,7 @@ export default {
                 for (let i = 0; i < value.length; i++) {
                     n = (n << 8) + value[i];
                 }
-                return n;
+                return n.toString();
             }
         },
         0x075a: {
@@ -405,7 +405,7 @@ export default {
                 for (let i = 0; i < value.length; i++) {
                     n = (n << 8) + value[i];
                 }
-                return n;
+                return n.toString();
             }
         },
         0x075f: {
@@ -415,7 +415,7 @@ export default {
                 for (let i = 0; i < value.length; i++) {
                     n = (n << 8) + value[i];
                 }
-                return n;
+                return n.toString();
             }
         }
     }
