@@ -78,7 +78,11 @@ function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
     for (let fieldIndex = 0; fieldIndex < numberOfFields; fieldIndex++) {
         const tag = readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder);
         if (tag !== undefined) {
-            tags[tag.name] = {'value': tag.value, 'description': tag.description};
+            tags[tag.name] = {
+                'id': tag.id,
+                'value': tag.value,
+                'description': tag.description
+            };
         }
         offset += FIELD_SIZE;
     }
@@ -131,6 +135,7 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
             }
         }
         return {
+            id: tagCode,
             name: tagName,
             value: tagValue,
             description: tagDescription
@@ -138,6 +143,7 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
     }
 
     return {
+        id: tagCode,
         name: `undefined-${tagCode}`,
         value: tagValue,
         description: tagValue
