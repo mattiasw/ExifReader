@@ -117,7 +117,7 @@ function getAttributes(element) {
     const attributes = {};
 
     for (let i = 0; i < element.attributes.length; i++) {
-        attributes[element.attributes[i].nodeName] = element.attributes[i].value;
+        attributes[element.attributes[i].nodeName] = decodeURIComponent(escape(element.attributes[i].value));
     }
 
     return attributes;

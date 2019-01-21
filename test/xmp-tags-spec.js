@@ -352,7 +352,7 @@ describe('xmp-tags', () => {
                 <xmp:MyXMPArray xml:lang="en">
                     <rdf:Bag>
                         <rdf:li>
-                            <rdf:Description>
+                            <rdf:Description xmp:MyXMPTag="AÃºC">
                                 <rdf:value>47</rdf:value>
                                 <mq:MyQualifier>My qualifier</mq:MyQualifier>
                             </rdf:Description>
@@ -369,7 +369,8 @@ describe('xmp-tags', () => {
                 {
                     value: '47',
                     attributes: {
-                        MyQualifier: 'My qualifier'
+                        MyQualifier: 'My qualifier',
+                        MyXMPTag: 'AúC'
                     },
                     description: '47'
                 },
