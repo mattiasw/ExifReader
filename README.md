@@ -82,6 +82,11 @@ Some XMP tags have processed values as descriptions. That means that e.g. an
 If you would like more XMP tags to have a processed description, please file an
 issue or do a pull request.
 
+Some text tags use TextDecoder to decode their content. If your specific
+environment does not support it at all or a specific encoding, you will not be
+able to see the decoded value. One example is when [Node.js wasn't compiled
+with support for the specific encoding](https://nodejs.org/api/util.html#util_whatwg_supported_encodings).
+
 Client/Browser Support
 ----------------------
 

@@ -6,20 +6,56 @@ import {getStringValue} from './tag-names-utils';
 
 export default {
     'iptc': {
+        0x0100: {
+            'name': 'Model Version',
+            'description': (value) => {
+                return ((value[0] << 8) + value[1]).toString();
+            }
+        },
+        0x0105: {
+            'name': 'Destination',
+            'repeatable': true
+        },
+        0x0114: {
+            'name': 'File Format',
+            'description': (value) => {
+                return ((value[0] << 8) + value[1]).toString();
+            }
+        },
+        0x0116: {
+            'name': 'File Format Version',
+            'description': (value) => {
+                return ((value[0] << 8) + value[1]).toString();
+            }
+        },
+        0x011e: 'Service Identifier',
+        0x0128: 'Envelope Number',
+        0x0132: 'Product ID',
+        0x013c: 'Envelope Priority',
+        0x0146: {
+            'name': 'Date Sent',
+            'description': getCreationDate
+        },
+        0x0150: {
+            'name': 'Time Sent',
+            'description': getCreationTime
+        },
         0x015a: {
             'name': 'Coded Character Set',
+            'description': getEncodingName,
+            'encoding_name': getEncodingName,
+        },
+        0x0164: 'UNO',
+        0x0178: {
+            'name': 'ARM Identifier',
             'description': (value) => {
-                const string = getStringValue(value);
-                if (string === '\x1b%G') {
-                    return 'UTF-8';
-                } else if (string === '\x1b%/G') {
-                    return 'UTF-8 Level 1';
-                } else if (string === '\x1b%/H') {
-                    return 'UTF-8 Level 2';
-                } else if (string === '\x1b%/I') {
-                    return 'UTF-8 Level 3';
-                }
-                return 'Unknown';
+                return ((value[0] << 8) + value[1]).toString();
+            }
+        },
+        0x017a: {
+            'name': 'ARM Version',
+            'description': (value) => {
+                return ((value[0] << 8) + value[1]).toString();
             }
         },
         0x0200: {
@@ -240,72 +276,80 @@ export default {
             }
         },
         0x029a: 'Audio Outcue',
+        0x02ba: 'Short Document ID',
+        0x02bb: 'Unique Document ID',
+        0x02bc: 'Owner ID',
         0x02c8: {
-            'name': 'ObjectData Preview File Format',
+            'name': (value) => {
+                return value.length === 2 ? 'ObjectData Preview File Format' : 'Record 2 destination';
+            },
             'description': (value) => {
-                const stringValue = getStringValue(value);
-                if (stringValue === '00') {
-                    return 'No ObjectData';
-                } else if (stringValue === '01') {
-                    return 'IPTC-NAA Digital Newsphoto Parameter Record';
-                } else if (stringValue === '02') {
-                    return 'IPTC7901 Recommended Message Format';
-                } else if (stringValue === '03') {
-                    return 'Tagged Image File Format (Adobe/Aldus Image data)';
-                } else if (stringValue === '04') {
-                    return 'Illustrator (Adobe Graphics data)';
-                } else if (stringValue === '05') {
-                    return 'AppleSingle (Apple Computer Inc)';
-                } else if (stringValue === '06') {
-                    return 'NAA 89-3 (ANPA 1312)';
-                } else if (stringValue === '07') {
-                    return 'MacBinary II';
-                } else if (stringValue === '08') {
-                    return 'IPTC Unstructured Character Oriented File Format (UCOFF)';
-                } else if (stringValue === '09') {
-                    return 'United Press International ANPA 1312 variant';
-                } else if (stringValue === '10') {
-                    return 'United Press International Down-Load Message';
-                } else if (stringValue === '11') {
-                    return 'JPEG File Interchange (JFIF)';
-                } else if (stringValue === '12') {
-                    return 'Photo-CD Image-Pac (Eastman Kodak)';
-                } else if (stringValue === '13') {
-                    return 'Microsoft Bit Mapped Graphics File [*.BMP]';
-                } else if (stringValue === '14') {
-                    return 'Digital Audio File [*.WAV] (Microsoft & Creative Labs)';
-                } else if (stringValue === '15') {
-                    return 'Audio plus Moving Video [*.AVI] (Microsoft)';
-                } else if (stringValue === '16') {
-                    return 'PC DOS/Windows Executable Files [*.COM][*.EXE]';
-                } else if (stringValue === '17') {
-                    return 'Compressed Binary File [*.ZIP] (PKWare Inc)';
-                } else if (stringValue === '18') {
-                    return 'Audio Interchange File Format AIFF (Apple Computer Inc)';
-                } else if (stringValue === '19') {
-                    return 'RIFF Wave (Microsoft Corporation)';
-                } else if (stringValue === '20') {
-                    return 'Freehand (Macromedia/Aldus)';
-                } else if (stringValue === '21') {
-                    return 'Hypertext Markup Language "HTML" (The Internet Society)';
-                } else if (stringValue === '22') {
-                    return 'MPEG 2 Audio Layer 2 (Musicom), ISO/IEC';
-                } else if (stringValue === '23') {
-                    return 'MPEG 2 Audio Layer 3, ISO/IEC';
-                } else if (stringValue === '24') {
-                    return 'Portable Document File (*.PDF) Adobe';
-                } else if (stringValue === '25') {
-                    return 'News Industry Text Format (NITF)';
-                } else if (stringValue === '26') {
-                    return 'Tape Archive (*.TAR)';
-                } else if (stringValue === '27') {
-                    return 'Tidningarnas Telegrambyrå NITF version (TTNITF DTD)';
-                } else if (stringValue === '28') {
-                    return 'Ritzaus Bureau NITF version (RBNITF DTD)';
-                } else if (stringValue === '29') {
-                    return 'Corel Draw [*.CDR]';
+                if (value.length === 2) {
+                    const intValue = (value[0] << 8) + value[1];
+                    if (intValue === 0) {
+                        return 'No ObjectData';
+                    } else if (intValue === 1) {
+                        return 'IPTC-NAA Digital Newsphoto Parameter Record';
+                    } else if (intValue === 2) {
+                        return 'IPTC7901 Recommended Message Format';
+                    } else if (intValue === 3) {
+                        return 'Tagged Image File Format (Adobe/Aldus Image data)';
+                    } else if (intValue === 4) {
+                        return 'Illustrator (Adobe Graphics data)';
+                    } else if (intValue === 5) {
+                        return 'AppleSingle (Apple Computer Inc)';
+                    } else if (intValue === 6) {
+                        return 'NAA 89-3 (ANPA 1312)';
+                    } else if (intValue === 7) {
+                        return 'MacBinary II';
+                    } else if (intValue === 8) {
+                        return 'IPTC Unstructured Character Oriented File Format (UCOFF)';
+                    } else if (intValue === 9) {
+                        return 'United Press International ANPA 1312 variant';
+                    } else if (intValue === 10) {
+                        return 'United Press International Down-Load Message';
+                    } else if (intValue === 11) {
+                        return 'JPEG File Interchange (JFIF)';
+                    } else if (intValue === 12) {
+                        return 'Photo-CD Image-Pac (Eastman Kodak)';
+                    } else if (intValue === 13) {
+                        return 'Microsoft Bit Mapped Graphics File [*.BMP]';
+                    } else if (intValue === 14) {
+                        return 'Digital Audio File [*.WAV] (Microsoft & Creative Labs)';
+                    } else if (intValue === 15) {
+                        return 'Audio plus Moving Video [*.AVI] (Microsoft)';
+                    } else if (intValue === 16) {
+                        return 'PC DOS/Windows Executable Files [*.COM][*.EXE]';
+                    } else if (intValue === 17) {
+                        return 'Compressed Binary File [*.ZIP] (PKWare Inc)';
+                    } else if (intValue === 18) {
+                        return 'Audio Interchange File Format AIFF (Apple Computer Inc)';
+                    } else if (intValue === 19) {
+                        return 'RIFF Wave (Microsoft Corporation)';
+                    } else if (intValue === 20) {
+                        return 'Freehand (Macromedia/Aldus)';
+                    } else if (intValue === 21) {
+                        return 'Hypertext Markup Language "HTML" (The Internet Society)';
+                    } else if (intValue === 22) {
+                        return 'MPEG 2 Audio Layer 2 (Musicom), ISO/IEC';
+                    } else if (intValue === 23) {
+                        return 'MPEG 2 Audio Layer 3, ISO/IEC';
+                    } else if (intValue === 24) {
+                        return 'Portable Document File (*.PDF) Adobe';
+                    } else if (intValue === 25) {
+                        return 'News Industry Text Format (NITF)';
+                    } else if (intValue === 26) {
+                        return 'Tape Archive (*.TAR)';
+                    } else if (intValue === 27) {
+                        return 'Tidningarnas Telegrambyrå NITF version (TTNITF DTD)';
+                    } else if (intValue === 28) {
+                        return 'Ritzaus Bureau NITF version (RBNITF DTD)';
+                    } else if (intValue === 29) {
+                        return 'Corel Draw [*.CDR]';
+                    }
+                    return `Unknown format ${intValue}`;
                 }
-                return 'Unknown format ' + stringValue;
+                return getStringValue(value);
             }
         },
         0x02c9: {
@@ -337,7 +381,43 @@ export default {
                 return stringValue;
             }
         },
-        0x02ca: 'ObjectData Preview Data'
+        0x02ca: 'ObjectData Preview Data',
+        0x070a: {
+            'name': 'Size Mode',
+            'description': (value) => {
+                return (value[0]).toString();
+            }
+        },
+        0x0714: {
+            'name': 'Max Subfile Size',
+            'description': (value) => {
+                let n = 0;
+                for (let i = 0; i < value.length; i++) {
+                    n = (n << 8) + value[i];
+                }
+                return n.toString();
+            }
+        },
+        0x075a: {
+            'name': 'ObjectData Size Announced',
+            'description': (value) => {
+                let n = 0;
+                for (let i = 0; i < value.length; i++) {
+                    n = (n << 8) + value[i];
+                }
+                return n.toString();
+            }
+        },
+        0x075f: {
+            'name': 'Maximum ObjectData Size',
+            'description': (value) => {
+                let n = 0;
+                for (let i = 0; i < value.length; i++) {
+                    n = (n << 8) + value[i];
+                }
+                return n.toString();
+            }
+        }
     }
 };
 
@@ -363,4 +443,36 @@ function getCreationTime(value) {
     }
 
     return parsedTime;
+}
+
+function getEncodingName(value) {
+    const string = getStringValue(value);
+    if (string === '\x1b%G') {
+        return 'UTF-8';
+    } else if (string === '\x1b%5') {
+        return 'Windows-1252';
+    } else if (string === '\x1b%/G') {
+        return 'UTF-8 Level 1';
+    } else if (string === '\x1b%/H') {
+        return 'UTF-8 Level 2';
+    } else if (string === '\x1b%/I') {
+        return 'UTF-8 Level 3';
+    } else if (string === '\x1B/A') {
+        return 'ISO-8859-1';
+    } else if (string === '\x1B/B') {
+        return 'ISO-8859-2';
+    } else if (string === '\x1B/C') {
+        return 'ISO-8859-3';
+    } else if (string === '\x1B/D') {
+        return 'ISO-8859-4';
+    } else if (string === '\x1B/@') {
+        return 'ISO-8859-5';
+    } else if (string === '\x1B/G') {
+        return 'ISO-8859-6';
+    } else if (string === '\x1B/F') {
+        return 'ISO-8859-7';
+    } else if (string === '\x1B/H') {
+        return 'ISO-8859-8';
+    }
+    return 'Unknown';
 }

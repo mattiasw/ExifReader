@@ -9,12 +9,95 @@ import TagNames from '../src/iptc-tag-names';
 const IptcTagNames = TagNames['iptc'];
 
 describe('iptc-tag-names', () => {
+    it('should report correct name and description for Model Version', () => {
+        expect(IptcTagNames[0x0100].name).to.equal('Model Version');
+        expect(IptcTagNames[0x0100].description([0x47, 0x11])).to.equal('' + 0x4711);
+    });
+
+    it('should report correct name and repeatability for repeated Destination', () => {
+        expect(IptcTagNames[0x0105].name).to.equal('Destination');
+        expect(IptcTagNames[0x0105].repeatable).to.be.true;
+    });
+
+    it('should report correct name and description for File Format', () => {
+        expect(IptcTagNames[0x0114].name).to.equal('File Format');
+        expect(IptcTagNames[0x0114].description([0x47, 0x11])).to.equal('' + 0x4711);
+    });
+
+    it('should report correct name and description for File Format Version', () => {
+        expect(IptcTagNames[0x0116].name).to.equal('File Format Version');
+        expect(IptcTagNames[0x0116].description([0x47, 0x11])).to.equal('' + 0x4711);
+    });
+
+    it('should have tag Service Identifier', () => {
+        expect(IptcTagNames[0x011e]).to.equal('Service Identifier');
+    });
+
+    it('should have tag Envelope Number', () => {
+        expect(IptcTagNames[0x0128]).to.equal('Envelope Number');
+    });
+
+    it('should have tag Product ID', () => {
+        expect(IptcTagNames[0x0132]).to.equal('Product ID');
+    });
+
+    it('should have tag Envelope Priority', () => {
+        expect(IptcTagNames[0x013c]).to.equal('Envelope Priority');
+    });
+
+    it('should report correct name and description for Date Sent', () => {
+        expect(IptcTagNames[0x0146].name).to.equal('Date Sent');
+        expect(IptcTagNames[0x0146].description(getCharacterArray('12341223'))).to.equal('1234-12-23');
+    });
+
+    it('should report correct name and description for Time Sent', () => {
+        expect(IptcTagNames[0x0150].name).to.equal('Time Sent');
+        expect(IptcTagNames[0x0150].description(getCharacterArray('123456'))).to.equal('12:34:56');
+    });
+
     it('should report correct name and description for Coded Character Set', () => {
         expect(IptcTagNames[0x015a].name).to.equal('Coded Character Set');
         expect(IptcTagNames[0x015a].description(getCharacterArray('\x1b%G'))).to.equal('UTF-8');
+        expect(IptcTagNames[0x015a].description(getCharacterArray('\x1b%5'))).to.equal('Windows-1252');
         expect(IptcTagNames[0x015a].description(getCharacterArray('\x1b%/G'))).to.equal('UTF-8 Level 1');
         expect(IptcTagNames[0x015a].description(getCharacterArray('\x1b%/H'))).to.equal('UTF-8 Level 2');
         expect(IptcTagNames[0x015a].description(getCharacterArray('\x1b%/I'))).to.equal('UTF-8 Level 3');
+        expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/A'))).to.equal('ISO-8859-1');
+        expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/B'))).to.equal('ISO-8859-2');
+        expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/C'))).to.equal('ISO-8859-3');
+        expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/D'))).to.equal('ISO-8859-4');
+        expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/@'))).to.equal('ISO-8859-5');
+        expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/G'))).to.equal('ISO-8859-6');
+        expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/F'))).to.equal('ISO-8859-7');
+        expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/H'))).to.equal('ISO-8859-8');
+
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1b%G'))).to.equal('UTF-8');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1b%5'))).to.equal('Windows-1252');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1b%/G'))).to.equal('UTF-8 Level 1');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1b%/H'))).to.equal('UTF-8 Level 2');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1b%/I'))).to.equal('UTF-8 Level 3');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/A'))).to.equal('ISO-8859-1');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/B'))).to.equal('ISO-8859-2');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/C'))).to.equal('ISO-8859-3');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/D'))).to.equal('ISO-8859-4');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/@'))).to.equal('ISO-8859-5');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/G'))).to.equal('ISO-8859-6');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/F'))).to.equal('ISO-8859-7');
+        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/H'))).to.equal('ISO-8859-8');
+    });
+
+    it('should have tag UNO', () => {
+        expect(IptcTagNames[0x0164]).to.equal('UNO');
+    });
+
+    it('should report correct name and description for ARM Identifier', () => {
+        expect(IptcTagNames[0x0178].name).to.equal('ARM Identifier');
+        expect(IptcTagNames[0x0178].description([0x47, 0x11])).to.equal('' + 0x4711);
+    });
+
+    it('should report correct name and description for ARM Version', () => {
+        expect(IptcTagNames[0x017a].name).to.equal('ARM Version');
+        expect(IptcTagNames[0x017a].description([0x47, 0x11])).to.equal('' + 0x4711);
     });
 
     it('should report correct name and description for Record Version', () => {
@@ -291,43 +374,56 @@ describe('iptc-tag-names', () => {
         expect(IptcTagNames[0x029a]).to.equal('Audio Outcue');
     });
 
+    it('should have tag Short Document ID', () => {
+        expect(IptcTagNames[0x02ba]).to.equal('Short Document ID');
+    });
+
+    it('should have tag Unique Document ID', () => {
+        expect(IptcTagNames[0x02bb]).to.equal('Unique Document ID');
+    });
+
+    it('should have tag Owner ID', () => {
+        expect(IptcTagNames[0x02bc]).to.equal('Owner ID');
+    });
+
     it('should report correct name and description for ObjectData Preview File Format', () => {
-        expect(IptcTagNames[0x02c8].name).to.equal('ObjectData Preview File Format');
+        expect(IptcTagNames[0x02c8].name([0, 0])).to.equal('ObjectData Preview File Format');
+        expect(IptcTagNames[0x02c8].name([0])).to.equal('Record 2 destination');
         const fileFormats = {
-            '00': 'No ObjectData',
-            '01': 'IPTC-NAA Digital Newsphoto Parameter Record',
-            '02': 'IPTC7901 Recommended Message Format',
-            '03': 'Tagged Image File Format (Adobe/Aldus Image data)',
-            '04': 'Illustrator (Adobe Graphics data)',
-            '05': 'AppleSingle (Apple Computer Inc)',
-            '06': 'NAA 89-3 (ANPA 1312)',
-            '07': 'MacBinary II',
-            '08': 'IPTC Unstructured Character Oriented File Format (UCOFF)',
-            '09': 'United Press International ANPA 1312 variant',
-            '10': 'United Press International Down-Load Message',
-            '11': 'JPEG File Interchange (JFIF)',
-            '12': 'Photo-CD Image-Pac (Eastman Kodak)',
-            '13': 'Microsoft Bit Mapped Graphics File [*.BMP]',
-            '14': 'Digital Audio File [*.WAV] (Microsoft & Creative Labs)',
-            '15': 'Audio plus Moving Video [*.AVI] (Microsoft)',
-            '16': 'PC DOS/Windows Executable Files [*.COM][*.EXE]',
-            '17': 'Compressed Binary File [*.ZIP] (PKWare Inc)',
-            '18': 'Audio Interchange File Format AIFF (Apple Computer Inc)',
-            '19': 'RIFF Wave (Microsoft Corporation)',
-            '20': 'Freehand (Macromedia/Aldus)',
-            '21': 'Hypertext Markup Language "HTML" (The Internet Society)',
-            '22': 'MPEG 2 Audio Layer 2 (Musicom), ISO/IEC',
-            '23': 'MPEG 2 Audio Layer 3, ISO/IEC',
-            '24': 'Portable Document File (*.PDF) Adobe',
-            '25': 'News Industry Text Format (NITF)',
-            '26': 'Tape Archive (*.TAR)',
-            '27': 'Tidningarnas Telegrambyrå NITF version (TTNITF DTD)',
-            '28': 'Ritzaus Bureau NITF version (RBNITF DTD)',
-            '29': 'Corel Draw [*.CDR]',
-            '99': 'Unknown format 99'
+            0: 'No ObjectData',
+            1: 'IPTC-NAA Digital Newsphoto Parameter Record',
+            2: 'IPTC7901 Recommended Message Format',
+            3: 'Tagged Image File Format (Adobe/Aldus Image data)',
+            4: 'Illustrator (Adobe Graphics data)',
+            5: 'AppleSingle (Apple Computer Inc)',
+            6: 'NAA 89-3 (ANPA 1312)',
+            7: 'MacBinary II',
+            8: 'IPTC Unstructured Character Oriented File Format (UCOFF)',
+            9: 'United Press International ANPA 1312 variant',
+            10: 'United Press International Down-Load Message',
+            11: 'JPEG File Interchange (JFIF)',
+            12: 'Photo-CD Image-Pac (Eastman Kodak)',
+            13: 'Microsoft Bit Mapped Graphics File [*.BMP]',
+            14: 'Digital Audio File [*.WAV] (Microsoft & Creative Labs)',
+            15: 'Audio plus Moving Video [*.AVI] (Microsoft)',
+            16: 'PC DOS/Windows Executable Files [*.COM][*.EXE]',
+            17: 'Compressed Binary File [*.ZIP] (PKWare Inc)',
+            18: 'Audio Interchange File Format AIFF (Apple Computer Inc)',
+            19: 'RIFF Wave (Microsoft Corporation)',
+            20: 'Freehand (Macromedia/Aldus)',
+            21: 'Hypertext Markup Language "HTML" (The Internet Society)',
+            22: 'MPEG 2 Audio Layer 2 (Musicom), ISO/IEC',
+            23: 'MPEG 2 Audio Layer 3, ISO/IEC',
+            24: 'Portable Document File (*.PDF) Adobe',
+            25: 'News Industry Text Format (NITF)',
+            26: 'Tape Archive (*.TAR)',
+            27: 'Tidningarnas Telegrambyrå NITF version (TTNITF DTD)',
+            28: 'Ritzaus Bureau NITF version (RBNITF DTD)',
+            29: 'Corel Draw [*.CDR]',
+            99: 'Unknown format 99'
         };
         for (const id in fileFormats) {
-            expect(IptcTagNames[0x02c8].description(getCharacterArray(id))).to.equal(fileFormats[id]);
+            expect(IptcTagNames[0x02c8].description([id >> 8, id % 256])).to.equal(fileFormats[id]);
         }
     });
 
@@ -368,5 +464,26 @@ describe('iptc-tag-names', () => {
 
     it('should have tag ObjectData Preview Data', () => {
         expect(IptcTagNames[0x02ca]).to.equal('ObjectData Preview Data');
+    });
+
+    it('should report correct name and description for Size Mode', () => {
+        expect(IptcTagNames[0x070a].name).to.equal('Size Mode');
+        expect(IptcTagNames[0x070a].description([0])).to.equal('0');
+        expect(IptcTagNames[0x070a].description([1])).to.equal('1');
+    });
+
+    it('should report correct name and description for Max Subfile Size', () => {
+        expect(IptcTagNames[0x0714].name).to.equal('Max Subfile Size');
+        expect(IptcTagNames[0x0714].description([0x47, 0x11])).to.equal('' + 0x4711);
+    });
+
+    it('should report correct name and description for ObjectData Size Announced', () => {
+        expect(IptcTagNames[0x075a].name).to.equal('ObjectData Size Announced');
+        expect(IptcTagNames[0x075a].description([0x47, 0x11])).to.equal('' + 0x4711);
+    });
+
+    it('should report correct name and description for Maximum ObjectData Size', () => {
+        expect(IptcTagNames[0x075f].name).to.equal('Maximum ObjectData Size');
+        expect(IptcTagNames[0x075f].description([0x47, 0x11])).to.equal('' + 0x4711);
     });
 });

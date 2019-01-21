@@ -61,6 +61,7 @@ describe('tags', () => {
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00');
         Tags.__set__('TagNames', {'0th': {0x4711: 'MyExifTag'}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyExifTag'].id).to.equal(0x4711);
         expect(tags['MyExifTag'].description).to.equal(0x42);
     });
 
@@ -83,6 +84,7 @@ describe('tags', () => {
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00');
         Tags.__set__('TagNames', {'0th': {}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['undefined-18193'].id).to.equal(0x4711);
         expect(tags['undefined-18193'].description).to.equal(0x42);
         expect(tags['undefined-18193'].value).to.equal(0x42);
     });
@@ -126,6 +128,7 @@ describe('tags', () => {
             + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x10\x41\x42\x43\x44\x45\x00');
         expect(readIfd(dataView, '0th', 4, 6, ByteOrder.BIG_ENDIAN)).to.deep.equal({
             MyAsciiTag: {
+                id: 0x4711,
                 value: ['ABCDE'],
                 description: 'ABCDE'
             }
@@ -142,6 +145,7 @@ describe('tags', () => {
             + '\x00\x00\x00\x10\x41\x42\x43\x44\x45\x00');
         expect(readIfd(dataView, '0th', 4, 6, ByteOrder.BIG_ENDIAN)).to.deep.equal({
             MyAsciiTag: {
+                id: 0x4711,
                 value: ['<faulty value>'],
                 description: '<faulty value>'
             }
