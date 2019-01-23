@@ -19,6 +19,8 @@ export default {
     errors: exifErrors,
 };
 
+export const errors = exifErrors;
+
 export function load(data, options = {expanded: false}) {
     let dataView;
 
