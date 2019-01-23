@@ -51,6 +51,14 @@ CommonJS/Node modules:
 const ExifReader = require('exifreader');
 ```
 
+AMD modules:
+
+```javascript
+requirejs(['/path/to/exif-reader.js'], function (ExifReader) {
+    ...
+});
+```
+
 `script` tag:
 
 ```html
