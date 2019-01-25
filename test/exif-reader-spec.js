@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getConsoleWarnSpy} from './test-utils';
 import {__RewireAPI__ as ExifReaderRewireAPI} from '../src/exif-reader';
 import * as ExifReader from '../src/exif-reader';
 import exifErrors from '../src/errors';
@@ -13,18 +12,30 @@ const XMP_FIELD_LENGTH_TEST_VALUE = 47;
 
 describe('exif-reader', () => {
     afterEach(() => {
+        ExifReaderRewireAPI.__ResetDependency__('DataViewWrapper');
+        ExifReaderRewireAPI.__ResetDependency__('loadView');
         ExifReaderRewireAPI.__ResetDependency__('ImageHeader');
         ExifReaderRewireAPI.__ResetDependency__('Tags');
         ExifReaderRewireAPI.__ResetDependency__('IptcTags');
         ExifReaderRewireAPI.__ResetDependency__('XmpTags');
     });
 
-    it('should give a warning if a full DataView implementation is not available', () => {
-        const warnSpy = getConsoleWarnSpy();
-        const tags = ExifReader.load();
-        expect(warnSpy.hasWarned).to.be.true;
-        expect(tags).to.deep.equal({});
-        warnSpy.reset();
+    it('should throw an error if the passed buffer is non-compliant', () => {
+        expect(() => ExifReader.load()).to.throw;
+    });
+
+    it('should fall back on DataView wrapper if DataView implementation if a full DataView implementation is not available', () => {
+        let dataViewWrapperWasCalled = false;
+        ExifReaderRewireAPI.__Rewire__('DataViewWrapper', function () {
+            dataViewWrapperWasCalled = true;
+        });
+        ExifReaderRewireAPI.__Rewire__('loadView', function () {
+            // Do nothing in this test.
+        });
+
+        ExifReader.load();
+
+        expect(dataViewWrapperWasCalled).to.be.true;
     });
 
     it('should fail when there is no Exif data', () => {

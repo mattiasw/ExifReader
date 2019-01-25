@@ -7,6 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+import DataViewWrapper from './dataview';
 import ImageHeader from './image-header';
 import Tags from './tags';
 import IptcTags from './iptc-tags';
@@ -22,16 +23,15 @@ export default {
 export const errors = exifErrors;
 
 export function load(data, options = {expanded: false}) {
-    let dataView;
+    return loadView(getDataView(data), options);
+}
 
+function getDataView(data) {
     try {
-        dataView = new DataView(data);
+        return new DataView(data);
     } catch (error) {
-        console.warn('Warning: A full DataView implementation is not available. If you\'re using Node.js you probably want to do this:\n  1. Install a DataView polyfill, e.g. jdataview: npm install --save jdataview\n  2. Require that at the top of your script: global.DataView = require(\'jdataview\');\nSee an example of this in the ExifReader example directory.'); // eslint-disable-line no-console
-        return {};
+        return new DataViewWrapper(data);
     }
-
-    return loadView(dataView, options);
 }
 
 export function loadView(dataView, options = {expanded: false}) {

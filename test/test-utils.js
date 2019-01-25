@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import DataView from 'jdataview';
+import DataViewWrapper from '../src/dataview';
 
 export {
     getArrayBuffer,
@@ -12,15 +12,11 @@ export {
 };
 
 function getArrayBuffer(data) {
-    const buffer = new Buffer(data.length);
-    for (let i = 0; i < data.length; i++) {
-        buffer[i] = data.charCodeAt(i);
-    }
-    return buffer;
+    return Buffer.from(Array.from(data).map((character) => character.charCodeAt(0)));
 }
 
 function getDataView(data) {
-    return new DataView(getArrayBuffer(data));
+    return new DataViewWrapper(getArrayBuffer(data));
 }
 
 function getCharacterArray(string) {
