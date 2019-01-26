@@ -34,6 +34,10 @@ npm install
 After that, the transpiled, concatenated and minified ES5 file will be in the
 `dist` folder together with a sourcemap file.
 
+### Type definitions
+
+Type definitions for TypeScript are included in the package.
+
 Usage
 -----
 
@@ -155,6 +159,7 @@ Changelog
 
 -   **January 2019**:
     -   For Node.js, remove dependency of jDataView and explicit dependency of XMLDOM.
+    -   Add type definitions for TypeScript.
 -   **February, 2018**:
     -   Change license to Mozilla Public License 2.0 (MPL-2.0).
 -   **December, 2017**:
