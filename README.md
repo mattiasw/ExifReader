@@ -154,7 +154,7 @@ Changelog
 ---------
 
 -   **January 2019**:
-    -   Remove dependency of jDataView for Node.js.
+    -   For Node.js, remove dependency of jDataView and explicit dependency of XMLDOM.
 -   **February, 2018**:
     -   Change license to Mozilla Public License 2.0 (MPL-2.0).
 -   **December, 2017**:

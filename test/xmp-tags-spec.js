@@ -3,11 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import xmldom from 'xmldom';
 import {getConsoleWarnSpy, getDataView} from './test-utils';
+import {__RewireAPI__ as XmpTagsRewireAPI} from '../src/xmp-tags';
 import XmpTags from '../src/xmp-tags';
-
-global.DOMParser = xmldom.DOMParser;
 
 const PACKET_WRAPPER_START = '<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>';
 const PACKET_WRAPPER_END = '<?xpacket end="w"?>';
@@ -15,17 +13,27 @@ const META_ELEMENT_START = '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe X
 const META_ELEMENT_END = '</x:xmpmeta>';
 
 describe('xmp-tags', () => {
-    it('should give a warning if DOMParser is not available', () => {
-        const originalDOMParser = global.DOMParser;
-        delete global.DOMParser;
+    describe('without a DOM parser', () => {
+        beforeEach(() => {
+            XmpTagsRewireAPI.__Rewire__('DOMParser', {
+                get() {
+                    return undefined;
+                }
+            });
+        });
 
-        const warnSpy = getConsoleWarnSpy();
-        const tags = XmpTags.read();
-        expect(warnSpy.hasWarned).to.be.true;
-        expect(tags).to.deep.equal({});
+        afterEach(() => {
+            XmpTagsRewireAPI.__ResetDependency__('DOMParser');
+        });
 
-        warnSpy.reset();
-        global.DOMParser = originalDOMParser;
+        it('should give a warning if a DOM parser is not available', () => {
+            const warnSpy = getConsoleWarnSpy();
+            const tags = XmpTags.read();
+            expect(warnSpy.hasWarned).to.be.true;
+            expect(tags).to.deep.equal({});
+
+            warnSpy.reset();
+        });
     });
 
     it('should be able to handle zero rdf:Description elements', () => {
@@ -37,7 +45,7 @@ describe('xmp-tags', () => {
 
     it('should be able to handle an empty rdf:Description element', () => {
         const xmlString = getXmlString(`
-            <rdf:Description xmp:MyXMPTag0="4711" xmlns:myNamespace="http://ns.example.com/xmp">
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="4711">
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
@@ -53,7 +61,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read a normal simple value and ignore namespace definitions', () => {
         const xmlString = getXmlString(`
-            <rdf:Description xmp:MyXMPTag0="4711" xmlns:myNamespace="http://ns.example.com/xmp">
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="4711">
                 <xmp:MyXMPTag1 xml:lang="en">4812</xmp:MyXMPTag1>
             </rdf:Description>
         `);
@@ -77,7 +85,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read a UTF-8 value', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPTag0>abcÅÄÖáéí</xmp:MyXMPTag0>
             </rdf:Description>
         `);
@@ -94,7 +102,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read a non-ASCII, non-UTF-8 value', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPTag0>AÃºC</xmp:MyXMPTag0>
             </rdf:Description>
         `);
@@ -111,7 +119,7 @@ describe('xmp-tags', () => {
 
     it('should translate value for presentation in description property', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:tiff="http://ns.adobe.com/tiff/1.0/">
                 <tiff:Orientation>3</tiff:Orientation>
             </rdf:Description>
         `);
@@ -128,11 +136,11 @@ describe('xmp-tags', () => {
 
     it('should be able to read a nested rdf:Description with qualifier inside a normal simple value', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/">
                 <xmp:MyXMPTag>
-                    <rdf:Description mq:MyQualifier0="My qualifier 0">
+                    <rdf:Description Iptc4xmpCore:MyQualifier0="My qualifier 0">
                         <rdf:value>4711</rdf:value>
-                        <mq:MyQualifier1>My qualifier 1</mq:MyQualifier1>
+                        <Iptc4xmpCore:MyQualifier1>My qualifier 1</Iptc4xmpCore:MyQualifier1>
                     </rdf:Description>
                 </xmp:MyXMPTag>
             </rdf:Description>
@@ -153,10 +161,10 @@ describe('xmp-tags', () => {
 
     it('should be able to replace a nested rdf:Description with an rdf:parseType="Resource" attribute', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/">
                 <xmp:MyXMPTag rdf:parseType="Resource">
                     <rdf:value>4711</rdf:value>
-                    <mq:MyQualifier>My qualifier</mq:MyQualifier>
+                    <Iptc4xmpCore:MyQualifier>My qualifier</Iptc4xmpCore:MyQualifier>
                 </xmp:MyXMPTag>
             </rdf:Description>
         `);
@@ -176,7 +184,7 @@ describe('xmp-tags', () => {
     it('should be able to read a URI simple value', () => {
         const uri = 'http://example.com/';
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPURITag rdf:resource="${uri}" xml:lang="en"></xmp:MyXMPURITag>
             </rdf:Description>
         `);
@@ -196,11 +204,11 @@ describe('xmp-tags', () => {
     it('should be able to read a nested rdf:Description inside a URI simple value', () => {
         const uri = 'http://example.com/';
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/">
                 <xmp:MyXMPURITag xml:lang="en">
-                    <rdf:Description mq:MyQualifier0="My qualifier 0">
+                    <rdf:Description Iptc4xmpCore:MyQualifier0="My qualifier 0">
                         <rdf:value rdf:resource="${uri}"/>
-                        <mq:MyQualifier1>My qualifier 1</mq:MyQualifier1>
+                        <Iptc4xmpCore:MyQualifier1>My qualifier 1</Iptc4xmpCore:MyQualifier1>
                     </rdf:Description>
                 </xmp:MyXMPURITag>
             </rdf:Description>
@@ -222,7 +230,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read a structure value', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPStructure xml:lang="en">
                     <rdf:Description xmp:MyXMPTag0="47">
                         <xmp:MyXMPTag1 xml:lang="sv">11</xmp:MyXMPTag1>
@@ -256,7 +264,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read a structure value as attributes', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPStructure xmp:MyXMPTag0="47" xmp:MyXMPTag1="11"/>
             </rdf:Description>
         `);
@@ -282,7 +290,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read a concise structure value', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPStructure rdf:parseType="Resource">
                     <xmp:MyXMPTag0>47</xmp:MyXMPTag0>
                     <xmp:MyXMPTag1 xml:lang="en">11</xmp:MyXMPTag1>
@@ -313,7 +321,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read an unordered array value', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPArray xml:lang="en">
                     <rdf:Bag>
                         <rdf:li>47</rdf:li>
@@ -348,13 +356,13 @@ describe('xmp-tags', () => {
 
     it('should be able to read a nested rdf:Description inside an unordered array value', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/">
                 <xmp:MyXMPArray xml:lang="en">
                     <rdf:Bag>
                         <rdf:li>
                             <rdf:Description xmp:MyXMPTag="AÃºC">
                                 <rdf:value>47</rdf:value>
-                                <mq:MyQualifier>My qualifier</mq:MyQualifier>
+                                <Iptc4xmpCore:MyQualifier>My qualifier</Iptc4xmpCore:MyQualifier>
                             </rdf:Description>
                         </rdf:li>
                         <rdf:li xml:lang="sv">11</rdf:li>
@@ -391,7 +399,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read an ordered array value', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPArray xml:lang="en">
                     <rdf:Seq>
                         <rdf:li>47</rdf:li>
@@ -426,7 +434,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read an alternative array value', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPArray xml:lang="en">
                     <rdf:Alt>
                         <rdf:li>47</rdf:li>
@@ -461,7 +469,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read a nested array value', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPArray xml:lang="en">
                     <rdf:Bag>
                         <rdf:li rdf:parseType="Resource">
@@ -516,7 +524,7 @@ describe('xmp-tags', () => {
 
     it('should be able to read a nested array value with a single item', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                 <xmp:MyXMPArray xml:lang="en">
                     <rdf:Bag>
                         <rdf:li rdf:parseType="Resource">
@@ -547,7 +555,7 @@ describe('xmp-tags', () => {
 
     it('should use clear key names in description for IPTC Core Creator Contact Info fields', () => {
         const xmlString = getXmlString(`
-            <rdf:Description>
+            <rdf:Description xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/">
                 <Iptc4xmpCore:CreatorContactInfo
                     Iptc4xmpCore:CiAdrCity="My city"
                     Iptc4xmpCore:CiAdrCtry="My country"
@@ -611,8 +619,8 @@ describe('xmp-tags', () => {
 
     it('should be able to handle multiple rdf:Description elements', () => {
         const xmlString = getXmlString(`
-            <rdf:Description><xmp:MyXMPTag0>47</xmp:MyXMPTag0></rdf:Description>
-            <rdf:Description><xmp:MyXMPTag1>11</xmp:MyXMPTag1></rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp"><xmp:MyXMPTag0>47</xmp:MyXMPTag0></rdf:Description>
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp"><xmp:MyXMPTag1>11</xmp:MyXMPTag1></rdf:Description>
         `);
         const dataView = getDataView(xmlString);
         const tags = XmpTags.read(dataView, 0, xmlString.length);
@@ -621,28 +629,28 @@ describe('xmp-tags', () => {
     });
 
     it('should be able to handle XML with a packet wrapper', () => {
-        const xmlString = getXmlStringWithPacketWrapper('<rdf:Description xmp:MyXMPTag="4711"></rdf:Description>');
+        const xmlString = getXmlStringWithPacketWrapper('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711"></rdf:Description>');
         const dataView = getDataView(xmlString);
         const tags = XmpTags.read(dataView, 0, xmlString.length);
         expect(tags['MyXMPTag'].value).to.equal('4711');
     });
 
     it('should be able to handle XML with a meta element', () => {
-        const xmlString = getXmlStringWithMetaElement('<rdf:Description xmp:MyXMPTag="4711"></rdf:Description>');
+        const xmlString = getXmlStringWithMetaElement('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711"></rdf:Description>');
         const dataView = getDataView(xmlString);
         const tags = XmpTags.read(dataView, 0, xmlString.length);
         expect(tags['MyXMPTag'].value).to.equal('4711');
     });
 
     it('should be able to handle XML with a meta element inside a packet wrapper', () => {
-        const xmlString = getXmlStringWithMetaElementInsidePacketWrapper('<rdf:Description xmp:MyXMPTag="4711"></rdf:Description>');
+        const xmlString = getXmlStringWithMetaElementInsidePacketWrapper('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711"></rdf:Description>');
         const dataView = getDataView(xmlString);
         const tags = XmpTags.read(dataView, 0, xmlString.length);
         expect(tags['MyXMPTag'].value).to.equal('4711');
     });
 
     it('should be able to handle XML with a packet wrapper inside a meta element', () => {
-        const xmlString = getXmlStringWithPacketWrapperInsideMetaElement('<rdf:Description xmp:MyXMPTag="4711"></rdf:Description>');
+        const xmlString = getXmlStringWithPacketWrapperInsideMetaElement('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711"></rdf:Description>');
         const dataView = getDataView(xmlString);
         const tags = XmpTags.read(dataView, 0, xmlString.length);
         expect(tags['MyXMPTag'].value).to.equal('4711');

@@ -4,6 +4,7 @@
 
 import {getStringFromDataView} from './utils';
 import XmpTagNames from './xmp-tag-names';
+import DOMParser from './dom-parser';
 
 export default {
     read
@@ -21,17 +22,18 @@ function read(dataView, dataOffset, metadataSize) {
 }
 
 function getDocument(dataView, dataOffset, metadataSize) {
-    if (typeof DOMParser === 'undefined') {
-        console.warn('Warning: DOMParser is not available. If you\'re using Node.js you probably want to do this:\n  1. Install a DOM parser, e.g. xmldom: npm install --save xmldom\n  2. Require that at the top of your script: global.DOMParser = require(\'xmldom\').DOMParser;\nSee an example of this in the ExifReader example directory.'); // eslint-disable-line no-console
+    const Parser = DOMParser.get();
+    if (!Parser) {
+        console.warn('Warning: DOMParser is not available. It is needed to be able to parse XMP tags.'); // eslint-disable-line no-console
         throw new Error();
     }
 
-    const domParser = new DOMParser();
+    const domParser = new Parser();
     const xmlSource = getStringFromDataView(dataView, dataOffset, metadataSize);
     const doc = domParser.parseFromString(xmlSource, 'application/xml');
 
     if (doc.documentElement.nodeName === 'parsererror') {
-        throw new Error();
+        throw new Error(doc.documentElement.textContent);
     }
 
     return doc;
