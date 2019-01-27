@@ -6,7 +6,6 @@
 
 const path = require('path');
 const fs = require('fs');
-global.DOMParser = global.DOMParser || require('xmldom').DOMParser;
 
 const ExifReader = require('../../dist/exif-reader');
 const exifErrors = ExifReader.errors;
