@@ -43,13 +43,19 @@ function check(dataView) {
 function parseAppMarkers(dataView) {
     let appMarkerPosition = JPEG_ID_SIZE;
     let fieldLength;
+    let sof0DataOffset;
+    let sof2DataOffset;
     let tiffHeaderOffset;
     let iptcDataOffset;
     let xmpDataOffset;
     let xmpFieldLength;
 
     while (appMarkerPosition + APP_ID_OFFSET + 5 <= dataView.byteLength) {
-        if (isApp1ExifMarker(dataView, appMarkerPosition)) {
+        if (isSOF0Marker(dataView, appMarkerPosition)) {
+            sof0DataOffset = appMarkerPosition + APP_MARKER_SIZE;
+        } else if (isSOF2Marker(dataView, appMarkerPosition)) {
+            sof2DataOffset = appMarkerPosition + APP_MARKER_SIZE;
+        } else if (isApp1ExifMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
             tiffHeaderOffset = appMarkerPosition + TIFF_HEADER_OFFSET;
         } else if (isApp1XMPMarker(dataView, appMarkerPosition)) {
@@ -69,11 +75,20 @@ function parseAppMarkers(dataView) {
 
     return {
         hasAppMarkers: appMarkerPosition > JPEG_ID_SIZE,
+        fileDataOffset: sof0DataOffset || sof2DataOffset,
         tiffHeaderOffset,
         iptcDataOffset,
         xmpDataOffset,
         xmpFieldLength
     };
+}
+
+function isSOF0Marker(dataView, appMarkerPosition) {
+    return (dataView.getUint16(appMarkerPosition, false) === SOF0_MARKER);
+}
+
+function isSOF2Marker(dataView, appMarkerPosition) {
+    return (dataView.getUint16(appMarkerPosition, false) === SOF2_MARKER);
 }
 
 function isApp1ExifMarker(dataView, appMarkerPosition) {

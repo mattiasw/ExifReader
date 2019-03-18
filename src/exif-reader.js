@@ -10,6 +10,7 @@
 import DataViewWrapper from './dataview';
 import ImageHeader from './image-header';
 import Tags from './tags';
+import FileTags from './file-tags';
 import IptcTags from './iptc-tags';
 import XmpTags from './xmp-tags';
 import exifErrors from './errors';
@@ -39,8 +40,17 @@ export function loadView(dataView, options = {expanded: false}) {
     let tags = {};
 
     ImageHeader.check(dataView);
-    const {tiffHeaderOffset, iptcDataOffset, xmpDataOffset, xmpFieldLength} = ImageHeader.parseAppMarkers(dataView);
+    const {fileDataOffset, tiffHeaderOffset, iptcDataOffset, xmpDataOffset, xmpFieldLength} = ImageHeader.parseAppMarkers(dataView);
 
+    if (hasFileData(fileDataOffset)) {
+        foundMetaData = true;
+        const readTags = FileTags.read(dataView, fileDataOffset);
+        if (options.expanded) {
+            tags.file = readTags;
+        } else {
+            tags = Object.assign({}, tags, readTags);
+        }
+    }
     if (hasExifData(tiffHeaderOffset)) {
         foundMetaData = true;
         const readTags = Tags.read(dataView, tiffHeaderOffset);
@@ -73,6 +83,10 @@ export function loadView(dataView, options = {expanded: false}) {
     }
 
     return tags;
+}
+
+function hasFileData(fileDataOffset) {
+    return fileDataOffset !== undefined;
 }
 
 function hasExifData(tiffHeaderOffset) {

@@ -40,6 +40,7 @@ describe('image-header', () => {
         const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
         expect(appMarkerValues).to.deep.equal({
             hasAppMarkers: false,
+            fileDataOffset: undefined,
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
             xmpDataOffset: undefined,
@@ -52,6 +53,7 @@ describe('image-header', () => {
         const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
         expect(appMarkerValues).to.deep.equal({
             hasAppMarkers: true,
+            fileDataOffset: undefined,
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
             xmpDataOffset: undefined,
@@ -64,6 +66,7 @@ describe('image-header', () => {
         const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
         expect(appMarkerValues).to.deep.equal({
             hasAppMarkers: false,
+            fileDataOffset: undefined,
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
             xmpDataOffset: undefined,
@@ -113,16 +116,16 @@ describe('image-header', () => {
         expect(hasAppMarkers).to.be.true;
     });
 
-    it('should handle Start of Frame (Baseline DCT) marker', () => {
+    it('should recognize Start of Frame (Baseline DCT) data', () => {
         const dataView = getDataView(`\xff\xd8${SOF0_MARKER}\x00\x04\x47\x11${SOME_MARKER_CONTENT}`);
-        const {hasAppMarkers} = ImageHeader.parseAppMarkers(dataView);
-        expect(hasAppMarkers).to.be.true;
+        const {fileDataOffset} = ImageHeader.parseAppMarkers(dataView);
+        expect(fileDataOffset).to.equal(4);
     });
 
-    it('should handle Start of Frame (Progressive DCT) marker', () => {
+    it('should recognize Start of Frame (Progressive DCT) data', () => {
         const dataView = getDataView(`\xff\xd8${SOF2_MARKER}\x00\x04\x47\x11${SOME_MARKER_CONTENT}`);
-        const {hasAppMarkers} = ImageHeader.parseAppMarkers(dataView);
-        expect(hasAppMarkers).to.be.true;
+        const {fileDataOffset} = ImageHeader.parseAppMarkers(dataView);
+        expect(fileDataOffset).to.equal(4);
     });
 
     it('should handle Define Huffman Table(s) marker', () => {

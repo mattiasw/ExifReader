@@ -15,6 +15,7 @@ describe('exif-reader', () => {
         ExifReaderRewireAPI.__ResetDependency__('DataViewWrapper');
         ExifReaderRewireAPI.__ResetDependency__('loadView');
         ExifReaderRewireAPI.__ResetDependency__('ImageHeader');
+        ExifReaderRewireAPI.__ResetDependency__('FileTags');
         ExifReaderRewireAPI.__ResetDependency__('Tags');
         ExifReaderRewireAPI.__ResetDependency__('IptcTags');
         ExifReaderRewireAPI.__ResetDependency__('XmpTags');
@@ -41,12 +42,19 @@ describe('exif-reader', () => {
     it('should fail when there is no Exif data', () => {
         rewireImageHeader({
             hasAppMarkers: false,
+            fileDataOffset: undefined,
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
             xmpDataOffset: undefined,
             xmpFieldLength: undefined
         });
         expect(() => ExifReader.loadView()).to.throw(exifErrors.MetadataMissingError);
+    });
+
+    it('should be able to find file data segment', () => {
+        const myTags = {MyTag: 42};
+        rewireForLoadView({fileDataOffset: OFFSET_TEST_VALUE}, 'FileTags', myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find Exif APP segment', () => {
@@ -69,16 +77,19 @@ describe('exif-reader', () => {
 
     it('should expand segments into separated properties on return object if specified', () => {
         const myTags = {
-            exif: {MyExifTag: 42},
-            iptc: {MyIptcTag: 43},
-            xmp: {MyXmpTag: 44}
+            file: {MyFileTag: 42},
+            exif: {MyExifTag: 43},
+            iptc: {MyIptcTag: 44},
+            xmp: {MyXmpTag: 45}
         };
         rewireImageHeader({
+            fileDataOffset: OFFSET_TEST_VALUE,
             tiffHeaderOffset: OFFSET_TEST_VALUE,
             iptcDataOffset: OFFSET_TEST_VALUE,
             xmpDataOffset: OFFSET_TEST_VALUE,
             xmpFieldLength: XMP_FIELD_LENGTH_TEST_VALUE
         });
+        rewireTagsRead('FileTags', myTags.file);
         rewireTagsRead('Tags', myTags.exif);
         rewireTagsRead('IptcTags', myTags.iptc);
         rewireTagsRead('XmpTags', myTags.xmp);
