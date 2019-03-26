@@ -124,7 +124,6 @@ directory.
 Tips
 ----
 
--   Only load part of the image file since the Exif info segment has a max size. I suggest 128 kB. See the examples folder for a way to do this.
 -   After parsing the tags, consider deleting the MakerNote tag if you know you will load a lot of files and storing the tags. It can be really large for some manufacturers. See the examples folder to see how you can do that.
 
 Testing

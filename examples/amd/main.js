@@ -36,7 +36,7 @@ requirejs(['../../dist/exif-reader'], function (ExifReader) {
         };
 
         // We only need the start of the file for the Exif info.
-        reader.readAsArrayBuffer(files[0].slice(0, 128 * 1024));
+        reader.readAsArrayBuffer(files[0]);
     }
 
     function listTags(tags) {
