@@ -13,7 +13,8 @@
   "module": "src/exif-reader.js",
   "files": [
     "dist/",
-    "src/"
+    "src/",
+    "exif-reader.d.ts"
   ],
   "dependencies": {
     "@types/node": "^10.12.18",
