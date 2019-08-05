@@ -553,6 +553,25 @@ describe('xmp-tags', () => {
         });
     });
 
+    it('should be able to read an empty array value', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                <xmp:MyXMPArray xml:lang="en">
+                    <rdf:Bag />
+                </xmp:MyXMPArray>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        expect(tags['MyXMPArray']).to.deep.equal({
+            value: [],
+            attributes: {
+                lang: 'en'
+            },
+            description: ''
+        });
+    });
+
     it('should use clear key names in description for IPTC Core Creator Contact Info fields', () => {
         const xmlString = getXmlString(`
             <rdf:Description xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/">

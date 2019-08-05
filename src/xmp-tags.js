@@ -371,7 +371,9 @@ function parseNodeAsArray(node, name) {
     const attributes = parseNodeAttributes(node);
     const value = [];
 
-    if (!Array.isArray(items)) {
+    if (items === undefined) {
+        items = [];
+    } else if (!Array.isArray(items)) {
         items = [items];
     }
 
