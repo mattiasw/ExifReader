@@ -124,7 +124,9 @@ directory.
 Tips
 ----
 
--   After parsing the tags, consider deleting the MakerNote tag if you know you will load a lot of files and storing the tags. It can be really large for some manufacturers. See the examples folder to see how you can do that.
+-   After parsing the tags, consider deleting the MakerNote tag if you know you
+    will load a lot of files and storing the tags. It can be really large for
+    some manufacturers. See the examples folder to see how you can do that.
 
 Testing
 -------
@@ -136,11 +138,23 @@ Testing is done with [Mocha](https://mochajs.org/) and
 npm test
 ```
 
-Issues
-------
+Known Issues
+------------
 
--   The descriptions for UserComment, GPSProcessingMethod and GPSAreaInformation are missing for other encodings than ASCII.
+-   The descriptions for UserComment, GPSProcessingMethod and GPSAreaInformation
+    are missing for other encodings than ASCII.
 
+Contributing
+------------
+
+See [CONTRIBUTE.md](CONTRIBUTE.md).
+
+Code of Conduct
+---------------
+
+This project is released with a
+[Contributor Code of Conduct](CODE_OF_CONDUCT.md). By participating in this
+project you agree to abide by its terms.
 
 License
 -------
