@@ -147,7 +147,7 @@ Known Issues
 Contributing
 ------------
 
-See [CONTRIBUTE.md](CONTRIBUTE.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Code of Conduct
 ---------------
