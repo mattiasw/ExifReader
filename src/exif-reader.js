@@ -13,6 +13,7 @@ import Tags from './tags';
 import FileTags from './file-tags';
 import IptcTags from './iptc-tags';
 import XmpTags from './xmp-tags';
+import IccTags from './icc-tags';
 import exifErrors from './errors';
 
 export default {
@@ -39,7 +40,7 @@ export function loadView(dataView, options = {expanded: false}) {
     let foundMetaData = false;
     let tags = {};
 
-    const {fileDataOffset, tiffHeaderOffset, iptcDataOffset, xmpDataOffset, xmpFieldLength} = ImageHeader.parseAppMarkers(dataView);
+    const {fileDataOffset, tiffHeaderOffset, iptcDataOffset, xmpDataOffset, xmpFieldLength, iccChunks} = ImageHeader.parseAppMarkers(dataView);
 
     if (hasFileData(fileDataOffset)) {
         foundMetaData = true;
@@ -77,6 +78,15 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = Object.assign({}, tags, readTags);
         }
     }
+    if (hasIccData(iccChunks)) {
+        foundMetaData = true;
+        const readTags = IccTags.read(dataView, iccChunks);
+        if (options.expanded) {
+            tags.icc = readTags;
+        } else {
+            tags = Object.assign({}, tags, readTags);
+        }
+    }
     if (!foundMetaData) {
         throw new exifErrors.MetadataMissingError();
     }
@@ -98,4 +108,8 @@ function hasIptcData(iptcDataOffset) {
 
 function hasXmpData(xmpDataOffset) {
     return xmpDataOffset !== undefined;
+}
+
+function hasIccData(iccDataOffsets) {
+    return Array.isArray(iccDataOffsets) && iccDataOffsets.length > 0;
 }

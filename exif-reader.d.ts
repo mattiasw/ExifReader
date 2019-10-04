@@ -15,6 +15,11 @@ interface NumberArrayTag {
     value: Array<number>
 }
 
+interface ValueTag {
+    description: string,
+    value: String
+}
+
 interface StringArrayTag {
     id: number,
     description: string,
@@ -36,15 +41,16 @@ interface XmpTags {
 interface ExpandedTags {
     exif?: Tags,
     iptc?: Tags,
-    xmp?: XmpTags
+    xmp?: XmpTags,
+    icc?: IccTags
 }
 
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags & XmpTags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags & XmpTags & IccTags;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded: true}): ExpandedTags;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false}): Tags & XmpTags;
-export function loadView(data: DataView): Tags & XmpTags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false}): Tags & XmpTags & IccTags;
+export function loadView(data: DataView): Tags & XmpTags & IccTags;
 export function loadView(data: DataView, options: {expanded: true}): ExpandedTags;
-export function loadView(data: DataView, options: {expanded?: false}): Tags & XmpTags;
+export function loadView(data: DataView, options: {expanded?: false}): Tags & XmpTags & IccTags;
 
 export namespace errors {
     export class MetadataMissingError extends Error {}
@@ -263,4 +269,8 @@ interface Tags {
     'Max Subfile Size': NumberArrayTag, // NumberTag
     'ObjectData Size Announced': NumberArrayTag, // NumberTag
     'Maximum ObjectData Size': NumberArrayTag // NumberTag
+}
+
+interface IccTags {
+    [name: string]: ValueTag;
 }
