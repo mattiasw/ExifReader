@@ -70,7 +70,10 @@
         ],
         "indent": [
             "error",
-            4
+            4,
+            {
+                "SwitchCase": 1
+            }
         ],
         "key-spacing": [
             "error",
@@ -163,6 +166,9 @@
         "quotes": [
             "error",
             "single"
+        ],
+        "radix": [
+            "error"
         ],
         "rest-spread-spacing": [
             "error",

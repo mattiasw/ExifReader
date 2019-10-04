@@ -17,6 +17,11 @@ const APP_MARKER_SIZE = 2;
 const TIFF_HEADER_OFFSET = 10; // From start of APP1 marker.
 const IPTC_DATA_OFFSET = 18; // From start of APP13 marker.
 const XMP_DATA_OFFSET = 33; // From start of APP1 marker.
+const APP2_ICC_DATA_OFFSET = 18; // From start of APP2 marker including marker and chunk/chunk total numbers
+
+const APP2_ICC_IDENTIFIER = 'ICC_PROFILE\0';
+const ICC_CHUNK_NUMBER_OFFSET = APP_ID_OFFSET + APP2_ICC_IDENTIFIER.length;
+const ICC_TOTAL_CHUNKS_OFFSET = ICC_CHUNK_NUMBER_OFFSET + 1;
 
 const SOF0_MARKER = 0xffc0;
 const SOF2_MARKER = 0xffc2;
@@ -27,9 +32,11 @@ const SOS_MARKER = 0xffda;
 
 const APP0_MARKER = 0xffe0;
 const APP1_MARKER = 0xffe1;
+const APP2_MARKER = 0xffe2;
 const APP13_MARKER = 0xffed;
 const APP15_MARKER = 0xffef;
 const COMMENT_MARKER = 0xfffe;
+
 const APP1_EXIF_IDENTIFIER = 'Exif';
 const APP1_XMP_IDENTIFIER = 'http://ns.adobe.com/xap/1.0/';
 const APP13_IPTC_IDENTIFIER = 'Photoshop 3.0';
@@ -47,6 +54,7 @@ function parseAppMarkers(dataView) {
     let iptcDataOffset;
     let xmpDataOffset;
     let xmpFieldLength;
+    let iccChunks;
 
     if (isTiffFile(dataView)) {
         return {
@@ -74,6 +82,17 @@ function parseAppMarkers(dataView) {
         } else if (isApp13PhotoshopMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
             iptcDataOffset = appMarkerPosition + IPTC_DATA_OFFSET;
+        } else if (isApp2ICCMarker(dataView, appMarkerPosition)) {
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
+            const iccDataOffset = appMarkerPosition + APP2_ICC_DATA_OFFSET;
+            const iccDataLength = fieldLength - (APP2_ICC_DATA_OFFSET - APP_MARKER_SIZE);
+
+            const iccChunkNumber = dataView.getUint8(appMarkerPosition + ICC_CHUNK_NUMBER_OFFSET, false);
+            const iccChunksTotal = dataView.getUint8(appMarkerPosition + ICC_TOTAL_CHUNKS_OFFSET, false);
+            if (!iccChunks) {
+                iccChunks = [];
+            }
+            iccChunks.push({offset: iccDataOffset, length: iccDataLength, chunkNumber: iccChunkNumber, chunksTotal: iccChunksTotal});
         } else if (isAppMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
         } else {
@@ -88,7 +107,8 @@ function parseAppMarkers(dataView) {
         tiffHeaderOffset,
         iptcDataOffset,
         xmpDataOffset,
-        xmpFieldLength
+        xmpFieldLength,
+        iccChunks
     };
 }
 
@@ -111,6 +131,13 @@ function isSOF0Marker(dataView, appMarkerPosition) {
 
 function isSOF2Marker(dataView, appMarkerPosition) {
     return (dataView.getUint16(appMarkerPosition, false) === SOF2_MARKER);
+}
+
+function isApp2ICCMarker(dataView, appMarkerPosition) {
+    const markerIdLength = APP2_ICC_IDENTIFIER.length;
+
+    return (dataView.getUint16(appMarkerPosition, false) === APP2_MARKER)
+        && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP2_ICC_IDENTIFIER);
 }
 
 function isApp1ExifMarker(dataView, appMarkerPosition) {

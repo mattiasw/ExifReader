@@ -64,7 +64,8 @@ describe('image-header', () => {
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
             xmpDataOffset: undefined,
-            xmpFieldLength: undefined
+            xmpFieldLength: undefined,
+            iccChunks: undefined
         });
     });
 
@@ -77,7 +78,8 @@ describe('image-header', () => {
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
             xmpDataOffset: undefined,
-            xmpFieldLength: undefined
+            xmpFieldLength: undefined,
+            iccChunks: undefined
         });
     });
 
@@ -90,7 +92,8 @@ describe('image-header', () => {
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
             xmpDataOffset: undefined,
-            xmpFieldLength: undefined
+            xmpFieldLength: undefined,
+            iccChunks: undefined
         });
     });
 
@@ -98,6 +101,16 @@ describe('image-header', () => {
         const dataView = getDataView(`${JPEG_IMAGE_START}\xff\xe2\x00\x07XXXX\x00\xff\xe0\x00\x07JFXX\x00${SOME_MARKER_CONTENT}`);
         const {tiffHeaderOffset} = ImageHeader.parseAppMarkers(dataView);
         expect(tiffHeaderOffset).to.equal(39);
+    });
+
+    it('should recognize APP2 ICC data', () => {
+        const dataView = getDataView(`${JPEG_IMAGE_START}\xff\xe2\x00\xA0ICC_PROFILE\x00\x07\x09`);
+        const {iccChunks} = ImageHeader.parseAppMarkers(dataView);
+        expect(iccChunks).to.have.lengthOf(1);
+        expect(iccChunks[0].chunkNumber).to.equal(7);
+        expect(iccChunks[0].chunksTotal).to.equal(9);
+        expect(iccChunks[0].length).to.equal(144);
+        expect(iccChunks[0].offset).to.equal(29);
     });
 
     it('should handle JFIF APP0 markers', () => {

@@ -16,4 +16,9 @@ describe('utils', () => {
         const dataView = getDataView('\x00\x00MyString');
         expect(Utils.getStringFromDataView(dataView, 2, 10)).to.equal('MyString');
     });
+
+    it('should parse unicode UTF16BE strings', () => {
+        const dataView = getDataView('\x0B\x83\x03\x7D\x04\x2F\x00\x54\x00\x65\x00\x73\x00\x74');
+        expect(Utils.getUnicodeStringFromDataView(dataView, 0, dataView.byteLength)).to.equal('ஃͽЯTest');
+    });
 });

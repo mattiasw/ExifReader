@@ -2,3 +2,4 @@ node_modules
 *.log
 .tags
 .tags1
+.vscode
