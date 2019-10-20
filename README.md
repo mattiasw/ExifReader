@@ -155,6 +155,12 @@ Testing is done with [Mocha](https://mochajs.org/) and
 npm test
 ```
 
+Test coverage can be generated like this:
+
+```bash
+npm run coverage
+```
+
 Known Limitations
 -----------------
 

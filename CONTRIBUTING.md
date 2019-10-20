@@ -35,6 +35,17 @@ npm run lint
 npm test
 ```
 
+To specifically look at test code coverage:
+
+```bash
+npm run coverage
+```
+
+This will tell directly in the terminal if the coverage has been reduced by the
+new code (it will fail) and also create a new folder with a more visual HTML
+version of the report. The HTML version shows which parts of the code that the
+current set of tests miss.
+
 If you need help with writing tests, just ask. I can probably help in one way or
 another.
 
