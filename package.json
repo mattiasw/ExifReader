@@ -17,7 +17,7 @@
     "exif-reader.d.ts"
   ],
   "dependencies": {
-    "@types/node": "^10.12.18",
+    "@types/node": "*",
     "xmldom": "^0.1.27"
   },
   "types": "./exif-reader.d.ts",
