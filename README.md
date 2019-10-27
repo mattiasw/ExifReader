@@ -7,8 +7,30 @@ with tags encoded using Exif, IPTC, and XMP.
 
 ExifReader supports module formats AMD, CommonJS and globals and can therefore
 easily be used from Webpack, RequireJS, Browserify, Node etc. Since it is
-written using ES2015, you can also import the ES2015 module directly from your
-own ES2015 project.
+written using ES2015+, you can also import the ES module directly from your own
+ES2015+ project.
+
+**Notes for exif-js users**
+
+If you come here from the popular but now dead exif-js package, please let me
+know if you're missing anything from it and I will try to help you. Some notes:
+
+-   Questions, bug reports, suggestions, and pull requests are very much
+    welcome. If you've been using another Exif package you probably have some
+    good insights on what's missing in this one.
+-   ExifReader has a different API, hopefully better. :-)
+-   XMP support in exif-js does not seem perfect. ExifReader should be a bit
+    better on that part.
+-   ExifReader works with strict mode.
+-   TIFF images are not supported, only JPEG. If this is important to you, [open
+    an issue](https://github.com/mattiasw/ExifReader/issues/new).
+-   exif-js accepts IMG HTML elements as input. This falls outside of the
+    functionality of ExifReader. If you need this I suggest looking at exif-js
+    source code to see how it's done for your specific case and then pass in the
+    resulting data into ExifReader. If many people need this I could add a more
+    explicit example for how to do it together with ExifReader.
+-   I've been maintaining this package for close to eight years now and I have
+    no plans to stop doing that anytime soon.
 
 Installation
 ------------
@@ -97,7 +119,8 @@ issue or do a pull request.
 Some text tags use TextDecoder to decode their content. If your specific
 environment does not support it at all or a specific encoding, you will not be
 able to see the decoded value. One example is when [Node.js wasn't compiled
-with support for the specific encoding](https://nodejs.org/api/util.html#util_whatwg_supported_encodings).
+with support for the specific
+encoding](https://nodejs.org/api/util.html#util_whatwg_supported_encodings).
 
 Client/Browser Support
 ----------------------
@@ -114,12 +137,8 @@ try to polyfill it for versions before that (this is not well tested though).
 Examples
 --------
 
-A full HTML example page is located in the [examples/html/](examples/html/)
-directory. The example uses the FileReader API which is supported by the latest
-versions of all the major browsers.
-
-Also, there is a Node.js example in the [examples/nodejs/](examples/nodejs/)
-directory.
+Full HTML example pages and a Node.js example are located in the
+[examples/](examples/) directory.
 
 Tips
 ----
@@ -138,8 +157,8 @@ Testing is done with [Mocha](https://mochajs.org/) and
 npm test
 ```
 
-Known Issues
-------------
+Known Limitations
+-----------------
 
 -   The descriptions for UserComment, GPSProcessingMethod and GPSAreaInformation
     are missing for other encodings than ASCII.
@@ -171,7 +190,8 @@ Changelog
 ---------
 
 -   **January 2019**:
-    -   For Node.js, remove dependency of jDataView and explicit dependency of XMLDOM.
+    -   For Node.js, remove dependency of jDataView and explicit dependency of
+        XMLDOM.
     -   Add type definitions for TypeScript.
 -   **February, 2018**:
     -   Change license to Mozilla Public License 2.0 (MPL-2.0).
@@ -181,15 +201,18 @@ Changelog
     -   Add support for XMP tags.
 -   **December, 2016**:
     -   Merge IPTC branch.
-    -   Convert project to JavaScript (ECMAScript 2015) from CoffeeScript, transpiling to ES5 using Babel.
+    -   Convert project to JavaScript (ECMAScript 2015) from CoffeeScript,
+        transpiling to ES5 using Babel.
     -   Remove need to instatiate the ExifReader object before use.
     -   Add UMD support (CommonJS, AMD and global).
     -   Publish as npm package.
 -   **September 17, 2014**:
     -   Lower memory usage by unsetting the file data object after parsing.
-    -   Add deleteTag method to be able to delete tags that use a lot of memory, e.g. MakerNote.
+    -   Add deleteTag method to be able to delete tags that use a lot of memory,
+        e.g. MakerNote.
 -   **September 9, 2013**:
-    -   Make parsing of APP markers more robust. Fixes problems with some pictures.
+    -   Make parsing of APP markers more robust. Fixes problems with some
+        pictures.
 -   **July 13, 2013**:
     -   Throw Error instead of just strings.
 -   **April 23, 2013**:
