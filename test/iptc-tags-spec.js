@@ -130,6 +130,28 @@ describe('iptc-tags', function () {
         });
     });
 
+    it('should handle IPTC NAA resource tag with dynamic description that throws', () => {
+        IptcTags.__with__({
+            'IptcTagNames': {
+                'iptc': {
+                    0x4711: {
+                        'name': 'MyIptcTag',
+                        'description': () => {
+                            throw new Error();
+                        }
+                    }
+                }
+            }
+        })(() => {
+            const dataView = getDataView('\x1c\x47\x11\x00\x01\x42');
+            const {tag} = readTag(dataView, 0);
+            expect(tag.id).to.equal(0x4711);
+            expect(tag.name).to.equal('MyIptcTag');
+            expect(tag.value).to.deep.equal([0x42]);
+            expect(tag.description).to.equal('B');
+        });
+    });
+
     it('should read undefined IPTC NAA resource tag', () => {
         const dataView = getDataView('\x1c\x47\x11\x00\x02\x42\x43');
         const {tag} = readTag(dataView, 0);

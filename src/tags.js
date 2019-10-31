@@ -125,14 +125,14 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
 
         if ((TagNames[ifdType][tagCode]['name'] !== undefined) && (TagNames[ifdType][tagCode]['description'] !== undefined)) {
             tagName = TagNames[ifdType][tagCode]['name'];
-            tagDescription = TagNames[ifdType][tagCode]['description'](tagValue);
+            try {
+                tagDescription = TagNames[ifdType][tagCode]['description'](tagValue);
+            } catch (error) {
+                tagDescription = getDescriptionFromTagValue(tagValue);
+            }
         } else {
             tagName = TagNames[ifdType][tagCode];
-            if (tagValue instanceof Array) {
-                tagDescription = tagValue.join(', ');
-            } else {
-                tagDescription = tagValue;
-            }
+            tagDescription = getDescriptionFromTagValue(tagValue);
         }
         return {
             id: tagCode,
@@ -199,4 +199,11 @@ function decodeAsciiValue(asciiValue) {
     } catch (error) {
         return asciiValue;
     }
+}
+
+function getDescriptionFromTagValue(tagValue) {
+    if (tagValue instanceof Array) {
+        return tagValue.join(', ');
+    }
+    return tagValue;
 }
