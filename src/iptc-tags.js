@@ -170,7 +170,11 @@ function hasDynamicName(tag) {
 
 function getTagDescription(tag, tagValue, tags, encoding) {
     if (hasDescriptionProperty(tag)) {
-        return tag['description'](tagValue, tags);
+        try {
+            return tag['description'](tagValue, tags);
+        } catch (error) {
+            // Fall through to next handler.
+        }
     }
     if (tagValueIsText(tag, tagValue)) {
         return TagDecoder.decode(encoding, tagValue);

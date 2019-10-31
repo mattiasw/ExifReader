@@ -152,6 +152,29 @@ describe('tags', () => {
         });
     });
 
+    it('should be able to handle description function that throws, e.g. because it receives a faulty tag value', () => {
+        // Byte order + IFD offset + field count + field.
+        const dataView = getDataView('\x00\x00\x4d\x4d' + '\x00\x00\x00\x08' + '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00');
+        Tags.__set__('TagNames', {
+            '0th': {
+                0x4711: {
+                    name: 'MyExifTag',
+                    description() {
+                        throw new Error();
+                    }
+                }
+            }
+        });
+        const tags = read0thIfd(dataView, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags).to.deep.equal({
+            MyExifTag: {
+                id: 0x4711,
+                value: 0x42,
+                description: 0x42
+            }
+        });
+    });
+
     it('should be able to read 0th IFD', () => {
         // Byte order + IFD offset + field count + field.
         const dataView = getDataView('\x00\x00\x4d\x4d' + '\x00\x00\x00\x08' + '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00');
