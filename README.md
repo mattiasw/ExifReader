@@ -2,8 +2,8 @@ ExifReader
 ==========
 
 ExifReader is a JavaScript library that parses image files and extracts the
-metadata. It can be used either in a browser or from Node. Supports JPEG files
-with tags encoded using Exif, IPTC, and XMP.
+metadata. It can be used either in a browser or from Node. Supports JPEG and
+TIFF files with tags encoded using Exif, IPTC, and XMP.
 
 ExifReader supports module formats AMD, CommonJS and globals and can therefore
 easily be used from Webpack, RequireJS, Browserify, Node etc. Since it is
@@ -22,8 +22,6 @@ know if you're missing anything from it and I will try to help you. Some notes:
 -   XMP support in exif-js does not seem perfect. ExifReader should be a bit
     better on that part.
 -   ExifReader works with strict mode.
--   TIFF images are not supported, only JPEG. If this is important to you, [open
-    an issue](https://github.com/mattiasw/ExifReader/issues/new).
 -   exif-js accepts IMG HTML elements as input. This falls outside of the
     functionality of ExifReader. If you need this I suggest looking at exif-js
     source code to see how it's done for your specific case and then pass in the

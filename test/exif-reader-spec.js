@@ -105,9 +105,6 @@ function rewireForLoadView(appMarkersValue, tagsObject, tagsValue) {
 
 function rewireImageHeader(appMarkersValue) {
     ExifReaderRewireAPI.__Rewire__('ImageHeader', {
-        check() {
-            // Always succeed.
-        },
         parseAppMarkers() {
             return appMarkersValue;
         }

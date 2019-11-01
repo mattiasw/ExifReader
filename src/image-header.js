@@ -4,9 +4,14 @@
 
 import {getStringFromDataView} from './utils';
 
-const MIN_DATA_BUFFER_LENGTH = 2;
+const MIN_TIFF_DATA_BUFFER_LENGTH = 4;
+const MIN_JPEG_DATA_BUFFER_LENGTH = 2;
+const TIFF_ID = 0x2a;
+const TIFF_ID_OFFSET = 2;
+const TIFF_FILE_HEADER_OFFSET = 0;
 const JPEG_ID = 0xffd8;
 const JPEG_ID_SIZE = 2;
+const LITTLE_ENDIAN = 0x4949;
 const APP_ID_OFFSET = 4;
 const APP_MARKER_SIZE = 2;
 const TIFF_HEADER_OFFSET = 10; // From start of APP1 marker.
@@ -30,15 +35,8 @@ const APP1_XMP_IDENTIFIER = 'http://ns.adobe.com/xap/1.0/';
 const APP13_IPTC_IDENTIFIER = 'Photoshop 3.0';
 
 export default {
-    check,
     parseAppMarkers
 };
-
-function check(dataView) {
-    if ((dataView.byteLength < MIN_DATA_BUFFER_LENGTH) || (dataView.getUint16(0, false) !== JPEG_ID)) {
-        throw new Error('Invalid image format');
-    }
-}
 
 function parseAppMarkers(dataView) {
     let appMarkerPosition = JPEG_ID_SIZE;
@@ -49,6 +47,17 @@ function parseAppMarkers(dataView) {
     let iptcDataOffset;
     let xmpDataOffset;
     let xmpFieldLength;
+
+    if (isTiffFile(dataView)) {
+        return {
+            hasAppMarkers: true,
+            tiffHeaderOffset: TIFF_FILE_HEADER_OFFSET
+        };
+    }
+
+    if (!isJpegFile(dataView)) {
+        throw new Error('Invalid image format');
+    }
 
     while (appMarkerPosition + APP_ID_OFFSET + 5 <= dataView.byteLength) {
         if (isSOF0Marker(dataView, appMarkerPosition)) {
@@ -81,6 +90,19 @@ function parseAppMarkers(dataView) {
         xmpDataOffset,
         xmpFieldLength
     };
+}
+
+function isTiffFile(dataView) {
+    return (dataView.byteLength >= MIN_TIFF_DATA_BUFFER_LENGTH) && hasTiffMarker(dataView);
+}
+
+function hasTiffMarker(dataView) {
+    const littleEndian = dataView.getUint16(0) === LITTLE_ENDIAN;
+    return dataView.getUint16(TIFF_ID_OFFSET, littleEndian) === TIFF_ID;
+}
+
+function isJpegFile(dataView) {
+    return (dataView.byteLength >= MIN_JPEG_DATA_BUFFER_LENGTH) && (dataView.getUint16(0, false) === JPEG_ID);
 }
 
 function isSOF0Marker(dataView, appMarkerPosition) {
