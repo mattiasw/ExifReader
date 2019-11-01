@@ -6,7 +6,8 @@ import {expect} from 'chai';
 import {getDataView} from './test-utils';
 import ImageHeader from '../src/image-header';
 
-const IMAGE_START = '\xff\xd8\xff\xe0\x00\x07JFIF\x00';
+const JPEG_IMAGE_START = '\xff\xd8\xff\xe0\x00\x07JFIF\x00';
+const TIFF_IMAGE_START = '\x49\x49\x2a\x00';
 const APP1_MARKER = '\xff\xe1';
 const APP_UNKNOWN_MARKER = '\xff\xea';
 const COMMENT_MARKER = '\xff\xfe';
@@ -22,17 +23,36 @@ const SOME_MARKER_CONTENT = `${APP1_MARKER}\x47\x11Exif\x00\x00`;
 describe('image-header', () => {
     it('should fail for too short data buffer', () => {
         const dataView = getDataView('\x00');
-        expect(() => ImageHeader.check(dataView)).to.throw(/Invalid image format/);
+        expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
     });
 
     it('should fail for invalid image format', () => {
         const dataView = getDataView('------------');
-        expect(() => ImageHeader.check(dataView)).to.throw(/Invalid image format/);
+        expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
     });
 
     it('should accept well-formed header of JPEG image data', () => {
         const dataView = getDataView('\xff\xd8\xff\xe100Exif\x00\x00');
-        expect(() => ImageHeader.check(dataView)).to.not.throw();
+        expect(() => ImageHeader.parseAppMarkers(dataView)).to.not.throw();
+    });
+
+    it('should accept well-formed header of TIFF image data with little-endian encoding', () => {
+        const dataView = getDataView('\x49\x49\x2a\x00');
+        expect(() => ImageHeader.parseAppMarkers(dataView)).to.not.throw();
+    });
+
+    it('should accept well-formed header of TIFF image data with big-endian encoding', () => {
+        const dataView = getDataView('\x4d\x4d\x00\x2a');
+        expect(() => ImageHeader.parseAppMarkers(dataView)).to.not.throw();
+    });
+
+    it('should find header offset in TIFF file', () => {
+        const dataView = getDataView(TIFF_IMAGE_START);
+        const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
+        expect(appMarkerValues).to.deep.equal({
+            hasAppMarkers: true,
+            tiffHeaderOffset: 0
+        });
     });
 
     it('should find no tags when there are no markers', () => {
@@ -75,7 +95,7 @@ describe('image-header', () => {
     });
 
     it('should handle APP2 markers', () => {
-        const dataView = getDataView(`${IMAGE_START}\xff\xe2\x00\x07XXXX\x00\xff\xe0\x00\x07JFXX\x00${SOME_MARKER_CONTENT}`);
+        const dataView = getDataView(`${JPEG_IMAGE_START}\xff\xe2\x00\x07XXXX\x00\xff\xe0\x00\x07JFXX\x00${SOME_MARKER_CONTENT}`);
         const {tiffHeaderOffset} = ImageHeader.parseAppMarkers(dataView);
         expect(tiffHeaderOffset).to.equal(39);
     });
@@ -87,7 +107,7 @@ describe('image-header', () => {
     });
 
     it('should handle JFXX APP0 markers', () => {
-        const dataView = getDataView(`${IMAGE_START}\xff\xe0\x00\x07JFXX\x00${SOME_MARKER_CONTENT}`);
+        const dataView = getDataView(`${JPEG_IMAGE_START}\xff\xe0\x00\x07JFXX\x00${SOME_MARKER_CONTENT}`);
         const {tiffHeaderOffset} = ImageHeader.parseAppMarkers(dataView);
         expect(tiffHeaderOffset).to.equal(30);
     });
@@ -111,7 +131,7 @@ describe('image-header', () => {
     });
 
     it('should handle IPTC Comment markers', () => {
-        const dataView = getDataView(`${IMAGE_START}${COMMENT_MARKER}\x00\x2bOptimized by JPEGmin\x00`);
+        const dataView = getDataView(`${JPEG_IMAGE_START}${COMMENT_MARKER}\x00\x2bOptimized by JPEGmin\x00`);
         const {hasAppMarkers} = ImageHeader.parseAppMarkers(dataView);
         expect(hasAppMarkers).to.be.true;
     });

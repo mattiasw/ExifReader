@@ -39,7 +39,6 @@ export function loadView(dataView, options = {expanded: false}) {
     let foundMetaData = false;
     let tags = {};
 
-    ImageHeader.check(dataView);
     const {fileDataOffset, tiffHeaderOffset, iptcDataOffset, xmpDataOffset, xmpFieldLength} = ImageHeader.parseAppMarkers(dataView);
 
     if (hasFileData(fileDataOffset)) {
