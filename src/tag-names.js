@@ -7,9 +7,11 @@ import TagNamesExifIfd from './tag-names-exif-ifd';
 import TagNamesGpsIfd from './tag-names-gps-ifd';
 import TagNamesInteroperabilityIfd from './tag-names-interoperability-ifd';
 
+const tagNames0thExifIfds = Object.assign({}, TagNames0thIfd, TagNamesExifIfd);
+
 export default {
-    '0th': TagNames0thIfd,
-    'exif': TagNamesExifIfd,
+    '0th': tagNames0thExifIfds,
+    'exif': tagNames0thExifIfds,
     'gps': TagNamesGpsIfd,
     'interoperability': TagNamesInteroperabilityIfd
 };
