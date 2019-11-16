@@ -203,4 +203,8 @@ describe('tag-names-gps-ifd', () => {
         expect(TagNamesGpsIfd[0x001e].description(1)).to.equal('Differential correction applied');
         expect(TagNamesGpsIfd[0x001e].description(4711)).to.equal('Unknown');
     });
+
+    it('should have tag GPSHPositioningError', () => {
+        expect(TagNamesGpsIfd[0x001f]).to.equal('GPSHPositioningError');
+    });
 });

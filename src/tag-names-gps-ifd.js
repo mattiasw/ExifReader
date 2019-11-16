@@ -229,5 +229,6 @@ export default {
             }
             return 'Unknown';
         }
-    }
+    },
+    0x001f: 'GPSHPositioningError'
 };

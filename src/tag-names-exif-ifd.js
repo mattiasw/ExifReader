@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {getStringValue, getEncodedString} from './tag-names-utils';
+import TagNamesCommon from './tag-names-common';
 
 export default {
     0x829a: 'ExposureTime',
@@ -38,12 +39,35 @@ export default {
         'name': 'OECF',
         'description': () => '[Raw OECF table data]'
     },
+    0x882a: 'TimeZoneOffset',
+    0x882b: 'SelfTimerMode',
+    0x8830: {
+        name: 'SensitivityType',
+        description: (value) => ({
+            1: 'Standard Output Sensitivity',
+            2: 'Recommended Exposure Index',
+            3: 'ISO Speed',
+            4: 'Standard Output Sensitivity and Recommended Exposure Index',
+            5: 'Standard Output Sensitivity and ISO Speed',
+            6: 'Recommended Exposure Index and ISO Speed',
+            7: 'Standard Output Sensitivity, Recommended Exposure Index and ISO Speed'
+        })[value] || 'Unknown'
+    },
+    0x8831: 'StandardOutputSensitivity',
+    0x8832: 'RecommendedExposureIndex',
+    0x8833: 'ISOSpeed',
+    0x8834: 'ISOSpeedLatitudeyyy',
+    0x8835: 'ISOSpeedLatitudezzz',
     0x9000: {
         'name': 'ExifVersion',
         'description': (value) => getStringValue(value)
     },
     0x9003: 'DateTimeOriginal',
     0x9004: 'DateTimeDigitized',
+    0x9009: 'GooglePlusUploadCode',
+    0x9010: 'OffsetTime',
+    0x9011: 'OffsetTimeOriginal',
+    0x9012: 'OffsetTimeDigitized',
     0x9101: {
         'name': 'ComponentsConfiguration',
         'description': (value) => {
@@ -94,50 +118,7 @@ export default {
     },
     0x9208: {
         'name': 'LightSource',
-        'description': (value) => {
-            if (value === 1) {
-                return 'Daylight';
-            } else if (value === 2) {
-                return 'Fluorescent';
-            } else if (value === 3) {
-                return 'Tungsten (incandescent light)';
-            } else if (value === 4) {
-                return 'Flash';
-            } else if (value === 9) {
-                return 'Fine weather';
-            } else if (value === 10) {
-                return 'Cloudy weather';
-            } else if (value === 11) {
-                return 'Shade';
-            } else if (value === 12) {
-                return 'Daylight fluorescent (D 5700 – 7100K)';
-            } else if (value === 13) {
-                return 'Day white fluorescent (N 4600 – 5400K)';
-            } else if (value === 14) {
-                return 'Cool white fluorescent (W 3900 – 4500K)';
-            } else if (value === 15) {
-                return 'White fluorescent (WW 3200 – 3700K)';
-            } else if (value === 17) {
-                return 'Standard light A';
-            } else if (value === 18) {
-                return 'Standard light B';
-            } else if (value === 19) {
-                return 'Standard light C';
-            } else if (value === 20) {
-                return 'D55';
-            } else if (value === 21) {
-                return 'D65';
-            } else if (value === 22) {
-                return 'D75';
-            } else if (value === 23) {
-                return 'D50';
-            } else if (value === 24) {
-                return 'ISO studio tungsten';
-            } else if (value === 255) {
-                return 'Other light source';
-            }
-            return 'Unknown';
-        }
+        description: TagNamesCommon['LightSource']
     },
     0x9209: {
         'name': 'Flash',
@@ -191,6 +172,18 @@ export default {
         }
     },
     0x920a: 'FocalLength',
+    0x9211: 'ImageNumber',
+    0x9212: {
+        name: 'SecurityClassification',
+        description: (value) => ({
+            'C': 'Confidential',
+            'R': 'Restricted',
+            'S': 'Secret',
+            'T': 'Top Secret',
+            'U': 'Unclassified'
+        })[value] || 'Unknown'
+    },
+    0x9213: 'ImageHistory',
     0x9214: {
         'name': 'SubjectArea',
         'description': (value) => {
@@ -215,6 +208,12 @@ export default {
     0x9290: 'SubSecTime',
     0x9291: 'SubSecTimeOriginal',
     0x9292: 'SubSecTimeDigitized',
+    0x9400: 'AmbientTemperature',
+    0x9401: 'Humidity',
+    0x9402: 'Pressure',
+    0x9403: 'WaterDepth',
+    0x9404: 'Acceleration',
+    0x9405: 'CameraElevationAngle',
     0xa000: {
         'name': 'FlashpixVersion',
         'description': (value) => value.map((charCode) => String.fromCharCode(charCode)).join('')
@@ -441,5 +440,38 @@ export default {
             return 'Unknown';
         }
     },
-    0xa420: 'ImageUniqueID'
+    0xa420: 'ImageUniqueID',
+    0xa430: 'CameraOwnerName',
+    0xa431: 'BodySerialNumber',
+    0xa432: 'LensSpecification',
+    0xa433: 'LensMake',
+    0xa434: 'LensModel',
+    0xa435: 'LensSerialNumber',
+    0xa460: {
+        name: 'CompositeImage',
+        description: (value) => ({
+            1: 'Not a Composite Image',
+            2: 'General Composite Image',
+            3: 'Composite Image Captured While Shooting',
+        })[value] || 'Unknown'
+    },
+    0xa461: 'SourceImageNumberOfCompositeImage',
+    0xa462: 'SourceExposureTimesOfCompositeImage',
+    0xa500: 'Gamma',
+    0xea1c: 'Padding',
+    0xea1d: 'OffsetSchema',
+    0xfde8: 'OwnerName',
+    0xfde9: 'SerialNumber',
+    0xfdea: 'Lens',
+    0xfe4c: 'RawFile',
+    0xfe4d: 'Converter',
+    0xfe4e: 'WhiteBalance',
+    0xfe51: 'Exposure',
+    0xfe52: 'Shadows',
+    0xfe53: 'Brightness',
+    0xfe54: 'Contrast',
+    0xfe55: 'Saturation',
+    0xfe56: 'Sharpness',
+    0xfe57: 'Smoothness',
+    0xfe58: 'MoireFilter'
 };
