@@ -83,6 +83,18 @@ describe('types', () => {
         expect(Types.getSrationalAt(dataView, 0, byteOrder)).to.equal(-0x42 / 0x46474849);
     });
 
+    it('should be able to read a little endian IFD pointer', () => {
+        const dataView = getDataView('\x45\x44\x43\x42');
+        const byteOrder = ByteOrder.LITTLE_ENDIAN;
+        expect(Types.getIfdPointerAt(dataView, 0, byteOrder)).to.equal(0x42434445);
+    });
+
+    it('should be able to read a big endian IFD pointer', () => {
+        const dataView = getDataView('\x42\x43\x44\x45');
+        const byteOrder = ByteOrder.BIG_ENDIAN;
+        expect(Types.getIfdPointerAt(dataView, 0, byteOrder)).to.equal(0x42434445);
+    });
+
     it('should be able to get ASCII value', () => {
         const string = 'String\x00';
         const stringValues = string.split('').map((character) => character.charCodeAt(0));
@@ -102,5 +114,6 @@ describe('types', () => {
         expect(Types.getTypeSize('UNDEFINED')).to.equal(1);
         expect(Types.getTypeSize('SLONG')).to.equal(4);
         expect(Types.getTypeSize('SRATIONAL')).to.equal(8);
+        expect(Types.getTypeSize('IFD')).to.equal(4);
     });
 });

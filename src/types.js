@@ -12,7 +12,8 @@ const typeSizes = {
     5: 8, // RATIONAL
     7: 1, // UNDEFINED
     9: 4, // SLONG
-    10: 8 // SRATIONAL
+    10: 8, // SRATIONAL
+    13: 4 // IFD
 };
 
 const tagTypes = {
@@ -23,7 +24,8 @@ const tagTypes = {
     'RATIONAL': 5,
     'UNDEFINED': 7,
     'SLONG': 9,
-    'SRATIONAL': 10
+    'SRATIONAL': 10,
+    'IFD': 13
 };
 
 export default {
@@ -36,6 +38,7 @@ export default {
     getUndefinedAt,
     getSlongAt,
     getSrationalAt,
+    getIfdPointerAt,
     typeSizes,
     tagTypes,
     getTypeSize
@@ -75,6 +78,10 @@ function getSlongAt(dataView, offset, byteOrder) {
 
 function getSrationalAt(dataView, offset, byteOrder) {
     return getSlongAt(dataView, offset, byteOrder) / getSlongAt(dataView, offset + 4, byteOrder);
+}
+
+function getIfdPointerAt(dataView, offset, byteOrder) {
+    return getLongAt(dataView, offset, byteOrder);
 }
 
 function getTypeSize(typeName) {
