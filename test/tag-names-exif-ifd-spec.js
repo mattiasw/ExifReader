@@ -4,6 +4,7 @@
 
 import {expect} from 'chai';
 import TagNamesExifIfd from '../src/tag-names-exif-ifd';
+import TagNamesCommon from '../src/tag-names-common';
 import {getCharacterArray} from './test-utils';
 
 describe('tag-names-exif-ifd', () => {
@@ -43,6 +44,47 @@ describe('tag-names-exif-ifd', () => {
         expect(TagNamesExifIfd[0x8828].description(4711)).to.equal('[Raw OECF table data]');
     });
 
+    it('should have tag TimeZoneOffset', () => {
+        expect(TagNamesExifIfd[0x882a]).to.equal('TimeZoneOffset');
+    });
+
+    it('should have tag SelfTimerMode', () => {
+        expect(TagNamesExifIfd[0x882b]).to.equal('SelfTimerMode');
+    });
+
+    it('should have tag SensitivityType', () => {
+        expect(TagNamesExifIfd[0x8830].name).to.equal('SensitivityType');
+        expect(TagNamesExifIfd[0x8830].description(0)).to.equal('Unknown');
+        expect(TagNamesExifIfd[0x8830].description(1)).to.equal('Standard Output Sensitivity');
+        expect(TagNamesExifIfd[0x8830].description(2)).to.equal('Recommended Exposure Index');
+        expect(TagNamesExifIfd[0x8830].description(3)).to.equal('ISO Speed');
+        expect(TagNamesExifIfd[0x8830].description(4)).to.equal('Standard Output Sensitivity and Recommended Exposure Index');
+        expect(TagNamesExifIfd[0x8830].description(5)).to.equal('Standard Output Sensitivity and ISO Speed');
+        expect(TagNamesExifIfd[0x8830].description(6)).to.equal('Recommended Exposure Index and ISO Speed');
+        expect(TagNamesExifIfd[0x8830].description(7)).to.equal('Standard Output Sensitivity, Recommended Exposure Index and ISO Speed');
+        expect(TagNamesExifIfd[0x8830].description(42)).to.equal('Unknown');
+    });
+
+    it('should have tag StandardOutputSensitivity', () => {
+        expect(TagNamesExifIfd[0x8831]).to.equal('StandardOutputSensitivity');
+    });
+
+    it('should have tag RecommendedExposureIndex', () => {
+        expect(TagNamesExifIfd[0x8832]).to.equal('RecommendedExposureIndex');
+    });
+
+    it('should have tag ISOSpeed', () => {
+        expect(TagNamesExifIfd[0x8833]).to.equal('ISOSpeed');
+    });
+
+    it('should have tag ISOSpeedLatitudeyyy', () => {
+        expect(TagNamesExifIfd[0x8834]).to.equal('ISOSpeedLatitudeyyy');
+    });
+
+    it('should have tag ISOSpeedLatitudezzz', () => {
+        expect(TagNamesExifIfd[0x8835]).to.equal('ISOSpeedLatitudezzz');
+    });
+
     it('should have tag ExifVersion', () => {
         expect(TagNamesExifIfd[0x9000].description([0x30, 0x32, 0x32, 0x30])).to.equal('0220');
     });
@@ -53,6 +95,22 @@ describe('tag-names-exif-ifd', () => {
 
     it('should have tag DateTimeDigitized', () => {
         expect(TagNamesExifIfd[0x9004]).to.equal('DateTimeDigitized');
+    });
+
+    it('should have tag GooglePlusUploadCode', () => {
+        expect(TagNamesExifIfd[0x9009]).to.equal('GooglePlusUploadCode');
+    });
+
+    it('should have tag OffsetTime', () => {
+        expect(TagNamesExifIfd[0x9010]).to.equal('OffsetTime');
+    });
+
+    it('should have tag OffsetTimeOriginal', () => {
+        expect(TagNamesExifIfd[0x9011]).to.equal('OffsetTimeOriginal');
+    });
+
+    it('should have tag OffsetTimeDigitized', () => {
+        expect(TagNamesExifIfd[0x9012]).to.equal('OffsetTimeDigitized');
     });
 
     it('should report correct name and description for ComponentsConfiguration', () => {
@@ -103,27 +161,7 @@ describe('tag-names-exif-ifd', () => {
 
     it('should report correct name and description for LightSource', () => {
         expect(TagNamesExifIfd[0x9208].name).to.equal('LightSource');
-        expect(TagNamesExifIfd[0x9208].description(1)).to.equal('Daylight');
-        expect(TagNamesExifIfd[0x9208].description(2)).to.equal('Fluorescent');
-        expect(TagNamesExifIfd[0x9208].description(3)).to.equal('Tungsten (incandescent light)');
-        expect(TagNamesExifIfd[0x9208].description(4)).to.equal('Flash');
-        expect(TagNamesExifIfd[0x9208].description(9)).to.equal('Fine weather');
-        expect(TagNamesExifIfd[0x9208].description(10)).to.equal('Cloudy weather');
-        expect(TagNamesExifIfd[0x9208].description(11)).to.equal('Shade');
-        expect(TagNamesExifIfd[0x9208].description(12)).to.equal('Daylight fluorescent (D 5700 – 7100K)');
-        expect(TagNamesExifIfd[0x9208].description(13)).to.equal('Day white fluorescent (N 4600 – 5400K)');
-        expect(TagNamesExifIfd[0x9208].description(14)).to.equal('Cool white fluorescent (W 3900 – 4500K)');
-        expect(TagNamesExifIfd[0x9208].description(15)).to.equal('White fluorescent (WW 3200 – 3700K)');
-        expect(TagNamesExifIfd[0x9208].description(17)).to.equal('Standard light A');
-        expect(TagNamesExifIfd[0x9208].description(18)).to.equal('Standard light B');
-        expect(TagNamesExifIfd[0x9208].description(19)).to.equal('Standard light C');
-        expect(TagNamesExifIfd[0x9208].description(20)).to.equal('D55');
-        expect(TagNamesExifIfd[0x9208].description(21)).to.equal('D65');
-        expect(TagNamesExifIfd[0x9208].description(22)).to.equal('D75');
-        expect(TagNamesExifIfd[0x9208].description(23)).to.equal('D50');
-        expect(TagNamesExifIfd[0x9208].description(24)).to.equal('ISO studio tungsten');
-        expect(TagNamesExifIfd[0x9208].description(255)).to.equal('Other light source');
-        expect(TagNamesExifIfd[0x9208].description(4711)).to.equal('Unknown');
+        expect(TagNamesExifIfd[0x9208].description).to.equal(TagNamesCommon['LightSource']);
     });
 
     it('should report correct name and description for Flash', () => {
@@ -157,6 +195,24 @@ describe('tag-names-exif-ifd', () => {
         expect(TagNamesExifIfd[0x920a]).to.equal('FocalLength');
     });
 
+    it('should have tag ImageNumber', () => {
+        expect(TagNamesExifIfd[0x9211]).to.equal('ImageNumber');
+    });
+
+    it('should report correct name and description for SecurityClassification', () => {
+        expect(TagNamesExifIfd[0x9212].name).to.equal('SecurityClassification');
+        expect(TagNamesExifIfd[0x9212].description('C')).to.equal('Confidential');
+        expect(TagNamesExifIfd[0x9212].description('R')).to.equal('Restricted');
+        expect(TagNamesExifIfd[0x9212].description('S')).to.equal('Secret');
+        expect(TagNamesExifIfd[0x9212].description('T')).to.equal('Top Secret');
+        expect(TagNamesExifIfd[0x9212].description('U')).to.equal('Unclassified');
+        expect(TagNamesExifIfd[0x9212].description('Z')).to.equal('Unknown');
+    });
+
+    it('should have tag ImageHistory', () => {
+        expect(TagNamesExifIfd[0x9213]).to.equal('ImageHistory');
+    });
+
     it('should report correct name and description for SubjectArea', () => {
         expect(TagNamesExifIfd[0x9214].name).to.equal('SubjectArea');
         expect(TagNamesExifIfd[0x9214].description([0x4711, 0x4812])).to.equal('Location; X: 18193, Y: 18450');
@@ -188,6 +244,30 @@ describe('tag-names-exif-ifd', () => {
 
     it('should have tag SubSecTimeDigitized', () => {
         expect(TagNamesExifIfd[0x9292]).to.equal('SubSecTimeDigitized');
+    });
+
+    it('should have tag AmbientTemperature', () => {
+        expect(TagNamesExifIfd[0x9400]).to.equal('AmbientTemperature');
+    });
+
+    it('should have tag Humidity', () => {
+        expect(TagNamesExifIfd[0x9401]).to.equal('Humidity');
+    });
+
+    it('should have tag Pressure', () => {
+        expect(TagNamesExifIfd[0x9402]).to.equal('Pressure');
+    });
+
+    it('should have tag WaterDepth', () => {
+        expect(TagNamesExifIfd[0x9403]).to.equal('WaterDepth');
+    });
+
+    it('should have tag Acceleration', () => {
+        expect(TagNamesExifIfd[0x9404]).to.equal('Acceleration');
+    });
+
+    it('should have tag CameraElevationAngle', () => {
+        expect(TagNamesExifIfd[0x9405]).to.equal('CameraElevationAngle');
     });
 
     it('should report correct name and description for FlashpixVersion', () => {
@@ -372,5 +452,114 @@ describe('tag-names-exif-ifd', () => {
 
     it('should have tag ImageUniqueID', () => {
         expect(TagNamesExifIfd[0xa420]).to.equal('ImageUniqueID');
+    });
+
+    it('should have tag CameraOwnerName', () => {
+        expect(TagNamesExifIfd[0xa430]).to.equal('CameraOwnerName');
+    });
+
+    it('should have tag BodySerialNumber', () => {
+        expect(TagNamesExifIfd[0xa431]).to.equal('BodySerialNumber');
+    });
+
+    it('should have tag LensSpecification', () => {
+        expect(TagNamesExifIfd[0xa432]).to.equal('LensSpecification');
+    });
+
+    it('should have tag LensMake', () => {
+        expect(TagNamesExifIfd[0xa433]).to.equal('LensMake');
+    });
+
+    it('should have tag LensModel', () => {
+        expect(TagNamesExifIfd[0xa434]).to.equal('LensModel');
+    });
+
+    it('should have tag LensSerialNumber', () => {
+        expect(TagNamesExifIfd[0xa435]).to.equal('LensSerialNumber');
+    });
+
+    it('should have tag CompositeImage', () => {
+        expect(TagNamesExifIfd[0xa460].name).to.equal('CompositeImage');
+        expect(TagNamesExifIfd[0xa460].description(0)).to.equal('Unknown');
+        expect(TagNamesExifIfd[0xa460].description(1)).to.equal('Not a Composite Image');
+        expect(TagNamesExifIfd[0xa460].description(2)).to.equal('General Composite Image');
+        expect(TagNamesExifIfd[0xa460].description(3)).to.equal('Composite Image Captured While Shooting');
+        expect(TagNamesExifIfd[0xa460].description(42)).to.equal('Unknown');
+    });
+
+    it('should have tag SourceImageNumberOfCompositeImage', () => {
+        expect(TagNamesExifIfd[0xa461]).to.equal('SourceImageNumberOfCompositeImage');
+    });
+
+    it('should have tag SourceExposureTimesOfCompositeImage', () => {
+        expect(TagNamesExifIfd[0xa462]).to.equal('SourceExposureTimesOfCompositeImage');
+    });
+
+    it('should have tag Gamma', () => {
+        expect(TagNamesExifIfd[0xa500]).to.equal('Gamma');
+    });
+
+    it('should have tag Padding', () => {
+        expect(TagNamesExifIfd[0xea1c]).to.equal('Padding');
+    });
+
+    it('should have tag OffsetSchema', () => {
+        expect(TagNamesExifIfd[0xea1d]).to.equal('OffsetSchema');
+    });
+
+    it('should have tag OwnerName', () => {
+        expect(TagNamesExifIfd[0xfde8]).to.equal('OwnerName');
+    });
+
+    it('should have tag SerialNumber', () => {
+        expect(TagNamesExifIfd[0xfde9]).to.equal('SerialNumber');
+    });
+
+    it('should have tag Lens', () => {
+        expect(TagNamesExifIfd[0xfdea]).to.equal('Lens');
+    });
+
+    it('should have tag RawFile', () => {
+        expect(TagNamesExifIfd[0xfe4c]).to.equal('RawFile');
+    });
+
+    it('should have tag Converter', () => {
+        expect(TagNamesExifIfd[0xfe4d]).to.equal('Converter');
+    });
+
+    it('should have tag WhiteBalance', () => {
+        expect(TagNamesExifIfd[0xfe4e]).to.equal('WhiteBalance');
+    });
+
+    it('should have tag Exposure', () => {
+        expect(TagNamesExifIfd[0xfe51]).to.equal('Exposure');
+    });
+
+    it('should have tag Shadows', () => {
+        expect(TagNamesExifIfd[0xfe52]).to.equal('Shadows');
+    });
+
+    it('should have tag Brightness', () => {
+        expect(TagNamesExifIfd[0xfe53]).to.equal('Brightness');
+    });
+
+    it('should have tag Contrast', () => {
+        expect(TagNamesExifIfd[0xfe54]).to.equal('Contrast');
+    });
+
+    it('should have tag Saturation', () => {
+        expect(TagNamesExifIfd[0xfe55]).to.equal('Saturation');
+    });
+
+    it('should have tag Sharpness', () => {
+        expect(TagNamesExifIfd[0xfe56]).to.equal('Sharpness');
+    });
+
+    it('should have tag Smoothness', () => {
+        expect(TagNamesExifIfd[0xfe57]).to.equal('Smoothness');
+    });
+
+    it('should have tag MoireFilter', () => {
+        expect(TagNamesExifIfd[0xfe58]).to.equal('MoireFilter');
     });
 });
