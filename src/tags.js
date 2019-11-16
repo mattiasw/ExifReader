@@ -18,7 +18,8 @@ const getTagValueAt = {
     5: Types.getRationalAt,
     7: Types.getUndefinedAt,
     9: Types.getSlongAt,
-    10: Types.getSrationalAt
+    10: Types.getSrationalAt,
+    13: Types.getIfdPointerAt
 };
 
 export default {
