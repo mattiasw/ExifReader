@@ -17,7 +17,8 @@ const APP_MARKER_SIZE = 2;
 const TIFF_HEADER_OFFSET = 10; // From start of APP1 marker.
 const IPTC_DATA_OFFSET = 18; // From start of APP13 marker.
 const XMP_DATA_OFFSET = 33; // From start of APP1 marker.
-const APP2_ICC_DATA_OFFSET = 18; // From start of APP2 marker including marker and chunk/chunk total numbers
+const XMP_EXTENDED_DATA_OFFSET = 79; // From start of APP1 marker including GUID, total length, and offset.
+const APP2_ICC_DATA_OFFSET = 18; // From start of APP2 marker including marker and chunk/chunk total numbers.
 
 const APP2_ICC_IDENTIFIER = 'ICC_PROFILE\0';
 const ICC_CHUNK_NUMBER_OFFSET = APP_ID_OFFSET + APP2_ICC_IDENTIFIER.length;
@@ -38,7 +39,8 @@ const APP15_MARKER = 0xffef;
 const COMMENT_MARKER = 0xfffe;
 
 const APP1_EXIF_IDENTIFIER = 'Exif';
-const APP1_XMP_IDENTIFIER = 'http://ns.adobe.com/xap/1.0/';
+const APP1_XMP_IDENTIFIER = 'http://ns.adobe.com/xap/1.0/\x00';
+const APP1_XMP_EXTENDED_IDENTIFIER = 'http://ns.adobe.com/xmp/extension/\x00';
 const APP13_IPTC_IDENTIFIER = 'Photoshop 3.0';
 
 export default {
@@ -52,8 +54,7 @@ function parseAppMarkers(dataView) {
     let sof2DataOffset;
     let tiffHeaderOffset;
     let iptcDataOffset;
-    let xmpDataOffset;
-    let xmpFieldLength;
+    let xmpChunks;
     let iccChunks;
 
     if (isTiffFile(dataView)) {
@@ -75,10 +76,18 @@ function parseAppMarkers(dataView) {
         } else if (isApp1ExifMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
             tiffHeaderOffset = appMarkerPosition + TIFF_HEADER_OFFSET;
-        } else if (isApp1XMPMarker(dataView, appMarkerPosition)) {
+        } else if (isApp1XmpMarker(dataView, appMarkerPosition)) {
+            if (!xmpChunks) {
+                xmpChunks = [];
+            }
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
-            xmpDataOffset = appMarkerPosition + XMP_DATA_OFFSET;
-            xmpFieldLength = fieldLength - (XMP_DATA_OFFSET - APP_MARKER_SIZE);
+            xmpChunks.push(getXmpChunkDetails(appMarkerPosition, fieldLength));
+        } else if (isApp1ExtendedXmpMarker(dataView, appMarkerPosition)) {
+            if (!xmpChunks) {
+                xmpChunks = [];
+            }
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
+            xmpChunks.push(getExtendedXmpChunkDetails(appMarkerPosition, fieldLength));
         } else if (isApp13PhotoshopMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
             iptcDataOffset = appMarkerPosition + IPTC_DATA_OFFSET;
@@ -106,8 +115,7 @@ function parseAppMarkers(dataView) {
         fileDataOffset: sof0DataOffset || sof2DataOffset,
         tiffHeaderOffset,
         iptcDataOffset,
-        xmpDataOffset,
-        xmpFieldLength,
+        xmpChunks,
         iccChunks
     };
 }
@@ -148,12 +156,38 @@ function isApp1ExifMarker(dataView, appMarkerPosition) {
         && (dataView.getUint8(appMarkerPosition + APP_ID_OFFSET + markerIdLength, false) === 0x00);
 }
 
-function isApp1XMPMarker(dataView, appMarkerPosition) {
-    const markerIdLength = APP1_XMP_IDENTIFIER.length;
-
+function isApp1XmpMarker(dataView, appMarkerPosition) {
     return (dataView.getUint16(appMarkerPosition, false) === APP1_MARKER)
-        && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP1_XMP_IDENTIFIER)
-        && (dataView.getUint8(appMarkerPosition + APP_ID_OFFSET + markerIdLength, false) === 0x00);
+        && isXmpIdentifier(dataView, appMarkerPosition);
+}
+
+function isXmpIdentifier(dataView, appMarkerPosition) {
+    const markerIdLength = APP1_XMP_IDENTIFIER.length;
+    return getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP1_XMP_IDENTIFIER;
+}
+
+function isApp1ExtendedXmpMarker(dataView, appMarkerPosition) {
+    return (dataView.getUint16(appMarkerPosition, false) === APP1_MARKER)
+        && isExtendedXmpIdentifier(dataView, appMarkerPosition);
+}
+
+function isExtendedXmpIdentifier(dataView, appMarkerPosition) {
+    const markerIdLength = APP1_XMP_EXTENDED_IDENTIFIER.length;
+    return getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP1_XMP_EXTENDED_IDENTIFIER;
+}
+
+function getXmpChunkDetails(appMarkerPosition, fieldLength) {
+    return {
+        dataOffset: appMarkerPosition + XMP_DATA_OFFSET,
+        length: fieldLength - (XMP_DATA_OFFSET - APP_MARKER_SIZE)
+    };
+}
+
+function getExtendedXmpChunkDetails(appMarkerPosition, fieldLength) {
+    return {
+        dataOffset: appMarkerPosition + XMP_EXTENDED_DATA_OFFSET,
+        length: fieldLength - (XMP_EXTENDED_DATA_OFFSET - APP_MARKER_SIZE)
+    };
 }
 
 function isApp13PhotoshopMarker(dataView, appMarkerPosition) {
