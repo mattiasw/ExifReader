@@ -56,14 +56,16 @@ After that, the transpiled, concatenated and minified ES5 file will be in the
 
 ### Type definitions
 
-Type definitions for TypeScript are included in the package.
+Type definitions for TypeScript are included in the package. If you're missing
+any definitions for tags or something else, a pull-request would be very much
+welcome since I'm not using TypeScript myself.
 
 Usage
 -----
 
 ### Importing
 
-ES modules:
+ES modules using a bundler (Webpack, Parcel, etc.):
 
 ```javascript
 import ExifReader from 'exifreader';
@@ -106,13 +108,17 @@ pass in an options object with the property `expanded` set to `true`:
 const tags = ExifReader.load(fileBuffer, {expanded: true});
 ```
 
+`fileBuffer` must be an `ArrayBuffer` or a `SharedArrayBuffer` for
+browsers, or a `Buffer` for Node. See [examples folder](examples/) for more
+directions on how to get the file contents in different environments.
+
 Notes
 -----
 
 Some XMP tags have processed values as descriptions. That means that e.g. an
 `Orientation` value of `3` will have `Rotate 180` in the `description` property.
 If you would like more XMP tags to have a processed description, please file an
-issue or do a pull request.
+issue or create a pull request.
 
 Some text tags use TextDecoder to decode their content. If your specific
 environment does not support it at all or a specific encoding, you will not be
@@ -144,6 +150,12 @@ Tips
 -   After parsing the tags, consider deleting the MakerNote tag if you know you
     will load a lot of files and storing the tags. It can be really large for
     some manufacturers. See the examples folder to see how you can do that.
+-   In some cases it can make sense to only load the beginning of the image
+    file. It's unfortunately not possible to know how big the meta data will be
+    in an image, but if you limit yourself to regular Exif tags you can most
+    probably get by with only reading the first 128 kB. This may exclude IPTC
+    and XMP metadata though (and possibly Exif too if they come in an irregular
+    order) so please check if this optimization fits your use case.
 
 Testing
 -------
@@ -193,6 +205,11 @@ case is covered.
 Changelog
 ---------
 
+-   **November 2019**:
+    -   Add support for ICC color profile tags.
+    -   Add support for TIFF images.
+    -   Add support for extended XMP.
+    -   Add a lot of new tags.
 -   **January 2019**:
     -   For Node.js, remove dependency of jDataView and explicit dependency of
         XMLDOM.

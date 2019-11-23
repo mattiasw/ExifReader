@@ -37,7 +37,6 @@
             }
         };
 
-        // We only need the start of the file for the Exif info.
         reader.readAsArrayBuffer(files[0]);
     }
 
