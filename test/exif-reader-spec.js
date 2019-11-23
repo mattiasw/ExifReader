@@ -47,8 +47,7 @@ describe('exif-reader', () => {
             fileDataOffset: undefined,
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
-            xmpDataOffset: undefined,
-            xmpFieldLength: undefined,
+            xmpChunks: undefined,
             iccChunks: undefined
         });
         expect(() => ExifReader.loadView()).to.throw(exifErrors.MetadataMissingError);
@@ -74,7 +73,9 @@ describe('exif-reader', () => {
 
     it('should be able to find XMP APP segment', () => {
         const myTags = {MyXmpTag: 42};
-        rewireForLoadView({xmpDataOffset: OFFSET_TEST_VALUE, xmpFieldLength: XMP_FIELD_LENGTH_TEST_VALUE}, 'XmpTags', myTags);
+
+        rewireImageHeader({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]});
+        rewireXmpTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -82,7 +83,7 @@ describe('exif-reader', () => {
         const myTags = {MyIccTag: 42};
 
         rewireImageHeader({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]});
-        rewireIccTagsRead('IccTags', myTags);
+        rewireIccTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -98,15 +99,17 @@ describe('exif-reader', () => {
             fileDataOffset: OFFSET_TEST_VALUE,
             tiffHeaderOffset: OFFSET_TEST_VALUE,
             iptcDataOffset: OFFSET_TEST_VALUE,
-            xmpDataOffset: OFFSET_TEST_VALUE,
-            xmpFieldLength: XMP_FIELD_LENGTH_TEST_VALUE,
+            xmpChunks: [{
+                dataOffset: OFFSET_TEST_VALUE,
+                length: XMP_FIELD_LENGTH_TEST_VALUE
+            }],
             iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]
         });
         rewireTagsRead('FileTags', myTags.file);
         rewireTagsRead('Tags', myTags.exif);
         rewireTagsRead('IptcTags', myTags.iptc);
-        rewireTagsRead('XmpTags', myTags.xmp);
-        rewireIccTagsRead('IccTags', myTags.icc);
+        rewireXmpTagsRead(myTags.xmp);
+        rewireIccTagsRead(myTags.icc);
 
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
     });
@@ -127,22 +130,33 @@ function rewireImageHeader(appMarkersValue) {
 
 function rewireTagsRead(tagsObject, tagsValue) {
     ExifReaderRewireAPI.__Rewire__(tagsObject, {
-        read(dataView, offset, fieldLength) {
-            if ((offset !== OFFSET_TEST_VALUE)
-                || ((tagsObject === 'XmpTags') && (fieldLength !== XMP_FIELD_LENGTH_TEST_VALUE))) {
-                return {};
+        read(dataView, offset) {
+            if (offset === OFFSET_TEST_VALUE) {
+                return tagsValue;
             }
-            return tagsValue;
+            return {};
         }
     });
 }
 
-function rewireIccTagsRead(tagsObject, tagsValue) {
-    ExifReaderRewireAPI.__Rewire__(tagsObject, {
+function rewireXmpTagsRead(tagsValue) {
+    ExifReaderRewireAPI.__Rewire__('XmpTags', {
+        read(dataView, xmpData) {
+            if ((xmpData[0].dataOffset === OFFSET_TEST_VALUE) && (xmpData[0].length === XMP_FIELD_LENGTH_TEST_VALUE)) {
+                return tagsValue;
+            }
+            return {};
+        }
+    });
+}
+
+function rewireIccTagsRead(tagsValue) {
+    ExifReaderRewireAPI.__Rewire__('IccTags', {
         read(dataView, iccData) {
             if (iccData.length === 2 && iccData[0] === OFFSET_TEST_VALUE_ICC2_1 && iccData[1] === OFFSET_TEST_VALUE_ICC2_2) {
                 return tagsValue;
             }
+            return {};
         }
     });
 }

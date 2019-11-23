@@ -28,7 +28,11 @@ describe('xmp-tags', () => {
 
         it('should give a warning if a DOM parser is not available', () => {
             const warnSpy = getConsoleWarnSpy();
-            const tags = XmpTags.read();
+            const xmlString = getXmlString('');
+            const dataView = getDataView(xmlString);
+
+            const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
+
             expect(warnSpy.hasWarned).to.be.true;
             expect(tags).to.deep.equal({});
 
@@ -39,7 +43,7 @@ describe('xmp-tags', () => {
     it('should be able to handle zero rdf:Description elements', () => {
         const xmlString = getXmlString('');
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags).to.deep.equal({});
     });
 
@@ -49,7 +53,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags).to.deep.equal({
             MyXMPTag0: {
                 value: '4711',
@@ -66,7 +70,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags).to.deep.equal({
             MyXMPTag0: {
                 value: '4711',
@@ -90,7 +94,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags).to.deep.equal({
             MyXMPTag0: {
                 value: 'abcÅÄÖáéí',
@@ -107,7 +111,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags).to.deep.equal({
             MyXMPTag0: {
                 value: 'AÃºC',
@@ -124,7 +128,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags).to.deep.equal({
             Orientation: {
                 value: '3',
@@ -146,7 +150,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags).to.deep.equal({
             MyXMPTag: {
                 value: '4711',
@@ -169,7 +173,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags).to.deep.equal({
             MyXMPTag: {
                 value: '4711',
@@ -189,7 +193,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags).to.deep.equal({
             MyXMPURITag: {
                 value: uri,
@@ -214,7 +218,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags).to.deep.equal({
             MyXMPURITag: {
                 value: uri,
@@ -239,7 +243,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPStructure']).to.deep.equal({
             value: {
                 MyXMPTag0: {
@@ -269,7 +273,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPStructure']).to.deep.equal({
             value: {
                 MyXMPTag0: {
@@ -298,7 +302,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPStructure']).to.deep.equal({
             value: {
                 MyXMPTag0: {
@@ -331,7 +335,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPArray']).to.deep.equal({
             value: [
                 {
@@ -371,7 +375,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPArray']).to.deep.equal({
             value: [
                 {
@@ -409,7 +413,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPArray']).to.deep.equal({
             value: [
                 {
@@ -444,7 +448,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPArray']).to.deep.equal({
             value: [
                 {
@@ -485,7 +489,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPArray']).to.deep.equal({
             value: [
                 {
@@ -535,7 +539,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPArray']).to.deep.equal({
             value: [
                 {
@@ -562,7 +566,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPArray']).to.deep.equal({
             value: [],
             attributes: {
@@ -587,7 +591,7 @@ describe('xmp-tags', () => {
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['CreatorContactInfo']).to.deep.equal({
             value: {
                 CiAdrCity: {
@@ -642,7 +646,7 @@ describe('xmp-tags', () => {
             <rdf:Description xmlns:xmp="http://ns.example.com/xmp"><xmp:MyXMPTag1>11</xmp:MyXMPTag1></rdf:Description>
         `);
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPTag0'].value).to.equal('47');
         expect(tags['MyXMPTag1'].value).to.equal('11');
     });
@@ -650,29 +654,62 @@ describe('xmp-tags', () => {
     it('should be able to handle XML with a packet wrapper', () => {
         const xmlString = getXmlStringWithPacketWrapper('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711"></rdf:Description>');
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPTag'].value).to.equal('4711');
     });
 
     it('should be able to handle XML with a meta element', () => {
         const xmlString = getXmlStringWithMetaElement('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711"></rdf:Description>');
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPTag'].value).to.equal('4711');
     });
 
     it('should be able to handle XML with a meta element inside a packet wrapper', () => {
         const xmlString = getXmlStringWithMetaElementInsidePacketWrapper('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711"></rdf:Description>');
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPTag'].value).to.equal('4711');
     });
 
     it('should be able to handle XML with a packet wrapper inside a meta element', () => {
         const xmlString = getXmlStringWithPacketWrapperInsideMetaElement('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711"></rdf:Description>');
         const dataView = getDataView(xmlString);
-        const tags = XmpTags.read(dataView, 0, xmlString.length);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
         expect(tags['MyXMPTag'].value).to.equal('4711');
+    });
+
+    it('should be able to handle multiple chunks where all after the first are parts of a single one', function () {
+        const xmlString0 = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="4711">
+            </rdf:Description>
+        `);
+        const extendedXmlString = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag1="42">
+            </rdf:Description>
+        `);
+        const xmlString1 = extendedXmlString.substr(0, 40);
+        const xmlString2 = extendedXmlString.substr(40);
+        const dataView = getDataView(xmlString0 + xmlString1 + xmlString2);
+
+        const tags = XmpTags.read(dataView, [
+            {dataOffset: 0, length: xmlString0.length},
+            {dataOffset: xmlString0.length, length: xmlString1.length},
+            {dataOffset: xmlString0.length + xmlString1.length, length: xmlString2.length}
+        ]);
+
+        expect(tags).to.deep.equal({
+            MyXMPTag0: {
+                value: '4711',
+                attributes: {},
+                description: '4711'
+            },
+            MyXMPTag1: {
+                value: '42',
+                attributes: {},
+                description: '42'
+            }
+        });
     });
 });
 

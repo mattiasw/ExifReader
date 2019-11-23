@@ -10,18 +10,52 @@ export default {
     read
 };
 
-function read(dataView, dataOffset, metadataSize) {
+function read(dataView, chunks) {
+    return extractCompleteChunks(dataView, chunks).reduce(readTags, {});
+}
+
+// The first chunk is always the regular XMP document. Then there is something
+// called extended XMP. The extended XMP is also a single XMP document but it
+// can be divided into multiple chunks that need to be combined into one.
+function extractCompleteChunks(dataView, chunks) {
+    if (chunks.length === 0) {
+        return [];
+    }
+
+    const completeChunks = [combineChunks(dataView, chunks.slice(0, 1))];
+    if (chunks.length > 1) {
+        completeChunks.push(combineChunks(dataView, chunks.slice(1)));
+    }
+
+    return completeChunks;
+}
+
+function combineChunks(dataView, chunks) {
+    const totalLength = chunks.reduce((size, chunk) => size + chunk.length, 0);
+    const combinedChunks = new Uint8Array(totalLength);
+    let offset = 0;
+
+    for (const chunk of chunks) {
+        const slice = dataView.buffer.slice(chunk.dataOffset, chunk.dataOffset + chunk.length);
+        combinedChunks.set(new Uint8Array(slice), offset);
+        offset += chunk.length;
+    }
+
+    return new DataView(combinedChunks.buffer);
+}
+
+function readTags(tags, chunkDataView) {
     try {
-        const doc = getDocument(dataView, dataOffset, metadataSize);
+        const doc = getDocument(chunkDataView);
         const rdf = getRDF(doc);
 
-        return parseXMPObject(convertToObject(rdf, true));
+        return Object.assign(tags, parseXMPObject(convertToObject(rdf, true)));
     } catch (error) {
-        return {};
+        return tags;
     }
 }
 
-function getDocument(dataView, dataOffset, metadataSize) {
+function getDocument(chunkDataView) {
     const Parser = DOMParser.get();
     if (!Parser) {
         console.warn('Warning: DOMParser is not available. It is needed to be able to parse XMP tags.'); // eslint-disable-line no-console
@@ -29,7 +63,7 @@ function getDocument(dataView, dataOffset, metadataSize) {
     }
 
     const domParser = new Parser();
-    const xmlSource = getStringFromDataView(dataView, dataOffset, metadataSize);
+    const xmlSource = getStringFromDataView(chunkDataView, 0, chunkDataView.byteLength);
     const doc = domParser.parseFromString(xmlSource, 'application/xml');
 
     if (doc.documentElement.nodeName === 'parsererror') {

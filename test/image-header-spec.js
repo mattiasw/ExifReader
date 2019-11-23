@@ -63,8 +63,7 @@ describe('image-header', () => {
             fileDataOffset: undefined,
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
-            xmpDataOffset: undefined,
-            xmpFieldLength: undefined,
+            xmpChunks: undefined,
             iccChunks: undefined
         });
     });
@@ -77,8 +76,7 @@ describe('image-header', () => {
             fileDataOffset: undefined,
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
-            xmpDataOffset: undefined,
-            xmpFieldLength: undefined,
+            xmpChunks: undefined,
             iccChunks: undefined
         });
     });
@@ -91,8 +89,7 @@ describe('image-header', () => {
             fileDataOffset: undefined,
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
-            xmpDataOffset: undefined,
-            xmpFieldLength: undefined,
+            xmpChunks: undefined,
             iccChunks: undefined
         });
     });
@@ -187,13 +184,42 @@ describe('image-header', () => {
 
     it('should recognize IPTC XMP data', () => {
         const dataView = getDataView(`\xff\xd8${APP1_MARKER}\x00\x1fhttp://ns.adobe.com/xap/1.0/\x00`);
-        const {xmpDataOffset} = ImageHeader.parseAppMarkers(dataView);
-        expect(xmpDataOffset).to.equal(35);
+        const {xmpChunks: [{dataOffset}]} = ImageHeader.parseAppMarkers(dataView);
+        expect(dataOffset).to.equal(35);
     });
 
     it('should report correct size for IPTC XMP metadata', () => {
         const dataView = getDataView(`\xff\xd8${APP1_MARKER}\x00\x49http://ns.adobe.com/xap/1.0/\x00`);
-        const {xmpFieldLength} = ImageHeader.parseAppMarkers(dataView);
-        expect(xmpFieldLength).to.equal(42);
+        const {xmpChunks: [{length}]} = ImageHeader.parseAppMarkers(dataView);
+        expect(length).to.equal(42);
+    });
+
+    it('should recognize Extended XMP data', () => {
+        const dataView = getDataView(`\xff\xd8${APP1_MARKER}\x00\x25http://ns.adobe.com/xmp/extension/\x00`);
+        const {xmpChunks: [{dataOffset}]} = ImageHeader.parseAppMarkers(dataView);
+        expect(dataOffset).to.equal(81);
+    });
+
+    it('should handle multiple XMP segments', () => {
+        const guid = '5740B4AB4292ABB7BDCE0639415FA33F';
+        const totalLength = '\x03\x02\x01\x00';
+        const offset = '\x00\x00\x02\x01';
+        const dataView = getDataView(
+            '\xff\xd8'
+            + `${APP1_MARKER}\x00\x1fhttp://ns.adobe.com/xap/1.0/\x00`
+            + `${APP1_MARKER}\x00\x4dhttp://ns.adobe.com/xmp/extension/\x00${guid}${totalLength}${offset}`
+        );
+
+        const {
+            xmpChunks: [
+                {dataOffset: dataOffset0, length: length0},
+                {dataOffset: dataOffset1, length: length1}
+            ]
+        } = ImageHeader.parseAppMarkers(dataView);
+
+        expect(dataOffset0).to.equal(35);
+        expect(length0).to.equal(0);
+        expect(dataOffset1).to.equal(114);
+        expect(length1).to.equal(0);
     });
 });

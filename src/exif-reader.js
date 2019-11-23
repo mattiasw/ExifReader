@@ -40,7 +40,7 @@ export function loadView(dataView, options = {expanded: false}) {
     let foundMetaData = false;
     let tags = {};
 
-    const {fileDataOffset, tiffHeaderOffset, iptcDataOffset, xmpDataOffset, xmpFieldLength, iccChunks} = ImageHeader.parseAppMarkers(dataView);
+    const {fileDataOffset, tiffHeaderOffset, iptcDataOffset, xmpChunks, iccChunks} = ImageHeader.parseAppMarkers(dataView);
 
     if (hasFileData(fileDataOffset)) {
         foundMetaData = true;
@@ -69,9 +69,9 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = Object.assign({}, tags, readTags);
         }
     }
-    if (hasXmpData(xmpDataOffset)) {
+    if (hasXmpData(xmpChunks)) {
         foundMetaData = true;
-        const readTags = XmpTags.read(dataView, xmpDataOffset, xmpFieldLength);
+        const readTags = XmpTags.read(dataView, xmpChunks);
         if (options.expanded) {
             tags.xmp = readTags;
         } else {
@@ -106,8 +106,8 @@ function hasIptcData(iptcDataOffset) {
     return iptcDataOffset !== undefined;
 }
 
-function hasXmpData(xmpDataOffset) {
-    return xmpDataOffset !== undefined;
+function hasXmpData(xmpChunks) {
+    return Array.isArray(xmpChunks) && xmpChunks.length > 0;
 }
 
 function hasIccData(iccDataOffsets) {
