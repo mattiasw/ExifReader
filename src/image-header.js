@@ -3,15 +3,19 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {getStringFromDataView} from './utils';
+import ByteOrder from './byte-order';
 
 const MIN_TIFF_DATA_BUFFER_LENGTH = 4;
 const MIN_JPEG_DATA_BUFFER_LENGTH = 2;
 const TIFF_ID = 0x2a;
 const TIFF_ID_OFFSET = 2;
 const TIFF_FILE_HEADER_OFFSET = 0;
+const HEIC_ID = 'ftyp';
+const HEIC_ID_OFFSET = 4;
+const HEIC_MAJOR_BRANDS = ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1'];
+const HEIC_MAJOR_BRAND_LENGTH = 4;
 const JPEG_ID = 0xffd8;
 const JPEG_ID_SIZE = 2;
-const LITTLE_ENDIAN = 0x4949;
 const APP_ID_OFFSET = 4;
 const APP_MARKER_SIZE = 2;
 const TIFF_HEADER_OFFSET = 10; // From start of APP1 marker.
@@ -48,6 +52,42 @@ export default {
 };
 
 function parseAppMarkers(dataView) {
+    if (isTiffFile(dataView)) {
+        return findTiffOffsets();
+    }
+
+    if (isJpegFile(dataView)) {
+        return findJpegOffsets(dataView);
+    }
+
+    if (isHeicFile(dataView)) {
+        return findHeicOffsets(dataView);
+    }
+
+    throw new Error('Invalid image format');
+}
+
+function isTiffFile(dataView) {
+    return (dataView.byteLength >= MIN_TIFF_DATA_BUFFER_LENGTH) && hasTiffMarker(dataView);
+}
+
+function hasTiffMarker(dataView) {
+    const littleEndian = dataView.getUint16(0) === ByteOrder.LITTLE_ENDIAN;
+    return dataView.getUint16(TIFF_ID_OFFSET, littleEndian) === TIFF_ID;
+}
+
+function findTiffOffsets() {
+    return {
+        hasAppMarkers: true,
+        tiffHeaderOffset: TIFF_FILE_HEADER_OFFSET
+    };
+}
+
+function isJpegFile(dataView) {
+    return (dataView.byteLength >= MIN_JPEG_DATA_BUFFER_LENGTH) && (dataView.getUint16(0, false) === JPEG_ID);
+}
+
+function findJpegOffsets(dataView) {
     let appMarkerPosition = JPEG_ID_SIZE;
     let fieldLength;
     let sof0DataOffset;
@@ -56,17 +96,6 @@ function parseAppMarkers(dataView) {
     let iptcDataOffset;
     let xmpChunks;
     let iccChunks;
-
-    if (isTiffFile(dataView)) {
-        return {
-            hasAppMarkers: true,
-            tiffHeaderOffset: TIFF_FILE_HEADER_OFFSET
-        };
-    }
-
-    if (!isJpegFile(dataView)) {
-        throw new Error('Invalid image format');
-    }
 
     while (appMarkerPosition + APP_ID_OFFSET + 5 <= dataView.byteLength) {
         if (isSOF0Marker(dataView, appMarkerPosition)) {
@@ -118,19 +147,6 @@ function parseAppMarkers(dataView) {
         xmpChunks,
         iccChunks
     };
-}
-
-function isTiffFile(dataView) {
-    return (dataView.byteLength >= MIN_TIFF_DATA_BUFFER_LENGTH) && hasTiffMarker(dataView);
-}
-
-function hasTiffMarker(dataView) {
-    const littleEndian = dataView.getUint16(0) === LITTLE_ENDIAN;
-    return dataView.getUint16(TIFF_ID_OFFSET, littleEndian) === TIFF_ID;
-}
-
-function isJpegFile(dataView) {
-    return (dataView.byteLength >= MIN_JPEG_DATA_BUFFER_LENGTH) && (dataView.getUint16(0, false) === JPEG_ID);
 }
 
 function isSOF0Marker(dataView, appMarkerPosition) {
@@ -208,4 +224,37 @@ function isAppMarker(dataView, appMarkerPosition) {
         || (appMarker === DQT_MARKER)
         || (appMarker === DRI_MARKER)
         || (appMarker === SOS_MARKER);
+}
+
+function isHeicFile(dataView) {
+    const heicMajorBrand = getStringFromDataView(dataView, HEIC_ID_OFFSET + HEIC_ID.length, HEIC_MAJOR_BRAND_LENGTH);
+
+    return (getStringFromDataView(dataView, HEIC_ID_OFFSET, HEIC_ID.length) === HEIC_ID)
+        && (HEIC_MAJOR_BRANDS.indexOf(heicMajorBrand) !== -1);
+}
+
+function findHeicOffsets(dataView) {
+    const NULL_VALUES_LENGTH = 2;
+    const BYTE_ORDER_LENGTH = 2;
+    const markerIdLength = APP1_EXIF_IDENTIFIER.length;
+    let offset = HEIC_ID_OFFSET + HEIC_ID.length + HEIC_MAJOR_BRAND_LENGTH;
+
+    while (offset + markerIdLength + NULL_VALUES_LENGTH + BYTE_ORDER_LENGTH <= dataView.byteLength) {
+        const byteOrder = dataView.getUint16(offset + markerIdLength + NULL_VALUES_LENGTH, false);
+
+        if ((getStringFromDataView(dataView, offset, markerIdLength) === APP1_EXIF_IDENTIFIER)
+            && (dataView.getUint8(offset + markerIdLength, false) === 0x00)
+            && ((byteOrder === ByteOrder.LITTLE_ENDIAN) || (byteOrder === ByteOrder.BIG_ENDIAN))) {
+            return {
+                hasAppMarkers: true,
+                tiffHeaderOffset: offset + markerIdLength + NULL_VALUES_LENGTH
+            };
+        }
+
+        offset++;
+    }
+
+    return {
+        hasAppMarkers: false
+    };
 }

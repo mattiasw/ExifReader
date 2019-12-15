@@ -2,8 +2,9 @@ ExifReader
 ==========
 
 ExifReader is a JavaScript library that parses image files and extracts the
-metadata. It can be used either in a browser or from Node. Supports JPEG and
-TIFF files with tags encoded using Exif, IPTC, and XMP.
+metadata. It can be used either in a browser or from Node. Supports JPEG, TIFF,
+and HEIC files with tags encoded using Exif, IPTC, and XMP (the latter two only
+for JPEG).
 
 ExifReader supports module formats AMD, CommonJS and globals and can therefore
 easily be used from Webpack, RequireJS, Browserify, Node etc. Since it is
@@ -27,8 +28,8 @@ know if you're missing anything from it and I will try to help you. Some notes:
     source code to see how it's done for your specific case and then pass in the
     resulting data into ExifReader. If many people need this I could add a more
     explicit example for how to do it together with ExifReader.
--   I've been maintaining this package for close to eight years now and I have
-    no plans to stop doing that anytime soon.
+-   I've been maintaining this package since 2012 and I have no plans to stop
+    doing that anytime soon.
 
 Installation
 ------------
@@ -212,8 +213,10 @@ case is covered.
 Changelog
 ---------
 
+-   **December 2019**:
+    -   Add support for HEIC images.
 -   **November 2019**:
-    -   Add support for ICC color profile tags.
+    -   Add support for ICC color profile tags in JPEG images.
     -   Add support for TIFF images.
     -   Add support for extended XMP.
     -   Add a lot of new tags.
@@ -231,7 +234,7 @@ Changelog
     -   Merge IPTC branch.
     -   Convert project to JavaScript (ECMAScript 2015) from CoffeeScript,
         transpiling to ES5 using Babel.
-    -   Remove need to instatiate the ExifReader object before use.
+    -   Remove need to instantiate the ExifReader object before use.
     -   Add UMD support (CommonJS, AMD and global).
     -   Publish as npm package.
 -   **September 17, 2014**:

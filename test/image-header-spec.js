@@ -8,6 +8,7 @@ import ImageHeader from '../src/image-header';
 
 const JPEG_IMAGE_START = '\xff\xd8\xff\xe0\x00\x07JFIF\x00';
 const TIFF_IMAGE_START = '\x49\x49\x2a\x00';
+const HEIC_PREFIX = '\x00\x00\x00\x18ftyp';
 const APP1_MARKER = '\xff\xe1';
 const APP_UNKNOWN_MARKER = '\xff\xea';
 const COMMENT_MARKER = '\xff\xfe';
@@ -52,6 +53,26 @@ describe('image-header', () => {
         expect(appMarkerValues).to.deep.equal({
             hasAppMarkers: true,
             tiffHeaderOffset: 0
+        });
+    });
+
+    describe('HEIC files', () => {
+        describe('major brand recognition', () => {
+            const majorBrands = ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1'];
+
+            for (const brand of majorBrands) {
+                it(`should find header offset in HEIC file with major brand ${brand}`, () => {
+                    const dataView = getDataView(`${HEIC_PREFIX}${brand}Exif\x00\x00\x4d\x4d`);
+                    const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
+                    expect(appMarkerValues.hasAppMarkers).to.be.true;
+                });
+            }
+        });
+
+        it('should find Exif offset', () => {
+            const dataView = getDataView(`${HEIC_PREFIX}heicabcd1234Exif\x00\x00\x4d\x4d`);
+            const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
+            expect(appMarkerValues.tiffHeaderOffset).to.equal(26);
         });
     });
 
