@@ -115,16 +115,23 @@ directions on how to get the file contents in different environments.
 Notes
 -----
 
-Some XMP tags have processed values as descriptions. That means that e.g. an
-`Orientation` value of `3` will have `Rotate 180` in the `description` property.
-If you would like more XMP tags to have a processed description, please file an
-issue or create a pull request.
-
-Some text tags use TextDecoder to decode their content. If your specific
-environment does not support it at all or a specific encoding, you will not be
-able to see the decoded value. One example is when [Node.js wasn't compiled
-with support for the specific
-encoding](https://nodejs.org/api/util.html#util_whatwg_supported_encodings).
+-   In Exif data, the full GPS information is split into two different tags for
+    each direction: the coordinate value (`GPSLatitude`, `GPSLongitude`) and the
+    reference value (`GPSLatitudeRef`, `GPSLongitudeRef`). Use the references to
+    know whether the coordinate is north/south and east/west. Often you will see
+    north and east represented as positive values, and south and west
+    represented as negative values (e.g. in Google Maps). This setup is also
+    used for the altitude using `GPSAltitude` and `GPSAltitudeRef` where the
+    latter specifies if it's above sea level (positive) or below sea level
+    (negative).
+-   Some XMP tags have processed values as descriptions. That means that e.g. an
+    `Orientation` value of `3` will have `Rotate 180` in the `description`
+    property. If you would like more XMP tags to have a processed description,
+    please file an issue or create a pull request.
+-   Some text tags use TextDecoder to decode their content. If your specific
+    environment does not support it at all or a specific encoding, you will not
+    be able to see the decoded value. One example is when [Node.js wasn't
+    compiled with support for the specific encoding](https://nodejs.org/api/util.html#util_whatwg_supported_encodings).
 
 Client/Browser Support
 ----------------------
