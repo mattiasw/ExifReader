@@ -82,7 +82,8 @@ function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
             tags[tag.name] = {
                 'id': tag.id,
                 'value': tag.value,
-                'description': tag.description
+                'description': tag.description,
+                'raw': tag.raw
             };
         }
         offset += FIELD_SIZE;
@@ -99,7 +100,7 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
     const tagCode = Types.getShortAt(dataView, offset, byteOrder);
     const tagType = Types.getShortAt(dataView, offset + TAG_TYPE_OFFSET, byteOrder);
     const tagCount = Types.getLongAt(dataView, offset + TAG_COUNT_OFFSET, byteOrder);
-    let tagValue;
+    let tagValue, rawValue;
 
     if (Types.typeSizes[tagType] === undefined) {
         return undefined;
@@ -119,6 +120,9 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
     if (tagType === Types.tagTypes['ASCII']) {
         tagValue = splitNullSeparatedAsciiString(tagValue);
         tagValue = decodeAsciiValue(tagValue);
+    } else if (tagType === Types.tagTypes['RATIONAL'] || tagType === Types.tagTypes['SRATIONAL']) {
+        tagValue = tagValue[0] / tagValue[1],
+        rawValue = tagValue;
     }
 
     if (TagNames[ifdType][tagCode] !== undefined) {
@@ -139,7 +143,8 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
             id: tagCode,
             name: tagName,
             value: tagValue,
-            description: tagDescription
+            description: tagDescription,
+            raw: rawValue
         };
     }
 
@@ -147,7 +152,8 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
         id: tagCode,
         name: `undefined-${tagCode}`,
         value: tagValue,
-        description: tagValue
+        description: tagValue,
+        raw: rawValue
     };
 }
 

@@ -130,7 +130,8 @@ describe('tags', () => {
             MyAsciiTag: {
                 id: 0x4711,
                 value: ['ABCDE'],
-                description: 'ABCDE'
+                description: 'ABCDE',
+                raw: undefined
             }
         });
     });
@@ -147,7 +148,8 @@ describe('tags', () => {
             MyAsciiTag: {
                 id: 0x4711,
                 value: ['<faulty value>'],
-                description: '<faulty value>'
+                description: '<faulty value>',
+                raw: undefined
             }
         });
     });
@@ -170,7 +172,8 @@ describe('tags', () => {
             MyExifTag: {
                 id: 0x4711,
                 value: 0x42,
-                description: 0x42
+                description: 0x42,
+                raw: undefined
             }
         });
     });

@@ -45,13 +45,13 @@ describe('types', () => {
     it('should be able to read a little endian rational', () => {
         const dataView = getDataView('\x45\x44\x43\x42\x49\x48\x47\x46');
         const byteOrder = ByteOrder.LITTLE_ENDIAN;
-        expect(Types.getRationalAt(dataView, 0, byteOrder)).to.equal(0x42434445 / 0x46474849);
+        expect(Types.getRationalAt(dataView, 0, byteOrder)).to.eql([0x42434445, 0x46474849]);
     });
 
     it('should be able to read a big endian rational', () => {
         const dataView = getDataView('\x42\x43\x44\x45\x46\x47\x48\x49');
         const byteOrder = ByteOrder.BIG_ENDIAN;
-        expect(Types.getRationalAt(dataView, 0, byteOrder)).to.equal(0x42434445 / 0x46474849);
+        expect(Types.getRationalAt(dataView, 0, byteOrder)).to.eql([0x42434445, 0x46474849]);
     });
 
     it('should be able to read an undefined', () => {
@@ -74,13 +74,13 @@ describe('types', () => {
     it('should be able to read a little endian srational', () => {
         const dataView = getDataView('\xbe\xff\xff\xff\x49\x48\x47\x46');
         const byteOrder = ByteOrder.LITTLE_ENDIAN;
-        expect(Types.getSrationalAt(dataView, 0, byteOrder)).to.equal(-0x42 / 0x46474849);
+        expect(Types.getSrationalAt(dataView, 0, byteOrder)).to.eql([-0x42, 0x46474849]);
     });
 
     it('should be able to read a big endian srational', () => {
         const dataView = getDataView('\xff\xff\xff\xbe\x46\x47\x48\x49');
         const byteOrder = ByteOrder.BIG_ENDIAN;
-        expect(Types.getSrationalAt(dataView, 0, byteOrder)).to.equal(-0x42 / 0x46474849);
+        expect(Types.getSrationalAt(dataView, 0, byteOrder)).to.eql([-0x42, 0x46474849]);
     });
 
     it('should be able to read a little endian IFD pointer', () => {
