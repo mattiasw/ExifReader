@@ -121,8 +121,13 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
         tagValue = splitNullSeparatedAsciiString(tagValue);
         tagValue = decodeAsciiValue(tagValue);
     } else if (tagType === Types.tagTypes['RATIONAL'] || tagType === Types.tagTypes['SRATIONAL']) {
-        rawValue = tagValue,
-        tagValue = tagValue[0] / tagValue[1];
+        if (tagCount > 1) {
+            rawValue = tagValue,
+            tagValue = tagValue.map(([n, d]) => n / d);
+        } else {
+            rawValue = tagValue,
+            tagValue = tagValue[0] / tagValue[1];
+        }
     }
 
     if (TagNames[ifdType][tagCode] !== undefined) {
