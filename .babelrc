@@ -4,7 +4,10 @@
             "presets": [["env", {
                 "targets.uglify": true,
                 "modules": "umd"
-            }]]
+            }]],
+            "plugins": [
+                "transform-for-of-as-array"
+            ]
         },
         "test": {
             "presets": ["env"],

@@ -25,6 +25,7 @@
     "babel-core": "^6.26.3",
     "babel-loader": "^7.1.5",
     "babel-plugin-rewire": "^1.1.0",
+    "babel-plugin-transform-for-of-as-array": "^1.1.1",
     "babel-preset-env": "^1.7.0",
     "babel-template": "^6.26.0",
     "babel-types": "^6.26.0",

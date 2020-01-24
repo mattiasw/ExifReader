@@ -21,3 +21,13 @@ export function getUnicodeStringFromDataView(dataView, offset, length) {
 function getStringValueFromArray(charArray) {
     return charArray.map((charCode) => String.fromCharCode(charCode));
 }
+
+export function objectAssign(target, ...sources) {
+    for (const source of sources) {
+        for (const property in source) {
+            target[property] = source[property];
+        }
+    }
+
+    return target;
+}

@@ -7,6 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+import {objectAssign} from './utils';
 import DataViewWrapper from './dataview';
 import ImageHeader from './image-header';
 import Tags from './tags';
@@ -48,7 +49,7 @@ export function loadView(dataView, options = {expanded: false}) {
         if (options.expanded) {
             tags.file = readTags;
         } else {
-            tags = Object.assign({}, tags, readTags);
+            tags = objectAssign({}, tags, readTags);
         }
     }
     if (hasExifData(tiffHeaderOffset)) {
@@ -57,7 +58,7 @@ export function loadView(dataView, options = {expanded: false}) {
         if (options.expanded) {
             tags.exif = readTags;
         } else {
-            tags = Object.assign({}, tags, readTags);
+            tags = objectAssign({}, tags, readTags);
         }
     }
     if (hasIptcData(iptcDataOffset)) {
@@ -66,7 +67,7 @@ export function loadView(dataView, options = {expanded: false}) {
         if (options.expanded) {
             tags.iptc = readTags;
         } else {
-            tags = Object.assign({}, tags, readTags);
+            tags = objectAssign({}, tags, readTags);
         }
     }
     if (hasXmpData(xmpChunks)) {
@@ -75,7 +76,7 @@ export function loadView(dataView, options = {expanded: false}) {
         if (options.expanded) {
             tags.xmp = readTags;
         } else {
-            tags = Object.assign({}, tags, readTags);
+            tags = objectAssign({}, tags, readTags);
         }
     }
     if (hasIccData(iccChunks)) {
@@ -84,7 +85,7 @@ export function loadView(dataView, options = {expanded: false}) {
         if (options.expanded) {
             tags.icc = readTags;
         } else {
-            tags = Object.assign({}, tags, readTags);
+            tags = objectAssign({}, tags, readTags);
         }
     }
     if (!foundMetaData) {
