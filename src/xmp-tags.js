@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView} from './utils';
+import {getStringFromDataView, objectAssign} from './utils';
 import XmpTagNames from './xmp-tag-names';
 import DOMParser from './dom-parser';
 
@@ -49,7 +49,7 @@ function readTags(tags, chunkDataView) {
         const doc = getDocument(chunkDataView);
         const rdf = getRDF(doc);
 
-        return Object.assign(tags, parseXMPObject(convertToObject(rdf, true)));
+        return objectAssign(tags, parseXMPObject(convertToObject(rdf, true)));
     } catch (error) {
         return tags;
     }
@@ -174,9 +174,9 @@ function parseXMPObject(xmpObject) {
         }
 
         nodes.forEach((node) => {
-            Object.assign(tags, parseNodeAttributesAsTags(node.attributes));
+            objectAssign(tags, parseNodeAttributesAsTags(node.attributes));
             if (typeof node.value === 'object') {
-                Object.assign(tags, parseNodeChildrenAsTags(node.value));
+                objectAssign(tags, parseNodeChildrenAsTags(node.value));
             }
         });
     }
@@ -314,7 +314,7 @@ function parseNodeAsSimpleRdfDescription(node, name) {
         node = node.value['rdf:Description'];
     }
 
-    Object.assign(attributes, parseNodeAttributes(node), parseNodeChildrenAsAttributes(node));
+    objectAssign(attributes, parseNodeAttributes(node), parseNodeChildrenAsAttributes(node));
 
     const value = parseRdfValue(node);
 
@@ -365,12 +365,12 @@ function parseNodeAsStructureRdfDescription(node, name) {
     };
 
     if (node.value['rdf:Description'] !== undefined) {
-        Object.assign(tag.value, parseNodeAttributesAsTags(node.value['rdf:Description'].attributes));
-        Object.assign(tag.attributes, parseNodeAttributes(node));
+        objectAssign(tag.value, parseNodeAttributesAsTags(node.value['rdf:Description'].attributes));
+        objectAssign(tag.attributes, parseNodeAttributes(node));
         node = node.value['rdf:Description'];
     }
 
-    Object.assign(tag.value, parseNodeChildrenAsTags(node.value));
+    objectAssign(tag.value, parseNodeChildrenAsTags(node.value));
 
     tag.description = getDescription(tag.value, name);
 

@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import {objectAssign} from './utils';
 import ByteOrder from './byte-order';
 import Types from './types';
 import TagNames from './tag-names';
@@ -46,7 +47,7 @@ function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
 
 function readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder) {
     if (tags[EXIF_IFD_POINTER_KEY] !== undefined) {
-        return Object.assign(tags, readIfd(dataView, 'exif', tiffHeaderOffset, tiffHeaderOffset + tags[EXIF_IFD_POINTER_KEY].value, byteOrder));
+        return objectAssign(tags, readIfd(dataView, 'exif', tiffHeaderOffset, tiffHeaderOffset + tags[EXIF_IFD_POINTER_KEY].value, byteOrder));
     }
 
     return tags;
@@ -54,7 +55,7 @@ function readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder) {
 
 function readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder) {
     if (tags[GPS_INFO_IFD_POINTER_KEY] !== undefined) {
-        return Object.assign(tags, readIfd(dataView, 'gps', tiffHeaderOffset, tiffHeaderOffset + tags[GPS_INFO_IFD_POINTER_KEY].value, byteOrder));
+        return objectAssign(tags, readIfd(dataView, 'gps', tiffHeaderOffset, tiffHeaderOffset + tags[GPS_INFO_IFD_POINTER_KEY].value, byteOrder));
     }
 
     return tags;
@@ -62,7 +63,7 @@ function readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder) {
 
 function readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder) {
     if (tags[INTEROPERABILITY_IFD_POINTER_KEY] !== undefined) {
-        return Object.assign(tags, readIfd(dataView, 'interoperability', tiffHeaderOffset, tiffHeaderOffset + tags[INTEROPERABILITY_IFD_POINTER_KEY].value, byteOrder));
+        return objectAssign(tags, readIfd(dataView, 'interoperability', tiffHeaderOffset, tiffHeaderOffset + tags[INTEROPERABILITY_IFD_POINTER_KEY].value, byteOrder));
     }
 
     return tags;
