@@ -17,7 +17,6 @@
     "exif-reader.d.ts"
   ],
   "dependencies": {
-    "@types/node": "^10.12.18",
     "xmldom": "^0.1.27"
   },
   "types": "./exif-reader.d.ts",
@@ -38,6 +37,9 @@
     "nyc": "^14.1.1",
     "webpack": "^4.41.2",
     "webpack-cli": "^3.3.6"
+  },
+  "peerDependencies": {
+    "@types/node": "*"
   },
   "scripts": {
     "build": "webpack",
