@@ -91,12 +91,32 @@ export default {
     0x0117: 'StripByteCounts',
     0x0118: 'MinSampleValue',
     0x0119: 'MaxSampleValue',
-    0x011a: 'XResolution',
-    0x011b: 'YResolution',
+    0x011a: {
+        'name': 'XResolution',
+        'description': (value) => {
+            return '' + Math.round(value[0] / value[1]);
+        }
+    },
+    0x011b: {
+        'name': 'YResolution',
+        'description': (value) => {
+            return '' + Math.round(value[0] / value[1]);
+        }
+    },
     0x011c: 'PlanarConfiguration',
     0x011d: 'PageName',
-    0x011e: 'XPosition',
-    0x011f: 'YPosition',
+    0x011e: {
+        'name': 'XPosition',
+        'description': (value) => {
+            return '' + Math.round(value[0] / value[1]);
+        }
+    },
+    0x011f: {
+        'name': 'YPosition',
+        'description': (value) => {
+            return '' + Math.round(value[0] / value[1]);
+        }
+    },
     0x0122: {
         name: 'GrayResponseUnit',
         description: (value) => ({
@@ -126,8 +146,18 @@ export default {
     0x013b: 'Artist',
     0x013c: 'HostComputer',
     0x013d: 'Predictor',
-    0x013e: 'WhitePoint',
-    0x013f: 'PrimaryChromaticities',
+    0x013e: {
+        'name': 'WhitePoint',
+        'description': (values) => {
+            return values.map((value) => `${value[0]}/${value[1]}`).join(', ');
+        }
+    },
+    0x013f: {
+        'name': 'PrimaryChromaticities',
+        'description': (values) => {
+            return values.map((value) => `${value[0]}/${value[1]}`).join(', ');
+        }
+    },
     0x0141: 'HalftoneHints',
     0x0142: 'TileWidth',
     0x0143: 'TileLength',
@@ -167,7 +197,12 @@ export default {
     },
     0x0201: 'JPEGInterchangeFormat',
     0x0202: 'JPEGInterchangeFormatLength',
-    0x0211: 'YCbCrCoefficients',
+    0x0211: {
+        'name': 'YCbCrCoefficients',
+        'description': (values) => {
+            return values.map((value) => '' + value[0] / value[1]).join('/');
+        }
+    },
     0x0212: 'YCbCrSubSampling',
     0x0213: {
         name: 'YCbCrPositioning',
@@ -181,7 +216,12 @@ export default {
             return 'undefined ' + value;
         }
     },
-    0x0214: 'ReferenceBlackWhite',
+    0x0214: {
+        'name': 'ReferenceBlackWhite',
+        'description': (values) => {
+            return values.map((value) => '' + value[0] / value[1]).join(', ');
+        }
+    },
     0x02bc: 'ApplicationNotes',
     0x4746: 'Rating',
     0x4749: 'RatingPercent',

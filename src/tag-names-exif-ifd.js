@@ -6,8 +6,19 @@ import {getStringValue, getEncodedString} from './tag-names-utils';
 import TagNamesCommon from './tag-names-common';
 
 export default {
-    0x829a: 'ExposureTime',
-    0x829d: 'FNumber',
+    0x829a: {
+        'name': 'ExposureTime',
+        'description': (value) => {
+            if (value[0] !== 0) {
+                return `1/${Math.round(value[1] / value[0])}`;
+            }
+            return `0/${value[1]}`;
+        }
+    },
+    0x829d: {
+        'name': 'FNumber',
+        'description': (value) => `f/${value[0] / value[1]}`
+    },
     0x8822: {
         'name': 'ExposureProgram',
         'description': (value) => {
@@ -29,6 +40,8 @@ export default {
                 return 'Portrait mode';
             } else if (value === 8) {
                 return 'Landscape mode';
+            } else if (value === 9) {
+                return 'Bulb';
             }
             return 'Unknown';
         }
@@ -89,12 +102,30 @@ export default {
         }
     },
     0x9102: 'CompressedBitsPerPixel',
-    0x9201: 'ShutterSpeedValue',
-    0x9202: 'ApertureValue',
+    0x9201: {
+        'name': 'ShutterSpeedValue',
+        'description': (value) => {
+            return `1/${Math.round(Math.pow(2, value[0] / value[1]))}`;
+        }
+    },
+    0x9202: {
+        'name': 'ApertureValue',
+        'description': (value) => {
+            return Math.pow(Math.sqrt(2), value[0] / value[1]).toFixed(2);
+        }
+    },
     0x9203: 'BrightnessValue',
     0x9204: 'ExposureBiasValue',
-    0x9205: 'MaxApertureValue',
-    0x9206: 'SubjectDistance',
+    0x9205: {
+        'name': 'MaxApertureValue',
+        'description': (value) => {
+            return Math.pow(Math.sqrt(2), value[0] / value[1]).toFixed(2);
+        }
+    },
+    0x9206: {
+        'name': 'SubjectDistance',
+        'description': (value) => (value[0] / value[1]) + ' m'
+    },
     0x9207: {
         'name': 'MeteringMode',
         'description': (value) => {
@@ -171,7 +202,10 @@ export default {
             return 'Unknown';
         }
     },
-    0x920a: 'FocalLength',
+    0x920a: {
+        'name': 'FocalLength',
+        'description': (value) => (value[0] / value[1]) + ' mm'
+    },
     0x9211: 'ImageNumber',
     0x9212: {
         name: 'SecurityClassification',
@@ -208,12 +242,30 @@ export default {
     0x9290: 'SubSecTime',
     0x9291: 'SubSecTimeOriginal',
     0x9292: 'SubSecTimeDigitized',
-    0x9400: 'AmbientTemperature',
-    0x9401: 'Humidity',
-    0x9402: 'Pressure',
-    0x9403: 'WaterDepth',
-    0x9404: 'Acceleration',
-    0x9405: 'CameraElevationAngle',
+    0x9400: {
+        'name': 'AmbientTemperature',
+        'description': (value) => (value[0] / value[1]) + ' °C'
+    },
+    0x9401: {
+        'name': 'Humidity',
+        'description': (value) => (value[0] / value[1]) + ' %'
+    },
+    0x9402: {
+        'name': 'Pressure',
+        'description': (value) => (value[0] / value[1]) + ' hPa'
+    },
+    0x9403: {
+        'name': 'WaterDepth',
+        'description': (value) => (value[0] / value[1]) + ' m'
+    },
+    0x9404: {
+        'name': 'Acceleration',
+        'description': (value) => (value[0] / value[1]) + ' mGal'
+    },
+    0x9405: {
+        'name': 'CameraElevationAngle',
+        'description': (value) => (value[0] / value[1]) + ' °'
+    },
     0xa000: {
         'name': 'FlashpixVersion',
         'description': (value) => value.map((charCode) => String.fromCharCode(charCode)).join('')
@@ -337,10 +389,10 @@ export default {
     0xa404: {
         'name': 'DigitalZoomRatio',
         'description': (value) => {
-            if (value === 0) {
+            if (value[0] === 0) {
                 return 'Digital zoom was not used';
             }
-            return value;
+            return '' + (value[0] / value[1]);
         }
     },
     0xa405: {
@@ -443,7 +495,16 @@ export default {
     0xa420: 'ImageUniqueID',
     0xa430: 'CameraOwnerName',
     0xa431: 'BodySerialNumber',
-    0xa432: 'LensSpecification',
+    0xa432: {
+        'name': 'LensSpecification',
+        'description': (value) => {
+            const focalLengths = `${value[0][0] / value[0][1]}-${value[1][0] / value[1][1]} mm`;
+            if (value[3][1] === 0) {
+                return `${focalLengths} f/?`;
+            }
+            return `${focalLengths} f/${1 / ((value[2][1] / value[2][1]) / (value[3][0] / value[3][1]))}`;
+        }
+    },
     0xa433: 'LensMake',
     0xa434: 'LensModel',
     0xa435: 'LensSerialNumber',

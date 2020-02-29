@@ -8,12 +8,15 @@ import TagNamesCommon from '../src/tag-names-common';
 import {getCharacterArray} from './test-utils';
 
 describe('tag-names-exif-ifd', () => {
-    it('should have tag ExposureTime', () => {
-        expect(TagNamesExifIfd[0x829a]).to.equal('ExposureTime');
+    it('should report correct name and description for ExposureTime', () => {
+        expect(TagNamesExifIfd[0x829a].name).to.equal('ExposureTime');
+        expect(TagNamesExifIfd[0x829a].description([4, 1000])).to.equal('1/250');
+        expect(TagNamesExifIfd[0x829a].description([0, 1000])).to.equal('0/1000');
     });
 
     it('should have tag FNumber', () => {
-        expect(TagNamesExifIfd[0x829d]).to.equal('FNumber');
+        expect(TagNamesExifIfd[0x829d].name).to.equal('FNumber');
+        expect(TagNamesExifIfd[0x829d].description([14, 5])).to.equal('f/2.8');
     });
 
     it('should report correct name and description for ExposureProgram', () => {
@@ -28,6 +31,7 @@ describe('tag-names-exif-ifd', () => {
         expect(exposureProgramTag.description(6)).to.equal('Action program');
         expect(exposureProgramTag.description(7)).to.equal('Portrait mode');
         expect(exposureProgramTag.description(8)).to.equal('Landscape mode');
+        expect(exposureProgramTag.description(9)).to.equal('Bulb');
         expect(exposureProgramTag.description(4711)).to.equal('Unknown');
     });
 
@@ -124,11 +128,15 @@ describe('tag-names-exif-ifd', () => {
     });
 
     it('should have tag ShutterSpeedValue', () => {
-        expect(TagNamesExifIfd[0x9201]).to.equal('ShutterSpeedValue');
+        expect(TagNamesExifIfd[0x9201].name).to.equal('ShutterSpeedValue');
+        expect(TagNamesExifIfd[0x9201].description([46435, 9999])).to.equal('1/25');
+        expect(TagNamesExifIfd[0x9201].description([2000, 0])).to.equal('1/Infinity');
     });
 
     it('should have tag ApertureValue', () => {
-        expect(TagNamesExifIfd[0x9202]).to.equal('ApertureValue');
+        expect(TagNamesExifIfd[0x9202].name).to.equal('ApertureValue');
+        expect(TagNamesExifIfd[0x9202].description([633985, 100000])).to.equal('9.00');
+        expect(TagNamesExifIfd[0x9202].description([633985, 0])).to.equal('Infinity');
     });
 
     it('should have tag BrightnessValue', () => {
@@ -140,11 +148,14 @@ describe('tag-names-exif-ifd', () => {
     });
 
     it('should have tag MaxApertureValue', () => {
-        expect(TagNamesExifIfd[0x9205]).to.equal('MaxApertureValue');
+        expect(TagNamesExifIfd[0x9205].name).to.equal('MaxApertureValue');
+        expect(TagNamesExifIfd[0x9205].description([633985, 100000])).to.equal('9.00');
+        expect(TagNamesExifIfd[0x9205].description([633985, 0])).to.equal('Infinity');
     });
 
     it('should have tag SubjectDistance', () => {
-        expect(TagNamesExifIfd[0x9206]).to.equal('SubjectDistance');
+        expect(TagNamesExifIfd[0x9206].name).to.equal('SubjectDistance');
+        expect(TagNamesExifIfd[0x9206].description([3, 2])).to.equal('1.5 m');
     });
 
     it('should report correct name and description for MeteringMode', () => {
@@ -192,7 +203,8 @@ describe('tag-names-exif-ifd', () => {
     });
 
     it('should have tag FocalLength', () => {
-        expect(TagNamesExifIfd[0x920a]).to.equal('FocalLength');
+        expect(TagNamesExifIfd[0x920a].name).to.equal('FocalLength');
+        expect(TagNamesExifIfd[0x920a].description([13, 2])).to.equal('6.5 mm');
     });
 
     it('should have tag ImageNumber', () => {
@@ -247,27 +259,33 @@ describe('tag-names-exif-ifd', () => {
     });
 
     it('should have tag AmbientTemperature', () => {
-        expect(TagNamesExifIfd[0x9400]).to.equal('AmbientTemperature');
+        expect(TagNamesExifIfd[0x9400].name).to.equal('AmbientTemperature');
+        expect(TagNamesExifIfd[0x9400].description([6, 5])).to.equal('1.2 °C');
     });
 
     it('should have tag Humidity', () => {
-        expect(TagNamesExifIfd[0x9401]).to.equal('Humidity');
+        expect(TagNamesExifIfd[0x9401].name).to.equal('Humidity');
+        expect(TagNamesExifIfd[0x9401].description([165, 2])).to.equal('82.5 %');
     });
 
     it('should have tag Pressure', () => {
-        expect(TagNamesExifIfd[0x9402]).to.equal('Pressure');
+        expect(TagNamesExifIfd[0x9402].name).to.equal('Pressure');
+        expect(TagNamesExifIfd[0x9402].description([2003, 2])).to.equal('1001.5 hPa');
     });
 
     it('should have tag WaterDepth', () => {
-        expect(TagNamesExifIfd[0x9403]).to.equal('WaterDepth');
+        expect(TagNamesExifIfd[0x9403].name).to.equal('WaterDepth');
+        expect(TagNamesExifIfd[0x9403].description([-13, 2])).to.equal('-6.5 m');
     });
 
     it('should have tag Acceleration', () => {
-        expect(TagNamesExifIfd[0x9404]).to.equal('Acceleration');
+        expect(TagNamesExifIfd[0x9404].name).to.equal('Acceleration');
+        expect(TagNamesExifIfd[0x9404].description([61, 2])).to.equal('30.5 mGal');
     });
 
     it('should have tag CameraElevationAngle', () => {
-        expect(TagNamesExifIfd[0x9405]).to.equal('CameraElevationAngle');
+        expect(TagNamesExifIfd[0x9405].name).to.equal('CameraElevationAngle');
+        expect(TagNamesExifIfd[0x9405].description([89, 2])).to.equal('44.5 °');
     });
 
     it('should report correct name and description for FlashpixVersion', () => {
@@ -384,8 +402,8 @@ describe('tag-names-exif-ifd', () => {
 
     it('should report correct name and description for DigitalZoomRatio', () => {
         expect(TagNamesExifIfd[0xa404].name).to.equal('DigitalZoomRatio');
-        expect(TagNamesExifIfd[0xa404].description(0)).to.equal('Digital zoom was not used');
-        expect(TagNamesExifIfd[0xa404].description(4.711)).to.equal(4.711);
+        expect(TagNamesExifIfd[0xa404].description([0, 2])).to.equal('Digital zoom was not used');
+        expect(TagNamesExifIfd[0xa404].description([9, 2])).to.equal('4.5');
     });
 
     it('should report correct name and description for FocalLengthIn35mmFilm', () => {
@@ -463,7 +481,10 @@ describe('tag-names-exif-ifd', () => {
     });
 
     it('should have tag LensSpecification', () => {
-        expect(TagNamesExifIfd[0xa432]).to.equal('LensSpecification');
+        expect(TagNamesExifIfd[0xa432].name).to.equal('LensSpecification');
+        expect(TagNamesExifIfd[0xa432].description([[700, 10], [2000, 10], [40, 10], [40, 10]])).to.equal('70-200 mm f/4');
+        expect(TagNamesExifIfd[0xa432].description([[17, 1], [85, 1], [0, 1], [0, 1]])).to.equal('17-85 mm f/0');
+        expect(TagNamesExifIfd[0xa432].description([[24, 1], [105, 1], [0, 0], [0, 0]])).to.equal('24-105 mm f/?');
     });
 
     it('should have tag LensMake', () => {

@@ -131,11 +131,15 @@ describe('tag-names-0th-ifd', () => {
     });
 
     it('should have tag XResolution', () => {
-        expect(TagNames0thIfd[0x011a]).to.equal('XResolution');
+        expect(TagNames0thIfd[0x011a].name).to.equal('XResolution');
+        expect(TagNames0thIfd[0x011a].description([300000, 1000])).to.equal('300');
+        expect(TagNames0thIfd[0x011a].description([300, 0])).to.equal('Infinity');
     });
 
     it('should have tag YResolution', () => {
-        expect(TagNames0thIfd[0x011b]).to.equal('YResolution');
+        expect(TagNames0thIfd[0x011b].name).to.equal('YResolution');
+        expect(TagNames0thIfd[0x011b].description([300000, 1000])).to.equal('300');
+        expect(TagNames0thIfd[0x011b].description([300, 0])).to.equal('Infinity');
     });
 
     it('should have tag PlanarConfiguration', () => {
@@ -147,11 +151,15 @@ describe('tag-names-0th-ifd', () => {
     });
 
     it('should have tag XPosition', () => {
-        expect(TagNames0thIfd[0x011e]).to.equal('XPosition');
+        expect(TagNames0thIfd[0x011e].name).to.equal('XPosition');
+        expect(TagNames0thIfd[0x011e].description([3000, 10])).to.equal('300');
+        expect(TagNames0thIfd[0x011e].description([300, 0])).to.equal('Infinity');
     });
 
     it('should have tag YPosition', () => {
-        expect(TagNames0thIfd[0x011f]).to.equal('YPosition');
+        expect(TagNames0thIfd[0x011f].name).to.equal('YPosition');
+        expect(TagNames0thIfd[0x011f].description([3000, 10])).to.equal('300');
+        expect(TagNames0thIfd[0x011f].description([300, 0])).to.equal('Infinity');
     });
 
     it('should report correct name and description for GrayResponseUnit', () => {
@@ -200,11 +208,14 @@ describe('tag-names-0th-ifd', () => {
     });
 
     it('should have tag WhitePoint', () => {
-        expect(TagNames0thIfd[0x013e]).to.equal('WhitePoint');
+        expect(TagNames0thIfd[0x013e].name).to.equal('WhitePoint');
+        expect(TagNames0thIfd[0x013e].description([[30, 100], [40, 200]])).to.equal('30/100, 40/200');
     });
 
     it('should have tag PrimaryChromaticities', () => {
-        expect(TagNames0thIfd[0x013f]).to.equal('PrimaryChromaticities');
+        expect(TagNames0thIfd[0x013f].name).to.equal('PrimaryChromaticities');
+        expect(TagNames0thIfd[0x013f].description([[30, 100], [40, 200], [50, 300], [60, 400], [70, 500], [80, 600]]))
+            .to.equal('30/100, 40/200, 50/300, 60/400, 70/500, 80/600');
     });
 
     it('should have tag HalftoneHints', () => {
@@ -257,7 +268,8 @@ describe('tag-names-0th-ifd', () => {
     });
 
     it('should have tag YCbCrCoefficients', () => {
-        expect(TagNames0thIfd[0x0211]).to.equal('YCbCrCoefficients');
+        expect(TagNames0thIfd[0x0211].name).to.equal('YCbCrCoefficients');
+        expect(TagNames0thIfd[0x0211].description([[299, 1000], [587, 1000], [114, 1000]])).to.equal('0.299/0.587/0.114');
     });
 
     it('should have tag YCbCrSubSampling', () => {
@@ -272,7 +284,9 @@ describe('tag-names-0th-ifd', () => {
     });
 
     it('should have tag ReferenceBlackWhite', () => {
-        expect(TagNames0thIfd[0x0214]).to.equal('ReferenceBlackWhite');
+        expect(TagNames0thIfd[0x0214].name).to.equal('ReferenceBlackWhite');
+        expect(TagNames0thIfd[0x0214].description([[0, 10], [2550, 10], [0, 10], [1280, 10], [0, 10], [1280, 10]]))
+            .to.equal('0, 255, 0, 128, 0, 128');
     });
 
     it('should have tag ApplicationNotes', () => {

@@ -107,6 +107,18 @@ describe('tags', () => {
         expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN).description).to.equal('AúC');
     });
 
+    it('should be able to read RATIONAL tag', () => {
+        Tags.__set__('TagNames', {'0th': {0x4711: 'MyRationalTag'}});
+        const dataView = getDataView('\x47\x11' + '\x00\x05' + '\x00\x00\x00\x01' + '\x00\x00\x00\x0c' + '\x00\x00\x00\x09\x00\x00\x00\x02');
+        expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN).description).to.equal('4.5');
+    });
+
+    it('should be able to read SRATIONAL tag', () => {
+        Tags.__set__('TagNames', {'0th': {0x4711: 'MySrationalTag'}});
+        const dataView = getDataView('\x47\x11' + '\x00\x0a' + '\x00\x00\x00\x01' + '\x00\x00\x00\x0c' + '\xff\xff\xff\xf7\x00\x00\x00\x02');
+        expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN).description).to.equal('-4.5');
+    });
+
     it('should be able to handle tag with faulty type', () => {
         const dataView = getDataView('\x47\x11\x00\x08\x00\x00\x00\x00');
         expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN)).to.be.undefined;
