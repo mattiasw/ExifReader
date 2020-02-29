@@ -132,6 +132,9 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
             } catch (error) {
                 tagDescription = getDescriptionFromTagValue(tagValue);
             }
+        } else if ((tagType === Types.tagTypes['RATIONAL']) || (tagType === Types.tagTypes['SRATIONAL'])) {
+            tagName = TagNames[ifdType][tagCode];
+            tagDescription = '' + (tagValue[0] / tagValue[1]);
         } else {
             tagName = TagNames[ifdType][tagCode];
             tagDescription = getDescriptionFromTagValue(tagValue);

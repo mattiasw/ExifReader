@@ -65,7 +65,7 @@ function getLongAt(dataView, offset, byteOrder) {
 }
 
 function getRationalAt(dataView, offset, byteOrder) {
-    return getLongAt(dataView, offset, byteOrder) / getLongAt(dataView, offset + 4, byteOrder);
+    return [getLongAt(dataView, offset, byteOrder), getLongAt(dataView, offset + 4, byteOrder)];
 }
 
 function getUndefinedAt(dataView, offset) {
@@ -77,7 +77,7 @@ function getSlongAt(dataView, offset, byteOrder) {
 }
 
 function getSrationalAt(dataView, offset, byteOrder) {
-    return getSlongAt(dataView, offset, byteOrder) / getSlongAt(dataView, offset + 4, byteOrder);
+    return [getSlongAt(dataView, offset, byteOrder), getSlongAt(dataView, offset + 4, byteOrder)];
 }
 
 function getIfdPointerAt(dataView, offset, byteOrder) {

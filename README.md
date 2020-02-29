@@ -116,6 +116,9 @@ directions on how to get the file contents in different environments.
 Notes
 -----
 
+-   The `description` property of tags can change in a minor update. If you
+    want to process a tag's value somehow, use the `value` property to be sure
+    nothing breaks between updates.
 -   In Exif data, the full GPS information is split into two different tags for
     each direction: the coordinate value (`GPSLatitude`, `GPSLongitude`) and the
     reference value (`GPSLatitudeRef`, `GPSLongitudeRef`). Use the references to
@@ -213,6 +216,14 @@ case is covered.
 Changelog
 ---------
 
+-   **March 2020**:
+    -   Major update to version 3.0. However, the actual change is quite small,
+        albeit a breaking one if you use that functionality (`.value` on
+        rational tags). Rational values are now kept in their original
+        numerator/denominator pair instead of being calculated into a float.
+        In addition to `.value` on rational tags some descriptions have also
+        changed into better ones, e.g. ExposureTime now looks like `1/200`
+        instead of `0.005`.
 -   **December 2019**:
     -   Add support for HEIC images.
 -   **November 2019**:

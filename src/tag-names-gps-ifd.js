@@ -29,7 +29,7 @@ export default {
     0x0002: {
         'name': 'GPSLatitude',
         'description': (value) => {
-            return value[0] + value[1] / 60 + value[2] / 3600;
+            return (value[0][0] / value[0][1]) + (value[1][0] / value[1][1]) / 60 + (value[2][0] / value[2][1]) / 3600;
         }
     },
     0x0003: {
@@ -47,7 +47,7 @@ export default {
     0x0004: {
         'name': 'GPSLongitude',
         'description': (value) => {
-            return value[0] + value[1] / 60 + value[2] / 3600;
+            return (value[0][0] / value[0][1]) + (value[1][0] / value[1][1]) / 60 + (value[2][0] / value[2][1]) / 3600;
         }
     },
     0x0005: {
@@ -64,14 +64,15 @@ export default {
     0x0006: {
         'name': 'GPSAltitude',
         'description': (value) => {
-            return value + ' m';
+            return (value[0] / value[1]) + ' m';
         }
     },
     0x0007: {
         'name': 'GPSTimeStamp',
-        'description': (value) => {
-            return value.map((num) => {
-                if (`${num}`.length === 1) {
+        'description': (values) => {
+            return values.map(([numerator, denominator]) => {
+                const num = numerator / denominator;
+                if (/^\d(\.|$)/.test(`${num}`)) {
                     return `0${num}`;
                 }
                 return num;
@@ -161,7 +162,7 @@ export default {
     0x0014: {
         'name': 'GPSDestLatitude',
         'description': (value) => {
-            return value[0] + value[1] / 60 + value[2] / 3600;
+            return (value[0][0] / value[0][1]) + (value[1][0] / value[1][1]) / 60 + (value[2][0] / value[2][1]) / 3600;
         }
     },
     0x0015: {
@@ -179,7 +180,7 @@ export default {
     0x0016: {
         'name': 'GPSDestLongitude',
         'description': (value) => {
-            return value[0] + value[1] / 60 + value[2] / 3600;
+            return (value[0][0] / value[0][1]) + (value[1][0] / value[1][1]) / 60 + (value[2][0] / value[2][1]) / 3600;
         }
     },
     0x0017: {

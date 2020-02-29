@@ -27,7 +27,7 @@ describe('tag-names-gps-ifd', () => {
     it('should report correct name and description for GPSLatitude', () => {
         // 37.231969, 115.811119 (37° 13' 55.0878", 115° 48' 40.0284")
         expect(TagNamesGpsIfd[0x0002].name).to.equal('GPSLatitude');
-        expect(TagNamesGpsIfd[0x0002].description([37, 13, 55.0878])).to.be.closeTo(37.231969, 0.000001);
+        expect(TagNamesGpsIfd[0x0002].description([[74, 2], [13, 1], [550878, 10000]])).to.be.closeTo(37.231969, 0.000001);
     });
 
     it('should report correct name and description for GPSLongitudeRef', () => {
@@ -40,7 +40,7 @@ describe('tag-names-gps-ifd', () => {
     it('should report correct name and description for GPSLongitude', () => {
         // 37.231969, 115.811119 (37° 13' 55.0878", 115° 48' 40.0284")
         expect(TagNamesGpsIfd[0x0004].name).to.equal('GPSLongitude');
-        expect(TagNamesGpsIfd[0x0004].description([115, 48, 40.0284])).to.be.closeTo(115.811119, 0.000001);
+        expect(TagNamesGpsIfd[0x0004].description([[230, 2], [48, 1], [400284, 10000]])).to.be.closeTo(115.811119, 0.000001);
     });
 
     it('should report correct name and description for GPSAltitudeRef', () => {
@@ -52,14 +52,16 @@ describe('tag-names-gps-ifd', () => {
 
     it('should report correct name and description for GPSAltitude', () => {
         expect(TagNamesGpsIfd[0x0006].name).to.equal('GPSAltitude');
-        expect(TagNamesGpsIfd[0x0006].description(42)).to.equal('42 m');
+        expect(TagNamesGpsIfd[0x0006].description([84, 2])).to.equal('42 m');
     });
 
     it('should report correct name and description for GPSTimeStamp', () => {
         expect(TagNamesGpsIfd[0x0007].name).to.equal('GPSTimeStamp');
-        expect(TagNamesGpsIfd[0x0007].description([6, 17, 32.48])).to.equal('06:17:32.48');
-        expect(TagNamesGpsIfd[0x0007].description([6, 7, 32.48])).to.equal('06:07:32.48');
-        expect(TagNamesGpsIfd[0x0007].description([6, 0, 32.48])).to.equal('06:00:32.48');
+        expect(TagNamesGpsIfd[0x0007].description([[12, 2], [17, 1], [3248, 100]])).to.equal('06:17:32.48');
+        expect(TagNamesGpsIfd[0x0007].description([[24, 2], [7, 1], [3248, 100]])).to.equal('12:07:32.48');
+        expect(TagNamesGpsIfd[0x0007].description([[12, 2], [0, 1], [3248, 100]])).to.equal('06:00:32.48');
+        expect(TagNamesGpsIfd[0x0007].description([[12, 2], [0, 1], [248, 100]])).to.equal('06:00:02.48');
+        expect(TagNamesGpsIfd[0x0007].description([[12, 2], [0, 1], [200, 100]])).to.equal('06:00:02');
     });
 
     it('should have tag GPSSatellites', () => {
@@ -132,7 +134,7 @@ describe('tag-names-gps-ifd', () => {
     it('should report correct name and description for GPSDestLatitude', () => {
         // 37.231969, 115.811119 (37° 13' 55.0878", 115° 48' 40.0284")
         expect(TagNamesGpsIfd[0x0014].name).to.equal('GPSDestLatitude');
-        expect(TagNamesGpsIfd[0x0014].description([37, 13, 55.0878])).to.be.closeTo(37.231969, 0.000001);
+        expect(TagNamesGpsIfd[0x0014].description([[74, 2], [13, 1], [550878, 10000]])).to.be.closeTo(37.231969, 0.000001);
     });
 
     it('should report correct name and description for GPSDestLongitudeRef', () => {
@@ -145,7 +147,7 @@ describe('tag-names-gps-ifd', () => {
     it('should report correct name and description for GPSDestLongitude', () => {
         // 37.231969, 115.811119 (37° 13' 55.0878", 115° 48' 40.0284")
         expect(TagNamesGpsIfd[0x0016].name).to.equal('GPSDestLongitude');
-        expect(TagNamesGpsIfd[0x0016].description([115, 48, 40.0284])).to.be.closeTo(115.811119, 0.000001);
+        expect(TagNamesGpsIfd[0x0016].description([[230, 2], [48, 1], [400284, 10000]])).to.be.closeTo(115.811119, 0.000001);
     });
 
     it('should report correct name and description for GPSDestBearingRef', () => {
