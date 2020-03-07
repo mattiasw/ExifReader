@@ -17,11 +17,11 @@
     "exif-reader.d.ts"
   ],
   "dependencies": {
-    "@types/node": "^10.12.18",
     "xmldom": "^0.1.27"
   },
   "types": "./exif-reader.d.ts",
   "devDependencies": {
+    "@types/node": "^13.9.0",
     "babel-core": "^6.26.3",
     "babel-loader": "^7.1.5",
     "babel-plugin-rewire": "^1.1.0",
