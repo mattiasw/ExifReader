@@ -3,8 +3,8 @@ ExifReader
 
 ExifReader is a JavaScript library that parses image files and extracts the
 metadata. It can be used either in a browser or from Node. Supports JPEG, TIFF,
-and HEIC files with tags encoded using Exif, IPTC, and XMP (the latter two only
-for JPEG).
+PNG, and HEIC files with tags encoded using Exif, IPTC, and XMP (depending on
+file type).
 
 ExifReader supports module formats AMD, CommonJS and globals and can therefore
 easily be used from Webpack, RequireJS, Browserify, Node etc. Since it is
@@ -116,9 +116,6 @@ directions on how to get the file contents in different environments.
 Notes
 -----
 
--   The `description` property of tags can change in a minor update. If you
-    want to process a tag's value somehow, use the `value` property to be sure
-    nothing breaks between updates.
 -   In Exif data, the full GPS information is split into two different tags for
     each direction: the coordinate value (`GPSLatitude`, `GPSLongitude`) and the
     reference value (`GPSLatitudeRef`, `GPSLongitudeRef`). Use the references to
@@ -128,6 +125,10 @@ Notes
     used for the altitude using `GPSAltitude` and `GPSAltitudeRef` where the
     latter specifies if it's above sea level (positive) or below sea level
     (negative).
+-   For PNG files, only XMP tags are currently supported. If you are missing
+    tags in a PNG file, please open a new issue and supply an example image.
+    (Tags in PNGs can be compressed though which will probably be hard to
+    support in browsers without the size of the library getting too big.)
 -   Some XMP tags have processed values as descriptions. That means that e.g. an
     `Orientation` value of `3` will have `Rotate 180` in the `description`
     property. If you would like more XMP tags to have a processed description,
@@ -136,6 +137,9 @@ Notes
     environment does not support it at all or a specific encoding, you will not
     be able to see the decoded value. One example is when [Node.js wasn't
     compiled with support for the specific encoding](https://nodejs.org/api/util.html#util_whatwg_supported_encodings).
+-   The `description` property of tags can change in a minor update. If you
+    want to process a tag's value somehow, use the `value` property to be sure
+    nothing breaks between updates.
 
 Client/Browser Support
 ----------------------
@@ -217,6 +221,7 @@ Changelog
 ---------
 
 -   **March 2020**:
+    -   Add support for PNG images.
     -   Major update to version 3.0. However, the actual change is quite small,
         albeit a breaking one if you use that functionality (`.value` on
         rational tags). Rational values are now kept in their original

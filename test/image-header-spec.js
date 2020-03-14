@@ -8,6 +8,7 @@ import ImageHeader from '../src/image-header';
 
 const JPEG_IMAGE_START = '\xff\xd8\xff\xe0\x00\x07JFIF\x00';
 const TIFF_IMAGE_START = '\x49\x49\x2a\x00';
+const PNG_IMAGE_START = '\x89\x50\x4e\x47\x0d\x0a\x1a\x0a';
 const HEIC_PREFIX = '\x00\x00\x00\x18ftyp';
 const APP1_MARKER = '\xff\xe1';
 const APP_UNKNOWN_MARKER = '\xff\xea';
@@ -53,6 +54,58 @@ describe('image-header', () => {
         expect(appMarkerValues).to.deep.equal({
             hasAppMarkers: true,
             tiffHeaderOffset: 0
+        });
+    });
+
+    describe('PNG files', () => {
+        it('should find image header offset', () => {
+            const chunkLength = '\x00\x00\x00\x02';
+            const chunkType = 'IHDR';
+            const chunkData = '\x47\x11';
+            const crc = '\x00\x00\x00\x00';
+            const chunkLengthOther = '\x00\x00\x00\x04';
+            const chunkTypeOther = 'abcd';
+            const chunkDataOther = '\x48\x12\x49\x13';
+
+            const dataView = getDataView(
+                PNG_IMAGE_START
+                + chunkLengthOther + chunkTypeOther + chunkDataOther + crc
+                + chunkLength + chunkType + chunkData + crc
+            );
+
+            const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
+
+            expect(appMarkerValues).to.deep.equal({
+                hasAppMarkers: true,
+                pngHeaderOffset: PNG_IMAGE_START.length + 16 + 8,
+            });
+        });
+
+        it('should find XMP offset in international textual data', () => {
+            const xmpPrefix = 'XML:com.adobe.xmp';
+            const chunkLength = `\x00\x00\x00${String.fromCharCode(xmpPrefix.length + 2)}`;
+            const chunkType = 'iTXt';
+            const chunkData = `${xmpPrefix}\x47\x11`;
+            const crc = '\x00\x00\x00\x00';
+            const chunkLengthOther = '\x00\x00\x00\x04';
+            const chunkTypeOther = 'abcd';
+            const chunkDataOther = '\x48\x12\x49\x13';
+
+            const dataView = getDataView(
+                PNG_IMAGE_START
+                + chunkLengthOther + chunkTypeOther + chunkDataOther + crc
+                + chunkLength + chunkType + chunkData + crc
+            );
+
+            const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
+
+            expect(appMarkerValues).to.deep.equal({
+                hasAppMarkers: true,
+                xmpChunks: [{
+                    dataOffset: PNG_IMAGE_START.length + 16 + 8 + xmpPrefix.length,
+                    length: 2,
+                }],
+            });
         });
     });
 

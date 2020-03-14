@@ -21,6 +21,7 @@ describe('exif-reader', () => {
         ExifReaderRewireAPI.__ResetDependency__('Tags');
         ExifReaderRewireAPI.__ResetDependency__('IptcTags');
         ExifReaderRewireAPI.__ResetDependency__('XmpTags');
+        ExifReaderRewireAPI.__ResetDependency__('PngFileTags');
     });
 
     it('should throw an error if the passed buffer is non-compliant', () => {
@@ -84,6 +85,12 @@ describe('exif-reader', () => {
 
         rewireImageHeader({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]});
         rewireIccTagsRead(myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
+    it('should be able to find PNG file data segment', () => {
+        const myTags = {MyTag: 42};
+        rewireForLoadView({pngHeaderOffset: OFFSET_TEST_VALUE}, 'PngFileTags', myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 

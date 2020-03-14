@@ -10,10 +10,23 @@ const MIN_JPEG_DATA_BUFFER_LENGTH = 2;
 const TIFF_ID = 0x2a;
 const TIFF_ID_OFFSET = 2;
 const TIFF_FILE_HEADER_OFFSET = 0;
+
+const PNG_ID = '\x89\x50\x4e\x47\x0d\x0a\x1a\x0a';
+const PNG_CHUNK_LENGTH_SIZE = 4;
+const PNG_CHUNK_TYPE_SIZE = 4;
+const PNG_CRC_SIZE = 4;
+const PNG_CHUNK_LENGTH_OFFSET = 0;
+const PNG_CHUNK_TYPE_OFFSET = PNG_CHUNK_LENGTH_SIZE;
+const PNG_CHUNK_DATA_OFFSET = PNG_CHUNK_LENGTH_SIZE + PNG_CHUNK_TYPE_SIZE;
+const PNG_CHUNK_TYPE_IMAGE_HEADER = 'IHDR';
+const PNG_CHUNK_TYPE_INTERNATIONAL_TEXT = 'iTXt';
+const PNG_XMP_PREFIX = 'XML:com.adobe.xmp';
+
 const HEIC_ID = 'ftyp';
 const HEIC_ID_OFFSET = 4;
 const HEIC_MAJOR_BRANDS = ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1'];
 const HEIC_MAJOR_BRAND_LENGTH = 4;
+
 const JPEG_ID = 0xffd8;
 const JPEG_ID_SIZE = 2;
 const APP_ID_OFFSET = 4;
@@ -58,6 +71,10 @@ function parseAppMarkers(dataView) {
 
     if (isJpegFile(dataView)) {
         return findJpegOffsets(dataView);
+    }
+
+    if (isPngFile(dataView)) {
+        return findPngOffsets(dataView);
     }
 
     if (isHeicFile(dataView)) {
@@ -224,6 +241,46 @@ function isAppMarker(dataView, appMarkerPosition) {
         || (appMarker === DQT_MARKER)
         || (appMarker === DRI_MARKER)
         || (appMarker === SOS_MARKER);
+}
+
+function isPngFile(dataView) {
+    return getStringFromDataView(dataView, 0, PNG_ID.length) === PNG_ID;
+}
+
+function findPngOffsets(dataView) {
+    const offsets = {
+        hasAppMarkers: false
+    };
+    let offset = PNG_ID.length;
+
+    while (offset + PNG_CHUNK_LENGTH_SIZE + PNG_CHUNK_TYPE_SIZE <= dataView.byteLength) {
+        if (isPngImageHeaderChunk(dataView, offset)) {
+            offsets.hasAppMarkers = true;
+            offsets.pngHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
+        } else if (isPngXmpChunk(dataView, offset)) {
+            offsets.hasAppMarkers = true;
+            offsets.xmpChunks = [{
+                dataOffset: offset + PNG_CHUNK_DATA_OFFSET + PNG_XMP_PREFIX.length,
+                length: dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET) - PNG_XMP_PREFIX.length
+            }];
+        }
+
+        offset += dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET)
+            + PNG_CHUNK_LENGTH_SIZE
+            + PNG_CHUNK_TYPE_SIZE
+            + PNG_CRC_SIZE;
+    }
+
+    return offsets;
+}
+
+function isPngImageHeaderChunk(dataView, offset) {
+    return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === PNG_CHUNK_TYPE_IMAGE_HEADER;
+}
+
+function isPngXmpChunk(dataView, offset) {
+    return (getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === PNG_CHUNK_TYPE_INTERNATIONAL_TEXT)
+        && (getStringFromDataView(dataView, offset + PNG_CHUNK_DATA_OFFSET, PNG_XMP_PREFIX.length) === PNG_XMP_PREFIX);
 }
 
 function isHeicFile(dataView) {
