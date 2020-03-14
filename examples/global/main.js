@@ -46,6 +46,7 @@
         var row;
 
         tableBody = document.getElementById('exif-table-body');
+        tableBody.innerHTML = '';
         for (name in tags) {
             row = document.createElement('tr');
             row.innerHTML = '<td>' + name + '</td><td>' + tags[name].description + '</td>';

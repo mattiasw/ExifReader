@@ -41,6 +41,7 @@ function handleFile(event) {
 
 function listTags(tags) {
     const tableBody = document.getElementById('exif-table-body');
+    tableBody.innerHTML = '';
     for (const name in tags) {
         const row = document.createElement('tr');
         row.innerHTML = `
