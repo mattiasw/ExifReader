@@ -31,6 +31,14 @@
                 // tags.
                 delete tags['MakerNote'];
 
+                // If you want to extract the thumbnail you can use it like
+                // this:
+                if (tags['Thumbnail'] && tags['Thumbnail'].image) {
+                    var image = document.getElementById('thumbnail');
+                    image.classList.remove('hidden');
+                    image.src = 'data:image/jpg;base64,' + tags['Thumbnail'].base64;
+                }
+
                 listTags(tags);
             } catch (error) {
                 alert(error);
@@ -48,9 +56,11 @@
         tableBody = document.getElementById('exif-table-body');
         tableBody.innerHTML = '';
         for (name in tags) {
-            row = document.createElement('tr');
-            row.innerHTML = '<td>' + name + '</td><td>' + tags[name].description + '</td>';
-            tableBody.appendChild(row);
+            if (tags[name].description !== undefined) {
+                row = document.createElement('tr');
+                row.innerHTML = '<td>' + name + '</td><td>' + tags[name].description + '</td>';
+                tableBody.appendChild(row);
+            }
         }
     }
 })(window, document);

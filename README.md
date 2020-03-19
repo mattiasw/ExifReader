@@ -2,9 +2,9 @@ ExifReader
 ==========
 
 ExifReader is a JavaScript library that parses image files and extracts the
-metadata. It can be used either in a browser or from Node. Supports JPEG, TIFF,
-PNG, and HEIC files with tags encoded using Exif, IPTC, and XMP (depending on
-file type).
+metadata. It can also extract an embedded thumbnail. It can be used either in a
+browser or from Node. Supports JPEG, TIFF, PNG, and HEIC files with tags encoded
+using Exif, IPTC, and XMP (depending on file type).
 
 ExifReader supports module formats AMD, CommonJS and globals and can therefore
 easily be used from Webpack, RequireJS, Browserify, Node etc. Since it is
@@ -112,6 +112,32 @@ const tags = ExifReader.load(fileBuffer, {expanded: true});
 `fileBuffer` must be an `ArrayBuffer` or a `SharedArrayBuffer` for
 browsers, or a `Buffer` for Node. See [examples folder](examples/) for more
 directions on how to get the file contents in different environments.
+
+### Using the thumbnail
+
+The thumbnail and its details will be accessible through `tags['Thumbnail']`.
+There is information about e.g. width and height, and the thumbnail image data
+is stored in `tags['Thumbnail'].image`.
+
+How you use it is going to depend on your environment. For a web browser you can
+either use the raw byte data in `tags['Thumbnail'].image` and use it the way you
+want, or you can use the helper property `tags['Thumbnail'].base64` that is a
+base64 representation of the image. It can be used for a data URI like this:
+
+```javascript
+const tags = ExifReader.load(fileBuffer);
+imageElement.src = 'data:image/jpg;base64,' + tags['Thumbnail'].base64;
+```
+
+If you're using node, you can store it as a new file like this:
+
+```javascript
+const fs = require('fs');
+const tags = ExifReader.load(fileBuffer);
+fs.writeFileSync('/path/to/new/thumbnail.jpg', Buffer.from(tags['Thumbnail'].image));
+```
+
+See [examples/](examples/) directory for more details.
 
 Notes
 -----

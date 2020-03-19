@@ -16,6 +16,7 @@ import IptcTags from './iptc-tags';
 import XmpTags from './xmp-tags';
 import IccTags from './icc-tags';
 import PngFileTags from './png-file-tags';
+import Thumbnail from './thumbnail';
 import exifErrors from './errors';
 
 export default {
@@ -55,11 +56,14 @@ export function loadView(dataView, options = {expanded: false}) {
     }
     if (hasExifData(tiffHeaderOffset)) {
         foundMetaData = true;
-        const readTags = Tags.read(dataView, tiffHeaderOffset);
+        const {Thumbnail: thumbnailTags, ...readTags} = Tags.read(dataView, tiffHeaderOffset);
         if (options.expanded) {
             tags.exif = readTags;
         } else {
             tags = objectAssign({}, tags, readTags);
+        }
+        if (thumbnailTags) {
+            tags.Thumbnail = thumbnailTags;
         }
     }
     if (hasIptcData(iptcDataOffset)) {
@@ -98,6 +102,13 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = objectAssign({}, tags, readTags);
         }
     }
+
+    const thumbnail = Thumbnail.get(dataView, tags.Thumbnail, tiffHeaderOffset);
+    if (thumbnail) {
+        tags.Thumbnail = thumbnail;
+        foundMetaData = true;
+    }
+
     if (!foundMetaData) {
         throw new exifErrors.MetadataMissingError();
     }

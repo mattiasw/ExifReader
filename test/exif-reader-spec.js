@@ -22,6 +22,7 @@ describe('exif-reader', () => {
         ExifReaderRewireAPI.__ResetDependency__('IptcTags');
         ExifReaderRewireAPI.__ResetDependency__('XmpTags');
         ExifReaderRewireAPI.__ResetDependency__('PngFileTags');
+        ExifReaderRewireAPI.__ResetDependency__('Thumbnail');
     });
 
     it('should throw an error if the passed buffer is non-compliant', () => {
@@ -100,7 +101,8 @@ describe('exif-reader', () => {
             exif: {MyExifTag: 43},
             iptc: {MyIptcTag: 44},
             xmp: {MyXmpTag: 45},
-            icc: {MyIccTag: 42}
+            icc: {MyIccTag: 42},
+            Thumbnail: {type: 'image/jpeg'}
         };
         rewireImageHeader({
             fileDataOffset: OFFSET_TEST_VALUE,
@@ -113,12 +115,22 @@ describe('exif-reader', () => {
             iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]
         });
         rewireTagsRead('FileTags', myTags.file);
-        rewireTagsRead('Tags', myTags.exif);
+        rewireTagsRead('Tags', {...myTags.exif, Thumbnail: myTags.Thumbnail});
         rewireTagsRead('IptcTags', myTags.iptc);
         rewireXmpTagsRead(myTags.xmp);
         rewireIccTagsRead(myTags.icc);
 
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
+    });
+
+    it('should retrieve a thumbnail', () => {
+        const myThumbnail = {type: 'image/jpeg'};
+        const myTags = {MyExifTag: 43, Thumbnail: myThumbnail};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+        rewireThumbnail(myThumbnail);
+
+        expect(ExifReader.loadView({})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
+        expect(ExifReader.loadView({}, {expanded: true})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
     });
 });
 
@@ -164,6 +176,15 @@ function rewireIccTagsRead(tagsValue) {
                 return tagsValue;
             }
             return {};
+        }
+    });
+}
+
+function rewireThumbnail(thumbnailTags) {
+    ExifReaderRewireAPI.__Rewire__('Thumbnail', {
+        get(dataView, tags) {
+            expect(tags).to.deep.equal(thumbnailTags);
+            return {image: '<image data>', ...thumbnailTags};
         }
     });
 }
