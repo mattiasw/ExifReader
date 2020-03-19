@@ -74,10 +74,14 @@ function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
     const FIELD_SIZE = 12;
 
     const tags = {};
-    const numberOfFields = Types.getShortAt(dataView, offset, byteOrder);
+    const numberOfFields = getNumberOfFields(dataView, offset, byteOrder);
 
     offset += FIELD_COUNT_SIZE;
     for (let fieldIndex = 0; fieldIndex < numberOfFields; fieldIndex++) {
+        if (offset + FIELD_SIZE > dataView.byteLength) {
+            break;
+        }
+
         const tag = readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder);
         if (tag !== undefined) {
             tags[tag.name] = {
@@ -86,10 +90,25 @@ function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
                 'description': tag.description
             };
         }
+
         offset += FIELD_SIZE;
     }
 
+    if (offset < dataView.byteLength - Types.getTypeSize('LONG')) {
+        const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
+        if (nextIfdOffset !== 0) {
+            tags['Thumbnail'] = readIfd(dataView, ifdType, tiffHeaderOffset, tiffHeaderOffset + nextIfdOffset, byteOrder);
+        }
+    }
+
     return tags;
+}
+
+function getNumberOfFields(dataView, offset, byteOrder) {
+    if (offset + Types.getTypeSize('SHORT') <= dataView.byteLength) {
+        return Types.getShortAt(dataView, offset, byteOrder);
+    }
+    return 0;
 }
 
 function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {

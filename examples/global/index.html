@@ -9,6 +9,12 @@
         <title>ExifReader Global Variable Example</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
+            .hidden {
+                display: none;
+            }
+            .thumbnail {
+                margin-top: 12px;
+            }
             .tags {
                 margin-top: 12px;
             }
@@ -24,6 +30,7 @@
                 <input type="file" id="file" name="file" />
             </label>
         </form>
+        <img id="thumbnail" src="" alt="Thumbnail of image." class="thumbnail hidden">
         <table class="tags">
             <thead>
                 <tr>

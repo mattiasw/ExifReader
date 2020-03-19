@@ -31,3 +31,23 @@ export function objectAssign(target, ...sources) {
 
     return target;
 }
+
+export function deferInit(object, key, initializer) {
+    let initialized = false;
+    Object.defineProperty(object, key, {
+        get() {
+            if (!initialized) {
+                initialized = true;
+                Object.defineProperty(object, key, {
+                    configurable: true,
+                    enumerable: true,
+                    value: initializer.apply(object),
+                    writable: true
+                });
+            }
+            return object[key];
+        },
+        configurable: true,
+        enumerable: true
+    });
+}

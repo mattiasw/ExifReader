@@ -6,6 +6,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const ExifReader = require('../../dist/exif-reader');
 const exifErrors = ExifReader.errors;
@@ -29,6 +30,11 @@ fs.readFile(filePath, function (error, data) {
         // The MakerNote tag can be really large. Remove it to lower memory
         // usage if you're parsing a lot of files and saving the tags.
         delete tags['MakerNote'];
+
+        // If you want to extract the thumbnail you can save it like this:
+        if (tags['Thumbnail'] && tags['Thumbnail'].image) {
+            fs.writeFileSync(path.join(os.tmpdir(), 'thumbnail.jpg'), Buffer.from(tags['Thumbnail'].image));
+        }
 
         listTags(tags);
     } catch (error) {

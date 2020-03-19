@@ -26,5 +26,8 @@ module.exports = {
                 loader: 'babel-loader'
             }
         ]
+    },
+    node: {
+        Buffer: false
     }
 };

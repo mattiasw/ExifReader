@@ -57,8 +57,8 @@ describe('tags', () => {
     });
 
     it('should be able to read a one-field IFD', () => {
-        // Field count + field.
-        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00');
+        // Field count + field + offset to next IFD.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
         Tags.__set__('TagNames', {'0th': {0x4711: 'MyExifTag'}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyExifTag'].id).to.equal(0x4711);
@@ -66,8 +66,8 @@ describe('tags', () => {
     });
 
     it('should be able to read a multi-field IFD', () => {
-        // Field count + 1st field + 2nd field.
-        const dataView = getDataView('\x00\x02' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x47\x12\x00\x01\x00\x00\x00\x01\x43\x00\x00\x00');
+        // Field count + 1st field + 2nd field + offset to next IFD.
+        const dataView = getDataView('\x00\x02' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x47\x12\x00\x01\x00\x00\x00\x01\x43\x00\x00\x00' + '\x00\x00\x00\x00');
         Tags.__set__('TagNames', {
             '0th': {
                 0x4711: 'MyExifTag0',
@@ -80,8 +80,8 @@ describe('tags', () => {
     });
 
     it('should be able to read an undefined IFD', () => {
-        // Field count + field.
-        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00');
+        // Field count + field + offset to next IFD.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
         Tags.__set__('TagNames', {'0th': {}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['undefined-18193'].id).to.equal(0x4711);
@@ -137,7 +137,10 @@ describe('tags', () => {
         const dataView = getDataView(
             '\x00\x00\x00\x00' + '\x00\x00' // Padding to test offset.
             + '\x00\x01' // Number of fields.
-            + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x10\x41\x42\x43\x44\x45\x00');
+            + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x14'
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+            + '\x41\x42\x43\x44\x45\x00' // Value.
+        );
         expect(readIfd(dataView, '0th', 4, 6, ByteOrder.BIG_ENDIAN)).to.deep.equal({
             MyAsciiTag: {
                 id: 0x4711,
@@ -154,7 +157,10 @@ describe('tags', () => {
             + '\x00\x01' // Number of fields.
             + '\x47\x11\x00\x02'
             + '\x00\x00\x00\x07' // Too large number of tag items.
-            + '\x00\x00\x00\x10\x41\x42\x43\x44\x45\x00');
+            + '\x00\x00\x00\x14' // Offset.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+            + '\x41\x42\x43\x44\x45\x00'
+        );
         expect(readIfd(dataView, '0th', 4, 6, ByteOrder.BIG_ENDIAN)).to.deep.equal({
             MyAsciiTag: {
                 id: 0x4711,
@@ -162,6 +168,19 @@ describe('tags', () => {
                 description: '<faulty value>'
             }
         });
+    });
+
+    it('should be able to handle when IFD content is missing', () => {
+        const dataView = getDataView('\x00\x00\x00\x00');
+        expect(readIfd(dataView, '0th', 0, 4, ByteOrder.BIG_ENDIAN)).to.deep.equal({});
+    });
+
+    it('should be able to handle when specified number of fields in IFD is wrong', () => {
+        const dataView = getDataView(
+            '\x00\x00\x00\x00'
+            + '\x00\x01' // Number of fields.
+        );
+        expect(readIfd(dataView, '0th', 0, 4, ByteOrder.BIG_ENDIAN)).to.deep.equal({});
     });
 
     it('should be able to handle description function that throws, e.g. because it receives a faulty tag value', () => {
@@ -193,6 +212,26 @@ describe('tags', () => {
         Tags.__set__('TagNames', {'0th': {0x4711: 'MyExifTag'}});
         const tags = read0thIfd(dataView, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyExifTag'].description).to.equal(0x42);
+    });
+
+    it('should be able to read 1st IFD (thumbnail) following 0th IFD', () => {
+        const dataView = getDataView(
+            // Byte order + IFD offset + field count + field + offset to next IFD.
+            '\x00\x00\x4d\x4d' + '\x00\x00\x00\x08' + '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x1c'
+            // Padding.
+            + '\x01\x02'
+            // Field count + field + offset to next IFD.
+            + '\x00\x01' + '\x48\x12\x00\x01\x00\x00\x00\x01\x43\x00\x00\x00' + '\x00\x00\x00\x00'
+        );
+        Tags.__set__('TagNames', {'0th': {
+            0x4711: 'MyExifTag1',
+            0x4812: 'MyExifTag2'
+        }});
+
+        const tags = read0thIfd(dataView, 0, ByteOrder.BIG_ENDIAN);
+
+        expect(tags['MyExifTag1'].description).to.equal(0x42);
+        expect(tags['Thumbnail']['MyExifTag2'].description).to.equal(0x43);
     });
 
     it('should be able to read Exif IFD', () => {
