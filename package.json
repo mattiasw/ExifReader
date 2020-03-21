@@ -19,14 +19,12 @@
   "dependencies": {},
   "types": "./exif-reader.d.ts",
   "devDependencies": {
+    "@babel/core": "^7.9.0",
+    "@babel/preset-env": "^7.9.0",
+    "@babel/register": "^7.9.0",
     "@types/node": "^13.9.0",
-    "babel-core": "^6.26.3",
-    "babel-loader": "^7.1.5",
-    "babel-plugin-rewire": "^1.1.0",
-    "babel-plugin-transform-for-of-as-array": "^1.1.1",
-    "babel-preset-env": "^1.7.0",
-    "babel-template": "^6.26.0",
-    "babel-types": "^6.26.0",
+    "babel-loader": "^8.1.0",
+    "babel-plugin-rewire": "^1.2.0",
     "chai": "^4.1.2",
     "cross-env": "^5.2.0",
     "eslint": "^6.8.0",
@@ -42,7 +40,7 @@
     "coverage": "nyc npm test",
     "lint": "eslint .",
     "precommit": "npm-run-all lint test",
-    "test": "cross-env BABEL_ENV=test mocha --require babel-core/register"
+    "test": "cross-env BABEL_ENV=test mocha --require @babel/register"
   },
   "nyc": {
     "check-coverage": true,
