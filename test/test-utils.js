@@ -7,6 +7,7 @@ import DataViewWrapper from '../src/dataview';
 export {
     getArrayBuffer,
     getDataView,
+    getByteStringFromNumber,
     getCharacterArray,
     getConsoleWarnSpy
 };
@@ -17,6 +18,16 @@ function getArrayBuffer(data) {
 
 function getDataView(data) {
     return new DataViewWrapper(getArrayBuffer(data));
+}
+
+function getByteStringFromNumber(number, numBytes) {
+    const bytes = [];
+    for (let i = 0; i < numBytes; i++) {
+        const rest = number % 256;
+        bytes.push(String.fromCharCode(rest));
+        number = (number - rest) / 256;
+    }
+    return bytes.reverse().join('');
 }
 
 function getCharacterArray(string) {
