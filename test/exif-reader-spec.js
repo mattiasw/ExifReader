@@ -132,6 +132,44 @@ describe('exif-reader', () => {
         expect(ExifReader.loadView({})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
         expect(ExifReader.loadView({}, {expanded: true})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
     });
+
+    describe('custom builds', () => {
+        it('should handle when file tags have been excluded', () => {
+            rewireForCustomBuild({fileDataOffset: OFFSET_TEST_VALUE}, 'FileTags');
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when Exif tags have been excluded', () => {
+            rewireForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags');
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when IPTC tags have been excluded', () => {
+            rewireForCustomBuild({iptcDataOffset: OFFSET_TEST_VALUE}, 'IptcTags');
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when XMP tags have been excluded', () => {
+            rewireForCustomBuild({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}, 'XmpTags');
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when ICC tags have been excluded', () => {
+            rewireForCustomBuild({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}, 'IccTags');
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when PNG file tags have been excluded', () => {
+            rewireForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, 'PngFileTags');
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when thumbnail has been excluded', () => {
+            rewireImageHeader({});
+            ExifReaderRewireAPI.__Rewire__('Thumbnail', false);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+    });
 });
 
 function rewireForLoadView(appMarkersValue, tagsObject, tagsValue) {
@@ -187,4 +225,9 @@ function rewireThumbnail(thumbnailTags) {
             return {image: '<image data>', ...thumbnailTags};
         }
     });
+}
+
+function rewireForCustomBuild(appMarkersValue, tagsObject) {
+    rewireImageHeader(appMarkersValue);
+    ExifReaderRewireAPI.__Rewire__(tagsObject, false);
 }
