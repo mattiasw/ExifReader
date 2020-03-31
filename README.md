@@ -11,7 +11,7 @@ easily be used from Webpack, RequireJS, Browserify, Node etc. Since it is
 written using ES2015+, you can also import the ES module directly from your own
 ES2015+ project.
 
-The included bundle has all functionality built in but you can easiliy make a
+The included bundle has all functionality built in but you can easily make a
 custom build that suits your project's needs. See below for instructions.
 
 **Notes for exif-js users**
