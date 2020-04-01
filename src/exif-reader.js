@@ -1,7 +1,7 @@
 /**
  * ExifReader
  * http://github.com/mattiasw/exifreader
- * Copyright (C) 2011-2020  Mattias Wallander <mattias@wallander.eu>
+ * Copyright (C) 2011-2018  Mattias Wallander <mattias@wallander.eu>
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -45,7 +45,7 @@ export function loadView(dataView, options = {expanded: false}) {
 
     const {fileDataOffset, tiffHeaderOffset, iptcDataOffset, xmpChunks, iccChunks, pngHeaderOffset} = ImageHeader.parseAppMarkers(dataView);
 
-    if (FileTags && hasFileData(fileDataOffset)) {
+    if (hasFileData(fileDataOffset)) {
         foundMetaData = true;
         const readTags = FileTags.read(dataView, fileDataOffset);
         if (options.expanded) {
@@ -54,7 +54,7 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = objectAssign({}, tags, readTags);
         }
     }
-    if (Tags && hasExifData(tiffHeaderOffset)) {
+    if (hasExifData(tiffHeaderOffset)) {
         foundMetaData = true;
         const {Thumbnail: thumbnailTags, ...readTags} = Tags.read(dataView, tiffHeaderOffset);
         if (options.expanded) {
@@ -66,7 +66,7 @@ export function loadView(dataView, options = {expanded: false}) {
             tags.Thumbnail = thumbnailTags;
         }
     }
-    if (IptcTags && hasIptcData(iptcDataOffset)) {
+    if (hasIptcData(iptcDataOffset)) {
         foundMetaData = true;
         const readTags = IptcTags.read(dataView, iptcDataOffset);
         if (options.expanded) {
@@ -75,7 +75,7 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = objectAssign({}, tags, readTags);
         }
     }
-    if (XmpTags && hasXmpData(xmpChunks)) {
+    if (hasXmpData(xmpChunks)) {
         foundMetaData = true;
         const readTags = XmpTags.read(dataView, xmpChunks);
         if (options.expanded) {
@@ -84,7 +84,7 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = objectAssign({}, tags, readTags);
         }
     }
-    if (IccTags && hasIccData(iccChunks)) {
+    if (hasIccData(iccChunks)) {
         foundMetaData = true;
         const readTags = IccTags.read(dataView, iccChunks);
         if (options.expanded) {
@@ -93,7 +93,7 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = objectAssign({}, tags, readTags);
         }
     }
-    if (PngFileTags && hasPngFileData(pngHeaderOffset)) {
+    if (hasPngFileData(pngHeaderOffset)) {
         foundMetaData = true;
         const readTags = PngFileTags.read(dataView, pngHeaderOffset);
         if (options.expanded) {
@@ -103,7 +103,7 @@ export function loadView(dataView, options = {expanded: false}) {
         }
     }
 
-    const thumbnail = Thumbnail && Thumbnail.get(dataView, tags.Thumbnail, tiffHeaderOffset);
+    const thumbnail = Thumbnail.get(dataView, tags.Thumbnail, tiffHeaderOffset);
     if (thumbnail) {
         tags.Thumbnail = thumbnail;
         foundMetaData = true;

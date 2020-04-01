@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {getStringFromDataView} from './utils';
-import Constants from './constants';
 
 export default {
     isHeicFile,
@@ -23,26 +22,22 @@ function isHeicFile(dataView) {
 }
 
 function findHeicOffsets(dataView) {
-    if (Constants.USE_EXIF) {
-        const {offset: metaOffset, length: metaLength} = findMetaAtom(dataView);
-        if (metaOffset === undefined) {
-            return {hasAppMarkers: false};
-        }
-
-        const metaEndOffset = Math.min(metaOffset + metaLength, dataView.byteLength);
-        const {exifItemOffset, ilocOffset} = findExifItemAndIloc(dataView, metaOffset, metaEndOffset);
-        if ((exifItemOffset === undefined) || (ilocOffset === undefined)) {
-            return {hasAppMarkers: false};
-        }
-
-        const exifOffset = findExifOffset(dataView, exifItemOffset, ilocOffset, metaEndOffset);
-        return {
-            hasAppMarkers: exifOffset !== undefined,
-            tiffHeaderOffset: exifOffset
-        };
+    const {offset: metaOffset, length: metaLength} = findMetaAtom(dataView);
+    if (metaOffset === undefined) {
+        return {hasAppMarkers: false};
     }
 
-    return {hasAppMarkers: false};
+    const metaEndOffset = Math.min(metaOffset + metaLength, dataView.byteLength);
+    const {exifItemOffset, ilocOffset} = findExifItemAndIloc(dataView, metaOffset, metaEndOffset);
+    if ((exifItemOffset === undefined) || (ilocOffset === undefined)) {
+        return {hasAppMarkers: false};
+    }
+
+    const exifOffset = findExifOffset(dataView, exifItemOffset, ilocOffset, metaEndOffset);
+    return {
+        hasAppMarkers: exifOffset !== undefined,
+        tiffHeaderOffset: exifOffset
+    };
 }
 
 function findMetaAtom(dataView) {
