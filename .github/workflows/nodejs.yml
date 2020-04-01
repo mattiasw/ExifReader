@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: [10.x, 12.x]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - run: npm ci
+    - run: npm run lint
+    - run: npm test
+      env:
+        CI: true
+    - run: npm run build
+  package-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js 12.x
+      uses: actions/setup-node@v1
+      with:
+        node-version: 12.x
+    - run: npm ci
+    - name: Test npm package with minimal requirements
+      run: |
+        npm pack
+        PACKAGE="exifreader-$(node -p "require('./package.json').version").tgz"
+        mkdir my-project
+        cd my-project
+        PATH=$(echo "$PATH" | sed -e 's/:\/usr\/local\/bin://'):/usr/local/bin/npm:/usr/local/bin/node
+        npm init -y
+        npm install ../$PACKAGE
+  package-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Use Node.js 12.x
+      uses: actions/setup-node@v1
+      with:
+        node-version: 12.x
+    - run: npm ci
+    - name: Test npm package with minimal requirements
+      run: |
+        npm pack
+        $PackageVersion = ((node -p "require('./package.json').version") | Out-String).Trim()
+        mkdir my-project
+        cd my-project
+        $regexRemovePath = [regex]::Escape('C:\npm\prefix')
+        $arrPath = $env:Path -split ';' | Where-Object {$_ -notMatch "^$regexRemovePath\\?"}
+        $env:Path = $arrPath -join ';'
+        npm init -y
+        npm install ..\exifreader-$($PackageVersion).tgz
