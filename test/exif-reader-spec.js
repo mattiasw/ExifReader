@@ -16,6 +16,7 @@ describe('exif-reader', () => {
     afterEach(() => {
         ExifReaderRewireAPI.__ResetDependency__('DataViewWrapper');
         ExifReaderRewireAPI.__ResetDependency__('loadView');
+        ExifReaderRewireAPI.__ResetDependency__('Constants');
         ExifReaderRewireAPI.__ResetDependency__('ImageHeader');
         ExifReaderRewireAPI.__ResetDependency__('FileTags');
         ExifReaderRewireAPI.__ResetDependency__('Tags');
@@ -132,6 +133,86 @@ describe('exif-reader', () => {
         expect(ExifReader.loadView({})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
         expect(ExifReader.loadView({}, {expanded: true})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
     });
+
+    describe('custom builds', () => {
+        let Constants;
+
+        beforeEach(() => {
+            Constants = {
+                USE_FILE: true,
+                USE_EXIF: true,
+                USE_IPTC: true,
+                USE_XMP: true,
+                USE_ICC: true,
+                USE_THUMBNAIL: true,
+                USE_TIFF: true,
+                USE_JPEG: true,
+                USE_PNG: true,
+                USE_HEIC: true
+            };
+        });
+
+        it('should handle when file tags have been excluded', () => {
+            Constants.USE_FILE = false;
+            rewireForCustomBuild({fileDataOffset: OFFSET_TEST_VALUE}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when JPEG files have been excluded', () => {
+            Constants.USE_JPEG = false;
+            ExifReaderRewireAPI.__Rewire__('Thumbnail', {get: () => true});
+            rewireForCustomBuild({
+                fileDataOffset: OFFSET_TEST_VALUE,
+                iptcDataOffset: OFFSET_TEST_VALUE,
+                iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]
+            }, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when Exif tags have been excluded', () => {
+            Constants.USE_EXIF = false;
+            rewireForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle thumbnail when Exif tags have been excluded', () => {
+            Constants.USE_EXIF = false;
+            ExifReaderRewireAPI.__Rewire__('Thumbnail', {get: () => true});
+            rewireForCustomBuild({}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when IPTC tags have been excluded', () => {
+            Constants.USE_IPTC = false;
+            rewireForCustomBuild({iptcDataOffset: OFFSET_TEST_VALUE}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when XMP tags have been excluded', () => {
+            Constants.USE_XMP = false;
+            rewireForCustomBuild({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when ICC tags have been excluded', () => {
+            Constants.USE_ICC = false;
+            rewireForCustomBuild({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when PNG file tags have been excluded', () => {
+            Constants.USE_PNG = false;
+            rewireForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when thumbnail has been excluded', () => {
+            Constants.USE_THUMBNAIL = false;
+            ExifReaderRewireAPI.__Rewire__('Thumbnail', {get: () => true});
+            rewireForCustomBuild({}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+    });
 });
 
 function rewireForLoadView(appMarkersValue, tagsObject, tagsValue) {
@@ -187,4 +268,9 @@ function rewireThumbnail(thumbnailTags) {
             return {image: '<image data>', ...thumbnailTags};
         }
     });
+}
+
+function rewireForCustomBuild(appMarkersValue, Constants) {
+    rewireImageHeader(appMarkersValue);
+    ExifReaderRewireAPI.__Rewire__('Constants', Constants);
 }

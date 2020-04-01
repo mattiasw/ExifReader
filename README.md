@@ -11,6 +11,10 @@ easily be used from Webpack, RequireJS, Browserify, Node etc. Since it is
 written using ES2015+, you can also import the ES module directly from your own
 ES2015+ project.
 
+The included bundle has all functionality built in, but you can easily make a
+custom build that suits your project's needs. See below for instructions. NOTE:
+This functionality is in beta. Please file an issue if there are any problems.
+
 **Notes for exif-js users**
 
 If you come here from the popular but now dead exif-js package, please let me
@@ -139,6 +143,69 @@ fs.writeFileSync('/path/to/new/thumbnail.jpg', Buffer.from(tags['Thumbnail'].ima
 
 See [examples/](examples/) directory for more details.
 
+### Configure a custom build
+
+**NOTE:** This functionality is in beta but should work fine. Please file an
+issue if you're having problems or ideas on how to make it better.
+
+This is for npm users that use the built file. To specify what functionality you
+want you can either use include pattern (start with an empty set and include) or
+exclude pattern (start with full functionality and exclude). If an include
+pattern is set, excludes will not be used.
+
+The configuration is added to your project's `package.json` file.
+
+**Example 1:** Only include JPEG files and Exif tags (this makes the bundle
+almost half the size of the full one (non-gzipped)):
+
+```javascript
+"exifreader": {
+    "include": {
+        "jpeg": true,
+        "exif": true
+    }
+}
+```
+
+**Example 2:** Exclude XMP tags:
+
+```javascript
+"exifreader": {
+    "exclude": {
+        "xmp": true
+    }
+}
+```
+
+Then, if you didn't install ExifReader yet, just run `npm install exifreader`.
+Otherwise you have to re-build the library:
+
+```bash
+npm rebuild exifreader
+```
+
+After that the new bundle is here: `node_modules/exifreader/dist/exif-reader.js`
+
+If you're using the include pattern config, remember to include everything you
+want to use. If you want `xmp` and don't specify any file types, you will get
+"Invalid image format", and if you specify `jpeg` but don't mention any tag
+types no tags will be found.
+
+Possible modules to include or exclude:
+
+| Module      | Description                                                    |
+| ----------- | -------------------------------------------------------------- |
+| `jpeg`      | JPEG images.                                                   |
+| `tiff`      | TIFF images.                                                   |
+| `png`       | PNG images.                                                    |
+| `heic`      | HEIC/HEIF images.                                              |
+| `file`      | JPEG image width, height etc.                                  |
+| `exif`      | Regular Exif tags. If excluded, will also exclude `thumbnail`. |
+| `iptc`      | IPTC tags.                                                     |
+| `xmp`       | XMP tags.                                                      |
+| `icc`       | ICC color profile tags.                                        |
+| `thumbnail` | JPEG thumbnail. Needs `exif`.                                  |
+
 Notes
 -----
 
@@ -217,6 +284,8 @@ npm run coverage
 Known Limitations
 -----------------
 
+-   For PNG files, only uncompressed XMP tags are currently supported.
+-   For HEIC files, only Exif tags are currently supported.
 -   The descriptions for UserComment, GPSProcessingMethod and GPSAreaInformation
     are missing for other encodings than ASCII.
 
@@ -246,8 +315,11 @@ case is covered.
 Changelog
 ---------
 
+-   **April 2020**:
+    -   Add functionality to create a custom build to reduce bundle size.
 -   **March 2020**:
     -   Add support for PNG images.
+    -   Add support for thumbnails in JPEGs.
     -   Major update to version 3.0. However, the actual change is quite small,
         albeit a breaking one if you use that functionality (`.value` on
         rational tags). Rational values are now kept in their original
