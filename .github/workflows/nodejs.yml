@@ -29,10 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Use Node.js 12.x
+    - name: Use Node.js 10.x
       uses: actions/setup-node@v1
       with:
-        node-version: 12.x
+        node-version: 10.x
     - run: npm ci
     - name: Test npm package with minimal requirements
       run: |
@@ -43,14 +43,16 @@ jobs:
         PATH=$(echo "$PATH" | sed -e 's/:\/usr\/local\/bin://'):/usr/local/bin/npm:/usr/local/bin/node
         npm init -y
         npm install ../$PACKAGE
+        node -p "const {writeFileSync} = require('fs'); const packageJson = require('./package.json'); packageJson.exifreader = {include: {jpeg: true, exif: true}}; writeFileSync('package.json', JSON.stringify(packageJson));"
+        npm rebuild exifreader
   package-windows:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Use Node.js 12.x
+    - name: Use Node.js 10.x
       uses: actions/setup-node@v1
       with:
-        node-version: 12.x
+        node-version: 10.x
     - run: npm ci
     - name: Test npm package with minimal requirements
       run: |
@@ -63,3 +65,5 @@ jobs:
         $env:Path = $arrPath -join ';'
         npm init -y
         npm install ..\exifreader-$($PackageVersion).tgz
+        node -p "const {writeFileSync} = require('fs'); const packageJson = require('./package.json'); packageJson.exifreader = {include: {jpeg: true, exif: true}}; writeFileSync('package.json', JSON.stringify(packageJson));"
+        npm rebuild exifreader
