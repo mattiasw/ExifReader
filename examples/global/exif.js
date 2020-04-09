@@ -2,15 +2,17 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-requirejs(['../../dist/exif-reader'], function (ExifReader) {
+(function (window, document) {
     'use strict';
 
     if (!supportsFileReader()) {
-        document.write('<strong>Sorry, your web browser does not support the FileReader API.</strong>');
+        alert('Sorry, your web browser does not support the FileReader API.');
         return;
     }
 
-    document.getElementById('file').addEventListener('change', handleFile, false);
+    window.addEventListener('load', function () {
+        document.getElementById('file').addEventListener('change', handleFile, false);
+    }, false);
 
     function supportsFileReader() {
         return window.FileReader !== undefined;
@@ -19,6 +21,8 @@ requirejs(['../../dist/exif-reader'], function (ExifReader) {
     function handleFile(event) {
         var files = event.target.files;
         var reader = new FileReader();
+
+        window.exifReaderClear();
 
         reader.onload = function (readerEvent) {
             try {
@@ -37,28 +41,12 @@ requirejs(['../../dist/exif-reader'], function (ExifReader) {
                     image.src = 'data:image/jpg;base64,' + tags['Thumbnail'].base64;
                 }
 
-                listTags(tags);
+                window.exifReaderListTags(tags);
             } catch (error) {
-                alert(error);
+                window.exifReaderError(error.toString());
             }
         };
 
         reader.readAsArrayBuffer(files[0]);
     }
-
-    function listTags(tags) {
-        var tableBody;
-        var name;
-        var row;
-
-        tableBody = document.getElementById('exif-table-body');
-        tableBody.innerHTML = '';
-        for (name in tags) {
-            if (tags[name].description !== undefined) {
-                row = document.createElement('tr');
-                row.innerHTML = '<td>' + name + '</td><td>' + tags[name].description + '</td>';
-                tableBody.appendChild(row);
-            }
-        }
-    }
-});
+})(window, document);

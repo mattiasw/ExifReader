@@ -2,10 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {objectAssign} from './utils';
-import ByteOrder from './byte-order';
-import Types from './types';
-import TagNames from './tag-names';
+import {objectAssign} from './utils.js';
+import ByteOrder from './byte-order.js';
+import Types from './types.js';
+import TagNames from './tag-names.js';
 
 const EXIF_IFD_POINTER_KEY = 'Exif IFD Pointer';
 const GPS_INFO_IFD_POINTER_KEY = 'GPS Info IFD Pointer';

@@ -5,21 +5,15 @@
 // The UMD format used in the pre-built file in the dist folder won't work with
 // native ES modules. Just use the main source file instead since the project is
 // already written as ES modules.
-import ExifReader from '../../src/exif-reader';
+import ExifReader from '../src/exif-reader.js';
 
-if (supportsFileReader()) {
-    document.getElementById('file').addEventListener('change', handleFile, false);
-} else {
-    document.write('<strong>Sorry, your web browser does not support the FileReader API.</strong>');
-}
-
-function supportsFileReader() {
-    return window.FileReader !== undefined;
-}
+document.getElementById('file').addEventListener('change', handleFile);
 
 function handleFile(event) {
     const files = event.target.files;
     const reader = new FileReader();
+
+    window.exifReaderClear();
 
     reader.onload = function (readerEvent) {
         try {
@@ -38,26 +32,11 @@ function handleFile(event) {
                 image.src = 'data:image/jpg;base64,' + tags['Thumbnail'].base64;
             }
 
-            listTags(tags);
+            window.exifReaderListTags(tags);
         } catch (error) {
-            alert(error);
+            window.exifReaderError(error.toString());
         }
     };
 
     reader.readAsArrayBuffer(files[0]);
-}
-
-function listTags(tags) {
-    const tableBody = document.getElementById('exif-table-body');
-    tableBody.innerHTML = '';
-    for (const name in tags) {
-        if (tags[name].description !== undefined) {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${name}</td>
-                <td>${tags[name].description}</td>
-            `;
-            tableBody.appendChild(row);
-        }
-    }
 }

@@ -6,7 +6,7 @@
     <head>
         <meta charset="utf-8">
         <meta http-equiv="x-ua-compatible" content="ie=edge">
-        <title>ExifReader Global Object Example</title>
+        <title>ExifReader Node.js</title>
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300italic,700,700italic">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/5.0.0/normalize.min.css" integrity="sha256-t2/7smZfgrST4FS1DT0bs/KotCM74XlcqZN5Vu7xlrw=" crossorigin="anonymous">
@@ -14,33 +14,14 @@
         <link rel="stylesheet" href="../style.css">
     </head>
     <body class="container">
-        <h1>Example with global object</h1>
-        <div class="source-code"></div>
-        <form>
-            <label>
-                Choose an image file from your computer:<br>
-                <input type="file" id="file" name="file">
-            </label>
-        </form>
-
-        <div class="error hidden"></div>
-
-        <img id="thumbnail" src="" alt="Thumbnail of image." class="thumbnail hidden">
-
-        <table class="tags">
-            <thead>
-                <tr>
-                    <th>Tag name</th>
-                    <th>Tag description</th>
-                </tr>
-            </thead>
-            <tbody id="exif-table-body">
-            </tbody>
-        </table>
-
-        <script src="../utils.js"></script>
+        <h1>Node.js</h1>
+        <div class="source-code" data-initialize>
+            <p>
+                You need a modern browser to view the content of this page. If
+                you want to read the Node.js example, go to the project source
+                directly and open examples/nodejs/exif.js.
+            </p>
+        </div>
         <script src="../source.js"></script>
-        <script src="../exif-reader.js"></script>
-        <script src="exif.js"></script>
     </body>
 </html>

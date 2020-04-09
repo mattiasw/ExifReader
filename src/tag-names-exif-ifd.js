@@ -2,8 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringValue, getEncodedString} from './tag-names-utils';
-import TagNamesCommon from './tag-names-common';
+import {getStringValue, getEncodedString} from './tag-names-utils.js';
+import TagNamesCommon from './tag-names-common.js';
 
 export default {
     0x829a: {

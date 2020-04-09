@@ -38,13 +38,15 @@
     "nyc": "^14.1.1",
     "string-replace-loader": "^2.2.0",
     "webpack": "^4.42.0",
-    "webpack-cli": "^3.3.6"
+    "webpack-cli": "^3.3.6",
+    "webpack-dev-server": "git+https://github.com/webpack/webpack-dev-server.git#c6bdfe4afb2ce3612c02142954c68a8e657c3915"
   },
   "scripts": {
     "build": "node bin/build.js",
     "coverage": "nyc npm test",
     "lint": "eslint .",
     "precommit": "npm-run-all lint test",
+    "start": "webpack-dev-server --open",
     "test": "cross-env BABEL_ENV=test mocha --require @babel/register",
     "postinstall": "node bin/build.js --only-with-config"
   },
