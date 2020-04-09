@@ -31,6 +31,13 @@ module.exports = {
         globalObject: 'typeof self !== \'undefined\' ? self : this'
     },
     devtool: 'source-map',
+    devServer: {
+        contentBase: [path.join(__dirname, 'examples'), path.join(__dirname, 'src')],
+        contentBasePublicPath: ['/', '/src'],
+        https: true,
+        watchContentBase: true,
+        liveReload: true
+    },
     module: {
         rules: [
             {

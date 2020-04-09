@@ -1,8 +1,8 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-import {iccTags, iccProfile} from './icc-tag-names';
-import {getStringFromDataView, getUnicodeStringFromDataView} from './utils';
+import {iccTags, iccProfile} from './icc-tag-names.js';
+import {getStringFromDataView, getUnicodeStringFromDataView} from './utils.js';
 
 export default {
     read

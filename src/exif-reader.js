@@ -7,18 +7,18 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import {objectAssign} from './utils';
-import DataViewWrapper from './dataview';
-import Constants from './constants';
-import ImageHeader from './image-header';
-import Tags from './tags';
-import FileTags from './file-tags';
-import IptcTags from './iptc-tags';
-import XmpTags from './xmp-tags';
-import IccTags from './icc-tags';
-import PngFileTags from './png-file-tags';
-import Thumbnail from './thumbnail';
-import exifErrors from './errors';
+import {objectAssign} from './utils.js';
+import DataViewWrapper from './dataview.js';
+import Constants from './constants.js';
+import ImageHeader from './image-header.js';
+import Tags from './tags.js';
+import FileTags from './file-tags.js';
+import IptcTags from './iptc-tags.js';
+import XmpTags from './xmp-tags.js';
+import IccTags from './icc-tags.js';
+import PngFileTags from './png-file-tags.js';
+import Thumbnail from './thumbnail.js';
+import exifErrors from './errors.js';
 
 export default {
     load,

@@ -2,9 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView, objectAssign} from './utils';
-import XmpTagNames from './xmp-tag-names';
-import DOMParser from './dom-parser';
+import {getStringFromDataView, objectAssign} from './utils.js';
+import XmpTagNames from './xmp-tag-names.js';
+import DOMParser from './dom-parser.js';
 
 export default {
     read
