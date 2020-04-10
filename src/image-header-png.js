@@ -16,7 +16,7 @@ const PNG_CHUNK_TYPE_SIZE = 4;
 const PNG_CHUNK_LENGTH_OFFSET = 0;
 const PNG_CHUNK_TYPE_OFFSET = PNG_CHUNK_LENGTH_SIZE;
 const PNG_CHUNK_DATA_OFFSET = PNG_CHUNK_LENGTH_SIZE + PNG_CHUNK_TYPE_SIZE;
-const PNG_XMP_PREFIX = 'XML:com.adobe.xmp';
+const PNG_XMP_PREFIX = 'XML:com.adobe.xmp\x00';
 
 function isPngFile(dataView) {
     return getStringFromDataView(dataView, 0, PNG_ID.length) === PNG_ID;
@@ -35,11 +35,14 @@ function findPngOffsets(dataView) {
             offsets.hasAppMarkers = true;
             offsets.pngHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
         } else if (Constants.USE_XMP && isPngXmpChunk(dataView, offset)) {
-            offsets.hasAppMarkers = true;
-            offsets.xmpChunks = [{
-                dataOffset: offset + PNG_CHUNK_DATA_OFFSET + PNG_XMP_PREFIX.length,
-                length: dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET) - PNG_XMP_PREFIX.length
-            }];
+            const dataOffset = getPngXmpDataOffset(dataView, offset);
+            if (dataOffset !== undefined) {
+                offsets.hasAppMarkers = true;
+                offsets.xmpChunks = [{
+                    dataOffset,
+                    length: dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET) - (dataOffset - (offset + PNG_CHUNK_DATA_OFFSET))
+                }];
+            }
         }
 
         offset += dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET)
@@ -60,4 +63,23 @@ function isPngXmpChunk(dataView, offset) {
     const PNG_CHUNK_TYPE_INTERNATIONAL_TEXT = 'iTXt';
     return (getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === PNG_CHUNK_TYPE_INTERNATIONAL_TEXT)
         && (getStringFromDataView(dataView, offset + PNG_CHUNK_DATA_OFFSET, PNG_XMP_PREFIX.length) === PNG_XMP_PREFIX);
+}
+
+function getPngXmpDataOffset(dataView, offset) {
+    const COMPRESSION_FLAG_SIZE = 1;
+    const COMPRESSION_METHOD_SIZE = 1;
+
+    offset += PNG_CHUNK_DATA_OFFSET + PNG_XMP_PREFIX.length + COMPRESSION_FLAG_SIZE + COMPRESSION_METHOD_SIZE;
+
+    let numberOfNullSeparators = 0;
+    while (numberOfNullSeparators < 2 && offset < dataView.byteLength) {
+        if (dataView.getUint8(offset) === 0x00) {
+            numberOfNullSeparators++;
+        }
+        offset++;
+    }
+    if (numberOfNullSeparators < 2) {
+        return undefined;
+    }
+    return offset;
 }
