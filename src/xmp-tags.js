@@ -63,7 +63,7 @@ function getDocument(chunkDataView) {
     }
 
     const domParser = new Parser();
-    const xmlSource = getStringFromDataView(chunkDataView, 0, chunkDataView.byteLength);
+    const xmlSource = trimXmlSource(getStringFromDataView(chunkDataView, 0, chunkDataView.byteLength));
     const doc = domParser.parseFromString(xmlSource, 'application/xml');
 
     if (doc.documentElement.nodeName === 'parsererror') {
@@ -71,6 +71,10 @@ function getDocument(chunkDataView) {
     }
 
     return doc;
+}
+
+function trimXmlSource(xmlSource) {
+    return xmlSource.replace(/^.+(<\?xpacket begin)/, '$1').replace(/(<\?xpacket end=".*"\?>).+$/, '$1');
 }
 
 function getRDF(node) {
