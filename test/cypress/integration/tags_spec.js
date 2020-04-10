@@ -78,7 +78,7 @@ for (const moduleType of moduleTypes) {
     describe(moduleType.name, function () {
         it('shows the source code', function () {
             cy
-                .visit('https://localhost:8080')
+                .visit('/')
                 .get(`a[href^="${moduleType.path}"]`)
                 .click()
                 .get('.source-code pre.hidden')
@@ -95,7 +95,7 @@ for (const moduleType of moduleTypes) {
             describe(image.name, function () {
                 beforeEach(function () {
                     cy
-                        .visit(`https://localhost:8080/${moduleType.path}/`)
+                        .visit(`/${moduleType.path}/`)
                         .get('html[data-initialized]');
                 });
 

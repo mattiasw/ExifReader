@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {getDataView} from './test-utils';
-import PngFileTags from '../src/png-file-tags';
+import PngFileTags from '../../src/png-file-tags';
 
 const FILE_DATA_CONTENT =
       '\x01\x02\x03\x04' // Width

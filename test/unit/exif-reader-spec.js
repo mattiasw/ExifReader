@@ -3,9 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {__RewireAPI__ as ExifReaderRewireAPI} from '../src/exif-reader';
-import * as ExifReader from '../src/exif-reader';
-import exifErrors from '../src/errors';
+import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
+import * as ExifReader from '../../src/exif-reader';
+import exifErrors from '../../src/errors';
 
 const OFFSET_TEST_VALUE = 4711;
 const XMP_FIELD_LENGTH_TEST_VALUE = 47;

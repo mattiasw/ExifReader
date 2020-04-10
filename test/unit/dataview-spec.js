@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import DataView from '../src/dataview';
+import DataView from '../../src/dataview';
 
 describe('dataview', () => {
     it('throws if the passed buffer is missing methods', () => {

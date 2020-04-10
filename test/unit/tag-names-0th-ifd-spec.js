@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNames0thIfd from '../src/tag-names-0th-ifd';
-import TagNamesCommon from '../src/tag-names-common';
+import TagNames0thIfd from '../../src/tag-names-0th-ifd';
+import TagNamesCommon from '../../src/tag-names-common';
 
 describe('tag-names-0th-ifd', () => {
     it('should have tag ProcessingSoftware', () => {

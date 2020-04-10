@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {iccProfile} from '../src/icc-tag-names';
+import {iccProfile} from '../../src/icc-tag-names';
 import {getDataView} from './test-utils';
 
 const PROFILE_VERSION = '\x02\x40\x00\x00';

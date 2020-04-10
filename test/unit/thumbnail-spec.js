@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {getDataView, getArrayBuffer} from './test-utils';
-import Thumbnail from '../src/thumbnail';
+import Thumbnail from '../../src/thumbnail';
 
 const OFFSET_TEST_VALUE = 4;
 const COMPRESSION_JPEG = 6;

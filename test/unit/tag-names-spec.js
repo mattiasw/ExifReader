@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNames from '../src/tag-names';
+import TagNames from '../../src/tag-names';
 
 describe('tag-names', () => {
     it('should have 0th IFD tag names', () => {

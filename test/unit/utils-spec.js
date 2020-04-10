@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {getDataView} from './test-utils';
-import * as Utils from '../src/utils';
+import * as Utils from '../../src/utils';
 
 describe('utils', () => {
     it('should extract string from DataView', () => {

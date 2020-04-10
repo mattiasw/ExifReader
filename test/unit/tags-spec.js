@@ -4,9 +4,9 @@
 
 import {expect} from 'chai';
 import {getDataView} from './test-utils';
-import Tags from '../src/tags';
-import Types from '../src/types';
-import ByteOrder from '../src/byte-order';
+import Tags from '../../src/tags';
+import Types from '../../src/types';
+import ByteOrder from '../../src/byte-order';
 
 describe('tags', () => {
     const get0thIfdOffset = Tags.__get__('get0thIfdOffset');
