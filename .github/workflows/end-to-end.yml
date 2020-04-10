@@ -1,0 +1,27 @@
+name: End-to-end tests
+
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  end-to-end:
+    runs-on: ubuntu-16.04
+    name: Cypress run
+    env:
+      CI: 1
+    steps:
+      - uses: actions/checkout@v1
+      - uses: cypress-io/github-action@v1
+        with:
+          start: npm start
+      - uses: actions/upload-artifact@v1
+        if: failure()
+        with:
+          name: cypress-screenshots
+          path: test/cypress/screenshots
+      - uses: actions/upload-artifact@v1
+        if: always()
+        with:
+          name: cypress-videos
+          path: test/cypress/videos

@@ -35,8 +35,9 @@ module.exports = {
         contentBase: [path.join(__dirname, 'examples'), path.join(__dirname, 'src')],
         contentBasePublicPath: ['/', '/src'],
         https: true,
-        watchContentBase: true,
-        liveReload: true
+        open: !process.env.CI,
+        watchContentBase: !process.env.CI,
+        liveReload: !process.env.CI
     },
     module: {
         rules: [
@@ -116,7 +117,6 @@ function getConstantReplacements(modules) {
 
     if (modules) {
         for (const module in modules) {
-            console.log(`Constants.USE_${module.toUpperCase()}`, JSON.stringify(modules[module]));
             replacements.push({
                 search: `Constants\\.USE_${module.toUpperCase()}`,
                 flags: 'g',
