@@ -275,10 +275,11 @@ describe('image-header', () => {
         });
 
         it('should find XMP offset in international textual data', () => {
-            const xmpPrefix = 'XML:com.adobe.xmp';
-            const chunkLength = `\x00\x00\x00${String.fromCharCode(xmpPrefix.length + 2)}`;
+            const xmpPrefix = 'XML:com.adobe.xmp\x00';
+            const chunkAdditionalFields = '\x00\x00\x00\x00';
+            const chunkLength = `\x00\x00\x00${String.fromCharCode(xmpPrefix.length + chunkAdditionalFields.length + 2)}`;
             const chunkType = 'iTXt';
-            const chunkData = `${xmpPrefix}\x47\x11`;
+            const chunkData = `${xmpPrefix}${chunkAdditionalFields}\x47\x11`;
             const crc = '\x00\x00\x00\x00';
             const chunkLengthOther = '\x00\x00\x00\x04';
             const chunkTypeOther = 'abcd';
@@ -295,7 +296,7 @@ describe('image-header', () => {
             expect(appMarkerValues).to.deep.equal({
                 hasAppMarkers: true,
                 xmpChunks: [{
-                    dataOffset: PNG_IMAGE_START.length + 16 + 8 + xmpPrefix.length,
+                    dataOffset: PNG_IMAGE_START.length + 16 + 8 + xmpPrefix.length + chunkAdditionalFields.length,
                     length: 2,
                 }],
             });
