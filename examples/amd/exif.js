@@ -12,6 +12,8 @@ requirejs(['../exif-reader'], function (ExifReader) {
 
     document.getElementById('file').addEventListener('change', handleFile, false);
 
+    document.querySelector('html').setAttribute('data-initialized', '');
+
     function supportsFileReader() {
         return window.FileReader !== undefined;
     }

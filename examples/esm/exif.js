@@ -9,6 +9,8 @@ import ExifReader from '../src/exif-reader.js';
 
 document.getElementById('file').addEventListener('change', handleFile);
 
+document.querySelector('html').setAttribute('data-initialized', '');
+
 function handleFile(event) {
     const files = event.target.files;
     const reader = new FileReader();
