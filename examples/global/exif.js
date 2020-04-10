@@ -14,6 +14,8 @@
         document.getElementById('file').addEventListener('change', handleFile, false);
     }, false);
 
+    document.querySelector('html').setAttribute('data-initialized', '');
+
     function supportsFileReader() {
         return window.FileReader !== undefined;
     }
