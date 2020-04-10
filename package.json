@@ -50,7 +50,7 @@
     "cypress:open": "cypress open",
     "lint": "eslint .",
     "precommit": "npm-run-all lint test",
-    "start": "webpack-dev-server --open",
+    "start": "webpack-dev-server",
     "test": "cross-env BABEL_ENV=test mocha --require @babel/register --recursive \"test/unit/\"",
     "test:e2e": "cypress run",
     "postinstall": "node bin/build.js --only-with-config"
