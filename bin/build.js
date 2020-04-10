@@ -12,7 +12,7 @@ function checkConfig() {
     if (dependentHasExifReaderConfig()) {
         if (!isDependenciesInstalled()) {
             console.log('Installing ExifReader custom build dependencies...');
-            execSync('npm install --no-optional --no-package-lock');
+            execSync('npm install --no-optional --no-package-lock --no-save @babel/core @babel/preset-env @babel/register babel-loader cross-env string-replace-loader webpack webpack-cli', {stdio: 'inherit'});
             console.log('Done.');
         }
         return true;
