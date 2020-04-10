@@ -4,8 +4,8 @@
 
 import {expect} from 'chai';
 import {getDataView} from './test-utils';
-import Types from '../src/types';
-import ByteOrder from '../src/byte-order';
+import Types from '../../src/types';
+import ByteOrder from '../../src/byte-order';
 
 describe('types', () => {
     it('should be able to read a byte', () => {

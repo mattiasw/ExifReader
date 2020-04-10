@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNamesGpsIfd from '../src/tag-names-gps-ifd';
+import TagNamesGpsIfd from '../../src/tag-names-gps-ifd';
 import {getCharacterArray} from './test-utils';
 
 describe('tag-names-gps-ifd', () => {

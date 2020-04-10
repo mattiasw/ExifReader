@@ -4,8 +4,8 @@
 
 import {expect} from 'chai';
 import {getDataView} from './test-utils';
-import {getCharacterArray} from '../src/tag-names-utils';
-import TagDecoder from '../src/tag-decoder';
+import {getCharacterArray} from '../../src/tag-names-utils';
+import TagDecoder from '../../src/tag-decoder';
 
 const TAG_VALUE_STRING = 'abcÅÄÖáéí';
 

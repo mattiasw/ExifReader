@@ -4,8 +4,8 @@
 
 import {expect} from 'chai';
 import {getConsoleWarnSpy, getDataView} from './test-utils';
-import {__RewireAPI__ as XmpTagsRewireAPI} from '../src/xmp-tags';
-import XmpTags from '../src/xmp-tags';
+import {__RewireAPI__ as XmpTagsRewireAPI} from '../../src/xmp-tags';
+import XmpTags from '../../src/xmp-tags';
 
 const PACKET_WRAPPER_START = '<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>';
 const PACKET_WRAPPER_END = '<?xpacket end="w"?>';

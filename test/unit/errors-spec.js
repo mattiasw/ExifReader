@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import exifErrors from '../src/errors';
+import exifErrors from '../../src/errors';
 
 describe('errors', () => {
     describe('MetadataMissingError', () => {

@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNamesCommon from '../src/tag-names-common';
+import TagNamesCommon from '../../src/tag-names-common';
 
 describe('tag-names-common', () => {
     it('should report correct values for LightSource', () => {

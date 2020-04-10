@@ -4,9 +4,9 @@
 
 import {expect} from 'chai';
 import * as fs from 'fs';
-import {parseTags} from '../src/icc-tags';
-const ICC_V2 = './test/icc/sRGB2014.icc';
-const ICC_V4 = './test/icc/sRGB_v4_ICC_preference.icc';
+import {parseTags} from '../../src/icc-tags';
+const ICC_V2 = './test/unit/icc/sRGB2014.icc';
+const ICC_V4 = './test/unit/icc/sRGB_v4_ICC_preference.icc';
 
 describe('load-icc-v2', () => {
     it('should load ICC v2 file ', () => {

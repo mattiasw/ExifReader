@@ -4,8 +4,8 @@
 
 import {expect} from 'chai';
 import {getDataView, getByteStringFromNumber} from './test-utils';
-import {__RewireAPI__ as ImageHeaderRewireAPI} from '../src/image-header';
-import ImageHeader from '../src/image-header';
+import {__RewireAPI__ as ImageHeaderRewireAPI} from '../../src/image-header';
+import ImageHeader from '../../src/image-header';
 
 describe('image-header', () => {
     afterEach(() => {

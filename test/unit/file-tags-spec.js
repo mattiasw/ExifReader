@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {getDataView} from './test-utils';
-import FileTags from '../src/file-tags';
+import FileTags from '../../src/file-tags';
 
 const FILE_DATA_CONTENT = '\xff\xc0\x00\x11\x08\x01\x02\x02\x03\x03\x01\x22\x00\x02\x11\x01\x03\x11\x01';
 const FILE_DATA_CONTENT_GREYSCALE = '\xff\xc0\x0b\x02\x08\x01\x02\x02\x03\x01\x01\x02\x03';

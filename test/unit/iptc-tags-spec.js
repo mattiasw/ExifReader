@@ -4,8 +4,8 @@
 
 import {expect} from 'chai';
 import {getDataView} from './test-utils';
-import {getCharacterArray} from '../src/tag-names-utils';
-import IptcTags from '../src/iptc-tags';
+import {getCharacterArray} from '../../src/tag-names-utils';
+import IptcTags from '../../src/iptc-tags';
 
 describe('iptc-tags', function () {
     const getResourceBlock = IptcTags.__get__('getResourceBlock');

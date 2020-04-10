@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNamesExifIfd from '../src/tag-names-exif-ifd';
-import TagNamesCommon from '../src/tag-names-common';
+import TagNamesExifIfd from '../../src/tag-names-exif-ifd';
+import TagNamesCommon from '../../src/tag-names-common';
 import {getCharacterArray} from './test-utils';
 
 describe('tag-names-exif-ifd', () => {

@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TextDecoderModule from '../src/text-decoder';
+import TextDecoderModule from '../../src/text-decoder';
 
 describe('text-decoder', function () {
     beforeEach(() => {

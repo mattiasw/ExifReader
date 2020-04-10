@@ -2,7 +2,8 @@ coverage
 node_modules
 *.log
 .nyc_output
-cypress/videos
+test/cypress/screenshots
+test/cypress/videos
 .tags
 .tags1
 .vscode

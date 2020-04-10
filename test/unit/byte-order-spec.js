@@ -4,8 +4,8 @@
 
 import {expect} from 'chai';
 import {getDataView} from './test-utils';
-import ByteOrder from '../src/byte-order';
-import ImageHeader from '../src/image-header';
+import ByteOrder from '../../src/byte-order';
+import ImageHeader from '../../src/image-header';
 
 describe('byte order', () => {
     it('should find byte order data', () => {

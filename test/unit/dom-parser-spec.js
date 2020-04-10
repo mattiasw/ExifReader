@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import DOMParserModule from '../src/dom-parser';
+import DOMParserModule from '../../src/dom-parser';
 
 describe('dom-parser', function () {
     beforeEach(() => {
