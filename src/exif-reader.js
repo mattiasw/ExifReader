@@ -10,6 +10,7 @@
 import {objectAssign} from './utils.js';
 import DataViewWrapper from './dataview.js';
 import Constants from './constants.js';
+import {getStringValueFromArray} from './utils.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
 import FileTags from './file-tags.js';
@@ -55,9 +56,11 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = objectAssign({}, tags, readTags);
         }
     }
+
     if (Constants.USE_EXIF && hasExifData(tiffHeaderOffset)) {
         foundMetaData = true;
         const {Thumbnail: thumbnailTags, ...readTags} = Tags.read(dataView, tiffHeaderOffset);
+
         if (options.expanded) {
             tags.exif = readTags;
         } else {
@@ -66,7 +69,17 @@ export function loadView(dataView, options = {expanded: false}) {
         if (thumbnailTags) {
             tags.Thumbnail = thumbnailTags;
         }
+
+        if (Constants.USE_TIFF && Constants.USE_XMP && readTags['ApplicationNotes'] && !hasXmpData(xmpChunks)) {
+            const readXmpTags = XmpTags.read(getStringValueFromArray(readTags['ApplicationNotes'].value));
+            if (options.expanded) {
+                tags.xmp = readXmpTags;
+            } else {
+                tags = objectAssign({}, tags, readXmpTags);
+            }
+        }
     }
+
     if (Constants.USE_JPEG && Constants.USE_IPTC && hasIptcData(iptcDataOffset)) {
         foundMetaData = true;
         const readTags = IptcTags.read(dataView, iptcDataOffset);
@@ -76,6 +89,7 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = objectAssign({}, tags, readTags);
         }
     }
+
     if (Constants.USE_XMP && hasXmpData(xmpChunks)) {
         foundMetaData = true;
         const readTags = XmpTags.read(dataView, xmpChunks);
@@ -85,6 +99,7 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = objectAssign({}, tags, readTags);
         }
     }
+
     if (Constants.USE_JPEG && Constants.USE_ICC && hasIccData(iccChunks)) {
         foundMetaData = true;
         const readTags = IccTags.read(dataView, iccChunks);
@@ -94,6 +109,7 @@ export function loadView(dataView, options = {expanded: false}) {
             tags = objectAssign({}, tags, readTags);
         }
     }
+
     if (Constants.USE_PNG && hasPngFileData(pngHeaderOffset)) {
         foundMetaData = true;
         const readTags = PngFileTags.read(dataView, pngHeaderOffset);

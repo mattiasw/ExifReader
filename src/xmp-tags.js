@@ -11,6 +11,9 @@ export default {
 };
 
 function read(dataView, chunks) {
+    if (typeof dataView === 'string') {
+        return readTags({}, dataView);
+    }
     return extractCompleteChunks(dataView, chunks).reduce(readTags, {});
 }
 
@@ -63,8 +66,8 @@ function getDocument(chunkDataView) {
     }
 
     const domParser = new Parser();
-    const xmlSource = trimXmlSource(getStringFromDataView(chunkDataView, 0, chunkDataView.byteLength));
-    const doc = domParser.parseFromString(xmlSource, 'application/xml');
+    const xmlString = typeof chunkDataView === 'string' ? chunkDataView : getStringFromDataView(chunkDataView, 0, chunkDataView.byteLength);
+    const doc = domParser.parseFromString(trimXmlSource(xmlString), 'application/xml');
 
     if (doc.documentElement.nodeName === 'parsererror') {
         throw new Error(doc.documentElement.textContent);
