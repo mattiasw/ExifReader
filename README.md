@@ -316,6 +316,7 @@ Changelog
 ---------
 
 -   **April 2020**:
+    -   Add support for IPTC and XMP tags in TIFF images.
     -   Add functionality to create a custom build to reduce bundle size.
 -   **March 2020**:
     -   Add support for PNG images.
