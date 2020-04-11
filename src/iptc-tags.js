@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import {isArray} from './utils.js';
 import IptcTagNames from './iptc-tag-names.js';
 import TagDecoder from './tag-decoder.js';
 
@@ -17,6 +18,9 @@ export default {
 
 function read(dataView, dataOffset) {
     try {
+        if (isArray(dataView)) {
+            return parseTags(new DataView(Uint8Array.from(dataView).buffer), {size: dataView.length}, 0);
+        }
         const {naaBlock, dataOffset: newDataOffset} = getNaaResourceBlock(dataView, dataOffset);
         return parseTags(dataView, naaBlock, newDataOffset);
     } catch (error) {
@@ -28,7 +32,7 @@ function getNaaResourceBlock(dataView, dataOffset) {
     while (dataOffset + RESOURCE_BLOCK_HEADER_SIZE <= dataView.byteLength) {
         const resourceBlock = getResourceBlock(dataView, dataOffset);
         if (isNaaResourceBlock(resourceBlock)) {
-            return {naaBlock: resourceBlock, dataOffset};
+            return {naaBlock: resourceBlock, dataOffset: dataOffset + RESOURCE_BLOCK_HEADER_SIZE};
         }
         dataOffset += RESOURCE_BLOCK_HEADER_SIZE + resourceBlock.size + getBlockPadding(resourceBlock);
     }
@@ -63,7 +67,6 @@ function parseTags(dataView, naaBlock, dataOffset) {
     const tags = {};
     let encoding = undefined;
 
-    dataOffset += RESOURCE_BLOCK_HEADER_SIZE;
     const endOfBlockOffset = dataOffset + naaBlock['size'];
 
     while ((dataOffset < endOfBlockOffset) && (dataOffset < dataView.byteLength)) {

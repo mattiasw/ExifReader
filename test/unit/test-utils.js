@@ -8,7 +8,6 @@ export {
     getArrayBuffer,
     getDataView,
     getByteStringFromNumber,
-    getCharacterArray,
     getConsoleWarnSpy
 };
 
@@ -28,10 +27,6 @@ function getByteStringFromNumber(number, numBytes) {
         number = (number - rest) / 256;
     }
     return bytes.reverse().join('');
-}
-
-function getCharacterArray(string) {
-    return string.split('').map((character) => character.charCodeAt(0));
 }
 
 function getConsoleWarnSpy() {

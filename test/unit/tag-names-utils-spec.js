@@ -3,7 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getStringValue, getEncodedString, getCharacterArray} from '../../src/tag-names-utils';
+import {getCharacterArray} from '../../src/utils';
+import {getStringValue, getEncodedString} from '../../src/tag-names-utils';
 
 describe('tag-names-utils', () => {
     it('should get string from character values', () => {

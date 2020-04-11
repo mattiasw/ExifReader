@@ -23,7 +23,3 @@ export function getEncodedString(value) {
 
     return 'Undefined';
 }
-
-export function getCharacterArray(string) {
-    return string.split('').map((character) => character.charCodeAt(0));
-}

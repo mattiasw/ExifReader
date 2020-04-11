@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
-import {getCharacterArray} from './test-utils';
+import {getCharacterArray, isArray} from '../../src/utils';
 import * as ExifReader from '../../src/exif-reader';
 import exifErrors from '../../src/errors';
 
@@ -66,6 +66,15 @@ describe('exif-reader', () => {
     it('should be able to find Exif APP segment', () => {
         const myTags = {MyExifTag: 42};
         rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
+    it('should be able to find IPTC segment inside Exif APP segment (used in TIFF files)', () => {
+        const myExifTags = {'IPTC-NAA': {value: ['<IPTC block array>']}};
+        const myIptcTags = {MyIptcTag: 42};
+        const myTags = {...myExifTags, ...myIptcTags};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
+        rewireTagsRead('IptcTags', myIptcTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -134,12 +143,18 @@ describe('exif-reader', () => {
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
     });
 
-    it('should expand inlined TIFF segments for XMP into separated properties on return object if specified', () => {
-        const myExifTags = {ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')}};
-        const myXmpTags = {MyXmpTag: 45};
-        const myTags = {exif: myExifTags, xmp: myXmpTags};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
-        rewireXmpTagsRead(myXmpTags);
+    it('should expand inlined TIFF segments for XMP and IPTC into separated properties on return object if specified', () => {
+        const myTags = {
+            exif: {
+                ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')},
+                'IPTC-NAA': {value: ['<IPTC block array>']}
+            },
+            iptc: {MyIptcTag: 42},
+            xmp: {MyXmpTag: 43}
+        };
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags.exif);
+        rewireTagsRead('IptcTags', myTags.iptc);
+        rewireXmpTagsRead(myTags.xmp);
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
     });
 
@@ -250,7 +265,7 @@ function rewireImageHeader(appMarkersValue) {
 function rewireTagsRead(tagsObject, tagsValue) {
     ExifReaderRewireAPI.__Rewire__(tagsObject, {
         read(dataView, offset) {
-            if (offset === OFFSET_TEST_VALUE) {
+            if (isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
                 return tagsValue;
             }
             return {};

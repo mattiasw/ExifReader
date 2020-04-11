@@ -200,7 +200,7 @@ Possible modules to include or exclude:
 | `png`       | PNG images.                                                    |
 | `heic`      | HEIC/HEIF images.                                              |
 | `file`      | JPEG image width, height etc.                                  |
-| `exif`      | Regular Exif tags. If excluded, will also exclude `thumbnail`. |
+| `exif`      | Regular Exif tags. If excluded, will also exclude `thumbnail`. For TIFF files, excluding this will also exclude IPTC and XMP. |
 | `iptc`      | IPTC tags.                                                     |
 | `xmp`       | XMP tags.                                                      |
 | `icc`       | ICC color profile tags.                                        |

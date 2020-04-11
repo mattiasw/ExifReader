@@ -41,8 +41,10 @@ const images = [
         name: 'test.tiff',
         hasThumbnail: false,
         tags: {
-            'ImageWidth': '11', // Exif
-            'FocalLength': '9 mm' // Exif
+            'ImageWidth': '50', // Exif
+            'ResolutionUnit': 'inches', // Exif
+            'Date Created': '2020-04-08', // IPTC
+            'subject': 'My Keyword 1, Another Keyword, A third keyword' // XMP
         }
     },
     {
