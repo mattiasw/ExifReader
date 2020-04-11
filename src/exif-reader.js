@@ -70,6 +70,15 @@ export function loadView(dataView, options = {expanded: false}) {
             tags.Thumbnail = thumbnailTags;
         }
 
+        if (Constants.USE_TIFF && Constants.USE_IPTC && readTags['IPTC-NAA'] && !hasIptcData(iptcDataOffset)) {
+            const readIptcTags = IptcTags.read(readTags['IPTC-NAA'].value, 0);
+            if (options.expanded) {
+                tags.iptc = readIptcTags;
+            } else {
+                tags = objectAssign({}, tags, readIptcTags);
+            }
+        }
+
         if (Constants.USE_TIFF && Constants.USE_XMP && readTags['ApplicationNotes'] && !hasXmpData(xmpChunks)) {
             const readXmpTags = XmpTags.read(getStringValueFromArray(readTags['ApplicationNotes'].value));
             if (options.expanded) {

@@ -112,6 +112,7 @@ function getNumberOfFields(dataView, offset, byteOrder) {
 }
 
 function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
+    const TAG_CODE_IPTC_NAA = 0x83bb;
     const TAG_TYPE_OFFSET = Types.getTypeSize('SHORT');
     const TAG_COUNT_OFFSET = TAG_TYPE_OFFSET + Types.getTypeSize('SHORT');
     const TAG_VALUE_OFFSET = TAG_COUNT_OFFSET + Types.getTypeSize('LONG');
@@ -130,7 +131,8 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
     } else {
         const tagValueOffset = Types.getLongAt(dataView, offset + TAG_VALUE_OFFSET, byteOrder);
         if (tagValueFitsInDataView(dataView, tiffHeaderOffset, tagValueOffset, tagType, tagCount)) {
-            tagValue = getTagValue(dataView, tiffHeaderOffset + tagValueOffset, tagType, tagCount, byteOrder);
+            const forceByteType = tagCode === TAG_CODE_IPTC_NAA;
+            tagValue = getTagValue(dataView, tiffHeaderOffset + tagValueOffset, tagType, tagCount, byteOrder, forceByteType);
         } else {
             tagValue = '<faulty value>';
         }
@@ -178,9 +180,13 @@ function tagValueFitsInOffsetSlot(tagType, tagCount) {
     return Types.typeSizes[tagType] * tagCount <= Types.getTypeSize('LONG');
 }
 
-function getTagValue(dataView, offset, type, count, byteOrder) {
+function getTagValue(dataView, offset, type, count, byteOrder, forceByteType = false) {
     let value = [];
 
+    if (forceByteType) {
+        count = count * Types.typeSizes[type];
+        type = Types.tagTypes['BYTE'];
+    }
     for (let valueIndex = 0; valueIndex < count; valueIndex++) {
         value.push(getTagValueAt[type](dataView, offset, byteOrder));
         offset += Types.typeSizes[type];

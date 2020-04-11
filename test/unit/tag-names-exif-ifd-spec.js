@@ -5,7 +5,7 @@
 import {expect} from 'chai';
 import TagNamesExifIfd from '../../src/tag-names-exif-ifd';
 import TagNamesCommon from '../../src/tag-names-common';
-import {getCharacterArray} from './test-utils';
+import {getCharacterArray} from '../../src/utils';
 
 describe('tag-names-exif-ifd', () => {
     it('should report correct name and description for ExposureTime', () => {

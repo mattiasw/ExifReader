@@ -4,13 +4,17 @@
 
 import {expect} from 'chai';
 import {getDataView} from './test-utils';
-import {getCharacterArray} from '../../src/tag-names-utils';
+import {getCharacterArray} from '../../src/utils';
 import IptcTags from '../../src/iptc-tags';
 
 describe('iptc-tags', function () {
     const getResourceBlock = IptcTags.__get__('getResourceBlock');
     const getNaaResourceBlock = IptcTags.__get__('getNaaResourceBlock');
     const readTag = IptcTags.__get__('readTag');
+
+    afterEach(() => {
+        IptcTags.__ResetDependency__('IptcTagNames');
+    });
 
     it('should read an IPTC resource block', () => {
         const dataView = getDataView('8BIM\x04\x04\x00\x00\x00\x00\x00\x42');
@@ -206,6 +210,24 @@ describe('iptc-tags', function () {
             }
         })(() => {
             const dataView = getDataView('8BIM\x04\x04\x00\x00\x00\x00\x00\x0e' + '\x1c\x47\x11\x00\x02BC' + '\x1c\x47\x12\x00\x02DE');
+            const tags = IptcTags.read(dataView, 0);
+            expect(tags['MyIptcTag1'].id).to.equal(0x4711);
+            expect(tags['MyIptcTag1'].description).to.equal('BC');
+            expect(tags['MyIptcTag2'].id).to.equal(0x4712);
+            expect(tags['MyIptcTag2'].description).to.equal('DE');
+        });
+    });
+
+    it('should read IPTC tags from naked IPTC block (TIFF uses this)', () => {
+        IptcTags.__with__({
+            'IptcTagNames': {
+                'iptc': {
+                    0x4711: 'MyIptcTag1',
+                    0x4712: 'MyIptcTag2'
+                }
+            }
+        })(() => {
+            const dataView = getCharacterArray('\x1c\x47\x11\x00\x02BC' + '\x1c\x47\x12\x00\x02DE');
             const tags = IptcTags.read(dataView, 0);
             expect(tags['MyIptcTag1'].id).to.equal(0x4711);
             expect(tags['MyIptcTag1'].description).to.equal('BC');

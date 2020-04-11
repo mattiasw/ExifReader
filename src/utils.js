@@ -22,6 +22,10 @@ export function getStringValueFromArray(charArray) {
     return charArray.map((charCode) => String.fromCharCode(charCode)).join('');
 }
 
+export function getCharacterArray(string) {
+    return string.split('').map((character) => character.charCodeAt(0));
+}
+
 export function objectAssign(target, ...sources) {
     for (const source of sources) {
         for (const property in source) {
@@ -30,6 +34,10 @@ export function objectAssign(target, ...sources) {
     }
 
     return target;
+}
+
+export function isArray(value) {
+    return Object.prototype.toString.call(value) === '[object Array]';
 }
 
 export function deferInit(object, key, initializer) {
