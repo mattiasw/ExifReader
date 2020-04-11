@@ -4,6 +4,7 @@
 
 import {expect} from 'chai';
 import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
+import {getCharacterArray} from './test-utils';
 import * as ExifReader from '../../src/exif-reader';
 import exifErrors from '../../src/errors';
 
@@ -68,6 +69,15 @@ describe('exif-reader', () => {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should be able to find XMP segment inside Exif APP segment (used in TIFF files)', () => {
+        const myExifTags = {ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')}};
+        const myXmpTags = {MyXmpTag: 45};
+        const myTags = {...myExifTags, ...myXmpTags};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
+        rewireXmpTagsRead(myXmpTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
     it('should be able to find IPTC APP segment', () => {
         const myTags = {MyIptcTag: 42};
         rewireForLoadView({iptcDataOffset: OFFSET_TEST_VALUE}, 'IptcTags', myTags);
@@ -121,6 +131,15 @@ describe('exif-reader', () => {
         rewireXmpTagsRead(myTags.xmp);
         rewireIccTagsRead(myTags.icc);
 
+        expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
+    });
+
+    it('should expand inlined TIFF segments for XMP into separated properties on return object if specified', () => {
+        const myExifTags = {ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')}};
+        const myXmpTags = {MyXmpTag: 45};
+        const myTags = {exif: myExifTags, xmp: myXmpTags};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
+        rewireXmpTagsRead(myXmpTags);
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
     });
 
@@ -242,6 +261,9 @@ function rewireTagsRead(tagsObject, tagsValue) {
 function rewireXmpTagsRead(tagsValue) {
     ExifReaderRewireAPI.__Rewire__('XmpTags', {
         read(dataView, xmpData) {
+            if (typeof dataView === 'string') {
+                return tagsValue;
+            }
             if ((xmpData[0].dataOffset === OFFSET_TEST_VALUE) && (xmpData[0].length === XMP_FIELD_LENGTH_TEST_VALUE)) {
                 return tagsValue;
             }

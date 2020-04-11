@@ -7,7 +7,7 @@ export function getStringFromDataView(dataView, offset, length) {
     for (let i = 0; i < length && offset + i < dataView.byteLength; i++) {
         chars.push(dataView.getUint8(offset + i, false));
     }
-    return getStringValueFromArray(chars).join('');
+    return getStringValueFromArray(chars);
 }
 
 export function getUnicodeStringFromDataView(dataView, offset, length) {
@@ -15,11 +15,11 @@ export function getUnicodeStringFromDataView(dataView, offset, length) {
     for (let i = 0; i < length && offset + i < dataView.byteLength; i += 2) {
         chars.push(dataView.getUint16(offset + i));
     }
-    return getStringValueFromArray(chars).join('');
+    return getStringValueFromArray(chars);
 }
 
-function getStringValueFromArray(charArray) {
-    return charArray.map((charCode) => String.fromCharCode(charCode));
+export function getStringValueFromArray(charArray) {
+    return charArray.map((charCode) => String.fromCharCode(charCode)).join('');
 }
 
 export function objectAssign(target, ...sources) {

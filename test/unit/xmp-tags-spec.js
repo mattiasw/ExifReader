@@ -711,6 +711,21 @@ describe('xmp-tags', () => {
             }
         });
     });
+
+    it('should handle when input is a regular string', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="4711">
+            </rdf:Description>
+        `);
+        const tags = XmpTags.read(xmlString);
+        expect(tags).to.deep.equal({
+            MyXMPTag0: {
+                value: '4711',
+                attributes: {},
+                description: '4711'
+            }
+        });
+    });
 });
 
 function getXmlStringWithPacketWrapper(content) {
