@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {isArray} from './utils.js';
 import IptcTagNames from './iptc-tag-names.js';
 import TagDecoder from './tag-decoder.js';
 
@@ -18,7 +17,7 @@ export default {
 
 function read(dataView, dataOffset) {
     try {
-        if (isArray(dataView)) {
+        if (Array.isArray(dataView)) {
             return parseTags(new DataView(Uint8Array.from(dataView).buffer), {size: dataView.length}, 0);
         }
         const {naaBlock, dataOffset: newDataOffset} = getNaaResourceBlock(dataView, dataOffset);

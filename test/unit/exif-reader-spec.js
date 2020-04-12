@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
-import {getCharacterArray, isArray} from '../../src/utils';
+import {getCharacterArray} from '../../src/utils';
 import * as ExifReader from '../../src/exif-reader';
 import exifErrors from '../../src/errors';
 
@@ -265,7 +265,7 @@ function rewireImageHeader(appMarkersValue) {
 function rewireTagsRead(tagsObject, tagsValue) {
     ExifReaderRewireAPI.__Rewire__(tagsObject, {
         read(dataView, offset) {
-            if (isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
+            if (Array.isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
                 return tagsValue;
             }
             return {};

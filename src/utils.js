@@ -36,10 +36,6 @@ export function objectAssign(target, ...sources) {
     return target;
 }
 
-export function isArray(value) {
-    return Object.prototype.toString.call(value) === '[object Array]';
-}
-
 export function deferInit(object, key, initializer) {
     let initialized = false;
     Object.defineProperty(object, key, {
