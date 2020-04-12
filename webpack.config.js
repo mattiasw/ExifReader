@@ -45,7 +45,7 @@ module.exports = {
         rules: [
             {
                 test: /\.js$/,
-                exclude: /node_modules/,
+                exclude: /node_modules(?!.exifreader)/,
                 use: {
                     loader: 'babel-loader',
                     options: {
@@ -72,6 +72,7 @@ module.exports = {
 function parseConfig({include: includesConfig, exclude: excludesConfig}) {
     const modules = [
         'file',
+        'png_file',
         'exif',
         'iptc',
         'xmp',
@@ -106,7 +107,7 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
 }
 
 function getConfig() {
-    const packageJson = findConfigFromClosestPackageJson();
+    const packageJson = getPackageJson();
 
     if (packageJson && packageJson.include) {
         if (Array.isArray(packageJson.include.exif)) {
@@ -124,6 +125,13 @@ function getConfig() {
     }
 
     return false;
+}
+
+function getPackageJson() {
+    if (process.env.EXIFREADER_CUSTOM_BUILD) {
+        return JSON.parse(process.env.EXIFREADER_CUSTOM_BUILD);
+    }
+    return findConfigFromClosestPackageJson();
 }
 
 function getConfigValues(configObject) {

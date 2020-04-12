@@ -25,11 +25,12 @@ jobs:
         node-version: ${{ matrix.node-version }}
     - run: npm ci
     - run: npm run lint
-    - run: npm test
+    - run: npm run test
+    - run: npm run test:build
       env:
         CI: true
     - run: npm run build
-  package-ubuntu:
+  package-ubuntu-full:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -38,18 +39,11 @@ jobs:
       with:
         node-version: 10.x
     - run: npm ci
-    - name: Test npm package with minimal requirements
+    - name: Test npm package and custom builds with minimal requirements
       run: |
-        npm pack
-        PACKAGE="exifreader-$(node -p "require('./package.json').version").tgz"
-        mkdir my-project
-        cd my-project
         PATH=$(echo "$PATH" | sed -e 's/:\/usr\/local\/bin://'):/usr/local/bin/npm:/usr/local/bin/node
-        npm init -y
-        npm install ../$PACKAGE
-        node -p "const {writeFileSync} = require('fs'); const packageJson = require('./package.json'); packageJson.exifreader = {include: {jpeg: true, exif: true}}; writeFileSync('package.json', JSON.stringify(packageJson));"
-        npm rebuild exifreader
-  package-windows:
+        npm run test:build:custom
+  package-windows-basic:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v2

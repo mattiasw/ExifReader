@@ -25,7 +25,7 @@ fs.readFile(filePath, function (error, data) {
     }
 
     try {
-        const tags = ExifReader.load(data.buffer);
+        const tags = ExifReader.load((new Uint8Array(data)).buffer);
 
         // The MakerNote tag can be really large. Remove it to lower memory
         // usage if you're parsing a lot of files and saving the tags.

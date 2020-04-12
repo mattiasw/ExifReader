@@ -174,6 +174,7 @@ describe('exif-reader', () => {
         beforeEach(() => {
             Constants = {
                 USE_FILE: true,
+                USE_PNG_FILE: true,
                 USE_EXIF: true,
                 USE_IPTC: true,
                 USE_XMP: true,
@@ -189,6 +190,12 @@ describe('exif-reader', () => {
         it('should handle when file tags have been excluded', () => {
             Constants.USE_FILE = false;
             rewireForCustomBuild({fileDataOffset: OFFSET_TEST_VALUE}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when PNG file tags have been excluded', () => {
+            Constants.USE_PNG_FILE = false;
+            rewireForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, Constants);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 

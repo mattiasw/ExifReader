@@ -28,10 +28,11 @@ function findPngOffsets(dataView) {
     const offsets = {
         hasAppMarkers: false
     };
+
     let offset = PNG_ID.length;
 
     while (offset + PNG_CHUNK_LENGTH_SIZE + PNG_CHUNK_TYPE_SIZE <= dataView.byteLength) {
-        if (isPngImageHeaderChunk(dataView, offset)) {
+        if (Constants.USE_PNG_FILE && isPngImageHeaderChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
             offsets.pngHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
         } else if (Constants.USE_XMP && isPngXmpChunk(dataView, offset)) {
