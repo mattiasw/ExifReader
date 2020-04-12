@@ -89,6 +89,9 @@
                 "after": true
             }
         ],
+        "no-console": [
+            "error"
+        ],
         "no-irregular-whitespace": [
             "error",
             {

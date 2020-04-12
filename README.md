@@ -3,17 +3,16 @@ ExifReader
 
 ExifReader is a JavaScript library that parses image files and extracts the
 metadata. It can also extract an embedded thumbnail. It can be used either in a
-browser or from Node. Supports JPEG, TIFF, PNG, and HEIC files with tags encoded
-using Exif, IPTC, and XMP (depending on file type).
+browser or from Node. Supports JPEG, TIFF, PNG, and HEIC files with Exif, IPTC,
+XMP, and ICC meta data (depending on file type).
 
-ExifReader supports module formats AMD, CommonJS and globals and can therefore
-easily be used from Webpack, RequireJS, Browserify, Node etc. Since it is
-written using ES2015+, you can also import the ES module directly from your own
-ES2015+ project.
+ExifReader is highly and easliy configurable and the resulting bundle can be as
+small as **4 KB** (gzipped) if you're only interested in a few tags (e.g. date
+and/or GPS values). See section below on
+[making a custom build](#configure-a-custom-build).
 
-The included bundle has all functionality built in, but you can easily make a
-custom build that suits your project's needs. See below for instructions. NOTE:
-This functionality is in beta. Please file an issue if there are any problems.
+ExifReader supports module formats ESM, AMD, CommonJS, and globals and can
+therefore easily be used from Webpack, RequireJS, Browserify, Node etc.
 
 **Notes for exif-js users**
 
@@ -145,6 +144,8 @@ See [examples/](examples/) directory for more details.
 
 ### Configure a custom build
 
+Configuring a custom build can reduce the bundle size significantly.
+
 **NOTE:** This functionality is in beta but should work fine. Please file an
 issue if you're having problems or ideas on how to make it better.
 
@@ -152,6 +153,10 @@ This is for npm users that use the built file. To specify what functionality you
 want you can either use include pattern (start with an empty set and include) or
 exclude pattern (start with full functionality and exclude). If an include
 pattern is set, excludes will not be used.
+
+For Exif and IPTC it's also possible to specify which tags you're interested in.
+Those tag groups have huge dictionaries of tags and you may not be interested in
+all of them. (Note that it's not possible to specify tags to exclude.)
 
 The configuration is added to your project's `package.json` file.
 
@@ -167,7 +172,27 @@ almost half the size of the full one (non-gzipped)):
 }
 ```
 
-**Example 2:** Exclude XMP tags:
+**Example 2:** Only include TIFF files, and the Exif `DateTime` tag and the GPS
+tags (resulting bundle will be ~17 % of a full build):
+
+```javascript
+"exifreader": {
+    "include": {
+        "tiff": true,
+        "exif": [
+            "DateTime",
+            "GPSLatitude",
+            "GPSLatitudeRef",
+            "GPSLongitude",
+            "GPSLongitudeRef",
+            "GPSAltitude",
+            "GPSAltitudeRef"
+        ]
+    }
+}
+```
+
+**Example 3:** Exclude XMP tags:
 
 ```javascript
 "exifreader": {

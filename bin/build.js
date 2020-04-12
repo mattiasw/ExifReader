@@ -11,9 +11,9 @@ if (!process.argv.includes('--only-with-config') || checkConfig()) {
 function checkConfig() {
     if (dependentHasExifReaderConfig()) {
         if (!isDependenciesInstalled()) {
-            console.log('Installing ExifReader custom build dependencies...');
+            console.log('Installing ExifReader custom build dependencies...'); // eslint-disable-line no-console
             execSync('npm install --no-optional --no-package-lock --no-save @babel/core @babel/preset-env @babel/register babel-loader cross-env string-replace-loader webpack webpack-cli', {stdio: 'inherit'});
-            console.log('Done.');
+            console.log('Done.'); // eslint-disable-line no-console
         }
         return true;
     }
