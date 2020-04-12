@@ -4,6 +4,7 @@
 
 export default {
     USE_FILE: true,
+    USE_PNG_FILE: true,
     USE_EXIF: true,
     USE_IPTC: true,
     USE_XMP: true,

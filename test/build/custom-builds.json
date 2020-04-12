@@ -1,0 +1,123 @@
+[
+    {
+        "id": "everything",
+        "config": {
+            "include": {
+                "file": true,
+                "png_file": true,
+                "exif": true,
+                "iptc": true,
+                "xmp": true,
+                "icc": true,
+                "thumbnail": true,
+                "tiff": true,
+                "jpeg": true,
+                "png": true,
+                "heic": true
+            }
+        }
+    },
+    {
+        "id": "full-tiff",
+        "config": {
+            "include": {
+                "tiff": true,
+                "exif": true,
+                "iptc": true,
+                "xmp": true
+            }
+        }
+    },
+    {
+        "id": "partial-tiff",
+        "config": {
+            "include": {
+                "tiff": true,
+                "exif": ["DateTime", "ExposureProgram", "DateTimeOriginal", "ComponentsConfiguration", "Flash", "GPSLatitude", "GPSLatitudeRef"],
+                "iptc": ["File Format", "Coded Character Set", "By-line", "Keywords"]
+            }
+        }
+    },
+    {
+        "id": "full-jpeg",
+        "config": {
+            "include": {
+                "jpeg": true,
+                "file": true,
+                "exif": true,
+                "iptc": true,
+                "xmp": true,
+                "icc": true,
+                "thumbnail": true
+            }
+        }
+    },
+    {
+        "id": "partial-jpeg",
+        "config": {
+            "include": {
+                "jpeg": true,
+                "exif": ["DateTime", "ExposureProgram", "DateTimeOriginal", "ComponentsConfiguration", "Flash", "GPSLatitude", "GPSLatitudeRef"],
+                "iptc": ["File Format", "Coded Character Set", "By-line", "Keywords"]
+            }
+        }
+    },
+    {
+        "id": "full-png",
+        "config": {
+            "include": {
+                "png": true,
+                "png_file": true,
+                "xmp": true
+            }
+        }
+    },
+    {
+        "id": "small-png",
+        "config": {
+            "include": {
+                "png": true,
+                "xmp": true
+            }
+        }
+    },
+    {
+        "id": "full-heic",
+        "config": {
+            "include": {
+                "heic": true,
+                "exif": true
+            }
+        }
+    },
+    {
+        "id": "partial-heic",
+        "config": {
+            "include": {
+                "heic": true,
+                "exif": ["DateTime", "ExposureProgram", "DateTimeOriginal", "ComponentsConfiguration", "Flash", "GPSLatitude", "GPSLatitudeRef"]
+            }
+        }
+    },
+    {
+        "id": "tiff-png",
+        "config": {
+            "include": {
+                "tiff": true,
+                "png": true,
+                "exif": true,
+                "xmp": true
+            }
+        }
+    },
+    {
+        "id": "jpeg-heic",
+        "config": {
+            "include": {
+                "jpeg": true,
+                "heic": true,
+                "exif": true
+            }
+        }
+    }
+]

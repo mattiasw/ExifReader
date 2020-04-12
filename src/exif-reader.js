@@ -119,7 +119,7 @@ export function loadView(dataView, options = {expanded: false}) {
         }
     }
 
-    if (Constants.USE_PNG && hasPngFileData(pngHeaderOffset)) {
+    if (Constants.USE_PNG && Constants.USE_PNG_FILE && hasPngFileData(pngHeaderOffset)) {
         foundMetaData = true;
         const readTags = PngFileTags.read(dataView, pngHeaderOffset);
         if (options.expanded) {

@@ -5,6 +5,7 @@
 import {expect} from 'chai';
 import {getDataView, getByteStringFromNumber} from './test-utils';
 import {__RewireAPI__ as ImageHeaderRewireAPI} from '../../src/image-header';
+import {__RewireAPI__ as ImageHeaderPngRewireAPI} from '../../src/image-header-png';
 import ImageHeader from '../../src/image-header';
 
 describe('image-header', () => {
@@ -14,6 +15,7 @@ describe('image-header', () => {
         ImageHeaderRewireAPI.__ResetDependency__('Jpeg');
         ImageHeaderRewireAPI.__ResetDependency__('Png');
         ImageHeaderRewireAPI.__ResetDependency__('Heic');
+        ImageHeaderPngRewireAPI.__ResetDependency__('Constants');
     });
 
     it('should fail for too short data buffer', () => {
@@ -306,6 +308,26 @@ describe('image-header', () => {
             ImageHeaderRewireAPI.__Rewire__('Constants', {USE_PNG: false});
             const dataView = getDataView(PNG_IMAGE_START);
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
+        });
+
+        it('should handle when PNG file tags have been excluded in a custom build', () => {
+            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_PNG: true, USE_PNG_FILE: false});
+            ImageHeaderPngRewireAPI.__Rewire__('Constants', {USE_PNG: true, USE_PNG_FILE: false});
+            const chunkLength = '\x00\x00\x00\x02';
+            const chunkType = 'IHDR';
+            const chunkData = '\x47\x11';
+            const crc = '\x00\x00\x00\x00';
+            const chunkLengthOther = '\x00\x00\x00\x04';
+            const chunkTypeOther = 'abcd';
+            const chunkDataOther = '\x48\x12\x49\x13';
+
+            const dataView = getDataView(
+                PNG_IMAGE_START
+                + chunkLengthOther + chunkTypeOther + chunkDataOther + crc
+                + chunkLength + chunkType + chunkData + crc
+            );
+
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({hasAppMarkers: false});
         });
     });
 
