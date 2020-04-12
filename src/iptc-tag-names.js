@@ -281,7 +281,10 @@ export default {
         0x02bc: 'Owner ID',
         0x02c8: {
             'name': (value) => {
-                return value.length === 2 ? 'ObjectData Preview File Format' : 'Record 2 destination';
+                if (value.length === 2) {
+                    return 'ObjectData Preview File Format';
+                }
+                return 'Record 2 destination';
             },
             'description': (value) => {
                 if (value.length === 2) {

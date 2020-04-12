@@ -6,11 +6,13 @@
 
 const path = require('path');
 const findConfigFromClosestPackageJson = require('./bin/findDependentConfig');
+const TagFilterPlugin = require('./bin/TagFilterPlugin');
 
 const config = getConfig();
 const includedModules = parseConfig(config);
 
 if (includedModules) {
+    // eslint-disable-next-line no-console
     console.log(
         '[INFO] Building custom bundle from this config: '
         + (config.include ? `including ${JSON.stringify(config.include)}` : '')
@@ -44,7 +46,14 @@ module.exports = {
             {
                 test: /\.js$/,
                 exclude: /node_modules/,
-                loader: 'babel-loader'
+                use: {
+                    loader: 'babel-loader',
+                    options: {
+                        plugins: includedModules ? [
+                            [TagFilterPlugin, {include: includedModules}]
+                        ] : []
+                    }
+                }
             },
             {
                 test: /\/(exif-reader|image-header-?(tiff|jpeg|png|heic)?)\.js$/,
@@ -77,8 +86,9 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
     if (includesConfig) {
         const includes = {};
         for (const module of modules) {
-            includes[module] = includesConfig.includes(module)
-                || ((module === 'exif') && includesConfig.includes('thumbnail'));
+            includes[module] = (Object.keys(includesConfig).includes(module)
+                || ((module === 'exif') && Object.keys(includesConfig).includes('thumbnail')))
+                && includesConfig[module];
         }
         return includes;
     }
@@ -99,7 +109,15 @@ function getConfig() {
     const packageJson = findConfigFromClosestPackageJson();
 
     if (packageJson && packageJson.include) {
-        return {include: getConfigValues(packageJson.include)};
+        if (Array.isArray(packageJson.include.exif)) {
+            // Mandatory tags that are needed to be able to find the rest of them.
+            packageJson.include.exif.push('Exif IFD Pointer');
+            packageJson.include.exif.push('GPS Info IFD Pointer');
+            packageJson.include.exif.push('Interoperability IFD Pointer');
+            packageJson.include.exif.push('IPTC-NAA');
+            packageJson.include.exif.push('ApplicationNotes');
+        }
+        return {include: packageJson.include};
     }
     if (packageJson && packageJson.exclude) {
         return {exclude: getConfigValues(packageJson.exclude)};
@@ -120,7 +138,7 @@ function getConstantReplacements(modules) {
             replacements.push({
                 search: `Constants\\.USE_${module.toUpperCase()}`,
                 flags: 'g',
-                replace: JSON.stringify(modules[module])
+                replace: JSON.stringify(!!modules[module])
             });
         }
     }
