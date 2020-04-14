@@ -9,7 +9,7 @@ function parse(imagePath, libraryDir = '../..') {
     const exifReaderPath = require.resolve(path.join(libraryDir, 'dist/exif-reader'));
     delete require.cache[exifReaderPath];
     const ExifReader = require(exifReaderPath);
-    const data = (new Uint8Array(fs.readFileSync(imagePath))).buffer;
+    const data = fs.readFileSync(imagePath);
 
     try {
         const result = {

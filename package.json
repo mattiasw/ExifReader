@@ -50,14 +50,14 @@
     "coverage": "nyc npm test",
     "cypress:open": "cypress open",
     "lint": "eslint .",
-    "precommit": "npm-run-all lint test",
+    "precommit": "npm-run-all lint test test:build",
     "start": "webpack-dev-server",
     "test": "cross-env BABEL_ENV=test mocha --require @babel/register --recursive \"test/unit/\"",
     "test:build": "mocha test/build/test.js",
     "test:build:custom": "mocha test/build/test-custom.js",
     "test:build:update": "node test/build/update.js",
     "test:e2e": "cypress run",
-    "test:all": "npm-run-all test test:e2e test:build test:build:custom",
+    "test:all": "npm-run-all lint test test:e2e test:build test:build:custom",
     "postinstall": "node bin/build.js --only-with-config"
   },
   "nyc": {

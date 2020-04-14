@@ -30,7 +30,20 @@ export default {
 export const errors = exifErrors;
 
 export function load(data, options = {expanded: false}) {
+    if (isNodeBuffer(data)) {
+        // File data read in Node can share the underlying buffer with other
+        // data. Therefore it's safest to get a new one to avoid weird bugs.
+        data = (new Uint8Array(data)).buffer;
+    }
     return loadView(getDataView(data), options);
+}
+
+function isNodeBuffer(data) {
+    try {
+        return Buffer.isBuffer(data); // eslint-disable-line no-undef
+    } catch (error) {
+        return false;
+    }
 }
 
 function getDataView(data) {
