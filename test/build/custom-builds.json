@@ -1,6 +1,7 @@
 [
     {
         "id": "everything",
+        "rebuild": true,
         "config": {
             "include": {
                 "file": true,
@@ -54,6 +55,7 @@
     },
     {
         "id": "partial-jpeg",
+        "rebuild": true,
         "config": {
             "include": {
                 "jpeg": true,
@@ -64,6 +66,7 @@
     },
     {
         "id": "full-png",
+        "rebuild": true,
         "config": {
             "include": {
                 "png": true,

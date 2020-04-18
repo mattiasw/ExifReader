@@ -13,11 +13,13 @@ describe('custom configuration image outputs', () => {
     const TEMP_PROJECT_DIR = path.join(__dirname, 'tmp');
     const PACKAGE = path.join(__dirname, `../../exifreader-${getVersion()}.tgz`);
 
+    const filter = getFilter(process.argv);
+
     before(() => {
         cleanUp();
     });
 
-    configurations.forEach((configuration) => {
+    configurations.filter((configuration) => !filter || (configuration.id === filter)).forEach((configuration) => {
         describe(`configuration "${configuration.id}"`, function () {
             this.timeout(60000);
 
@@ -39,26 +41,34 @@ describe('custom configuration image outputs', () => {
                 });
             });
 
-            describe('rebuild', () => {
-                before(() => {
-                    setUp();
-                    execSync(`npm install --loglevel=error ${PACKAGE}`, {stdio: 'ignore'});
-                    updatePackageJson(configuration.config);
-                    execSync('npm rebuild exifreader', {stdio: 'ignore'});
-                });
+            if (configuration.rebuild) {
+                describe('rebuild', () => {
+                    before(() => {
+                        setUp();
+                        execSync(`npm install --loglevel=error ${PACKAGE}`, {stdio: 'ignore'});
+                        updatePackageJson(configuration.config);
+                        execSync('npm rebuild exifreader', {stdio: 'ignore'});
+                    });
 
-                after(() => {
-                    cleanUp();
-                });
+                    after(() => {
+                        cleanUp();
+                    });
 
-                fs.readdirSync(path.join(FIXTURES_PATH, 'images')).forEach((imageName) => {
-                    it(`matches stored image output for ${imageName}`, () => {
-                        testFile(imageName, configuration);
+                    fs.readdirSync(path.join(FIXTURES_PATH, 'images')).forEach((imageName) => {
+                        it(`matches stored image output for ${imageName}`, () => {
+                            testFile(imageName, configuration);
+                        });
                     });
                 });
-            });
+            }
         });
     });
+
+    function getFilter(argv) {
+        return argv
+            .filter((arg) => arg.startsWith('--name='))
+            .map((arg) => arg.replace(/^--name=/, ''))[0];
+    }
 
     function getVersion() {
         try {
