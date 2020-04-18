@@ -41,6 +41,7 @@
     "nyc": "^14.1.1",
     "rimraf": "^3.0.2",
     "string-replace-loader": "^2.2.0",
+    "terser-webpack-plugin": "^2.3.5",
     "webpack": "^4.42.0",
     "webpack-cli": "^3.3.6",
     "webpack-dev-server": "git+https://github.com/webpack/webpack-dev-server.git#c6bdfe4afb2ce3612c02142954c68a8e657c3915"

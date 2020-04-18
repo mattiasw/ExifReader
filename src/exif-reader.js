@@ -72,15 +72,16 @@ export function loadView(dataView, options = {expanded: false}) {
 
     if (Constants.USE_EXIF && hasExifData(tiffHeaderOffset)) {
         foundMetaData = true;
-        const {Thumbnail: thumbnailTags, ...readTags} = Tags.read(dataView, tiffHeaderOffset);
+        const readTags = Tags.read(dataView, tiffHeaderOffset);
+        if (readTags.Thumbnail) {
+            tags.Thumbnail = readTags.Thumbnail;
+            delete readTags.Thumbnail;
+        }
 
         if (options.expanded) {
             tags.exif = readTags;
         } else {
             tags = objectAssign({}, tags, readTags);
-        }
-        if (thumbnailTags) {
-            tags.Thumbnail = thumbnailTags;
         }
 
         if (Constants.USE_TIFF && Constants.USE_IPTC && readTags['IPTC-NAA'] && !hasIptcData(iptcDataOffset)) {

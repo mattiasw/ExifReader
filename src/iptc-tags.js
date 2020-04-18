@@ -46,8 +46,8 @@ function getResourceBlock(dataView, dataOffset) {
     }
 
     return {
-        type: dataView.getUint16(dataOffset + BYTES_8BIM_SIZE, false),
-        size: dataView.getUint16(dataOffset + RESOURCE_BLOCK_SIZE_OFFSET, false)
+        type: dataView.getUint16(dataOffset + BYTES_8BIM_SIZE),
+        size: dataView.getUint16(dataOffset + RESOURCE_BLOCK_SIZE_OFFSET)
     };
 }
 
@@ -114,8 +114,8 @@ function readTag(dataView, dataOffset, tags, encoding) {
         return {tag: null, tagSize: 0};
     }
 
-    const tagCode = dataView.getUint16(dataOffset + TAG_CODE_OFFSET, false);
-    const tagSize = dataView.getUint16(dataOffset + TAG_SIZE_OFFSET, false);
+    const tagCode = dataView.getUint16(dataOffset + TAG_CODE_OFFSET);
+    const tagSize = dataView.getUint16(dataOffset + TAG_SIZE_OFFSET);
     const tagValue = getTagValue(dataView, dataOffset + TAG_HEADER_SIZE, tagSize);
 
     const tag = {

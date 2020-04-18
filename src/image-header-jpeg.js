@@ -45,7 +45,7 @@ const APP1_XMP_EXTENDED_IDENTIFIER = 'http://ns.adobe.com/xmp/extension/\x00';
 const APP13_IPTC_IDENTIFIER = 'Photoshop 3.0';
 
 function isJpegFile(dataView) {
-    return (dataView.byteLength >= MIN_JPEG_DATA_BUFFER_LENGTH) && (dataView.getUint16(0, false) === JPEG_ID);
+    return (dataView.byteLength >= MIN_JPEG_DATA_BUFFER_LENGTH) && (dataView.getUint16(0) === JPEG_ID);
 }
 
 function findJpegOffsets(dataView) {
@@ -64,36 +64,36 @@ function findJpegOffsets(dataView) {
         } else if (Constants.USE_FILE && isSOF2Marker(dataView, appMarkerPosition)) {
             sof2DataOffset = appMarkerPosition + APP_MARKER_SIZE;
         } else if (Constants.USE_EXIF && isApp1ExifMarker(dataView, appMarkerPosition)) {
-            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             tiffHeaderOffset = appMarkerPosition + TIFF_HEADER_OFFSET;
         } else if (Constants.USE_XMP && isApp1XmpMarker(dataView, appMarkerPosition)) {
             if (!xmpChunks) {
                 xmpChunks = [];
             }
-            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             xmpChunks.push(getXmpChunkDetails(appMarkerPosition, fieldLength));
         } else if (Constants.USE_XMP && isApp1ExtendedXmpMarker(dataView, appMarkerPosition)) {
             if (!xmpChunks) {
                 xmpChunks = [];
             }
-            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             xmpChunks.push(getExtendedXmpChunkDetails(appMarkerPosition, fieldLength));
         } else if (Constants.USE_IPTC && isApp13PhotoshopMarker(dataView, appMarkerPosition)) {
-            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             iptcDataOffset = appMarkerPosition + IPTC_DATA_OFFSET;
         } else if (Constants.USE_ICC && isApp2ICCMarker(dataView, appMarkerPosition)) {
-            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             const iccDataOffset = appMarkerPosition + APP2_ICC_DATA_OFFSET;
             const iccDataLength = fieldLength - (APP2_ICC_DATA_OFFSET - APP_MARKER_SIZE);
 
-            const iccChunkNumber = dataView.getUint8(appMarkerPosition + ICC_CHUNK_NUMBER_OFFSET, false);
-            const iccChunksTotal = dataView.getUint8(appMarkerPosition + ICC_TOTAL_CHUNKS_OFFSET, false);
+            const iccChunkNumber = dataView.getUint8(appMarkerPosition + ICC_CHUNK_NUMBER_OFFSET);
+            const iccChunksTotal = dataView.getUint8(appMarkerPosition + ICC_TOTAL_CHUNKS_OFFSET);
             if (!iccChunks) {
                 iccChunks = [];
             }
             iccChunks.push({offset: iccDataOffset, length: iccDataLength, chunkNumber: iccChunkNumber, chunksTotal: iccChunksTotal});
         } else if (isAppMarker(dataView, appMarkerPosition)) {
-            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE, false);
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
         } else {
             break;
         }
@@ -111,30 +111,30 @@ function findJpegOffsets(dataView) {
 }
 
 function isSOF0Marker(dataView, appMarkerPosition) {
-    return (dataView.getUint16(appMarkerPosition, false) === SOF0_MARKER);
+    return (dataView.getUint16(appMarkerPosition) === SOF0_MARKER);
 }
 
 function isSOF2Marker(dataView, appMarkerPosition) {
-    return (dataView.getUint16(appMarkerPosition, false) === SOF2_MARKER);
+    return (dataView.getUint16(appMarkerPosition) === SOF2_MARKER);
 }
 
 function isApp2ICCMarker(dataView, appMarkerPosition) {
     const markerIdLength = APP2_ICC_IDENTIFIER.length;
 
-    return (dataView.getUint16(appMarkerPosition, false) === APP2_MARKER)
+    return (dataView.getUint16(appMarkerPosition) === APP2_MARKER)
         && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP2_ICC_IDENTIFIER);
 }
 
 function isApp1ExifMarker(dataView, appMarkerPosition) {
     const markerIdLength = APP1_EXIF_IDENTIFIER.length;
 
-    return (dataView.getUint16(appMarkerPosition, false) === APP1_MARKER)
+    return (dataView.getUint16(appMarkerPosition) === APP1_MARKER)
         && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP1_EXIF_IDENTIFIER)
-        && (dataView.getUint8(appMarkerPosition + APP_ID_OFFSET + markerIdLength, false) === 0x00);
+        && (dataView.getUint8(appMarkerPosition + APP_ID_OFFSET + markerIdLength) === 0x00);
 }
 
 function isApp1XmpMarker(dataView, appMarkerPosition) {
-    return (dataView.getUint16(appMarkerPosition, false) === APP1_MARKER)
+    return (dataView.getUint16(appMarkerPosition) === APP1_MARKER)
         && isXmpIdentifier(dataView, appMarkerPosition);
 }
 
@@ -144,7 +144,7 @@ function isXmpIdentifier(dataView, appMarkerPosition) {
 }
 
 function isApp1ExtendedXmpMarker(dataView, appMarkerPosition) {
-    return (dataView.getUint16(appMarkerPosition, false) === APP1_MARKER)
+    return (dataView.getUint16(appMarkerPosition) === APP1_MARKER)
         && isExtendedXmpIdentifier(dataView, appMarkerPosition);
 }
 
@@ -170,13 +170,13 @@ function getExtendedXmpChunkDetails(appMarkerPosition, fieldLength) {
 function isApp13PhotoshopMarker(dataView, appMarkerPosition) {
     const markerIdLength = APP13_IPTC_IDENTIFIER.length;
 
-    return (dataView.getUint16(appMarkerPosition, false) === APP13_MARKER)
+    return (dataView.getUint16(appMarkerPosition) === APP13_MARKER)
         && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP13_IPTC_IDENTIFIER)
-        && (dataView.getUint8(appMarkerPosition + APP_ID_OFFSET + markerIdLength, false) === 0x00);
+        && (dataView.getUint8(appMarkerPosition + APP_ID_OFFSET + markerIdLength) === 0x00);
 }
 
 function isAppMarker(dataView, appMarkerPosition) {
-    const appMarker = dataView.getUint16(appMarkerPosition, false);
+    const appMarker = dataView.getUint16(appMarkerPosition);
     return ((appMarker >= APP0_MARKER) && (appMarker <= APP15_MARKER))
         || (appMarker === COMMENT_MARKER)
         || (appMarker === SOF0_MARKER)

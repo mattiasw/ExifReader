@@ -70,7 +70,9 @@ export function parseTags(dataView) {
 
     const tags = {};
 
-    for (const offset of Object.keys(iccProfile)) {
+    const iccProfileKeys = Object.keys(iccProfile);
+    for (let i = 0; i < iccProfileKeys.length; i++) {
+        const offset = iccProfileKeys[i];
         const profileEntry = iccProfile[offset];
         const value = profileEntry.value(dataView, parseInt(offset, 10));
         let description = value;

@@ -165,6 +165,14 @@ describe('exif-reader', () => {
         rewireThumbnail(myThumbnail);
 
         expect(ExifReader.loadView({})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
+    });
+
+    it('should retrieve a thumbnail when using expanded result', () => {
+        const myThumbnail = {type: 'image/jpeg'};
+        const myTags = {MyExifTag: 43, Thumbnail: myThumbnail};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+        rewireThumbnail(myThumbnail);
+
         expect(ExifReader.loadView({}, {expanded: true})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
     });
 
