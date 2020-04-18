@@ -38,7 +38,8 @@ function combineChunks(dataView, chunks) {
     const combinedChunks = new Uint8Array(totalLength);
     let offset = 0;
 
-    for (const chunk of chunks) {
+    for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
         const slice = dataView.buffer.slice(chunk.dataOffset, chunk.dataOffset + chunk.length);
         combinedChunks.set(new Uint8Array(slice), offset);
         offset += chunk.length;

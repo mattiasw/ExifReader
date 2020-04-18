@@ -5,7 +5,7 @@
 export function getStringFromDataView(dataView, offset, length) {
     const chars = [];
     for (let i = 0; i < length && offset + i < dataView.byteLength; i++) {
-        chars.push(dataView.getUint8(offset + i, false));
+        chars.push(dataView.getUint8(offset + i));
     }
     return getStringValueFromArray(chars);
 }
@@ -26,14 +26,14 @@ export function getCharacterArray(string) {
     return string.split('').map((character) => character.charCodeAt(0));
 }
 
-export function objectAssign(target, ...sources) {
-    for (const source of sources) {
-        for (const property in source) {
-            target[property] = source[property];
+export function objectAssign() {
+    for (let i = 1; i < arguments.length; i++) {
+        for (const property in arguments[i]) {
+            arguments[0][property] = arguments[i][property];
         }
     }
 
-    return target;
+    return arguments[0];
 }
 
 export function deferInit(object, key, initializer) {

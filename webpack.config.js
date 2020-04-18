@@ -5,6 +5,7 @@
 /* eslint-env node */
 
 const path = require('path');
+const TerserPlugin = require('terser-webpack-plugin');
 const findConfigFromClosestPackageJson = require('./bin/findDependentConfig');
 const TagFilterPlugin = require('./bin/TagFilterPlugin');
 
@@ -23,6 +24,20 @@ if (includedModules) {
 
 module.exports = {
     mode: 'production',
+    optimization: {
+        minimizer: [new TerserPlugin({
+            terserOptions: {
+                compress: {
+                    arguments: true,
+                    booleans_as_integers: true,
+                    passes: 3,
+                    typeofs: false, // IE10 needs typeofs to be false.
+                    unsafe: true,
+                },
+                sourceMap: true,
+            }
+        })]
+    },
     entry: {
         'exif-reader': path.resolve('./src/exif-reader.js')
     },
@@ -113,10 +128,18 @@ function getConfig() {
         if (Array.isArray(packageJson.include.exif)) {
             // Mandatory tags that are needed to be able to find the rest of them.
             packageJson.include.exif.push('Exif IFD Pointer');
-            packageJson.include.exif.push('GPS Info IFD Pointer');
-            packageJson.include.exif.push('Interoperability IFD Pointer');
-            packageJson.include.exif.push('IPTC-NAA');
-            packageJson.include.exif.push('ApplicationNotes');
+            if (includesGpsTag(packageJson.include.exif)) {
+                packageJson.include.exif.push('GPS Info IFD Pointer');
+            }
+            if (includesInteroperabilityTag(packageJson.include.exif)) {
+                packageJson.include.exif.push('Interoperability IFD Pointer');
+            }
+            if (packageJson.include.iptc) {
+                packageJson.include.exif.push('IPTC-NAA');
+            }
+            if (packageJson.include.xmp) {
+                packageJson.include.exif.push('ApplicationNotes');
+            }
         }
         return {include: packageJson.include};
     }
@@ -132,6 +155,24 @@ function getPackageJson() {
         return JSON.parse(process.env.EXIFREADER_CUSTOM_BUILD);
     }
     return findConfigFromClosestPackageJson();
+}
+
+function includesGpsTag(tags) {
+    for (const tag of tags) {
+        if (tag.toLowerCase().startsWith('gps')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function includesInteroperabilityTag(tags) {
+    for (const tag of tags) {
+        if (tag.toLowerCase().startsWith('interoperability') || tag.toLowerCase().startsWith('relatedimage')) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function getConfigValues(configObject) {

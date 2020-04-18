@@ -143,9 +143,10 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
         tagValue = decodeAsciiValue(tagValue);
     }
 
-    if (TagNames[ifdType][tagCode] !== undefined) {
-        let tagName, tagDescription;
+    let tagName = `undefined-${tagCode}`;
+    let tagDescription = tagValue;
 
+    if (TagNames[ifdType][tagCode] !== undefined) {
         if ((TagNames[ifdType][tagCode]['name'] !== undefined) && (TagNames[ifdType][tagCode]['description'] !== undefined)) {
             tagName = TagNames[ifdType][tagCode]['name'];
             try {
@@ -160,19 +161,13 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
             tagName = TagNames[ifdType][tagCode];
             tagDescription = getDescriptionFromTagValue(tagValue);
         }
-        return {
-            id: tagCode,
-            name: tagName,
-            value: tagValue,
-            description: tagDescription
-        };
     }
 
     return {
         id: tagCode,
-        name: `undefined-${tagCode}`,
+        name: tagName,
         value: tagValue,
-        description: tagValue
+        description: tagDescription
     };
 }
 
@@ -209,15 +204,15 @@ function splitNullSeparatedAsciiString(string) {
     const tagValue = [];
     let i = 0;
 
-    for (const character of string) {
-        if (character === '\x00') {
+    for (let j = 0; j < string.length; j++) {
+        if (string[j] === '\x00') {
             i++;
             continue;
         }
         if (tagValue[i] === undefined) {
             tagValue[i] = '';
         }
-        tagValue[i] += character;
+        tagValue[i] += string[j];
     }
 
     return tagValue;
