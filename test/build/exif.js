@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 
 module.exports = {
     parse
@@ -13,15 +14,9 @@ function parse(imagePath, libraryDir = '../..') {
 
     try {
         const result = {
-            combined: ExifReader.load(data),
-            expanded: ExifReader.load(data, {expanded: true})
+            combined: hashDetails(ExifReader.load(data)),
+            expanded: hashGroupDetails(ExifReader.load(data, {expanded: true}))
         };
-        if (result.combined.Thumbnail && result.combined.Thumbnail.image) {
-            result.combined.Thumbnail.image = (new Uint8Array(result.combined.Thumbnail.image)).map((char) => Number(char)).toString();
-        }
-        if (result.expanded.Thumbnail && result.expanded.Thumbnail.image) {
-            result.expanded.Thumbnail.image = (new Uint8Array(result.expanded.Thumbnail.image)).map((char) => Number(char)).toString();
-        }
         return result;
     } catch (error) {
         if (error instanceof ExifReader.errors.MetadataMissingError) {
@@ -29,4 +24,54 @@ function parse(imagePath, libraryDir = '../..') {
         }
         return error.toString();
     }
+}
+
+function hashDetails(tags) {
+    for (const tagName of Object.keys(tags)) {
+        if (tagName === 'Thumbnail') {
+            if (tags[tagName].image) {
+                tags[tagName].image = hash(tags[tagName].image);
+                tags[tagName].base64 = hash(tags[tagName].base64);
+            }
+        } else if (Array.isArray(tags[tagName])) {
+            tags[tagName].map((item) => {
+                item.value = hash(item.value);
+                item.description = hash(item.description);
+            });
+        } else {
+            tags[tagName].value = hash(tags[tagName].value);
+            tags[tagName].description = hash(tags[tagName].description);
+            if (tags[tagName].attributes) {
+                tags[tagName].attributes = hash(tags[tagName].attributes);
+            }
+        }
+    }
+
+    return tags;
+}
+
+function hashGroupDetails(tags) {
+    for (const tagGroupName of Object.keys(tags)) {
+        if (tagGroupName === 'Thumbnail') {
+            hashDetails({Thumbnail: tags[tagGroupName]});
+        } else {
+            hashDetails(tags[tagGroupName]);
+        }
+    }
+
+    return tags;
+}
+
+function hash(value) {
+    if (value instanceof ArrayBuffer) {
+        value = (new Uint8Array(value)).map((byte) => Number(byte));
+    }
+    const stringified = JSON.stringify(value);
+    if (stringified.length > 200) {
+        return crypto.createHash('sha1').update(stringified).digest('base64');
+    }
+    if (Array.isArray(value)) {
+        return value.join(', ');
+    }
+    return value;
 }
