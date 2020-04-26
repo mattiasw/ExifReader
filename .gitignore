@@ -1,0 +1,14 @@
+coverage
+node_modules
+*.log
+.nyc_output
+test/cypress/screenshots
+test/cypress/videos
+.tags
+.tags1
+.vscode
+exifreader-*.tgz
+test/build/tmp
+test/fixtures/images/custom_*
+test/fixtures/outputs/custom_*
+gh-pages.tmp
