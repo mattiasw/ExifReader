@@ -48,6 +48,7 @@
   },
   "scripts": {
     "build": "node bin/build.js",
+    "build:pages": "node bin/build-pages.js",
     "coverage": "nyc npm test",
     "cypress:open": "cypress open",
     "lint": "eslint .",
