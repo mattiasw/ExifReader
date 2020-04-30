@@ -2,10 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  *
- * This script is used to build GitHub Pages when there is a new release. This
- * script will create a temporary directory "gh-pages.tmp" and place all files
+ * This script is used to build GitHub Pages when there is a new release. The
+ * script will create a temporary directory "gh-pages" and place all files
  * needed for GitHub Pages in there. Then they need to be committed to the
- * gh-pages branch.
+ * gh-pages branch and pushed to actually be visible.
  */
 
 const fs = require('fs');
