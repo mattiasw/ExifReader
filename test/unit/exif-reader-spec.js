@@ -191,7 +191,8 @@ describe('exif-reader', () => {
                 USE_TIFF: true,
                 USE_JPEG: true,
                 USE_PNG: true,
-                USE_HEIC: true
+                USE_HEIC: true,
+                USE_WEBP: true
             };
         });
 
@@ -209,11 +210,9 @@ describe('exif-reader', () => {
 
         it('should handle when JPEG files have been excluded', () => {
             Constants.USE_JPEG = false;
-            ExifReaderRewireAPI.__Rewire__('Thumbnail', {get: () => true});
             rewireForCustomBuild({
                 fileDataOffset: OFFSET_TEST_VALUE,
-                iptcDataOffset: OFFSET_TEST_VALUE,
-                iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]
+                iptcDataOffset: OFFSET_TEST_VALUE
             }, Constants);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
@@ -249,17 +248,51 @@ describe('exif-reader', () => {
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
-        it('should handle when PNG file tags have been excluded', () => {
+        it('should handle when PNG files have been excluded', () => {
             Constants.USE_PNG = false;
             rewireForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, Constants);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
+        it('should handle when JPEG files but not WebP files have been excluded', () => {
+            Constants.USE_JPEG = false;
+            const myTags = {
+                exif: {MyExifTag: 43},
+                iptc: {MyIptcTag: 44},
+                xmp: {MyXmpTag: 45},
+                icc: {MyIccTag: 42},
+                Thumbnail: {type: 'image/jpeg'}
+            };
+            rewireForCustomBuild({
+                tiffHeaderOffset: OFFSET_TEST_VALUE,
+                iptcDataOffset: OFFSET_TEST_VALUE,
+                xmpChunks: [{
+                    dataOffset: OFFSET_TEST_VALUE,
+                    length: XMP_FIELD_LENGTH_TEST_VALUE
+                }],
+                iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]
+            }, Constants);
+            rewireTagsRead('Tags', {...myTags.exif, Thumbnail: myTags.Thumbnail});
+            rewireTagsRead('IptcTags', myTags.iptc);
+            rewireXmpTagsRead(myTags.xmp);
+            rewireIccTagsRead(myTags.icc);
+
+            expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({
+                exif: myTags.exif,
+                xmp: myTags.xmp,
+                icc: myTags.icc,
+                Thumbnail: myTags.Thumbnail,
+            });
+        });
+
         it('should handle when thumbnail has been excluded', () => {
             Constants.USE_THUMBNAIL = false;
             ExifReaderRewireAPI.__Rewire__('Thumbnail', {get: () => true});
-            rewireForCustomBuild({}, Constants);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            rewireForCustomBuild({
+                tiffHeaderOffset: OFFSET_TEST_VALUE,
+            }, Constants);
+            rewireTagsRead('Tags', {Thumbnail: {type: 'image/jpeg'}});
+            expect(ExifReader.loadView()['Thumbnail']).to.be.undefined;
         });
     });
 });

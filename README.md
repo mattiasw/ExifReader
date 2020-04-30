@@ -3,8 +3,8 @@ ExifReader
 
 ExifReader is a JavaScript library that parses image files and extracts the
 metadata. It can also extract an embedded thumbnail. It can be used either in a
-browser or from Node. Supports JPEG, TIFF, PNG, and HEIC files with Exif, IPTC,
-XMP, and ICC meta data (depending on file type).
+browser or from Node. Supports JPEG, TIFF, PNG, HEIC, and WebP files with Exif,
+IPTC, XMP, and ICC meta data (depending on file type).
 
 ExifReader is highly and easliy configurable and the resulting bundle can be as
 small as **3 KiB** (gzipped) if you're only interested in a few tags (e.g. date
@@ -13,6 +13,22 @@ and/or GPS values). See section below on
 
 ExifReader supports module formats ESM, AMD, CommonJS, and globals and can
 therefore easily be used from Webpack, RequireJS, Browserify, Node etc.
+
+You can try it out on the
+[examples site](https://mattiasw.github.io/ExifReader/).
+
+**Support table**
+
+| File type | Exif    | IPTC    | XMP     | ICC     | Thumbnail |
+| ----------|---------|---------|---------|---------|-----------|
+| JPEG      | **yes** | **yes** | **yes** | **yes** | **yes**   |
+| TIFF      | **yes** | **yes** | **yes** | no      | no        |
+| PNG       | no      | no      | **yes** | no      | no        |
+| HEIC/HEIF | **yes** | no      | no      | no      | no        |
+| WebP      | **yes** | no      | **yes** | **yes** | **yes**   |
+
+If you're missing something that you think should be supported, file an issue
+with an attached example image and I'll see what I can do.
 
 **Notes for exif-js users**
 
@@ -224,13 +240,14 @@ Possible modules to include or exclude:
 | `tiff`      | TIFF images.                                                   |
 | `png`       | PNG images.                                                    |
 | `heic`      | HEIC/HEIF images.                                              |
+| `webp`      | WebP images.                                                   |
 | `file`      | JPEG file details: image width, height etc.                    |
 | `png_file`  | PNG file details: image width, height etc.                     |
 | `exif`      | Regular Exif tags. If excluded, will also exclude `thumbnail`. For TIFF files, excluding this will also exclude IPTC and XMP. |
 | `iptc`      | IPTC tags.                                                     |
 | `xmp`       | XMP tags.                                                      |
 | `icc`       | ICC color profile tags.                                        |
-| `thumbnail` | JPEG thumbnail. Needs `exif`.                                  |
+| `thumbnail` | Thumbnail. Needs `exif`.                                       |
 
 Notes
 -----
@@ -244,10 +261,6 @@ Notes
     used for the altitude using `GPSAltitude` and `GPSAltitudeRef` where the
     latter specifies if it's above sea level (positive) or below sea level
     (negative).
--   For PNG files, only XMP tags are currently supported. If you are missing
-    tags in a PNG file, please open a new issue and supply an example image.
-    (Tags in PNGs can be compressed though which will probably be hard to
-    support in browsers without the size of the library getting too big.)
 -   Some XMP tags have processed values as descriptions. That means that e.g. an
     `Orientation` value of `3` will have `Rotate 180` in the `description`
     property. If you would like more XMP tags to have a processed description,
@@ -310,8 +323,6 @@ npm run coverage
 Known Limitations
 -----------------
 
--   For PNG files, only uncompressed XMP tags are currently supported.
--   For HEIC files, only Exif tags are currently supported.
 -   The descriptions for UserComment, GPSProcessingMethod and GPSAreaInformation
     are missing for other encodings than ASCII.
 
@@ -341,6 +352,8 @@ case is covered.
 Changelog
 ---------
 
+-   **May 2020**:
+    -   Add support for WebP images.
 -   **April 2020**:
     -   Add support for IPTC and XMP tags in TIFF images.
     -   Add functionality to create a custom build to reduce bundle size.

@@ -7,6 +7,7 @@ import Tiff from './image-header-tiff.js';
 import Jpeg from './image-header-jpeg.js';
 import Png from './image-header-png.js';
 import Heic from './image-header-heic.js';
+import Webp from './image-header-webp.js';
 
 export default {
     parseAppMarkers
@@ -27,6 +28,10 @@ function parseAppMarkers(dataView) {
 
     if (Constants.USE_HEIC && Heic.isHeicFile(dataView)) {
         return Heic.findHeicOffsets(dataView);
+    }
+
+    if (Constants.USE_WEBP && Webp.isWebpFile(dataView)) {
+        return Webp.findOffsets(dataView);
     }
 
     throw new Error('Invalid image format');
