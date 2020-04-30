@@ -49,6 +49,20 @@ fs.readFile(filePath, function (error, data) {
 
 function listTags(tags) {
     for (const name in tags) {
-        console.log(`${name}: ${tags[name].description}`);
+        if ((name === 'Thumbnail') && tags[name].image) {
+            for (const thumbnailName in tags[name]) {
+                if (thumbnailName === 'image') {
+                    console.log(`${name}, image: <image>`);
+                } else if (thumbnailName === 'base64') {
+                    console.log(`${name}, base64: <base64 encoded image>`);
+                } else if (thumbnailName === 'type') {
+                    console.log(`${name}, ${thumbnailName}: ${tags[name][thumbnailName]}`);
+                } else {
+                    console.log(`${name}, ${thumbnailName}: ${tags[name][thumbnailName].description}`);
+                }
+            }
+        } else {
+            console.log(`${name}: ${tags[name].description}`);
+        }
     }
 }
