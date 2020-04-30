@@ -123,7 +123,7 @@ export function loadView(dataView, options = {expanded: false}) {
         }
     }
 
-    if (Constants.USE_JPEG && Constants.USE_ICC && hasIccData(iccChunks)) {
+    if ((Constants.USE_JPEG || Constants.USE_WEBP) && Constants.USE_ICC && hasIccData(iccChunks)) {
         foundMetaData = true;
         const readTags = IccTags.read(dataView, iccChunks);
         if (options.expanded) {
@@ -143,13 +143,15 @@ export function loadView(dataView, options = {expanded: false}) {
         }
     }
 
-    const thumbnail = Constants.USE_JPEG
+    const thumbnail = (Constants.USE_JPEG || Constants.USE_WEBP)
         && Constants.USE_EXIF
         && Constants.USE_THUMBNAIL
         && Thumbnail.get(dataView, tags.Thumbnail, tiffHeaderOffset);
     if (thumbnail) {
         tags.Thumbnail = thumbnail;
         foundMetaData = true;
+    } else {
+        delete tags.Thumbnail;
     }
 
     if (!foundMetaData) {

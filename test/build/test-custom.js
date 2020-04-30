@@ -21,7 +21,7 @@ describe('custom configuration image outputs', () => {
 
     configurations.filter((configuration) => !filter || (configuration.id === filter)).forEach((configuration) => {
         describe(`configuration "${configuration.id}"`, function () {
-            this.timeout(60000);
+            this.timeout(120000);
 
             describe('initial build', () => {
                 before(() => {

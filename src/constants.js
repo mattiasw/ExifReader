@@ -13,5 +13,6 @@ export default {
     USE_TIFF: true,
     USE_JPEG: true,
     USE_PNG: true,
-    USE_HEIC: true
+    USE_HEIC: true,
+    USE_WEBP: true
 };

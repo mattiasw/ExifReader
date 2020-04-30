@@ -15,6 +15,7 @@ describe('image-header', () => {
         ImageHeaderRewireAPI.__ResetDependency__('Jpeg');
         ImageHeaderRewireAPI.__ResetDependency__('Png');
         ImageHeaderRewireAPI.__ResetDependency__('Heic');
+        ImageHeaderRewireAPI.__ResetDependency__('Webp');
         ImageHeaderPngRewireAPI.__ResetDependency__('Constants');
     });
 
@@ -414,7 +415,7 @@ describe('image-header', () => {
             expect(appMarkerValues.hasAppMarkers).to.be.false;
         });
 
-        it('should handle when HEIC files have been excluded in a custmo build', () => {
+        it('should handle when HEIC files have been excluded in a custom build', () => {
             ImageHeaderRewireAPI.__Rewire__('Constants', {USE_HEIC: false});
             const {dataView} = getHeicDataView();
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
@@ -477,5 +478,34 @@ describe('image-header', () => {
             }
             return '';
         }
+    });
+
+    describe('WebP files', () => {
+        const dataView = {};
+        const offsets = {};
+
+        beforeEach(() => {
+            ImageHeaderRewireAPI.__Rewire__('Webp', {
+                isWebpFile: (_dataView) => _dataView === dataView,
+                findOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+            });
+        });
+
+        it('should handle WebP files', () => {
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal(offsets);
+        });
+
+        it('should ignore file when it\'s not a WebP image', () => {
+            ImageHeaderRewireAPI.__Rewire__('Webp', {
+                isWebpFile: () => false
+            });
+
+            expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
+        });
+
+        it('should handle when WebP files have been excluded in a custom build', () => {
+            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_WEBP: false});
+            expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
+        });
     });
 });

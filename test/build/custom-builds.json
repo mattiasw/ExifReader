@@ -14,7 +14,8 @@
                 "tiff": true,
                 "jpeg": true,
                 "png": true,
-                "heic": true
+                "heic": true,
+                "webp": true
             }
         }
     },
@@ -60,7 +61,8 @@
             "include": {
                 "jpeg": true,
                 "exif": ["DateTime", "ExposureProgram", "DateTimeOriginal", "ComponentsConfiguration", "Flash", "GPSLatitude", "GPSLatitudeRef"],
-                "iptc": ["File Format", "Coded Character Set", "By-line", "Keywords"]
+                "iptc": ["File Format", "Coded Character Set", "By-line", "Keywords"],
+                "thumbnail": true
             }
         }
     },
@@ -103,6 +105,27 @@
         }
     },
     {
+        "id": "full-webp",
+        "config": {
+            "include": {
+                "webp": true,
+                "exif": true,
+                "xmp": true,
+                "icc": true,
+                "thumbnail": true
+            }
+        }
+    },
+    {
+        "id": "partial-webp",
+        "config": {
+            "include": {
+                "webp": true,
+                "exif": ["DateTime", "ExposureProgram", "DateTimeOriginal", "ComponentsConfiguration", "Flash", "GPSLatitude", "GPSLatitudeRef"]
+            }
+        }
+    },
+    {
         "id": "tiff-png",
         "config": {
             "include": {
@@ -119,7 +142,8 @@
             "include": {
                 "jpeg": true,
                 "heic": true,
-                "exif": true
+                "exif": true,
+                "thumbnail": true
             }
         }
     }
