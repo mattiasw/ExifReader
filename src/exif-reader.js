@@ -101,6 +101,23 @@ export function loadView(dataView, options = {expanded: false}) {
                 tags = objectAssign({}, tags, readXmpTags);
             }
         }
+
+        if (Constants.USE_TIFF && Constants.USE_ICC && readTags['ICC_Profile'] && !hasIccData(iccChunks)) {
+            const readIccTags = IccTags.read(
+                readTags['ICC_Profile'].value,
+                [{
+                    offset: 0,
+                    length: readTags['ICC_Profile'].value.length,
+                    chunkNumber: 1,
+                    chunksTotal: 1
+                }]
+            );
+            if (options.expanded) {
+                tags.icc = readIccTags;
+            } else {
+                tags = objectAssign({}, tags, readIccTags);
+            }
+        }
     }
 
     if (Constants.USE_JPEG && Constants.USE_IPTC && hasIptcData(iptcDataOffset)) {

@@ -22,7 +22,7 @@ You can try it out on the
 | File type | Exif    | IPTC    | XMP     | ICC     | Thumbnail |
 | ----------|---------|---------|---------|---------|-----------|
 | JPEG      | **yes** | **yes** | **yes** | **yes** | **yes**   |
-| TIFF      | **yes** | **yes** | **yes** | no      | no        |
+| TIFF      | **yes** | **yes** | **yes** | **yes** | no        |
 | PNG       | no      | no      | **yes** | no      | no        |
 | HEIC/HEIF | **yes** | no      | no      | no      | no        |
 | WebP      | **yes** | no      | **yes** | **yes** | **yes**   |
@@ -245,7 +245,7 @@ Possible modules to include or exclude:
 | `webp`      | WebP images.                                                   |
 | `file`      | JPEG file details: image width, height etc.                    |
 | `png_file`  | PNG file details: image width, height etc.                     |
-| `exif`      | Regular Exif tags. If excluded, will also exclude `thumbnail`. For TIFF files, excluding this will also exclude IPTC and XMP. |
+| `exif`      | Regular Exif tags. If excluded, will also exclude `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
 | `iptc`      | IPTC tags.                                                     |
 | `xmp`       | XMP tags.                                                      |
 | `icc`       | ICC color profile tags.                                        |
@@ -358,6 +358,7 @@ Changelog
 
 -   **May 2020**:
     -   Add support for WebP images.
+    -   Add support for ICC tags in TIFF images.
 -   **April 2020**:
     -   Add support for IPTC and XMP tags in TIFF images.
     -   Add functionality to create a custom build to reduce bundle size.
