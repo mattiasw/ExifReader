@@ -27,7 +27,7 @@ function read(dataView, iccData) {
 
         const iccBinaryData = new Uint8Array(totalIccProfileLength);
         let offset = 0;
-        const buffer = dataView.buffer;
+        const buffer = getBuffer(dataView);
 
         for (let chunkNumber = 1; chunkNumber <= iccData.length; chunkNumber++) {
             const iccDataChunk = iccData.find((x) => x.chunkNumber === chunkNumber);
@@ -46,6 +46,13 @@ function read(dataView, iccData) {
     } catch (error) {
         return {};
     }
+}
+
+function getBuffer(dataView) {
+    if (Array.isArray(dataView)) {
+        return (new DataView(Uint8Array.from(dataView).buffer)).buffer;
+    }
+    return dataView.buffer;
 }
 
 function iccDoesNotHaveTagCount(buffer) {
