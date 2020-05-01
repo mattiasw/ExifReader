@@ -59,14 +59,14 @@
     "test:build:custom": "mocha --bail test/build/test-custom.js",
     "test:build:update": "node test/build/update.js",
     "test:e2e": "cypress run",
-    "test:all": "npm-run-all lint test test:e2e test:build test:build:custom",
+    "test:all": "npm-run-all lint coverage test:e2e test:build test:build:custom",
     "postinstall": "node bin/build.js --only-with-config"
   },
   "nyc": {
     "check-coverage": true,
     "statements": 95,
-    "branches": 89,
-    "functions": 97,
+    "branches": 94,
+    "functions": 98,
     "lines": 96,
     "reporter": [
       "lcov",

@@ -141,6 +141,9 @@ function getConfig() {
             if (packageJson.include.xmp) {
                 packageJson.include.exif.push('ApplicationNotes');
             }
+            if (packageJson.include.icc) {
+                packageJson.include.exif.push('ICC_Profile');
+            }
         }
         return {include: packageJson.include};
     }

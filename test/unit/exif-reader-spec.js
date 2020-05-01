@@ -87,6 +87,15 @@ describe('exif-reader', () => {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should be able to find ICC segment inside Exif APP segment (used in TIFF files)', () => {
+        const myExifTags = {ICC_Profile: {value: [1, 2, 3]}};
+        const myIccTags = {MyIccTag: 42};
+        const myTags = {...myExifTags, ...myIccTags};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
+        rewireIccTagsRead(myIccTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
     it('should be able to find IPTC APP segment', () => {
         const myTags = {MyIptcTag: 42};
         rewireForLoadView({iptcDataOffset: OFFSET_TEST_VALUE}, 'IptcTags', myTags);
@@ -143,18 +152,21 @@ describe('exif-reader', () => {
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
     });
 
-    it('should expand inlined TIFF segments for XMP and IPTC into separated properties on return object if specified', () => {
+    it('should expand inlined TIFF segments for XMP, IPTC, and ICC into separated properties on return object if specified', () => {
         const myTags = {
             exif: {
                 ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')},
-                'IPTC-NAA': {value: ['<IPTC block array>']}
+                'IPTC-NAA': {value: ['<IPTC block array>']},
+                ICC_Profile: {value: [1, 2, 3]}
             },
             iptc: {MyIptcTag: 42},
-            xmp: {MyXmpTag: 43}
+            xmp: {MyXmpTag: 43},
+            icc: {MyIccTag: 44}
         };
         rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags.exif);
         rewireTagsRead('IptcTags', myTags.iptc);
         rewireXmpTagsRead(myTags.xmp);
+        rewireIccTagsRead(myTags.icc);
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
     });
 
@@ -338,7 +350,8 @@ function rewireXmpTagsRead(tagsValue) {
 function rewireIccTagsRead(tagsValue) {
     ExifReaderRewireAPI.__Rewire__('IccTags', {
         read(dataView, iccData) {
-            if (iccData.length === 2 && iccData[0] === OFFSET_TEST_VALUE_ICC2_1 && iccData[1] === OFFSET_TEST_VALUE_ICC2_2) {
+            if (((iccData.length === 2) && (iccData[0] === OFFSET_TEST_VALUE_ICC2_1) && (iccData[1] === OFFSET_TEST_VALUE_ICC2_2))
+                || (iccData.length === 1) && (iccData[0].offset === 0) && (iccData[0].length === dataView.length)) {
                 return tagsValue;
             }
             return {};
