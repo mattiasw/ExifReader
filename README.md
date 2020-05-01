@@ -129,8 +129,9 @@ const tags = ExifReader.load(fileBuffer, {expanded: true});
 ```
 
 `fileBuffer` must be an `ArrayBuffer` or a `SharedArrayBuffer` for
-browsers, or a `Buffer` for Node. See [examples folder](examples/) for more
-directions on how to get the file contents in different environments.
+browsers, or a `Buffer` for Node. See the
+[examples site](https://mattiasw.github.io/ExifReader/) for more directions on
+how to get the file contents in different environments.
 
 ### Using the thumbnail
 
@@ -156,7 +157,8 @@ const tags = ExifReader.load(fileBuffer);
 fs.writeFileSync('/path/to/new/thumbnail.jpg', Buffer.from(tags['Thumbnail'].image));
 ```
 
-See [examples/](examples/) directory for more details.
+See the [examples site](https://mattiasw.github.io/ExifReader/) for more
+details.
 
 ### Configure a custom build
 
@@ -288,15 +290,17 @@ try to polyfill it for versions before that (this is not well tested though).
 Examples
 --------
 
-Full HTML example pages and a Node.js example are located in the
-[examples/](examples/) directory.
+Full HTML example pages and a Node.js example are located on the
+[examples site](https://mattiasw.github.io/ExifReader/).
 
 Tips
 ----
 
 -   After parsing the tags, consider deleting the MakerNote tag if you know you
     will load a lot of files and storing the tags. It can be really large for
-    some manufacturers. See the examples folder to see how you can do that.
+    some manufacturers. See the
+    [examples site](https://mattiasw.github.io/ExifReader/) to see how you can
+    do that.
 -   In some cases it can make sense to only load the beginning of the image
     file. It's unfortunately not possible to know how big the meta data will be
     in an image, but if you limit yourself to regular Exif tags you can most
