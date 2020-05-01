@@ -71,7 +71,7 @@ module.exports = {
                 }
             },
             {
-                test: /\/(exif-reader|image-header-?(tiff|jpeg|png|heic)?)\.js$/,
+                test: /\/(exif-reader|image-header-?(tiff|jpeg|png|heic|webp)?)\.js$/,
                 loader: 'string-replace-loader',
                 options: {
                     multiple: getConstantReplacements(includedModules)
@@ -96,7 +96,8 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
         'tiff',
         'jpeg',
         'png',
-        'heic'
+        'heic',
+        'webp'
     ];
 
     if (includesConfig) {
