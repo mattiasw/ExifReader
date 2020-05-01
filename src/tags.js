@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import Constants from './constants.js';
 import {objectAssign} from './utils.js';
 import ByteOrder from './byte-order.js';
 import Types from './types.js';
@@ -94,7 +95,7 @@ function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {
         offset += FIELD_SIZE;
     }
 
-    if (offset < dataView.byteLength - Types.getTypeSize('LONG')) {
+    if (Constants.USE_THUMBNAIL && (offset < dataView.byteLength - Types.getTypeSize('LONG'))) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
         if (nextIfdOffset !== 0) {
             tags['Thumbnail'] = readIfd(dataView, ifdType, tiffHeaderOffset, tiffHeaderOffset + nextIfdOffset, byteOrder);
