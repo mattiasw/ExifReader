@@ -23,22 +23,21 @@ function isHeicFile(dataView) {
 }
 
 function findHeicOffsets(dataView) {
-    if (Constants.USE_EXIF) {
+    if (Constants.USE_EXIF || Constants.USE_ICC) {
         const {offset: metaOffset, length: metaLength} = findMetaAtom(dataView);
         if (metaOffset === undefined) {
             return {hasAppMarkers: false};
         }
 
         const metaEndOffset = Math.min(metaOffset + metaLength, dataView.byteLength);
-        const {exifItemOffset, ilocOffset} = findExifItemAndIloc(dataView, metaOffset, metaEndOffset);
-        if ((exifItemOffset === undefined) || (ilocOffset === undefined)) {
-            return {hasAppMarkers: false};
-        }
+        const {exifItemOffset, ilocOffset, colrOffset} = findMetaItems(dataView, metaOffset, metaEndOffset);
 
         const exifOffset = findExifOffset(dataView, exifItemOffset, ilocOffset, metaEndOffset);
+        const iccChunks = findIccChunks(dataView, colrOffset, metaEndOffset);
         return {
-            hasAppMarkers: exifOffset !== undefined,
-            tiffHeaderOffset: exifOffset
+            hasAppMarkers: (exifOffset !== undefined) || (iccChunks !== undefined),
+            tiffHeaderOffset: exifOffset,
+            iccChunks
         };
     }
 
@@ -105,20 +104,24 @@ function hasEmptyHighBits(dataView, offset) {
     return dataView.getUint32(offset + ATOM_EXTENDED_SIZE_OFFSET) === 0;
 }
 
-function findExifItemAndIloc(dataView, offset, metaEndOffset) {
+function findMetaItems(dataView, offset, metaEndOffset) {
     const STRING_SIZE = 4;
-    const EXIF_ITEM_INDEX_REL_OFFSET = -4;
+    const ITEM_INDEX_REL_OFFSET = -4;
     const offsets = {
+        ilocOffset: undefined,
         exifItemOffset: undefined,
-        ilocOffset: undefined
+        colrOffset: undefined
     };
 
     while ((offset + STRING_SIZE <= metaEndOffset)
-        && (!offsets.exifItemOffset || !offsets.ilocOffset)) {
-        if (getStringFromDataView(dataView, offset, STRING_SIZE) === 'Exif') {
-            offsets.exifItemOffset = offset + EXIF_ITEM_INDEX_REL_OFFSET;
-        } else if (getStringFromDataView(dataView, offset, STRING_SIZE) === 'iloc') {
+        && (!offsets.ilocOffset || !offsets.exifItemOffset || !offsets.colrOffset)) {
+        const itemName = getStringFromDataView(dataView, offset, STRING_SIZE);
+        if (Constants.USE_EXIF && (itemName === 'iloc')) {
             offsets.ilocOffset = offset;
+        } else if (Constants.USE_EXIF && (itemName === 'Exif')) {
+            offsets.exifItemOffset = offset + ITEM_INDEX_REL_OFFSET;
+        } else if (Constants.USE_ICC && (itemName === 'colr')) {
+            offsets.colrOffset = offset + ITEM_INDEX_REL_OFFSET;
         }
 
         offset++;
@@ -135,7 +138,7 @@ function findExifOffset(dataView, exifItemOffset, offset, metaEndOffset) {
     const EXIF_PREFIX_LENGTH_OFFSET = 4;
     const ILOC_ITEM_SIZE = 16;
 
-    if (exifItemOffset + EXIF_ITEM_OFFSET_SIZE > metaEndOffset) {
+    if (!offset || !exifItemOffset || (exifItemOffset + EXIF_ITEM_OFFSET_SIZE > metaEndOffset)) {
         return undefined;
     }
 
@@ -156,4 +159,26 @@ function findExifOffset(dataView, exifItemOffset, offset, metaEndOffset) {
     }
 
     return undefined;
+}
+
+function findIccChunks(dataView, offset, metaEndOffset) {
+    const ITEM_TYPE_OFFSET = 8;
+    const ITEM_TYPE_SIZE = 4;
+    const ITEM_CONTENT_OFFSET = 12;
+
+    if (!offset || (offset + ITEM_CONTENT_OFFSET > metaEndOffset)) {
+        return undefined;
+    }
+
+    const colorType = getStringFromDataView(dataView, offset + ITEM_TYPE_OFFSET, ITEM_TYPE_SIZE);
+    if ((colorType !== 'prof') && (colorType !== 'rICC')) {
+        return undefined;
+    }
+
+    return [{
+        offset: offset + ITEM_CONTENT_OFFSET,
+        length: getAtomLength(dataView, offset) - ITEM_CONTENT_OFFSET,
+        chunkNumber: 1,
+        chunksTotal: 1
+    }];
 }

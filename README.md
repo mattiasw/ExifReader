@@ -24,7 +24,7 @@ You can try it out on the
 | JPEG      | **yes** | **yes** | **yes** | **yes** | **yes**   |
 | TIFF      | **yes** | **yes** | **yes** | **yes** | no        |
 | PNG       | no      | no      | **yes** | no      | no        |
-| HEIC/HEIF | **yes** | no      | no      | no      | no        |
+| HEIC/HEIF | **yes** | no      | no      | **yes** | no        |
 | WebP      | **yes** | no      | **yes** | **yes** | **yes**   |
 
 If you're missing something that you think should be supported, file an issue
