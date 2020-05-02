@@ -11,6 +11,7 @@ import {objectAssign} from './utils.js';
 import DataViewWrapper from './dataview.js';
 import Constants from './constants.js';
 import {getStringValueFromArray} from './utils.js';
+import {getCalculatedGpsValue} from './tag-names-utils.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
 import FileTags from './file-tags.js';
@@ -80,6 +81,7 @@ export function loadView(dataView, options = {expanded: false}) {
 
         if (options.expanded) {
             tags.exif = readTags;
+            addGpsGroup(tags);
         } else {
             tags = objectAssign({}, tags, readTags);
         }
@@ -165,8 +167,8 @@ export function loadView(dataView, options = {expanded: false}) {
         && Constants.USE_THUMBNAIL
         && Thumbnail.get(dataView, tags.Thumbnail, tiffHeaderOffset);
     if (thumbnail) {
-        tags.Thumbnail = thumbnail;
         foundMetaData = true;
+        tags.Thumbnail = thumbnail;
     } else {
         delete tags.Thumbnail;
     }
@@ -184,6 +186,34 @@ function hasFileData(fileDataOffset) {
 
 function hasExifData(tiffHeaderOffset) {
     return tiffHeaderOffset !== undefined;
+}
+
+function addGpsGroup(tags) {
+    if (tags.exif) {
+        if (tags.exif.GPSLatitude && tags.exif.GPSLatitudeRef) {
+            tags.gps = tags.gps || {};
+            tags.gps.Latitude = getCalculatedGpsValue(tags.exif.GPSLatitude.value);
+            if (tags.exif.GPSLatitudeRef.value.join('') === 'S') {
+                tags.gps.Latitude = -tags.gps.Latitude;
+            }
+        }
+
+        if (tags.exif.GPSLongitude && tags.exif.GPSLongitudeRef) {
+            tags.gps = tags.gps || {};
+            tags.gps.Longitude = getCalculatedGpsValue(tags.exif.GPSLongitude.value);
+            if (tags.exif.GPSLongitudeRef.value.join('') === 'W') {
+                tags.gps.Longitude = -tags.gps.Longitude;
+            }
+        }
+
+        if (tags.exif.GPSAltitude && tags.exif.GPSAltitudeRef) {
+            tags.gps = tags.gps || {};
+            tags.gps.Altitude = tags.exif.GPSAltitude.value[0] / tags.exif.GPSAltitude.value[1];
+            if (tags.exif.GPSAltitudeRef.value === 1) {
+                tags.gps.Altitude = -tags.gps.Altitude;
+            }
+        }
+    }
 }
 
 function hasIptcData(iptcDataOffset) {
