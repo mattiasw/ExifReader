@@ -23,3 +23,7 @@ export function getEncodedString(value) {
 
     return 'Undefined';
 }
+
+export function getCalculatedGpsValue(value) {
+    return (value[0][0] / value[0][1]) + (value[1][0] / value[1][1]) / 60 + (value[2][0] / value[2][1]) / 3600;
+}

@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getEncodedString} from './tag-names-utils.js';
+import {getEncodedString, getCalculatedGpsValue} from './tag-names-utils.js';
 
 export default {
     0x0000: {
@@ -28,9 +28,7 @@ export default {
     },
     0x0002: {
         'name': 'GPSLatitude',
-        'description': (value) => {
-            return (value[0][0] / value[0][1]) + (value[1][0] / value[1][1]) / 60 + (value[2][0] / value[2][1]) / 3600;
-        }
+        'description': getCalculatedGpsValue
     },
     0x0003: {
         'name': 'GPSLongitudeRef',
@@ -46,9 +44,7 @@ export default {
     },
     0x0004: {
         'name': 'GPSLongitude',
-        'description': (value) => {
-            return (value[0][0] / value[0][1]) + (value[1][0] / value[1][1]) / 60 + (value[2][0] / value[2][1]) / 3600;
-        }
+        'description': getCalculatedGpsValue
     },
     0x0005: {
         'name': 'GPSAltitudeRef',

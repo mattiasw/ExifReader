@@ -25,11 +25,13 @@ fs.readFile(filePath, function (error, data) {
     }
 
     try {
-        const tags = ExifReader.load(data);
+        const tags = ExifReader.load(data, {expanded: true});
 
         // The MakerNote tag can be really large. Remove it to lower memory
         // usage if you're parsing a lot of files and saving the tags.
-        delete tags['MakerNote'];
+        if (tags.exif) {
+            delete tags.exif['MakerNote'];
+        }
 
         // If you want to extract the thumbnail you can save it like this:
         if (tags['Thumbnail'] && tags['Thumbnail'].image) {
@@ -48,21 +50,17 @@ fs.readFile(filePath, function (error, data) {
 });
 
 function listTags(tags) {
-    for (const name in tags) {
-        if ((name === 'Thumbnail') && tags[name].image) {
-            for (const thumbnailName in tags[name]) {
-                if (thumbnailName === 'image') {
-                    console.log(`${name}, image: <image>`);
-                } else if (thumbnailName === 'base64') {
-                    console.log(`${name}, base64: <base64 encoded image>`);
-                } else if (thumbnailName === 'type') {
-                    console.log(`${name}, ${thumbnailName}: ${tags[name][thumbnailName]}`);
-                } else {
-                    console.log(`${name}, ${thumbnailName}: ${tags[name][thumbnailName].description}`);
-                }
+    for (const group in tags) {
+        for (const name in tags[group]) {
+            if (group === 'gps') {
+                console.log(`${group}:${name}: ${tags[group][name]}`);
+            } else if ((group === 'Thumbnail') && (name === 'image')) {
+                console.log(`${group}:${name}: <image>`);
+            } else if ((group === 'Thumbnail') && (name === 'base64')) {
+                console.log(`${group}:${name}: <base64 encoded image>`);
+            } else {
+                console.log(`${group}:${name}: ${tags[group][name].description}`);
             }
-        } else {
-            console.log(`${name}: ${tags[name].description}`);
         }
     }
 }
