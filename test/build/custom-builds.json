@@ -92,7 +92,8 @@
         "config": {
             "include": {
                 "heic": true,
-                "exif": true
+                "exif": true,
+                "icc": true
             }
         }
     },
