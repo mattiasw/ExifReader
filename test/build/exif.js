@@ -54,7 +54,7 @@ function hashGroupDetails(tags) {
     for (const tagGroupName of Object.keys(tags)) {
         if (tagGroupName === 'Thumbnail') {
             hashDetails({Thumbnail: tags[tagGroupName]});
-        } else {
+        } else if (tagGroupName !== 'gps') {
             hashDetails(tags[tagGroupName]);
         }
     }

@@ -188,6 +188,75 @@ describe('exif-reader', () => {
         expect(ExifReader.loadView({}, {expanded: true})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
     });
 
+    describe('gps group', () => {
+        it('should not create a "gps" group if there are no GPS values', () => {
+            const myTags = {MyExifTag: 43};
+            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+
+            expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({exif: myTags});
+        });
+
+        it('should add a converted latitude value for north latitude', () => {
+            const myTags = {
+                GPSLatitudeRef: {value: ['N']},
+                GPSLatitude: {value: [[34, 1], [3, 1], [3780, 100]]},
+            };
+            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+
+            expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Latitude: 34.0605});
+        });
+
+        it('should add a converted latitude value for south latitude', () => {
+            const myTags = {
+                GPSLatitudeRef: {value: ['S']},
+                GPSLatitude: {value: [[34, 1], [3, 1], [3780, 100]]},
+            };
+            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+
+            expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Latitude: -34.0605});
+        });
+
+        it('should add a converted longitude value for east longitude', () => {
+            const myTags = {
+                GPSLongitudeRef: {value: ['E']},
+                GPSLongitude: {value: [[44, 1], [45, 1], [3240, 100]]},
+            };
+            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+
+            expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Longitude: 44.759});
+        });
+
+        it('should add a converted longitude value for west longitude', () => {
+            const myTags = {
+                GPSLongitudeRef: {value: ['W']},
+                GPSLongitude: {value: [[44, 1], [45, 1], [3240, 100]]},
+            };
+            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+
+            expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Longitude: -44.759});
+        });
+
+        it('should add a converted altitude value for above sealevel', () => {
+            const myTags = {
+                GPSAltitudeRef: {value: 0},
+                GPSAltitude: {value: [46, 2]},
+            };
+            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+
+            expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Altitude: 23});
+        });
+
+        it('should add a converted altitude value for below sealevel', () => {
+            const myTags = {
+                GPSAltitudeRef: {value: 1},
+                GPSAltitude: {value: [46, 2]},
+            };
+            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+
+            expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Altitude: -23});
+        });
+    });
+
     describe('custom builds', () => {
         let Constants;
 

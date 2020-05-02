@@ -133,6 +133,14 @@ browsers, or a `Buffer` for Node. See the
 [examples site](https://mattiasw.github.io/ExifReader/) for more directions on
 how to get the file contents in different environments.
 
+### GPS
+
+If `expanded: true` is specified in the options, there will be a `gps` group.
+This group currently contains `Latitude`, `Longitude`, and `Altitude` which will
+be negative for values that are south of the equator, west of the IRM, or below
+sealevel. These are often more convenient values for regular use. For some
+elaboration or if you need the original values, see [Notes](#notes) below.
+
 ### Using the thumbnail
 
 The thumbnail and its details will be accessible through `tags['Thumbnail']`.
@@ -262,7 +270,8 @@ Notes
     represented as negative values (e.g. in Google Maps). This setup is also
     used for the altitude using `GPSAltitude` and `GPSAltitudeRef` where the
     latter specifies if it's above sea level (positive) or below sea level
-    (negative).
+    (negative). If you don't want to calculate the final values yourself, see
+    [the section on GPS](#gps) for pre-calculated ones.
 -   Some XMP tags have processed values as descriptions. That means that e.g. an
     `Orientation` value of `3` will have `Rotate 180` in the `description`
     property. If you would like more XMP tags to have a processed description,
