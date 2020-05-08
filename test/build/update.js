@@ -6,25 +6,39 @@ const configurations = require('./custom-builds.json');
 
 const FIXTURES_PATH = path.join(__dirname, '..', 'fixtures');
 
-updateForCustomBuilds();
-updateForRegularBuild();
+const nameFilter = getNameFilter(process.argv);
 
-function updateForCustomBuilds() {
+updateForCustomBuilds(nameFilter);
+updateForRegularBuild(nameFilter);
+
+function getNameFilter(argv) {
+    return argv
+        .filter((arg) => arg.startsWith('--image='))
+        .map((arg) => arg.replace(/^--image=/, ''))[0];
+}
+
+function updateForCustomBuilds(imageFilter) {
     configurations.forEach((configuration) => {
         process.env.EXIFREADER_CUSTOM_BUILD = JSON.stringify(configuration.config);
         execSync('npm run build');
-        fs.readdirSync(path.join(FIXTURES_PATH, 'images')).forEach((imageName) => {
-            saveOutput(`${imageName}_${configuration.id}`, Exif.parse(path.join(FIXTURES_PATH, 'images', imageName)));
-        });
+        fs
+            .readdirSync(path.join(FIXTURES_PATH, 'images'))
+            .filter((imageName) => !imageFilter || (imageName === imageFilter))
+            .forEach((imageName) => {
+                saveOutput(`${imageName}_${configuration.id}`, Exif.parse(path.join(FIXTURES_PATH, 'images', imageName)));
+            });
     });
 }
 
-function updateForRegularBuild() {
+function updateForRegularBuild(imageFilter) {
     delete process.env.EXIFREADER_CUSTOM_BUILD;
     execSync('npm run build');
-    fs.readdirSync(path.join(FIXTURES_PATH, 'images')).forEach((imageName) => {
-        saveOutput(imageName, Exif.parse(path.join(FIXTURES_PATH, 'images', imageName)));
-    });
+    fs
+        .readdirSync(path.join(FIXTURES_PATH, 'images'))
+        .filter((imageName) => !imageFilter || (imageName === imageFilter))
+        .forEach((imageName) => {
+            saveOutput(imageName, Exif.parse(path.join(FIXTURES_PATH, 'images', imageName)));
+        });
 }
 
 function saveOutput(imageName, result) {

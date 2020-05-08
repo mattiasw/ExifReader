@@ -27,6 +27,13 @@ describe('image-header-webp', () => {
         expect(offsets.tiffHeaderOffset).to.equal(32);
     });
 
+    it('should find correct Exif chunk offset when the Exif identifier has wrongly been left in', () => {
+        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView({withExifIdentifier: true}));
+
+        expect(offsets.hasAppMarkers).to.be.true;
+        expect(offsets.tiffHeaderOffset).to.equal(38);
+    });
+
     it('should ignore Exif data if it is excluded from custom build', () => {
         ImageHeaderWebpRewireAPI.__Rewire__('Constants', {USE_EXIF: false});
 
@@ -86,11 +93,12 @@ describe('image-header-webp', () => {
         expect(offsets.xmpChunks).to.be.undefined;
     });
 
-    function getWebpDataView({missingMetaData, oddSizedChunk} = {}) {
+    function getWebpDataView({missingMetaData, oddSizedChunk, withExifIdentifier} = {}) {
         return getDataView(
             'RIFF\x10\x00\x00\x00WEBP'
             + 'aaaa\x04\x00\x00\x00abcd'
-            + (missingMetaData ? '' : 'EXIF\x04\x00\x00\x00abcd')
+            + (missingMetaData || withExifIdentifier ? '' : 'EXIF\x04\x00\x00\x00abcd')
+            + (withExifIdentifier ? 'EXIF\x04\x00\x00\x00Exif\x00\x00abcd' : '')
             + (oddSizedChunk ? 'VP8 \x05\x00\x00\x00abcde\x00' : '')
             + (missingMetaData ? '' : 'XMP \x04\x00\x00\x00abcd')
             + (missingMetaData ? '' : 'ICCP\x04\x00\x00\x00abcd')

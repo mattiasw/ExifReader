@@ -23,6 +23,7 @@ function isWebpFile(dataView) {
 function findOffsets(dataView) {
     const SUB_CHUNK_START_OFFSET = 12;
     const CHUNK_SIZE_OFFSET = 4;
+    const EXIF_IDENTIFIER = 'Exif\x00\x00';
     const CHUNK_HEADER_SIZE = 8;
 
     let offset = SUB_CHUNK_START_OFFSET;
@@ -37,7 +38,11 @@ function findOffsets(dataView) {
 
         if (Constants.USE_EXIF && (chunkId === 'EXIF')) {
             hasAppMarkers = true;
-            tiffHeaderOffset = offset + CHUNK_HEADER_SIZE;
+            if (getStringFromDataView(dataView, offset + CHUNK_HEADER_SIZE, EXIF_IDENTIFIER.length) === EXIF_IDENTIFIER) {
+                tiffHeaderOffset = offset + CHUNK_HEADER_SIZE + EXIF_IDENTIFIER.length;
+            } else {
+                tiffHeaderOffset = offset + CHUNK_HEADER_SIZE;
+            }
         } else if (Constants.USE_XMP && (chunkId === 'XMP ')) {
             hasAppMarkers = true;
             xmpChunks = [{
