@@ -4,7 +4,8 @@
 
 import {deferInit} from './utils.js';
 
-const COMPRESSION_JPEG = 6;
+// https://exiftool.org/TagNames/EXIF.html#Compression
+const COMPRESSION_JPEG = [6, 7, 99];
 
 export default {
     get,
@@ -29,7 +30,7 @@ function get(dataView, thumbnailTags, tiffHeaderOffset) {
 }
 
 function hasJpegThumbnail(tags) {
-    return tags && ((tags.Compression === undefined) || (tags.Compression.value === COMPRESSION_JPEG))
+    return tags && ((tags.Compression === undefined) || (COMPRESSION_JPEG.includes(tags.Compression.value)))
         && tags.JPEGInterchangeFormat && tags.JPEGInterchangeFormat.value
         && tags.JPEGInterchangeFormatLength && tags.JPEGInterchangeFormatLength.value;
 }
