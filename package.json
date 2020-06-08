@@ -44,7 +44,7 @@
     "terser-webpack-plugin": "^2.3.5",
     "webpack": "^4.42.0",
     "webpack-cli": "^3.3.6",
-    "webpack-dev-server": "git+https://github.com/webpack/webpack-dev-server.git#c6bdfe4afb2ce3612c02142954c68a8e657c3915"
+    "webpack-dev-server": "^3.11.0"
   },
   "scripts": {
     "build": "node bin/build.js",
