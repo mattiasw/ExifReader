@@ -58,6 +58,8 @@ function listTags(tags) {
                 console.log(`${group}:${name}: <image>`);
             } else if ((group === 'Thumbnail') && (name === 'base64')) {
                 console.log(`${group}:${name}: <base64 encoded image>`);
+            } else if (Array.isArray(tags[group][name])) {
+                console.log(`${group}:${name}: ${tags[group][name].map((item) => item.description).join(', ')}`);
             } else {
                 console.log(`${group}:${name}: ${tags[group][name].description}`);
             }

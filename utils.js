@@ -33,11 +33,19 @@
 
         tableBody = document.getElementById('exif-table-body');
         for (name in tags) {
-            if (tags[name].description !== undefined) {
+            var description = getDescription(tags[name]);
+            if (description !== undefined) {
                 row = document.createElement('tr');
-                row.innerHTML = '<td>' + name + '</td><td>' + tags[name].description + '</td>';
+                row.innerHTML = '<td>' + name + '</td><td>' + description + '</td>';
                 tableBody.appendChild(row);
             }
         }
     };
+
+    function getDescription(tag) {
+        if (Array.isArray(tag)) {
+            return tag.map((item) => item.description).join(', ');
+        }
+        return tag.description;
+    }
 }(window));
