@@ -3,10 +3,56 @@
 
 export as namespace ExifReader;
 
+interface FileTags {
+    'Bits Per Sample'?: NumberFileTag,
+    'Image Height'?: NumberFileTag,
+    'Image Width'?: NumberFileTag,
+    'Color Components'?: NumberFileTag,
+    'Subsampling'?: NumberArrayFileTag
+}
+
+interface PngFileTags {
+    'Image Width'?: NumberFileTag,
+    'Image Height'?: NumberFileTag,
+    'Bit Depth'?: NumberFileTag,
+    'Color Type'?: {
+        value: number,
+        description: 'Grayscale' | 'RGB' | 'Palette' | 'Grayscale with Alpha' | 'RGB with Alpha' | 'Unknown'
+    },
+    'Compression'?: {
+        value: number,
+        description: 'Deflate/Inflate' | 'Unknown'
+    },
+    'Filter'?: {
+        value: number,
+        description: 'Adaptive' | 'Unknown'
+    },
+    'Interlace'?: {
+        value: number,
+        description: 'Noninterlaced' | 'Adam7 Interlace' | 'Unknown'
+    }
+}
+
+interface NumberFileTag {
+    description: string,
+    value: number
+}
+
+interface NumberArrayFileTag {
+    description: string,
+    value: Array<number>
+}
+
 interface NumberTag {
     id: number,
     description: string,
     value: number
+}
+
+interface RationalTag {
+    id: number,
+    description: string,
+    value: [number, number]
 }
 
 interface NumberArrayTag {
@@ -38,11 +84,33 @@ interface XmpTags {
     [name: string]: XmpTag
 }
 
+interface ThumbnailTags {
+    type: 'image/jpeg',
+    image: ArrayBuffer | SharedArrayBuffer | Buffer,
+    base64: string,
+    Compression: NumberTag,
+    XResolution: RationalTag,
+    YResolution: RationalTag,
+    ResolutionUnit: NumberTag,
+    JPEGInterchangeFormat: NumberTag,
+    JPEGInterchangeFormatLength: NumberTag
+}
+
 interface ExpandedTags {
+    file?: FileTags,
+    pngFile?: PngFileTags,
     exif?: Tags,
     iptc?: Tags,
     xmp?: XmpTags,
-    icc?: IccTags
+    icc?: IccTags,
+    Thumbnail?: ThumbnailTags,
+    gps?: GpsTags
+}
+
+interface GpsTags {
+    Latitude?: number,
+    Longitude?: number,
+    Altitude?: number
 }
 
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags & XmpTags & IccTags;
