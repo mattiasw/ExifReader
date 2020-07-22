@@ -85,10 +85,17 @@ Usage
 
 ### Importing
 
-ES modules using a bundler (Webpack, Parcel, etc.):
+ES module syntax:
 
 ```javascript
 import ExifReader from 'exifreader';
+```
+
+**NOTE:** TypeScript/Angular seems to sometimes have problems when using the
+default export. If you're seeing issues, use this syntax instead:
+
+```javascript
+import * as ExifReader from 'exifreader';
 ```
 
 CommonJS/Node modules:
