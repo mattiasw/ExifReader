@@ -92,8 +92,17 @@ interface ThumbnailTags {
     XResolution: RationalTag,
     YResolution: RationalTag,
     ResolutionUnit: NumberTag,
-    JPEGInterchangeFormat: NumberTag,
-    JPEGInterchangeFormatLength: NumberTag
+    JPEGInterchangeFormat?: NumberTag,
+    JPEGInterchangeFormatLength?: NumberTag,
+    ImageWidth?: NumberTag,
+    ImageLength?: NumberTag,
+    YCbCrPositioning?: NumberTag,
+    Orientation?: NumberTag,
+    PhotometricInterpretation?: NumberTag,
+    StripOffsets?: NumberArrayTag,
+    SamplesPerPixel?: NumberTag,
+    RowsPerStrip?: NumberTag,
+    StripByteCounts?: NumberArrayTag
 }
 
 interface ExpandedTags {
