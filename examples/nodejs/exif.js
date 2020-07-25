@@ -54,6 +54,8 @@ function listTags(tags) {
         for (const name in tags[group]) {
             if (group === 'gps') {
                 console.log(`${group}:${name}: ${tags[group][name]}`);
+            } else if ((group === 'Thumbnail') && (name === 'type')) {
+                console.log(`${group}:${name}: ${tags[group][name]}`);
             } else if ((group === 'Thumbnail') && (name === 'image')) {
                 console.log(`${group}:${name}: <image>`);
             } else if ((group === 'Thumbnail') && (name === 'base64')) {
