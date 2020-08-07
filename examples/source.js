@@ -29,7 +29,7 @@
         } else {
             if (sourceCodeIsEmpty()) {
                 const response = await fetch('exif.js');
-                const sourceCodeText = (await response.text()).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const sourceCodeText = cleanSourceCode(await response.text());
                 sourceCode.querySelector('code').innerHTML = sourceCodeText;
             }
             sourceCode.querySelector('pre').classList.remove('hidden');
@@ -43,5 +43,12 @@
 
     function sourceCodeIsEmpty() {
         return sourceCode.querySelector('code').innerHTML.trim() === '';
+    }
+
+    function cleanSourceCode(source) {
+        return source
+            .replace(/(\n\s*)?\n.*>>> IGNORE[\s\S]+?<<<.*\n/g, '\n')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     }
 }());

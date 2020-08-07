@@ -9,13 +9,17 @@ import ExifReader from '../src/exif-reader.js';
 
 document.getElementById('file').addEventListener('change', handleFile);
 
+// >>> IGNORE: Helper code for interactive example.
 document.querySelector('html').setAttribute('data-initialized', '');
+// <<<
 
 function handleFile(event) {
     const files = event.target.files;
     const reader = new FileReader();
 
+    // >>> IGNORE: Helper code for interactive example.
     window.exifReaderClear();
+    // <<<
 
     reader.onload = function (readerEvent) {
         try {
@@ -34,9 +38,17 @@ function handleFile(event) {
                 image.src = 'data:image/jpg;base64,' + tags['Thumbnail'].base64;
             }
 
+            // Use the tags now present in `tags`.
+
+            // >>> IGNORE: Helper code for interactive example.
             window.exifReaderListTags(tags);
+            // <<<
         } catch (error) {
+            // Handle error.
+
+            // >>> IGNORE: Helper code for interactive example.
             window.exifReaderError(error.toString());
+            // <<<
         }
     };
 
