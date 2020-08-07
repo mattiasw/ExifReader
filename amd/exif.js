@@ -12,7 +12,9 @@ requirejs(['../exif-reader'], function (ExifReader) {
 
     document.getElementById('file').addEventListener('change', handleFile, false);
 
+    // >>> IGNORE: Helper code for interactive example.
     document.querySelector('html').setAttribute('data-initialized', '');
+    // <<<
 
     function supportsFileReader() {
         return window.FileReader !== undefined;
@@ -22,7 +24,9 @@ requirejs(['../exif-reader'], function (ExifReader) {
         var files = event.target.files;
         var reader = new FileReader();
 
+        // >>> IGNORE: Helper code for interactive example.
         window.exifReaderClear();
+        // <<<
 
         reader.onload = function (readerEvent) {
             try {
@@ -41,9 +45,17 @@ requirejs(['../exif-reader'], function (ExifReader) {
                     image.src = 'data:image/jpg;base64,' + tags['Thumbnail'].base64;
                 }
 
+                // Use the tags now present in `tags`.
+
+                // >>> IGNORE: Helper code for interactive example.
                 window.exifReaderListTags(tags);
+                // <<<
             } catch (error) {
+                // Handle error.
+
+                // >>> IGNORE: Helper code for interactive example.
                 window.exifReaderError(error.toString());
+                // <<<
             }
         };
 
