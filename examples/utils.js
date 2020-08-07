@@ -14,14 +14,18 @@
     };
 
     window.exifReaderClear = function () {
-        var errorContainer = document.querySelector('.error');
+        var errorContainer;
+        var tableBody;
+        var thumbnail;
+
+        errorContainer = document.querySelector('.error');
         errorContainer.classList.add('hidden');
         errorContainer.innerHTML = '';
 
-        var tableBody = document.getElementById('exif-table-body');
+        tableBody = document.getElementById('exif-table-body');
         tableBody.innerHTML = '';
 
-        var thumbnail = document.getElementById('thumbnail');
+        thumbnail = document.getElementById('thumbnail');
         thumbnail.classList.add('hidden');
         thumbnail.innerHTML = '';
     };
@@ -29,11 +33,12 @@
     window.exifReaderListTags = function (tags) {
         var tableBody;
         var name;
+        var description;
         var row;
 
         tableBody = document.getElementById('exif-table-body');
         for (name in tags) {
-            var description = getDescription(tags[name]);
+            description = getDescription(tags[name]);
             if (description !== undefined) {
                 row = document.createElement('tr');
                 row.innerHTML = '<td>' + name + '</td><td>' + description + '</td>';
