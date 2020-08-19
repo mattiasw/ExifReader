@@ -143,6 +143,7 @@ interface Tags {
     'BitsPerSample': NumberArrayTag,
     'Compression': NumberTag,
     'PhotometricInterpretation': NumberTag,
+    'DocumentName': StringArrayTag,
     'ImageDescription': StringArrayTag,
     'Make': StringArrayTag,
     'Model': StringArrayTag,
