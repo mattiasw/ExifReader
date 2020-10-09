@@ -61,7 +61,7 @@
         "config": {
             "include": {
                 "jpeg": true,
-                "exif": ["DateTime", "ExposureProgram", "DateTimeOriginal", "ComponentsConfiguration", "Flash", "GPSLatitude", "GPSLatitudeRef"],
+                "exif": ["DateTime", "ExposureProgram", "DateTimeOriginal", "ComponentsConfiguration", "Flash", "GPSLatitude", "GPSLatitudeRef", "Orientation"],
                 "iptc": ["File Format", "Coded Character Set", "By-line", "Keywords"],
                 "thumbnail": true
             }

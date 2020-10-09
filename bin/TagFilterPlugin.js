@@ -36,7 +36,7 @@ const parseNameFunctionVisitor = {
 
 function tagNameIsIncluded(path, valuePath, include) {
     for (const propertyPath of valuePath.get('properties')) {
-        if (propertyPath.node.key.value === 'name') {
+        if (propertyPath.node.key.value === 'name' || propertyPath.node.key.name === 'name') { // Property key can be string or identifier ('name' vs. name).
             if (propertyPath.node.value.type === 'ArrowFunctionExpression') {
                 const result = {isIncluded: false};
                 propertyPath.traverse(parseNameFunctionVisitor, {include, result});
