@@ -56,12 +56,15 @@ jobs:
       run: |
         npm pack
         $PackageVersion = ((node -p "require('./package.json').version") | Out-String).Trim()
-        mkdir my-project
-        cd my-project
+        mkdir ../my-project
+        cd ../my-project
         $regexRemovePath = [regex]::Escape('C:\npm\prefix')
         $arrPath = $env:Path -split ';' | Where-Object {$_ -notMatch "^$regexRemovePath\\?"}
         $env:Path = $arrPath -join ';'
-        npm init -y
-        npm install ..\exifreader-$($PackageVersion).tgz
-        node -p "const {writeFileSync} = require('fs'); const packageJson = require('./package.json'); packageJson.exifreader = {include: {jpeg: true, exif: true}}; writeFileSync('package.json', JSON.stringify(packageJson));"
+        node -p "const {writeFileSync} = require('fs'); const packageJson = {exifreader: {include: {jpeg: true, exif: true}}, dependencies: {exifreader: '../ExifReader/exifreader-$($PackageVersion).tgz'}}; writeFileSync('package.json', JSON.stringify(packageJson));"
+        if ($LastExitCode -ne 0) { throw (Get-PSCallStack | Out-String) }
+        npm install
+        if ($LastExitCode -ne 0) { throw (Get-PSCallStack | Out-String) }
         npm rebuild exifreader
+        if ($LastExitCode -ne 0) { throw (Get-PSCallStack | Out-String) }
+      shell: pwsh -command "$ErrorActionPreference = 'Stop'; & {0}"
