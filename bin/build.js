@@ -9,7 +9,7 @@ const dependentHasExifReaderConfig = require('./findDependentConfig');
 process.chdir(path.join(__dirname, '..'));
 
 if (!process.argv.includes('--only-with-config') || checkConfig()) {
-    execSync('webpack', {stdio: 'inherit'});
+    execSync('npx webpack', {stdio: 'inherit'});
 }
 
 function checkConfig() {
