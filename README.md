@@ -175,12 +175,35 @@ fs.writeFileSync('/path/to/new/thumbnail.jpg', Buffer.from(tags['Thumbnail'].ima
 See the [examples site](https://mattiasw.github.io/ExifReader/) for more
 details.
 
+### Optimizing build size
+
+The most important step will be to [use a custom
+build](#configure-a-custom-build) so please do that.
+
+If you are using Webpack and are only targeting web browsers, make sure to add
+this to your Webpack config (probably the `webpack.config.js` file):
+
+```javascript
+    node: {
+        Buffer: false
+    }
+```
+
+`Buffer` is only used in Node.js but if Webpack sees a reference to it it will
+include a `Buffer` shim for browsers. This configuration will stop Webpack from
+doing that.
+
 ### Configure a custom build
 
 Configuring a custom build can reduce the bundle size significantly.
 
-**NOTE:** This functionality is in beta but should work fine. Please file an
+**NOTE 1:** This functionality is in beta but should work fine. Please file an
 issue if you're having problems or ideas on how to make it better.
+
+**NOTE 2:** This only changes the built file (`exifreader/dist/exif-reader.js`),
+not the source code. That means it's not possible to use the ES module (from the
+`src` folder) or any tree shaking to get the benefit of a custom build. Tree
+shaking will actually have close to no effect at all here so don't rely on it.
 
 This is for npm users that use the built file. To specify what functionality you
 want you can either use include pattern (start with an empty set and include) or
