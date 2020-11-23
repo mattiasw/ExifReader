@@ -191,26 +191,38 @@ function hasExifData(tiffHeaderOffset) {
 function addGpsGroup(tags) {
     if (tags.exif) {
         if (tags.exif.GPSLatitude && tags.exif.GPSLatitudeRef) {
-            tags.gps = tags.gps || {};
-            tags.gps.Latitude = getCalculatedGpsValue(tags.exif.GPSLatitude.value);
-            if (tags.exif.GPSLatitudeRef.value.join('') === 'S') {
-                tags.gps.Latitude = -tags.gps.Latitude;
+            try {
+                tags.gps = tags.gps || {};
+                tags.gps.Latitude = getCalculatedGpsValue(tags.exif.GPSLatitude.value);
+                if (tags.exif.GPSLatitudeRef.value.join('') === 'S') {
+                    tags.gps.Latitude = -tags.gps.Latitude;
+                }
+            } catch (error) {
+                // Ignore.
             }
         }
 
         if (tags.exif.GPSLongitude && tags.exif.GPSLongitudeRef) {
-            tags.gps = tags.gps || {};
-            tags.gps.Longitude = getCalculatedGpsValue(tags.exif.GPSLongitude.value);
-            if (tags.exif.GPSLongitudeRef.value.join('') === 'W') {
-                tags.gps.Longitude = -tags.gps.Longitude;
+            try {
+                tags.gps = tags.gps || {};
+                tags.gps.Longitude = getCalculatedGpsValue(tags.exif.GPSLongitude.value);
+                if (tags.exif.GPSLongitudeRef.value.join('') === 'W') {
+                    tags.gps.Longitude = -tags.gps.Longitude;
+                }
+            } catch (error) {
+                // Ignore.
             }
         }
 
         if (tags.exif.GPSAltitude && tags.exif.GPSAltitudeRef) {
-            tags.gps = tags.gps || {};
-            tags.gps.Altitude = tags.exif.GPSAltitude.value[0] / tags.exif.GPSAltitude.value[1];
-            if (tags.exif.GPSAltitudeRef.value === 1) {
-                tags.gps.Altitude = -tags.gps.Altitude;
+            try {
+                tags.gps = tags.gps || {};
+                tags.gps.Altitude = tags.exif.GPSAltitude.value[0] / tags.exif.GPSAltitude.value[1];
+                if (tags.exif.GPSAltitudeRef.value === 1) {
+                    tags.gps.Altitude = -tags.gps.Altitude;
+                }
+            } catch (error) {
+                // Ignore.
             }
         }
     }
