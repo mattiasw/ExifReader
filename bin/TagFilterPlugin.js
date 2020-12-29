@@ -11,6 +11,9 @@ const modules = {
     ],
     iptc: [
         'src/iptc-tag-names.js'
+    ],
+    mpf: [
+        'src/tag-names-mpf-ifd.js'
     ]
 };
 

@@ -38,6 +38,15 @@ fs.readFile(filePath, function (error, data) {
             fs.writeFileSync(path.join(os.tmpdir(), 'thumbnail.jpg'), Buffer.from(tags['Thumbnail'].image));
         }
 
+        // If you want to extract images from the multi-picture metadata (MPF) you can save them like this:
+        if (tags['mpf'] && tags['mpf']['Images']) {
+            for (let i = 0; i < tags['mpf']['Images'].length; i++) {
+                fs.writeFileSync(path.join(os.tmpdir(), `mpf-image-${i}.jpg`), Buffer.from(tags['mpf']['Images'][i].image));
+                // You can also read the metadata from each of these images too:
+                // ExifReader.load(tags['mpf']['Images'][i].image, {expanded: true});
+            }
+        }
+
         listTags(tags);
     } catch (error) {
         if (error instanceof exifErrors.MetadataMissingError) {
@@ -60,6 +69,8 @@ function listTags(tags) {
                 console.log(`${group}:${name}: <image>`);
             } else if ((group === 'Thumbnail') && (name === 'base64')) {
                 console.log(`${group}:${name}: <base64 encoded image>`);
+            } else if ((group === 'mpf') && (name === 'Images')) {
+                console.log(`${group}:${name}: ${getMpfImagesDescription(tags[group][name])}`);
             } else if (Array.isArray(tags[group][name])) {
                 console.log(`${group}:${name}: ${tags[group][name].map((item) => item.description).join(', ')}`);
             } else {
@@ -67,4 +78,18 @@ function listTags(tags) {
             }
         }
     }
+}
+
+function getMpfImagesDescription(images) {
+    return images.map(
+        (image, index) => `(${index}) ` + Object.keys(image).map((key) => {
+            if (key === 'image') {
+                return `${key}: <image>`;
+            }
+            if (key === 'base64') {
+                return `${key}: <base64 encoded image>`;
+            }
+            return `${key}: ${image[key].description}`;
+        }).join(', ')
+    ).join('; ');
 }

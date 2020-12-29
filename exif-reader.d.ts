@@ -122,6 +122,39 @@ interface GpsTags {
     Altitude?: number
 }
 
+interface MPFImageTags {
+    ImageFlags: {
+        value: Array<number>,
+        description: string
+    },
+    ImageFormat: {
+        value: number,
+        description: string
+    },
+    ImageType: {
+        value: number,
+        description: string
+    },
+    ImageSize: {
+        value: number,
+        description: string
+    },
+    ImageOffset: {
+        value: number,
+        description: string
+    },
+    DependentImage1EntryNumber: {
+        value: number,
+        description: string
+    },
+    DependentImage2EntryNumber: {
+        value: number,
+        description: string
+    },
+    image: ArrayBuffer | SharedArrayBuffer | Buffer,
+    base64: string
+}
+
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags & XmpTags & IccTags;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded: true}): ExpandedTags;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false}): Tags & XmpTags & IccTags;
@@ -263,6 +296,14 @@ interface Tags {
     'GPSAreaInformation': NumberTag & NumberArrayTag,
     'GPSDateStamp': StringArrayTag,
     'GPSDifferential': NumberTag,
+
+    // MPF tags
+    'MPFVersion': NumberArrayTag,
+    'NumberOfImages': NumberTag,
+    'MPEntry': NumberArrayTag,
+    'ImageUIDList': NumberArrayTag,
+    'TotalFrames': NumberTag,
+    'Images': Array<MPFImageTags>,
 
     // IPTC tags
     // IPTC tags don't have explicit types. Therefore the raw value will always

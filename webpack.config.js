@@ -71,7 +71,7 @@ module.exports = {
                 }
             },
             {
-                test: /\/(exif-reader|image-header-?(tiff|jpeg|png|heic|webp)?)\.js$/,
+                test: /\/(exif-reader|image-header-?(tiff|jpeg|png|heic|webp)?|tag-names)\.js$/,
                 loader: 'string-replace-loader',
                 options: {
                     multiple: getConstantReplacements(includedModules)
@@ -92,6 +92,7 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
         'iptc',
         'xmp',
         'icc',
+        'mpf',
         'thumbnail',
         'tiff',
         'jpeg',
@@ -103,8 +104,12 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
     if (includesConfig) {
         const includes = {};
         for (const module of modules) {
-            includes[module] = (Object.keys(includesConfig).includes(module)
-                || ((module === 'exif') && Object.keys(includesConfig).includes('thumbnail')))
+            includes[module] =
+                (
+                    Object.keys(includesConfig).includes(module)
+                    || ((module === 'exif') && Object.keys(includesConfig).includes('thumbnail'))
+                    || ((module === 'exif') && Object.keys(includesConfig).includes('mpf'))
+                )
                 && includesConfig[module];
         }
         return includes;
@@ -113,8 +118,12 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
     if (excludesConfig) {
         const includes = {};
         for (const module of modules) {
-            includes[module] = !(excludesConfig.includes(module)
-                || ((module === 'thumbnail') && excludesConfig.includes('exif')));
+            includes[module] =
+                !(
+                    excludesConfig.includes(module)
+                    || ((module === 'thumbnail') && excludesConfig.includes('exif'))
+                    || ((module === 'mpf') && excludesConfig.includes('exif'))
+                );
         }
         return includes;
     }
