@@ -7,6 +7,7 @@ import {objectAssign} from './utils.js';
 import ByteOrder from './byte-order.js';
 import Types from './types.js';
 import TagNames from './tag-names.js';
+import {deferInit, getBase64Image} from './utils.js';
 
 const EXIF_IFD_POINTER_KEY = 'Exif IFD Pointer';
 const GPS_INFO_IFD_POINTER_KEY = 'GPS Info IFD Pointer';
@@ -25,7 +26,8 @@ const getTagValueAt = {
 };
 
 export default {
-    read
+    read,
+    readMpf
 };
 
 function read(dataView, tiffHeaderOffset) {
@@ -68,6 +70,136 @@ function readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder) {
     }
 
     return tags;
+}
+
+function readMpf(dataView, dataOffset) {
+    const byteOrder = ByteOrder.getByteOrder(dataView, dataOffset);
+    const tags = readIfd(dataView, 'mpf', dataOffset, get0thIfdOffset(dataView, dataOffset, byteOrder), byteOrder);
+    return addMpfImages(dataView, dataOffset, tags, byteOrder);
+}
+
+function addMpfImages(dataView, dataOffset, tags, byteOrder) {
+    const ENTRY_SIZE = 16;
+
+    if (!tags['MPEntry']) {
+        return tags;
+    }
+
+    const images = [];
+    for (let i = 0; i < Math.ceil(tags['MPEntry'].value.length / ENTRY_SIZE); i++) {
+        images[i] = {};
+
+        const attributes = getImageNumberValue(tags['MPEntry'].value, i * ENTRY_SIZE, Types.getTypeSize('LONG'), byteOrder);
+        images[i]['ImageFlags'] = getImageFlags(attributes);
+        images[i]['ImageFormat'] = getImageFormat(attributes);
+        images[i]['ImageType'] = getImageType(attributes);
+
+        const imageSize = getImageNumberValue(tags['MPEntry'].value, i * ENTRY_SIZE + 4, Types.getTypeSize('LONG'), byteOrder);
+        images[i]['ImageSize'] = {
+            value: imageSize,
+            description: '' + imageSize
+        };
+
+        const imageOffset = isFirstIndividualImage(i) ? 0 : getImageNumberValue(tags['MPEntry'].value, i * ENTRY_SIZE + 8, Types.getTypeSize('LONG'), byteOrder) + dataOffset;
+        images[i]['ImageOffset'] = {
+            value: imageOffset,
+            description: '' + imageOffset
+        };
+
+        const dependentImage1EntryNumber =
+            getImageNumberValue(tags['MPEntry'].value, i * ENTRY_SIZE + 12, Types.getTypeSize('SHORT'), byteOrder);
+        images[i]['DependentImage1EntryNumber'] = {
+            value: dependentImage1EntryNumber,
+            description: '' + dependentImage1EntryNumber
+        };
+
+        const dependentImage2EntryNumber =
+            getImageNumberValue(tags['MPEntry'].value, i * ENTRY_SIZE + 14, Types.getTypeSize('SHORT'), byteOrder);
+        images[i]['DependentImage2EntryNumber'] = {
+            value: dependentImage2EntryNumber,
+            description: '' + dependentImage2EntryNumber
+        };
+
+        images[i].image = dataView.buffer.slice(imageOffset, imageOffset + imageSize);
+        deferInit(images[i], 'base64', function () {
+            return getBase64Image(this.image);
+        });
+    }
+
+    tags['Images'] = images;
+
+    return tags;
+}
+
+function getImageNumberValue(entries, offset, size, byteOrder) {
+    if (byteOrder === ByteOrder.LITTLE_ENDIAN) {
+        let value = 0;
+        for (let i = 0; i < size; i++) {
+            value += entries[offset + i] << (8 * i);
+        }
+        return value;
+    }
+
+    let value = 0;
+    for (let i = 0; i < size; i++) {
+        value += entries[offset + i] << (8 * (size - 1 - i));
+    }
+    return value;
+}
+
+function getImageFlags(attributes) {
+    const flags = [
+        (attributes >> 31) & 0x1,
+        (attributes >> 30) & 0x1,
+        (attributes >> 29) & 0x1
+    ];
+
+    const flagsDescription = [];
+
+    if (flags[0]) {
+        flagsDescription.push('Dependent Parent Image');
+    }
+    if (flags[1]) {
+        flagsDescription.push('Dependent Child Image');
+    }
+    if (flags[2]) {
+        flagsDescription.push('Representative Image');
+    }
+
+    return {
+        value: flags,
+        description: flagsDescription.join(', ') || 'None'
+    };
+}
+
+function getImageFormat(attributes) {
+    const imageFormat = attributes >> 24 & 0x7;
+    return {
+        value: imageFormat,
+        description: imageFormat === 0 ? 'JPEG' : 'Unknown'
+    };
+}
+
+function getImageType(attributes) {
+    const type = attributes & 0xffffff;
+    const descriptions = {
+        0x30000: 'Baseline MP Primary Image',
+        0x10001: 'Large Thumbnail (VGA equivalent)',
+        0x10002: 'Large Thumbnail (Full HD equivalent)',
+        0x20001: 'Multi-Frame Image (Panorama)',
+        0x20002: 'Multi-Frame Image (Disparity)',
+        0x20003: 'Multi-Frame Image (Multi-Angle)',
+        0x0: 'Undefined',
+    };
+
+    return {
+        value: type,
+        description: descriptions[type] || 'Unknown'
+    };
+}
+
+function isFirstIndividualImage(i) {
+    return i === 0;
 }
 
 function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder) {

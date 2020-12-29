@@ -52,7 +52,8 @@ describe('exif-reader', () => {
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
             xmpChunks: undefined,
-            iccChunks: undefined
+            iccChunks: undefined,
+            mpfDataOffset: undefined
         });
         expect(() => ExifReader.loadView()).to.throw(exifErrors.MetadataMissingError);
     });
@@ -118,6 +119,13 @@ describe('exif-reader', () => {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should be able to find MPF APP segment', () => {
+        const myTags = {MyMpfTag: 42};
+        rewireImageHeader({mpfDataOffset: OFFSET_TEST_VALUE});
+        rewireTagsRead('Tags', {}, myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
     it('should be able to find PNG file data segment', () => {
         const myTags = {MyTag: 42};
         rewireForLoadView({pngHeaderOffset: OFFSET_TEST_VALUE}, 'PngFileTags', myTags);
@@ -131,6 +139,7 @@ describe('exif-reader', () => {
             iptc: {MyIptcTag: 44},
             xmp: {MyXmpTag: 45},
             icc: {MyIccTag: 42},
+            mpf: {MyMpfTag: 47},
             Thumbnail: {type: 'image/jpeg'}
         };
         rewireImageHeader({
@@ -141,10 +150,11 @@ describe('exif-reader', () => {
                 dataOffset: OFFSET_TEST_VALUE,
                 length: XMP_FIELD_LENGTH_TEST_VALUE
             }],
-            iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]
+            iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2],
+            mpfDataOffset: OFFSET_TEST_VALUE
         });
         rewireTagsRead('FileTags', myTags.file);
-        rewireTagsRead('Tags', {...myTags.exif, Thumbnail: myTags.Thumbnail});
+        rewireTagsRead('Tags', {...myTags.exif, Thumbnail: myTags.Thumbnail}, myTags.mpf);
         rewireTagsRead('IptcTags', myTags.iptc);
         rewireXmpTagsRead(myTags.xmp);
         rewireIccTagsRead(myTags.icc);
@@ -288,6 +298,7 @@ describe('exif-reader', () => {
                 USE_IPTC: true,
                 USE_XMP: true,
                 USE_ICC: true,
+                USE_MPF: true,
                 USE_THUMBNAIL: true,
                 USE_TIFF: true,
                 USE_JPEG: true,
@@ -346,6 +357,12 @@ describe('exif-reader', () => {
         it('should handle when ICC tags have been excluded', () => {
             Constants.USE_ICC = false;
             rewireForCustomBuild({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when MPF tags have been excluded', () => {
+            Constants.USE_MPF = false;
+            rewireForCustomBuild({mpfDataOffset: OFFSET_TEST_VALUE}, Constants);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
@@ -411,11 +428,17 @@ function rewireImageHeader(appMarkersValue) {
     });
 }
 
-function rewireTagsRead(tagsObject, tagsValue) {
+function rewireTagsRead(tagsObject, tagsValue, mpfTagsValue = {}) {
     ExifReaderRewireAPI.__Rewire__(tagsObject, {
         read(dataView, offset) {
             if (Array.isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
                 return tagsValue;
+            }
+            return {};
+        },
+        readMpf(dataView, offset) {
+            if (Array.isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
+                return mpfTagsValue;
             }
             return {};
         }

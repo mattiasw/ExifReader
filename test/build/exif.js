@@ -33,6 +33,13 @@ function hashDetails(tags) {
                 tags[tagName].image = hash(tags[tagName].image);
                 tags[tagName].base64 = hash(tags[tagName].base64);
             }
+        } else if (tagName === 'Images') {
+            for (let i = 0; i < tags[tagName].length; i++) {
+                if (tags[tagName][i].image) {
+                    tags[tagName][i].image = hash(tags[tagName][i].image);
+                    tags[tagName][i].base64 = hash(tags[tagName][i].base64);
+                }
+            }
         } else if (Array.isArray(tags[tagName])) {
             tags[tagName].map((item) => {
                 item.value = hash(item.value);
@@ -64,6 +71,9 @@ function hashGroupDetails(tags) {
 
 function hash(value) {
     if (value instanceof ArrayBuffer) {
+        if (value.byteLength > 200) {
+            return crypto.createHash('sha1').update(new Uint8Array(value)).digest('base64');
+        }
         value = (new Uint8Array(value)).map((byte) => Number(byte));
     }
     const stringified = JSON.stringify(value);

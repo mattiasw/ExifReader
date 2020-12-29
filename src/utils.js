@@ -55,3 +55,17 @@ export function deferInit(object, key, initializer) {
         enumerable: true
     });
 }
+
+export function getBase64Image(image) {
+    if (typeof btoa !== 'undefined') {
+        // IE11- does not implement reduce on the Uint8Array prototype.
+        return btoa(Array.prototype.reduce.call(new Uint8Array(image), (data, byte) => data + String.fromCharCode(byte), ''));
+    }
+    if (typeof Buffer === 'undefined') {
+        return undefined;
+    }
+    if (typeof Buffer.from !== undefined) { // eslint-disable-line no-undef
+        return Buffer.from(image).toString('base64'); // eslint-disable-line no-undef
+    }
+    return (new Buffer(image)).toString('base64'); // eslint-disable-line no-undef
+}

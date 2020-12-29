@@ -59,7 +59,15 @@ export function loadView(dataView, options = {expanded: false}) {
     let foundMetaData = false;
     let tags = {};
 
-    const {fileDataOffset, tiffHeaderOffset, iptcDataOffset, xmpChunks, iccChunks, pngHeaderOffset} = ImageHeader.parseAppMarkers(dataView);
+    const {
+        fileDataOffset,
+        tiffHeaderOffset,
+        iptcDataOffset,
+        xmpChunks,
+        iccChunks,
+        mpfDataOffset,
+        pngHeaderOffset
+    } = ImageHeader.parseAppMarkers(dataView);
 
     if (Constants.USE_JPEG && Constants.USE_FILE && hasFileData(fileDataOffset)) {
         foundMetaData = true;
@@ -152,6 +160,16 @@ export function loadView(dataView, options = {expanded: false}) {
         }
     }
 
+    if (Constants.USE_MPF && hasMpfData(mpfDataOffset)) {
+        foundMetaData = true;
+        const readMpfTags = Tags.readMpf(dataView, mpfDataOffset);
+        if (options.expanded) {
+            tags.mpf = readMpfTags;
+        } else {
+            tags = objectAssign({}, tags, readMpfTags);
+        }
+    }
+
     if (Constants.USE_PNG && Constants.USE_PNG_FILE && hasPngFileData(pngHeaderOffset)) {
         foundMetaData = true;
         const readTags = PngFileTags.read(dataView, pngHeaderOffset);
@@ -238,6 +256,10 @@ function hasXmpData(xmpChunks) {
 
 function hasIccData(iccDataOffsets) {
     return Array.isArray(iccDataOffsets) && iccDataOffsets.length > 0;
+}
+
+function hasMpfData(mpfDataOffset) {
+    return mpfDataOffset !== undefined;
 }
 
 function hasPngFileData(pngFileDataOffset) {

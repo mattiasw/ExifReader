@@ -10,6 +10,7 @@
                 "iptc": true,
                 "xmp": true,
                 "icc": true,
+                "mpf": true,
                 "thumbnail": true,
                 "tiff": true,
                 "jpeg": true,
@@ -51,6 +52,7 @@
                 "iptc": true,
                 "xmp": true,
                 "icc": true,
+                "mpf": true,
                 "thumbnail": true
             }
         }

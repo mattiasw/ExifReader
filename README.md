@@ -4,9 +4,9 @@ ExifReader
 ExifReader is a JavaScript library that parses image files and extracts the
 metadata. It can also extract an embedded thumbnail. It can be used either in a
 browser or from Node. Supports JPEG, TIFF, PNG, HEIC, and WebP files with Exif,
-IPTC, XMP, and ICC meta data (depending on file type).
+IPTC, XMP, ICC, and MPF meta data (depending on file type).
 
-ExifReader is highly and easliy configurable and the resulting bundle can be as
+ExifReader is highly and easily configurable and the resulting bundle can be as
 small as **3 KiB** (gzipped) if you're only interested in a few tags (e.g. date
 and/or GPS values). See section below on
 [making a custom build](#configure-a-custom-build).
@@ -19,13 +19,16 @@ You can try it out on the
 
 **Support table**
 
-| File type | Exif    | IPTC    | XMP     | ICC     | Thumbnail |
-| ----------|---------|---------|---------|---------|-----------|
-| JPEG      | **yes** | **yes** | **yes** | **yes** | **yes**   |
-| TIFF      | **yes** | **yes** | **yes** | **yes** | no        |
-| PNG       | no      | no      | **yes** | no      | no        |
-| HEIC/HEIF | **yes** | no      | no      | **yes** | no        |
-| WebP      | **yes** | no      | **yes** | **yes** | **yes**   |
+| File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Thumbnail |
+| ----------|---------|---------|---------|---------|---------|-----------|
+| JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **yes**   |
+| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | no        |
+| PNG       | no      | no      | **yes** | no      | no      | no        |
+| HEIC/HEIF | **yes** | no      | no      | **yes** | ???     | no        |
+| WebP      | **yes** | no      | **yes** | **yes** | ???     | **yes**   |
+
+??? = MPF may be supported in any file type using Exif since it's an Exif
+extension, but it has only been tested on JPEGs.
 
 If you're missing something that you think should be supported, file an issue
 with an attached example image and I'll see what I can do.
@@ -283,10 +286,11 @@ Possible modules to include or exclude:
 | `webp`      | WebP images.                                                   |
 | `file`      | JPEG file details: image width, height etc.                    |
 | `png_file`  | PNG file details: image width, height etc.                     |
-| `exif`      | Regular Exif tags. If excluded, will also exclude `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
+| `exif`      | Regular Exif tags. If excluded, will also exclude `mpf` and `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
 | `iptc`      | IPTC tags.                                                     |
 | `xmp`       | XMP tags.                                                      |
 | `icc`       | ICC color profile tags.                                        |
+| `mpf`       | Multi-picture Format tags.                                     |
 | `thumbnail` | Thumbnail. Needs `exif`.                                       |
 
 Notes
@@ -395,6 +399,8 @@ case is covered.
 Changelog
 ---------
 
+-   **December 2020**:
+    -   Add support for Multi-picture Format (MPF).
 -   **May 2020**:
     -   Add support for WebP images.
     -   Add support for ICC tags in TIFF images.
