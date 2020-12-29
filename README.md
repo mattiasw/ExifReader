@@ -53,6 +53,17 @@ know if you're missing anything from it and I will try to help you. Some notes:
 -   I've been maintaining this package since 2012 and I have no plans to stop
     doing that anytime soon.
 
+Support
+-------
+
+Monetary support is not necessary for me to continue working on this, but in
+case you like this library and want to support its development you are very
+welcome to click the button below.
+
+<a href="https://www.buymeacoffee.com/mattiasw" target="_blank">
+<img src="https://cdn.buymeacoffee.com/buttons/v2/default-violet.png" alt="Buy me a coffee" style="height: 40px !important; width: 145px !important;">
+</a>
+
 Installation
 ------------
 
