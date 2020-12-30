@@ -61,7 +61,7 @@ case you like this library and want to support its development you are very
 welcome to click the button below.
 
 <a href="https://www.buymeacoffee.com/mattiasw" target="_blank">
-<img src="https://cdn.buymeacoffee.com/buttons/v2/default-violet.png" alt="Buy me a coffee" style="height: 40px !important; width: 145px !important;">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-violet.png" alt="Buy me a coffee" width="181" height="50">
 </a>
 
 Installation
