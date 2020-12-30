@@ -20,10 +20,13 @@ const IPTC_DATA_OFFSET = 18; // From start of APP13 marker.
 const XMP_DATA_OFFSET = 33; // From start of APP1 marker.
 const XMP_EXTENDED_DATA_OFFSET = 79; // From start of APP1 marker including GUID, total length, and offset.
 const APP2_ICC_DATA_OFFSET = 18; // From start of APP2 marker including marker and chunk/chunk total numbers.
+const MPF_DATA_OFFSET = 8;
 
 const APP2_ICC_IDENTIFIER = 'ICC_PROFILE\0';
 const ICC_CHUNK_NUMBER_OFFSET = APP_ID_OFFSET + APP2_ICC_IDENTIFIER.length;
 const ICC_TOTAL_CHUNKS_OFFSET = ICC_CHUNK_NUMBER_OFFSET + 1;
+
+const APP2_MPF_IDENTIFIER = 'MPF\0';
 
 const SOF0_MARKER = 0xffc0;
 const SOF2_MARKER = 0xffc2;
@@ -57,6 +60,7 @@ function findJpegOffsets(dataView) {
     let iptcDataOffset;
     let xmpChunks;
     let iccChunks;
+    let mpfDataOffset;
 
     while (appMarkerPosition + APP_ID_OFFSET + 5 <= dataView.byteLength) {
         if (Constants.USE_FILE && isSOF0Marker(dataView, appMarkerPosition)) {
@@ -92,6 +96,9 @@ function findJpegOffsets(dataView) {
                 iccChunks = [];
             }
             iccChunks.push({offset: iccDataOffset, length: iccDataLength, chunkNumber: iccChunkNumber, chunksTotal: iccChunksTotal});
+        } else if (Constants.USE_MPF && isApp2MPFMarker(dataView, appMarkerPosition)) {
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
+            mpfDataOffset = appMarkerPosition + MPF_DATA_OFFSET;
         } else if (isAppMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
         } else {
@@ -106,7 +113,8 @@ function findJpegOffsets(dataView) {
         tiffHeaderOffset,
         iptcDataOffset,
         xmpChunks,
-        iccChunks
+        iccChunks,
+        mpfDataOffset
     };
 }
 
@@ -123,6 +131,13 @@ function isApp2ICCMarker(dataView, appMarkerPosition) {
 
     return (dataView.getUint16(appMarkerPosition) === APP2_MARKER)
         && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP2_ICC_IDENTIFIER);
+}
+
+function isApp2MPFMarker(dataView, appMarkerPosition) {
+    const markerIdLength = APP2_MPF_IDENTIFIER.length;
+
+    return (dataView.getUint16(appMarkerPosition) === APP2_MARKER)
+        && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP2_MPF_IDENTIFIER);
 }
 
 function isApp1ExifMarker(dataView, appMarkerPosition) {

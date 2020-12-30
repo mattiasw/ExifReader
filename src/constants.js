@@ -9,6 +9,7 @@ export default {
     USE_IPTC: true,
     USE_XMP: true,
     USE_ICC: true,
+    USE_MPF: true,
     USE_THUMBNAIL: true,
     USE_TIFF: true,
     USE_JPEG: true,
