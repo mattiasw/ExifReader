@@ -263,6 +263,8 @@ interface Tags {
     'DeviceSettingDescription'?: NumberTag & NumberArrayTag,
     'SubjectDistanceRange'?: NumberTag,
     'ImageUniqueID'?: StringArrayTag,
+    'LensMake'?: StringArrayTag,
+    'LensModel'?: StringArrayTag,
 
     // GPS tags
     'GPSVersionID'?: NumberTag,
