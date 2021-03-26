@@ -358,13 +358,9 @@ Client/Browser Support
 ----------------------
 
 The library makes use of the DataView API which is supported in Chrome 9+,
-Firefox 15+, Internet Explorer 10+, Edge, Safari 5.1+, Opera 12.1+. If you want
-to support a browser that doesn't have DataView support, you should
-probably use a polyfill like
-[jDataView](https://github.com/jDataView/jDataView).
-
-Node.js has had support for DataView since version 0.12 but ExifReader will also
-try to polyfill it for versions before that (this is not well tested though).
+Firefox 15+, Internet Explorer 10+, Edge, Safari 5.1+, Opera 12.1+. For Node.js
+at least version 10 is required if you want to parse XMP tags, otherwise earlier
+versions will also work.
 
 Examples
 --------
