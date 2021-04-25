@@ -1,3 +1,5 @@
+// Add/update a single file:
+//     npm run test:build:update -- --image=<filename without path>
 const path = require('path');
 const fs = require('fs');
 const {execSync} = require('child_process');

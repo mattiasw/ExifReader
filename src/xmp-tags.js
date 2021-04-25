@@ -217,6 +217,9 @@ function isNamespaceDefinition(name) {
 }
 
 function getLocalName(name) {
+    if (/^MicrosoftPhoto(_\d+_)?:Rating$/i.test(name)) {
+        return 'RatingPercent';
+    }
     return name.split(':')[1];
 }
 

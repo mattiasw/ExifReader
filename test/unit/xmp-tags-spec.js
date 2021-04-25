@@ -726,6 +726,32 @@ describe('xmp-tags', () => {
             }
         });
     });
+
+    describe('exceptions', () => {
+        it('should rename MicrosoftPhoto:Rating to RatingPercent', () => {
+            const xmlString = getXmlString(`
+                <rdf:Description xmlns:tiff="http://ns.adobe.com/tiff/1.0/">
+                    <xmp:Rating>3</xmp:Rating>
+                    <MicrosoftPhoto:Rating>50</MicrosoftPhoto:Rating>
+                    <MicroSoftPhoto_1_:Rating>50</MicroSoftPhoto_1_:Rating>
+                </rdf:Description>
+            `);
+            const dataView = getDataView(xmlString);
+            const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
+            expect(tags).to.deep.equal({
+                Rating: {
+                    value: '3',
+                    attributes: {},
+                    description: '3'
+                },
+                RatingPercent: {
+                    value: '50',
+                    attributes: {},
+                    description: '50'
+                }
+            });
+        });
+    });
 });
 
 function getXmlStringWithPacketWrapper(content) {
