@@ -12,7 +12,16 @@ const PACKET_WRAPPER_END = '<?xpacket end="w"?>';
 const META_ELEMENT_START = '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.5-c002 1.000000, 0000/00/00-00:00:00        ">';
 const META_ELEMENT_END = '</x:xmpmeta>';
 
-describe('xmp-tags', () => {
+describe('xmp-tags', function () {
+    beforeEach(() => {
+        this.originalNonWebpackRequire = global.__non_webpack_require__;
+        global.__non_webpack_require__ = require;
+    });
+
+    afterEach(() => {
+        global.__non_webpack_require__ = this.originalNonWebpackRequire;
+    });
+
     describe('without a DOM parser', () => {
         beforeEach(() => {
             XmpTagsRewireAPI.__Rewire__('DOMParser', {

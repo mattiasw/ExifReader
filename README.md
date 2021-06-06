@@ -45,11 +45,6 @@ know if you're missing anything from it and I will try to help you. Some notes:
 -   XMP support in exif-js does not seem perfect. ExifReader should be a bit
     better on that part.
 -   ExifReader works with strict mode.
--   exif-js accepts IMG HTML elements as input. This falls outside of the
-    functionality of ExifReader. If you need this I suggest looking at exif-js
-    source code to see how it's done for your specific case and then pass in the
-    resulting data into ExifReader. If many people need this I could add a more
-    explicit example for how to do it together with ExifReader.
 -   I've been maintaining this package since 2012 and I have no plans to stop
     doing that anytime soon.
 
@@ -134,11 +129,41 @@ requirejs(['/path/to/exif-reader.js'], function (ExifReader) {
 
 ### Loading tags
 
+There are two ways to load the tags. Either have ExifReader do the loading of
+the image file, or load the file yourself first and pass in the file buffer. The
+main difference is that the first one is asynchronous and the second one is
+synchronous.
+
+#### Let ExifReader load the file (asynchronous API)
+
 ```javascript
-const tags = ExifReader.load(fileBuffer);
+const tags = await ExifReader.load(file);
 const imageDate = tags['DateTimeOriginal'].description;
 const unprocessedTagValue = tags['DateTimeOriginal'].value;
 ```
+
+Where `file` is one of
+
+*  File object, the result of a form file upload (browser)
+*  File path on a local file system (Node.js)
+*  URL (browser or Node.js; remember that in a browser context the remote server
+   has to set CORS headers that allow for remote loading of the file)
+
+#### Load the file yourself (synchronous API)
+
+```javascript
+const tags = ExifReader.load(fileBuffer);
+```
+
+Where `fileBuffer` is one of
+
+*  `ArrayBuffer` or `SharedArrayBuffer` (browser)
+*  `Buffer` (Node.js)
+
+See the [examples site](https://mattiasw.github.io/ExifReader/) for more
+directions on how to use the library.
+
+#### Grouping
 
 By default, Exif, IPTC and XMP tags are grouped together. This means that if
 e.g. `Orientation` exists in both Exif and XMP, the first value (Exif) will be
@@ -148,11 +173,6 @@ pass in an options object with the property `expanded` set to `true`:
 ```javascript
 const tags = ExifReader.load(fileBuffer, {expanded: true});
 ```
-
-`fileBuffer` must be an `ArrayBuffer` or a `SharedArrayBuffer` for
-browsers, or a `Buffer` for Node. See the
-[examples site](https://mattiasw.github.io/ExifReader/) for more directions on
-how to get the file contents in different environments.
 
 ### GPS
 
@@ -410,6 +430,8 @@ case is covered.
 Changelog
 ---------
 
+-   **June 2021**:
+    -   Make it possible to directly pass in file path, URL, or File object.
 -   **December 2020**:
     -   Add support for Multi-picture Format (MPF).
 -   **May 2020**:

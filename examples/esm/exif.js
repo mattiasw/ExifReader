@@ -13,44 +13,36 @@ document.getElementById('file').addEventListener('change', handleFile);
 document.querySelector('html').setAttribute('data-initialized', '');
 // <<<
 
-function handleFile(event) {
-    const files = event.target.files;
-    const reader = new FileReader();
-
+async function handleFile(event) {
     // >>> IGNORE: Helper code for interactive example.
     window.exifReaderClear();
     // <<<
+    try {
+        const tags = await ExifReader.load(event.target.files[0]);
 
-    reader.onload = function (readerEvent) {
-        try {
-            const tags = ExifReader.load(readerEvent.target.result);
+        // The MakerNote tag can be really large. Remove it to lower
+        // memory usage if you're parsing a lot of files and saving the
+        // tags.
+        delete tags['MakerNote'];
 
-            // The MakerNote tag can be really large. Remove it to lower
-            // memory usage if you're parsing a lot of files and saving the
-            // tags.
-            delete tags['MakerNote'];
-
-            // If you want to extract the thumbnail you can use it like
-            // this:
-            if (tags['Thumbnail'] && tags['Thumbnail'].image) {
-                const image = document.getElementById('thumbnail');
-                image.classList.remove('hidden');
-                image.src = 'data:image/jpg;base64,' + tags['Thumbnail'].base64;
-            }
-
-            // Use the tags now present in `tags`.
-
-            // >>> IGNORE: Helper code for interactive example.
-            window.exifReaderListTags(tags);
-            // <<<
-        } catch (error) {
-            // Handle error.
-
-            // >>> IGNORE: Helper code for interactive example.
-            window.exifReaderError(error.toString());
-            // <<<
+        // If you want to extract the thumbnail you can use it like
+        // this:
+        if (tags['Thumbnail'] && tags['Thumbnail'].image) {
+            const image = document.getElementById('thumbnail');
+            image.classList.remove('hidden');
+            image.src = 'data:image/jpg;base64,' + tags['Thumbnail'].base64;
         }
-    };
 
-    reader.readAsArrayBuffer(files[0]);
+        // Use the tags now present in `tags`.
+
+        // >>> IGNORE: Helper code for interactive example.
+        window.exifReaderListTags(tags);
+        // <<<
+    } catch (error) {
+        // Handle error.
+
+        // >>> IGNORE: Helper code for interactive example.
+        window.exifReaderError(error.toString());
+        // <<<
+    }
 }

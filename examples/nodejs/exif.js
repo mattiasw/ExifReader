@@ -18,44 +18,35 @@ if (process.argv.length < 3) {
 
 const filePath = process.argv[2];
 
-fs.readFile(filePath, function (error, data) {
-    if (error) {
-        console.error('Error reading file.');
-        process.exit(1);
+ExifReader.load(filePath, {expanded: true}).then(function (tags) {
+    // The MakerNote tag can be really large. Remove it to lower memory
+    // usage if you're parsing a lot of files and saving the tags.
+    if (tags.exif) {
+        delete tags.exif['MakerNote'];
     }
 
-    try {
-        const tags = ExifReader.load(data, {expanded: true});
-
-        // The MakerNote tag can be really large. Remove it to lower memory
-        // usage if you're parsing a lot of files and saving the tags.
-        if (tags.exif) {
-            delete tags.exif['MakerNote'];
-        }
-
-        // If you want to extract the thumbnail you can save it like this:
-        if (tags['Thumbnail'] && tags['Thumbnail'].image) {
-            fs.writeFileSync(path.join(os.tmpdir(), 'thumbnail.jpg'), Buffer.from(tags['Thumbnail'].image));
-        }
-
-        // If you want to extract images from the multi-picture metadata (MPF) you can save them like this:
-        if (tags['mpf'] && tags['mpf']['Images']) {
-            for (let i = 0; i < tags['mpf']['Images'].length; i++) {
-                fs.writeFileSync(path.join(os.tmpdir(), `mpf-image-${i}.jpg`), Buffer.from(tags['mpf']['Images'][i].image));
-                // You can also read the metadata from each of these images too:
-                // ExifReader.load(tags['mpf']['Images'][i].image, {expanded: true});
-            }
-        }
-
-        listTags(tags);
-    } catch (error) {
-        if (error instanceof exifErrors.MetadataMissingError) {
-            console.log('No Exif data found');
-        }
-
-        console.error(error);
-        process.exit(1);
+    // If you want to extract the thumbnail you can save it like this:
+    if (tags['Thumbnail'] && tags['Thumbnail'].image) {
+        fs.writeFileSync(path.join(os.tmpdir(), 'thumbnail.jpg'), Buffer.from(tags['Thumbnail'].image));
     }
+
+    // If you want to extract images from the multi-picture metadata (MPF) you can save them like this:
+    if (tags['mpf'] && tags['mpf']['Images']) {
+        for (let i = 0; i < tags['mpf']['Images'].length; i++) {
+            fs.writeFileSync(path.join(os.tmpdir(), `mpf-image-${i}.jpg`), Buffer.from(tags['mpf']['Images'][i].image));
+            // You can also read the metadata from each of these images too:
+            // ExifReader.load(tags['mpf']['Images'][i].image, {expanded: true});
+        }
+    }
+
+    listTags(tags);
+}).catch(function (error) {
+    if (error instanceof exifErrors.MetadataMissingError) {
+        console.log('No Exif data found');
+    }
+
+    console.error(error);
+    process.exit(1);
 });
 
 function listTags(tags) {

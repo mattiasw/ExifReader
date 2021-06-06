@@ -13,7 +13,7 @@ const XMP_FIELD_LENGTH_TEST_VALUE = 47;
 const OFFSET_TEST_VALUE_ICC2_1 = 27110;
 const OFFSET_TEST_VALUE_ICC2_2 = 47110;
 
-describe('exif-reader', () => {
+describe('exif-reader', function () {
     afterEach(() => {
         ExifReaderRewireAPI.__ResetDependency__('DataViewWrapper');
         ExifReaderRewireAPI.__ResetDependency__('loadView');
@@ -31,7 +31,280 @@ describe('exif-reader', () => {
         expect(() => ExifReader.load()).to.throw;
     });
 
-    it('should fall back on DataView wrapper if DataView implementation if a full DataView implementation is not available', () => {
+    describe('managing file loading internally', () => {
+        const IMAGE = '<image>';
+        const TAGS = {MyTag: 42};
+
+        beforeEach(() => {
+            ExifReaderRewireAPI.__Rewire__('isNodeBuffer', function () {
+                return false;
+            });
+            ExifReaderRewireAPI.__Rewire__('DataViewWrapper', function (buffer) {
+                this.buffer = buffer.slice(0, IMAGE.length).toString();
+                if (this.buffer !== IMAGE) {
+                    throw new Error('Buffer error, does not match image.');
+                }
+            });
+            ExifReaderRewireAPI.__Rewire__('loadView', function (dataView) {
+                if (dataView.buffer !== IMAGE) {
+                    throw new Error('DataView error, does not match image.');
+                }
+                return TAGS;
+            });
+            rewireForLoadView({fileDataOffset: OFFSET_TEST_VALUE}, 'FileTags', TAGS);
+        });
+
+        describe('loading from URL in a browser context', () => {
+            const URL = 'https://domain.com/path/to/image.jpg';
+
+            beforeEach(() => {
+                this.originalWindow = global.window;
+                this.originalFetch = global.fetch;
+                global.window = {};
+                global.fetch = (url) => {
+                    if (url !== URL) {
+                        throw new Error();
+                    }
+                    return Promise.resolve({
+                        arrayBuffer() {
+                            return IMAGE;
+                        }
+                    });
+                };
+            });
+
+            afterEach(() => {
+                global.window = this.originalWindow;
+                global.fetch = this.originalFetch;
+            });
+
+            it('should load data from a remote location when a URL is passed in', (done) => {
+                ExifReader.load(URL).then((tags) => {
+                    expect(tags).to.deep.equal(TAGS);
+                    done();
+                });
+            });
+        });
+
+        describe('loading from URL in a Node.js context', () => {
+            const URL = 'https://domain.com/path/to/image.jpg';
+            const HTTP_URL = URL.replace('https', 'http');
+            let getEvents;
+            let getResult;
+            let httpResponse;
+
+            beforeEach(() => {
+                getEvents = {
+                    data(callback) {
+                        setTimeout(() => callback(IMAGE), 0);
+                    },
+                    end(callback) {
+                        setTimeout(() => callback(), 0);
+                    }
+                };
+                getResult = {on: () => undefined};
+                httpResponse = {
+                    statusCode: 200,
+                    on(eventName, responseCallback) {
+                        setTimeout(() => getEvents[eventName] && getEvents[eventName](responseCallback), 0);
+                    },
+                    resume: () => undefined
+                };
+                this.originalNonWebpackRequire = global.__non_webpack_require__;
+                global.__non_webpack_require__ = function (moduleName) {
+                    if (/^https?$/.test(moduleName)) {
+                        return {
+                            get(url, callback) {
+                                if ((url !== URL) && (url !== HTTP_URL)) {
+                                    throw new Error('Error.');
+                                }
+                                setTimeout(() => callback(httpResponse), 0);
+                                return getResult;
+                            }
+                        };
+                    }
+                };
+            });
+
+            it('should load data from a remote location when an HTTPS URL is passed in', (done) => {
+                ExifReader.load(URL).then((tags) => {
+                    expect(tags).to.deep.equal(TAGS);
+                    done();
+                });
+            });
+
+            it('should load data from a remote location when an HTTP URL is passed in', (done) => {
+                ExifReader.load(HTTP_URL).then((tags) => {
+                    expect(tags).to.deep.equal(TAGS);
+                    done();
+                });
+            });
+
+            it('should fail when Node.js\' require is missing', (done) => {
+                delete global.__non_webpack_require__;
+                ExifReader.load(URL).catch(() => done());
+            });
+
+            it('should fail when the get request fails', (done) => {
+                getResult = {
+                    on(eventName, callback) {
+                        if (eventName === 'error') {
+                            callback('Error.');
+                        }
+                    }
+                };
+                ExifReader.load(URL).catch(() => done());
+            });
+
+            it('should fail when request response code is not 2XX', (done) => {
+                httpResponse.statusCode = 500;
+                ExifReader.load(URL).catch(() => done());
+            });
+
+            it('should fail when request response reading fails', (done) => {
+                getEvents.error = (callback) => callback('Error.');
+                ExifReader.load(URL).catch(() => done());
+            });
+        });
+
+        describe('loading from file path', () => {
+            const FILENAME = '/path/to/image.jpg';
+            const FILE_DESCRIPTOR = 42;
+            let fsMethods;
+
+            beforeEach(() => {
+                fsMethods = {
+                    open(filename, callback) {
+                        if (filename === FILENAME) {
+                            callback(undefined, FILE_DESCRIPTOR);
+                        } else {
+                            callback('Error.');
+                        }
+                    },
+                    stat(filename, callback) {
+                        if (filename === FILENAME) {
+                            callback(undefined, {size: 4711});
+                        } else {
+                            callback('Error.');
+                        }
+                    },
+                    read(fd, {buffer}, callback) {
+                        if (fd === FILE_DESCRIPTOR) {
+                            buffer.write(IMAGE);
+                            callback(undefined);
+                        } else {
+                            callback('Error.');
+                        }
+                    },
+                    close(fd, callback) {
+                        if (fd === FILE_DESCRIPTOR) {
+                            callback(undefined);
+                        } else {
+                            callback('Error.');
+                        }
+                    }
+                };
+                this.originalNonWebpackRequire = global.__non_webpack_require__;
+                global.__non_webpack_require__ = function (moduleName) {
+                    if (moduleName === 'fs') {
+                        return fsMethods;
+                    }
+                };
+            });
+
+            afterEach(() => {
+                global.__non_webpack_require__ = this.originalNonWebpackRequire;
+            });
+
+            it('should load data from a file on disk when a path is passed in', (done) => {
+                ExifReader.load(FILENAME).then((tags) => {
+                    expect(tags).to.deep.equal(TAGS);
+                    done();
+                });
+            });
+
+            it('should fail when Node.js\' require is missing', (done) => {
+                delete global.__non_webpack_require__;
+                ExifReader.load(FILENAME).catch(() => done());
+            });
+
+            it('should fail if opening a file fails', (done) => {
+                fsMethods.open = (_, callback) => callback('Error.');
+                ExifReader.load(FILENAME).catch(() => done());
+            });
+
+            it('should fail if reading the file size fails', (done) => {
+                fsMethods.stat = (_, callback) => callback('Error.');
+                ExifReader.load(FILENAME).catch(() => done());
+            });
+
+            it('should fail if reading a file fails', (done) => {
+                fsMethods.read = (_0, _1, callback) => callback('Error.');
+                ExifReader.load(FILENAME).catch(() => done());
+            });
+
+            it('should NOT fail if closing a file fails', (done) => {
+                fsMethods.close = (_, callback) => callback('Error.');
+                ExifReader.load(FILENAME).then(() => done());
+            });
+        });
+
+        describe('loading from a File object', () => {
+            let file;
+            let onReadStart;
+
+            beforeEach(() => {
+                this.originalWindow = global.window;
+                global.window = {};
+                this.originalFile = global.File;
+                this.originalFileReader = global.FileReader;
+                global.File = function () {
+                    // Not used for anything.
+                };
+                onReadStart = {
+                    callback() {
+                        this.onload({
+                            target: {
+                                result: IMAGE
+                            }
+                        });
+                    }
+                };
+                global.FileReader = function () {
+                    this.readAsArrayBuffer = (_file) => {
+                        if (_file === file) {
+                            setTimeout(onReadStart.callback.bind(this), 0);
+                        }
+                    };
+                };
+                file = new global.File();
+            });
+
+            afterEach(() => {
+                global.window = this.originalWindow;
+                global.File = this.originalFile;
+                global.FileReader = this.originalFileReader;
+            });
+
+            it('should load data from a File object', (done) => {
+                ExifReader.load(file).then((tags) => {
+                    expect(tags).to.deep.equal(TAGS);
+                    done();
+                });
+            });
+
+            it('should fail if reading a file fails', (done) => {
+                onReadStart = {
+                    callback() {
+                        this.onerror();
+                    }
+                };
+                ExifReader.load(file).catch(() => done());
+            });
+        });
+    });
+
+    it('should fall back on DataView wrapper if a full DataView implementation is not available', () => {
         let dataViewWrapperWasCalled = false;
         ExifReaderRewireAPI.__Rewire__('DataViewWrapper', function () {
             dataViewWrapperWasCalled = true;

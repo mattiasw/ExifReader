@@ -6,6 +6,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+/* global Buffer, __non_webpack_require__ */
 
 import {objectAssign} from './utils.js';
 import DataViewWrapper from './dataview.js';
@@ -31,6 +32,114 @@ export default {
 export const errors = exifErrors;
 
 export function load(data, options = {expanded: false}) {
+    if (isFilePathOrURL(data)) {
+        return loadFile(data).then((fileContents) => loadFromData(fileContents, options));
+    }
+    if (isBrowserFileObject(data)) {
+        return loadFileObject(data).then((fileContents) => loadFromData(fileContents, options));
+    }
+    return loadFromData(data, options);
+}
+
+function isFilePathOrURL(data) {
+    return typeof data === 'string';
+}
+
+function loadFile(filename) {
+    if (typeof window !== 'undefined') {
+        return browserFetchRemoteFile(filename);
+    }
+
+    if (/^https?:\/\//.test(filename)) {
+        return nodeFetchRemoteFile(filename).then((buffer) => {
+            return buffer;
+        });
+    }
+
+    return loadLocalFile(filename);
+}
+
+function browserFetchRemoteFile(url) {
+    return fetch(url).then((response) => response.arrayBuffer());
+}
+
+function nodeFetchRemoteFile(url) {
+    return new Promise((resolve, reject) => {
+        const get = requireNodeGet(url);
+        get(url, (response) => {
+            if ((response.statusCode >= 200) && (response.statusCode <= 299)) {
+                const data = [];
+                response.on('data', (chunk) => data.push(Buffer.from(chunk)));
+                response.on('error', (error) => reject(error));
+                response.on('end', () => resolve(Buffer.concat(data)));
+            } else {
+                reject(`Could not fetch file: ${response.statusCode} ${response.statusMessage}`);
+                response.resume();
+            }
+        }).on('error', (error) => reject(error));
+    });
+}
+
+function requireNodeGet(url) {
+    if (/^https:\/\//.test(url)) {
+        return __non_webpack_require__('https').get;
+    }
+    return __non_webpack_require__('http').get;
+}
+
+function loadLocalFile(filename) {
+    return new Promise((resolve, reject) => {
+        const fs = requireNodeFs();
+        fs.open(filename, (error, fd) => {
+            if (error) {
+                reject(error);
+            } else {
+                fs.stat(filename, (error, stat) => {
+                    if (error) {
+                        reject(error);
+                    } else {
+                        const buffer = Buffer.alloc(stat.size);
+                        fs.read(fd, {buffer}, (error) => {
+                            if (error) {
+                                reject(error);
+                            } else {
+                                fs.close(fd, (error) => {
+                                    if (error) {
+                                        console.warn(`Could not close file ${filename}:`, error); // eslint-disable-line no-console
+                                    }
+                                    resolve(buffer);
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    });
+}
+
+function requireNodeFs() {
+    try {
+        return __non_webpack_require__('fs');
+    } catch (error) {
+        return undefined;
+    }
+}
+
+function isBrowserFileObject(data) {
+    return (typeof window !== 'undefined') && (typeof File !== 'undefined') && (data instanceof File);
+}
+
+function loadFileObject(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (readerEvent) => resolve(readerEvent.target.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+function loadFromData(data, options) {
     if (isNodeBuffer(data)) {
         // File data read in Node can share the underlying buffer with other
         // data. Therefore it's safest to get a new one to avoid weird bugs.
@@ -41,7 +150,7 @@ export function load(data, options = {expanded: false}) {
 
 function isNodeBuffer(data) {
     try {
-        return Buffer.isBuffer(data); // eslint-disable-line no-undef
+        return Buffer.isBuffer(data);
     } catch (error) {
         return false;
     }

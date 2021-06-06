@@ -6,17 +6,20 @@ import {expect} from 'chai';
 import DOMParserModule from '../../src/dom-parser';
 
 describe('dom-parser', function () {
+    let originalNonWebpackRequire;
+
     beforeEach(() => {
+        originalNonWebpackRequire = global.__non_webpack_require__;
+        global.__non_webpack_require__ = require;
         this.originalDOMParser = global.DOMParser;
         if (typeof global.DOMParser !== undefined) {
             delete global.DOMParser;
         }
-        this.originalEval = global.eval;
     });
 
     afterEach(() => {
+        global.__non_webpack_require__ = originalNonWebpackRequire;
         global.DOMParser = this.originalDOMParser;
-        global.eval = this.originalEval;
     });
 
     it('should return DOMParser if it is globally defined', () => {
@@ -30,7 +33,7 @@ describe('dom-parser', function () {
     });
 
     it('should return undefined if DOMParser was not available', () => {
-        global.eval = function () {
+        global.__non_webpack_require__ = function () {
             throw new Error();
         };
         const Parser = DOMParserModule.get();
