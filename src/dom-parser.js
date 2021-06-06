@@ -11,7 +11,7 @@ function get() {
         return DOMParser;
     }
     try {
-        return eval('require')('xmldom').DOMParser; // This stops Webpack from replacing the require with a generic import and bundling the module.
+        return __non_webpack_require__('xmldom').DOMParser; // eslint-disable-line no-undef
     } catch (error) {
         return undefined;
     }
