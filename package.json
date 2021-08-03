@@ -78,6 +78,6 @@
     ]
   },
   "optionalDependencies": {
-    "xmldom": "^0.1.31"
+    "xmldom": "^0.6.0"
   }
 }
