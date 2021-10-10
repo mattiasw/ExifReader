@@ -22,10 +22,10 @@ function checkConfig() {
                 '@babel/register@7.13.8',
                 'babel-loader@8.2.2',
                 'cross-env@7.0.3',
-                'string-replace-loader@2.2.0',
-                'webpack@4.44.1',
-                'webpack-cli@3.3.12',
-                'terser-webpack-plugin@4.2.3'
+                'string-replace-loader@3.0.3',
+                'webpack@5.58.1',
+                'webpack-cli@4.9.0',
+                'terser-webpack-plugin@5.2.4'
             ];
             execSync(`npm install --production=false --loglevel=error --no-optional --no-package-lock --no-save ${packages.join(' ')}`, {stdio: 'inherit'});
             console.log('Done.'); // eslint-disable-line no-console

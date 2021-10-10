@@ -40,11 +40,11 @@
     "npm-run-all": "^4.1.5",
     "nyc": "^15.1.0",
     "rimraf": "^3.0.2",
-    "string-replace-loader": "^2.2.0",
-    "terser-webpack-plugin": "^4.2.3",
-    "webpack": "^4.44.1",
-    "webpack-cli": "^3.3.12",
-    "webpack-dev-server": "^3.11.2"
+    "string-replace-loader": "^3.0.3",
+    "terser-webpack-plugin": "^5.2.4",
+    "webpack": "^5.58.1",
+    "webpack-cli": "^4.9.0",
+    "webpack-dev-server": "^4.3.1"
   },
   "scripts": {
     "build": "node bin/build.js",
@@ -53,7 +53,7 @@
     "cypress:open": "cypress open",
     "lint": "eslint .",
     "precommit": "npm-run-all lint test test:build",
-    "start": "webpack-dev-server",
+    "start": "cross-env NODE_ENV=development webpack serve",
     "test": "cross-env BABEL_ENV=test mocha --require @babel/register --recursive \"test/unit/\"",
     "test:build": "mocha test/build/test.js",
     "test:build:custom": "mocha --bail test/build/test-custom.js",
@@ -79,5 +79,16 @@
   },
   "optionalDependencies": {
     "@xmldom/xmldom": "^0.7.5"
-  }
+  },
+  "browserslist": [
+    "> 0.5%",
+    "last 2 versions",
+    "not dead",
+    "Chrome >= 9",
+    "Firefox >= 15",
+    "IE >= 10",
+    "Edge >= 12",
+    "Safari >= 5.1",
+    "Opera >= 12.1"
+  ]
 }

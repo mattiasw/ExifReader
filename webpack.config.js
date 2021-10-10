@@ -23,7 +23,7 @@ if (includedModules) {
 }
 
 module.exports = {
-    mode: 'production',
+    mode: process.env.NODE_ENV || 'production',
     optimization: {
         minimizer: [new TerserPlugin({
             terserOptions: {
@@ -42,18 +42,28 @@ module.exports = {
         'exif-reader': path.resolve('./src/exif-reader.js')
     },
     output: {
-        path: path.resolve(__dirname, 'dist'),
-        library: 'ExifReader',
-        libraryTarget: 'umd',
+        library: {
+            name: 'ExifReader',
+            type: 'umd'
+        },
         globalObject: 'typeof self !== \'undefined\' ? self : this'
     },
     devtool: 'source-map',
     devServer: {
-        contentBase: [path.join(__dirname, 'examples'), path.join(__dirname, 'src')],
-        contentBasePublicPath: ['/', '/src'],
+        static: [
+            {
+                directory: path.join(__dirname, 'examples'),
+                publicPath: '/',
+                watch: !process.env.CI
+            },
+            {
+                directory: path.join(__dirname, 'src'),
+                publicPath: '/src',
+                watch: !process.env.CI
+            }
+        ],
         https: true,
         open: !process.env.CI,
-        watchContentBase: !process.env.CI,
         liveReload: !process.env.CI
     },
     module: {
@@ -78,9 +88,6 @@ module.exports = {
                 }
             }
         ]
-    },
-    node: {
-        Buffer: false
     }
 };
 

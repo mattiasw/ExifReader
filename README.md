@@ -214,8 +214,8 @@ details.
 The most important step will be to [use a custom
 build](#configure-a-custom-build) so please do that.
 
-If you are using Webpack and are only targeting web browsers, make sure to add
-this to your Webpack config (probably the `webpack.config.js` file):
+If you are using Webpack 4 or lower and are only targeting web browsers, make
+sure to add this to your Webpack config (probably the `webpack.config.js` file):
 
 ```javascript
     node: {
@@ -225,7 +225,7 @@ this to your Webpack config (probably the `webpack.config.js` file):
 
 `Buffer` is only used in Node.js but if Webpack sees a reference to it it will
 include a `Buffer` shim for browsers. This configuration will stop Webpack from
-doing that.
+doing that. Webpack 5 does this automatically.
 
 ### Configure a custom build
 
