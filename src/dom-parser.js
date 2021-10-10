@@ -11,7 +11,7 @@ function get() {
         return DOMParser;
     }
     try {
-        return __non_webpack_require__('xmldom').DOMParser; // eslint-disable-line no-undef
+        return __non_webpack_require__('@xmldom/xmldom').DOMParser; // eslint-disable-line no-undef
     } catch (error) {
         return undefined;
     }
