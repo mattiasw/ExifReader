@@ -156,13 +156,19 @@ describe('iptc-tags', function () {
         });
     });
 
-    it('should read undefined IPTC NAA resource tag', () => {
+    it('should read included undefined IPTC NAA resource tag', () => {
         const dataView = getDataView('\x1c\x47\x11\x00\x02\x42\x43');
-        const {tag} = readTag(dataView, 0);
+        const {tag} = readTag(dataView, 0, {}, undefined, true);
         expect(tag.id).to.equal(0x4711);
         expect(tag.name).to.equal('undefined-18193');
         expect(tag.value).to.deep.equal([0x42, 0x43]);
         expect(tag.description).to.deep.equal([0x42, 0x43]);
+    });
+
+    it('should ignore excluded undefined IPTC NAA resource tag', () => {
+        const dataView = getDataView('\x1c\x47\x11\x00\x02\x42\x43');
+        const {tag} = readTag(dataView, 0, {}, undefined, false);
+        expect(tag).to.be.undefined;
     });
 
     it('should read multiple IPTC NAA resource tags', () => {
@@ -196,7 +202,7 @@ describe('iptc-tags', function () {
 
     it('should stop parsing tags when a tag is faulty', () => {
         const dataView = getDataView('8BIM\x04\x04\x00\x00\x00\x00\x00\x0e' + '\x1c\x47\x11\x00\x02BC' + '\x00\x47\x12\x00\x02DE' + '\x1c\x47\x11\x00\x02FG');
-        const tags = IptcTags.read(dataView, 0);
+        const tags = IptcTags.read(dataView, 0, {}, undefined, true);
         expect(Object.keys(tags).length).to.equal(1);
     });
 

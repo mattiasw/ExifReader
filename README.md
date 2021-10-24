@@ -174,6 +174,16 @@ pass in an options object with the property `expanded` set to `true`:
 const tags = ExifReader.load(fileBuffer, {expanded: true});
 ```
 
+#### Unknown tags
+
+Tags that are unknown, either because they have been excluded by making a custom
+build or they are yet to be added into ExifReader, are by default not included
+in the output. If you need to see them there is an option that can be passed in:
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {includeUnknown: true});
+```
+
 ### GPS
 
 If `expanded: true` is specified in the options, there will be a `gps` group.

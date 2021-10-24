@@ -89,10 +89,18 @@ describe('tags', () => {
         // Field count + field + offset to next IFD.
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
         Tags.__set__('TagNames', {'0th': {}});
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, true);
         expect(tags['undefined-18193'].id).to.equal(0x4711);
         expect(tags['undefined-18193'].description).to.equal(0x42);
         expect(tags['undefined-18193'].value).to.equal(0x42);
+    });
+
+    it('should ignore undefined IFDs', () => {
+        // Field count + field + offset to next IFD.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
+        Tags.__set__('TagNames', {'0th': {}});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false);
+        expect(tags).to.deep.equal({});
     });
 
     it('should be able to read short ASCII tag', () => {

@@ -15,13 +15,13 @@ export default {
     read
 };
 
-function read(dataView, dataOffset) {
+function read(dataView, dataOffset, includeUnknown) {
     try {
         if (Array.isArray(dataView)) {
-            return parseTags(new DataView(Uint8Array.from(dataView).buffer), {size: dataView.length}, 0);
+            return parseTags(new DataView(Uint8Array.from(dataView).buffer), {size: dataView.length}, 0, includeUnknown);
         }
         const {naaBlock, dataOffset: newDataOffset} = getNaaResourceBlock(dataView, dataOffset);
-        return parseTags(dataView, naaBlock, newDataOffset);
+        return parseTags(dataView, naaBlock, newDataOffset, includeUnknown);
     } catch (error) {
         return {};
     }
@@ -62,42 +62,44 @@ function getBlockPadding(resourceBlock) {
     return 0;
 }
 
-function parseTags(dataView, naaBlock, dataOffset) {
+function parseTags(dataView, naaBlock, dataOffset, includeUnknown) {
     const tags = {};
     let encoding = undefined;
 
     const endOfBlockOffset = dataOffset + naaBlock['size'];
 
     while ((dataOffset < endOfBlockOffset) && (dataOffset < dataView.byteLength)) {
-        const {tag, tagSize} = readTag(dataView, dataOffset, tags, encoding);
+        const {tag, tagSize} = readTag(dataView, dataOffset, tags, encoding, includeUnknown);
 
         if (tag === null) {
             break;
         }
 
-        if ('encoding' in tag) {
-            encoding = tag.encoding;
-        }
-
-        if ((tags[tag.name] === undefined) || (tag['repeatable'] === undefined)) {
-            tags[tag.name] = {
-                id: tag.id,
-                value: tag.value,
-                description: tag.description
-            };
-        } else {
-            if (!(tags[tag.name] instanceof Array)) {
-                tags[tag.name] = [{
-                    id: tags[tag.name].id,
-                    value: tags[tag.name].value,
-                    description: tags[tag.name].description
-                }];
+        if (tag) {
+            if ('encoding' in tag) {
+                encoding = tag.encoding;
             }
-            tags[tag.name].push({
-                id: tag.id,
-                value: tag.value,
-                description: tag.description
-            });
+
+            if ((tags[tag.name] === undefined) || (tag['repeatable'] === undefined)) {
+                tags[tag.name] = {
+                    id: tag.id,
+                    value: tag.value,
+                    description: tag.description
+                };
+            } else {
+                if (!(tags[tag.name] instanceof Array)) {
+                    tags[tag.name] = [{
+                        id: tags[tag.name].id,
+                        value: tags[tag.name].value,
+                        description: tags[tag.name].description
+                    }];
+                }
+                tags[tag.name].push({
+                    id: tag.id,
+                    value: tag.value,
+                    description: tag.description
+                });
+            }
         }
 
         dataOffset += TAG_HEADER_SIZE + tagSize;
@@ -106,7 +108,7 @@ function parseTags(dataView, naaBlock, dataOffset) {
     return tags;
 }
 
-function readTag(dataView, dataOffset, tags, encoding) {
+function readTag(dataView, dataOffset, tags, encoding, includeUnknown) {
     const TAG_CODE_OFFSET = 1;
     const TAG_SIZE_OFFSET = 3;
 
@@ -116,6 +118,11 @@ function readTag(dataView, dataOffset, tags, encoding) {
 
     const tagCode = dataView.getUint16(dataOffset + TAG_CODE_OFFSET);
     const tagSize = dataView.getUint16(dataOffset + TAG_SIZE_OFFSET);
+
+    if (!includeUnknown && !IptcTagNames['iptc'][tagCode]) {
+        return {tag: undefined, tagSize};
+    }
+
     const tagValue = getTagValue(dataView, dataOffset + TAG_HEADER_SIZE, tagSize);
 
     const tag = {
