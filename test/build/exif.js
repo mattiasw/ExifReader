@@ -14,8 +14,8 @@ function parse(imagePath, libraryDir = '../..') {
 
     try {
         const result = {
-            combined: hashDetails(ExifReader.load(data)),
-            expanded: hashGroupDetails(ExifReader.load(data, {expanded: true}))
+            combined: hashDetails(ExifReader.load(data, {includeUnknown: true})),
+            expanded: hashGroupDetails(ExifReader.load(data, {expanded: true, includeUnknown: true}))
         };
         return result;
     } catch (error) {
