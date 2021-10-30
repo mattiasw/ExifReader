@@ -65,7 +65,7 @@ function listTags(tags) {
             } else if (Array.isArray(tags[group][name])) {
                 console.log(`${group}:${name}: ${tags[group][name].map((item) => item.description).join(', ')}`);
             } else {
-                console.log(`${group}:${name}: ${tags[group][name].description}`);
+                console.log(`${group}:${name}: ${typeof tags[group][name].description === 'string' ? tags[group][name].description.trim() : tags[group][name].description}`);
             }
         }
     }

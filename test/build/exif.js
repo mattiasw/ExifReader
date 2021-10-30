@@ -75,13 +75,20 @@ function hash(value) {
             return crypto.createHash('sha1').update(new Uint8Array(value)).digest('base64');
         }
         value = (new Uint8Array(value)).map((byte) => Number(byte));
-    }
-    const stringified = JSON.stringify(value);
-    if (stringified.length > 200) {
-        return crypto.createHash('sha1').update(stringified).digest('base64');
-    }
-    if (Array.isArray(value)) {
-        return value.join(', ');
+    } else if (Array.isArray(value)) {
+        const newValue = value.length > 200 ? value.slice(0, 100).concat(['...']).concat(value.slice(-100)) : value;
+        return newValue.map(hash);
+    } else if (typeof value === 'object') {
+        const newValue = {};
+        for (const key in value) {
+            newValue[key] = hash(value[key]);
+        }
+        return newValue;
+    } else if (typeof value === 'string') {
+        if (value.length > 200) {
+            return `${value.substring(0, 100)}[...]${value.substring(value.length - 100)}`;
+        }
+        return value;
     }
     return value;
 }
