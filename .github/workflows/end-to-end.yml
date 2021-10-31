@@ -8,7 +8,7 @@ on:
 
 jobs:
   end-to-end:
-    runs-on: ubuntu-16.04
+    runs-on: ubuntu-20.04
     name: Cypress run
     env:
       CI: 1

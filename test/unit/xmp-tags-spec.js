@@ -410,6 +410,90 @@ describe('xmp-tags', function () {
         });
     });
 
+    it('should be able to read an unordered array with a concise structure value', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                <xmp:MyXMPArray xml:lang="en">
+                    <rdf:Bag>
+                        <rdf:li>
+                            <rdf:Description xmp:MyXMPStructure0="47">
+                                <xmp:MyXMPStructure1 xml:lang="sv">11</xmp:MyXMPStructure1>
+                            </rdf:Description>
+                        </rdf:li>
+                    </rdf:Bag>
+                </xmp:MyXMPArray>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
+        expect(tags['MyXMPArray']).to.deep.equal({
+            value: [
+                {
+                    MyXMPStructure0: {
+                        value: '47',
+                        attributes: {},
+                        description: '47'
+                    },
+                    MyXMPStructure1: {
+                        value: '11',
+                        attributes: {
+                            lang: 'sv'
+                        },
+                        description: '11'
+                    }
+                }
+            ],
+            attributes: {
+                lang: 'en'
+            },
+            description: 'MyXMPStructure0: 47; MyXMPStructure1: 11'
+        });
+    });
+
+    it('should be able to read an unordered array with structure value as attribute', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                <xmp:MyXMPArray xml:lang="en">
+                    <rdf:Bag>
+                        <rdf:li>
+                            <rdf:Description xmp:MyXMPStructure0="47">
+                                <xmp:MyXMPStructure1 xmp:MyXMPTag0="11"/>
+                            </rdf:Description>
+                        </rdf:li>
+                    </rdf:Bag>
+                </xmp:MyXMPArray>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
+        expect(tags['MyXMPArray']).to.deep.equal({
+            value: [
+                {
+                    MyXMPStructure0: {
+                        value: '47',
+                        attributes: {},
+                        description: '47'
+                    },
+                    MyXMPStructure1: {
+                        value: {
+                            MyXMPTag0: {
+                                value: '11',
+                                attributes: {},
+                                description: '11'
+                            }
+                        },
+                        attributes: {},
+                        description: 'MyXMPTag0: 11'
+                    }
+                }
+            ],
+            attributes: {
+                lang: 'en'
+            },
+            description: 'MyXMPStructure0: 47; MyXMPStructure1: MyXMPTag0: 11'
+        });
+    });
+
     it('should be able to read an ordered array value', () => {
         const xmlString = getXmlString(`
             <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
@@ -563,6 +647,67 @@ describe('xmp-tags', function () {
                 lang: 'en'
             },
             description: 'MyXMPTag: 42'
+        });
+    });
+
+    it('should be able to read an array structure value as attributes', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                <xmp:MyXMPArray xml:lang="en">
+                    <rdf:Bag>
+                        <rdf:li xmp:MyXMPTag0="47" xmp:MyXMPTag1="11" />
+                    </rdf:Bag>
+                </xmp:MyXMPArray>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
+        expect(tags['MyXMPArray']).to.deep.equal({
+            value: [
+                {
+                    MyXMPTag0: {
+                        value: '47',
+                        attributes: {},
+                        description: '47'
+                    },
+                    MyXMPTag1: {
+                        value: '11',
+                        attributes: {},
+                        description: '11'
+                    }
+                }
+            ],
+            attributes: {
+                lang: 'en'
+            },
+            description: 'MyXMPTag0: 47; MyXMPTag1: 11'
+        });
+    });
+
+    it('should be able to read an xml:lang qualifier on an empty array item', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                <xmp:MyXMPArray>
+                    <rdf:Bag>
+                        <rdf:li xml:lang="en" />
+                    </rdf:Bag>
+                </xmp:MyXMPArray>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
+        expect(tags['MyXMPArray']).to.deep.equal({
+            value: [
+                {
+                    value: {},
+                    attributes: {
+                        lang: 'en'
+                    },
+                    description: ''
+                }
+            ],
+            attributes: {},
+            description: ''
         });
     });
 
