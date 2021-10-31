@@ -4,7 +4,7 @@ ExifReader
 ExifReader is a JavaScript library that parses image files and extracts the
 metadata. It can also extract an embedded thumbnail. It can be used either in a
 browser or from Node. Supports JPEG, TIFF, PNG, HEIC, and WebP files with Exif,
-IPTC, XMP, ICC, and MPF meta data (depending on file type).
+IPTC, XMP, ICC, and MPF metadata (depending on file type).
 
 ExifReader is highly and easily configurable and the resulting bundle can be as
 small as **3 KiB** (gzipped) if you're only interested in a few tags (e.g. date
@@ -183,6 +183,9 @@ in the output. If you need to see them there is an option that can be passed in:
 ```javascript
 const tags = ExifReader.load(fileBuffer, {includeUnknown: true});
 ```
+
+If you discover an unknown tag that should be handled by ExifReader, please
+reach out by filing an issue.
 
 ### GPS
 
@@ -387,11 +390,12 @@ Tips
     [examples site](https://mattiasw.github.io/ExifReader/) to see how you can
     do that.
 -   In some cases it can make sense to only load the beginning of the image
-    file. It's unfortunately not possible to know how big the meta data will be
-    in an image, but if you limit yourself to regular Exif tags you can most
-    probably get by with only reading the first 128 kB. This may exclude IPTC
-    and XMP metadata though (and possibly Exif too if they come in an irregular
-    order) so please check if this optimization fits your use case.
+    file since that is where the metadata is located. It's unfortunately not
+    possible to know how big the metadata will be in an image, but if you limit
+    yourself to regular Exif tags you can most probably get by with only reading
+    the first 128 kB. This may exclude IPTC and XMP metadata though (and
+    possibly Exif too if they come in an irregular order) so please check if
+    this optimization fits your use case.
 
 Testing
 -------
@@ -441,6 +445,15 @@ case is covered.
 Changelog
 ---------
 
+-   **October 2021**:
+    -   Major version update 4.0.0. A couple of small breaking changes that
+        shouldn't affect too many users:
+        - Node.js 10+ is needed to read XMP tags (requirement from
+          [xmldom](https://www.npmjs.com/package/@xmldom/xmldom) dependency)
+        - XMP arrays with complex items are now parsed correctly, e.g. `Regions`
+          (see [issue #129](https://github.com/mattiasw/ExifReader/issues/129)
+          for more details)
+        - [Unknown tags](#unknown-tags) are no longer included by default
 -   **June 2021**:
     -   Make it possible to directly pass in file path, URL, or File object.
 -   **December 2020**:
