@@ -254,7 +254,7 @@ function getDescriptionOfObject(value) {
     const descriptions = [];
 
     for (const key in value) {
-        descriptions.push(`${getClearTextKey(key)}: ${value[key].value}`);
+        descriptions.push(`${getClearTextKey(key)}: ${getDescription(value[key].value)}`);
     }
 
     return descriptions.join('; ');
@@ -303,11 +303,14 @@ function parseNodeChildrenAsTags(children) {
 function parseNodeAsTag(node, name) {
     if (hasNestedSimpleRdfDescription(node)) {
         return parseNodeAsSimpleRdfDescription(node, name);
-    } else if (hasNestedStructureRdfDescription(node)) {
+    }
+    if (hasNestedStructureRdfDescription(node)) {
         return parseNodeAsStructureRdfDescription(node, name);
-    } else if (isCompactStructure(node)) {
+    }
+    if (isCompactStructure(node)) {
         return parseNodeAsCompactStructure(node, name);
-    } else if (isArray(node)) {
+    }
+    if (isArray(node)) {
         return parseNodeAsArray(node, name);
     }
     return parseNodeAsSimpleValue(node, name);
@@ -390,6 +393,7 @@ function parseNodeAsStructureRdfDescription(node, name) {
 
 function isCompactStructure(node) {
     return (Object.keys(node.value).length === 0)
+        && (node.attributes['xml:lang'] === undefined)
         && (node.attributes['rdf:resource'] === undefined);
 }
 
@@ -437,20 +441,14 @@ function parseArrayValue(item) {
     if (hasNestedSimpleRdfDescription(item)) {
         return parseNodeAsSimpleRdfDescription(item);
     }
-
-    if (hasNestedArrayValue(item)) {
-        return parseNodeChildrenAsTags(item.value);
+    if (hasNestedStructureRdfDescription(item)) {
+        return parseNodeAsStructureRdfDescription(item).value;
+    }
+    if (isCompactStructure(item)) {
+        return parseNodeAsCompactStructure(item).value;
     }
 
-    return {
-        value: item.value,
-        attributes: parseNodeAttributes(item),
-        description: getDescription(item.value)
-    };
-}
-
-function hasNestedArrayValue(node) {
-    return node.attributes['rdf:parseType'] === 'Resource';
+    return parseNodeAsSimpleValue(item);
 }
 
 function parseNodeAsSimpleValue(node, name) {
