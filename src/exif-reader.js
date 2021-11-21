@@ -16,6 +16,7 @@ import {getCalculatedGpsValue} from './tag-names-utils.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
 import FileTags from './file-tags.js';
+import JfifTags from './jfif-tags.js';
 import IptcTags from './iptc-tags.js';
 import XmpTags from './xmp-tags.js';
 import IccTags from './icc-tags.js';
@@ -170,6 +171,7 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
 
     const {
         fileDataOffset,
+        jfifDataOffset,
         tiffHeaderOffset,
         iptcDataOffset,
         xmpChunks,
@@ -183,6 +185,16 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         const readTags = FileTags.read(dataView, fileDataOffset);
         if (expanded) {
             tags.file = readTags;
+        } else {
+            tags = objectAssign({}, tags, readTags);
+        }
+    }
+
+    if (Constants.USE_JPEG && Constants.USE_JFIF && hasJfifData(jfifDataOffset)) {
+        foundMetaData = true;
+        const readTags = JfifTags.read(dataView, jfifDataOffset);
+        if (expanded) {
+            tags.jfif = readTags;
         } else {
             tags = objectAssign({}, tags, readTags);
         }
@@ -309,6 +321,10 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
 
 function hasFileData(fileDataOffset) {
     return fileDataOffset !== undefined;
+}
+
+function hasJfifData(jfifDataOffset) {
+    return jfifDataOffset !== undefined;
 }
 
 function hasExifData(tiffHeaderOffset) {

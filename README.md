@@ -334,6 +334,7 @@ Possible modules to include or exclude:
 | `heic`      | HEIC/HEIF images.                                              |
 | `webp`      | WebP images.                                                   |
 | `file`      | JPEG file details: image width, height etc.                    |
+| `jfif`      | JFIF details in JPEG files: resolution, thumbnail etc.         |
 | `png_file`  | PNG file details: image width, height etc.                     |
 | `exif`      | Regular Exif tags. If excluded, will also exclude `mpf` and `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
 | `iptc`      | IPTC tags.                                                     |

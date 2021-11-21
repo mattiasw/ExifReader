@@ -94,6 +94,7 @@ module.exports = {
 function parseConfig({include: includesConfig, exclude: excludesConfig}) {
     const modules = [
         'file',
+        'jfif',
         'png_file',
         'exif',
         'iptc',
