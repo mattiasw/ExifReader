@@ -60,6 +60,7 @@ describe('image-header', () => {
 
     describe('JPEG files', () => {
         const JPEG_IMAGE_START = '\xff\xd8\xff\xe0\x00\x07JFIF\x00';
+        const APP0_MARKER = '\xff\xe0';
         const APP1_MARKER = '\xff\xe1';
         const APP_UNKNOWN_MARKER = '\xff\xea';
         const COMMENT_MARKER = '\xff\xfe';
@@ -82,6 +83,7 @@ describe('image-header', () => {
             expect(appMarkerValues).to.deep.equal({
                 hasAppMarkers: false,
                 fileDataOffset: undefined,
+                jfifDataOffset: undefined,
                 tiffHeaderOffset: undefined,
                 iptcDataOffset: undefined,
                 xmpChunks: undefined,
@@ -96,6 +98,7 @@ describe('image-header', () => {
             expect(appMarkerValues).to.deep.equal({
                 hasAppMarkers: true,
                 fileDataOffset: undefined,
+                jfifDataOffset: undefined,
                 tiffHeaderOffset: undefined,
                 iptcDataOffset: undefined,
                 xmpChunks: undefined,
@@ -110,6 +113,7 @@ describe('image-header', () => {
             expect(appMarkerValues).to.deep.equal({
                 hasAppMarkers: false,
                 fileDataOffset: undefined,
+                jfifDataOffset: undefined,
                 tiffHeaderOffset: undefined,
                 iptcDataOffset: undefined,
                 xmpChunks: undefined,
@@ -141,9 +145,9 @@ describe('image-header', () => {
         });
 
         it('should handle JFIF APP0 markers', () => {
-            const dataView = getDataView(`\xff\xd8\xff\xe0\x00\x07JFIF\x00${SOME_MARKER_CONTENT}`);
-            const {tiffHeaderOffset} = ImageHeader.parseAppMarkers(dataView);
-            expect(tiffHeaderOffset).to.equal(21);
+            const dataView = getDataView(`\xff\xd8${APP0_MARKER}\x00\x07JFIF\x00`);
+            const {jfifDataOffset} = ImageHeader.parseAppMarkers(dataView);
+            expect(jfifDataOffset).to.equal(4);
         });
 
         it('should handle JFXX APP0 markers', () => {

@@ -11,6 +11,26 @@ interface FileTags {
     'Subsampling'?: NumberArrayFileTag
 }
 
+interface JfifTags {
+    'JFIF Version'?: NumberFileTag,
+    'Resolution Unit'?: JfifResolutionUnitTag,
+    'XResolution'?: NumberFileTag,
+    'YResolution'?: NumberFileTag,
+    'JFIF Thumbnail Width'?: NumberFileTag,
+    'JFIF Thumbnail Height'?: NumberFileTag,
+    'JFIF Thumbnail'?: JfifThumbnailTag
+}
+
+interface JfifResolutionUnitTag {
+    value: number,
+    description: 'None' | 'inches' | 'cm' | 'Unknown'
+}
+
+interface JfifThumbnailTag {
+    value: ArrayBuffer | SharedArrayBuffer | Buffer,
+    description: '<24-bit RGB pixel data>'
+}
+
 interface PngFileTags {
     'Image Width'?: NumberFileTag,
     'Image Height'?: NumberFileTag,
@@ -107,6 +127,7 @@ interface ThumbnailTags {
 
 interface ExpandedTags {
     file?: FileTags,
+    jfif?: JfifTags,
     pngFile?: PngFileTags,
     exif?: Tags,
     iptc?: Tags,
@@ -185,8 +206,8 @@ interface Tags {
     'SamplesPerPixel'?: NumberTag,
     'RowsPerStrip'?: NumberTag,
     'StripByteCounts'?: NumberArrayTag,
-    'XResolution'?: NumberTag,
-    'YResolution'?: NumberTag,
+    'XResolution'?: NumberTag | NumberFileTag, // Also in JFIF tags.
+    'YResolution'?: NumberTag | NumberFileTag, // Also in JFIF tags.
     'PlanarConfiguration'?: NumberTag,
     'ResolutionUnit'?: NumberTag,
     'TransferFunction'?: NumberArrayTag,
@@ -204,6 +225,13 @@ interface Tags {
     'Copyright'?: StringArrayTag,
     'Exif IFD Pointer'?: NumberTag,
     'GPS Info IFD Pointer'?: NumberTag,
+
+    // JFIF tags
+    'JFIF Version'?: NumberFileTag,
+    'Resolution Unit'?: JfifResolutionUnitTag,
+    'JFIF Thumbnail Width'?: NumberFileTag,
+    'JFIF Thumbnail Height'?: NumberFileTag,
+    'JFIF Thumbnail'?: JfifThumbnailTag,
 
     // Exif tags
     'ExposureTime'?: NumberTag,

@@ -322,6 +322,7 @@ describe('exif-reader', function () {
         rewireImageHeader({
             hasAppMarkers: false,
             fileDataOffset: undefined,
+            jfifDataOffset: undefined,
             tiffHeaderOffset: undefined,
             iptcDataOffset: undefined,
             xmpChunks: undefined,
@@ -334,6 +335,12 @@ describe('exif-reader', function () {
     it('should be able to find file data segment', () => {
         const myTags = {MyTag: 42};
         rewireForLoadView({fileDataOffset: OFFSET_TEST_VALUE}, 'FileTags', myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
+    it('should be able to find JFIF data segment', () => {
+        const myTags = {MyTag: 42};
+        rewireForLoadView({jfifDataOffset: OFFSET_TEST_VALUE}, 'JfifTags', myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -408,6 +415,7 @@ describe('exif-reader', function () {
     it('should expand segments into separated properties on return object if specified', () => {
         const myTags = {
             file: {MyFileTag: 42},
+            jfif: {MyJfifTag: 48},
             exif: {MyExifTag: 43},
             iptc: {MyIptcTag: 44},
             xmp: {MyXmpTag: 45},
@@ -417,6 +425,7 @@ describe('exif-reader', function () {
         };
         rewireImageHeader({
             fileDataOffset: OFFSET_TEST_VALUE,
+            jfifDataOffset: OFFSET_TEST_VALUE,
             tiffHeaderOffset: OFFSET_TEST_VALUE,
             iptcDataOffset: OFFSET_TEST_VALUE,
             xmpChunks: [{
@@ -427,6 +436,7 @@ describe('exif-reader', function () {
             mpfDataOffset: OFFSET_TEST_VALUE
         });
         rewireTagsRead('FileTags', myTags.file);
+        rewireTagsRead('JfifTags', myTags.jfif);
         rewireTagsRead('Tags', {...myTags.exif, Thumbnail: myTags.Thumbnail}, myTags.mpf);
         rewireTagsRead('IptcTags', myTags.iptc);
         rewireXmpTagsRead(myTags.xmp);
@@ -566,6 +576,7 @@ describe('exif-reader', function () {
         beforeEach(() => {
             Constants = {
                 USE_FILE: true,
+                USE_JFIF: true,
                 USE_PNG_FILE: true,
                 USE_EXIF: true,
                 USE_IPTC: true,
@@ -587,6 +598,12 @@ describe('exif-reader', function () {
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
+        it('should handle when JFIF tags have been excluded', () => {
+            Constants.USE_JFIF = false;
+            rewireForCustomBuild({jfifDataOffset: OFFSET_TEST_VALUE}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
         it('should handle when PNG file tags have been excluded', () => {
             Constants.USE_PNG_FILE = false;
             rewireForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, Constants);
@@ -597,6 +614,7 @@ describe('exif-reader', function () {
             Constants.USE_JPEG = false;
             rewireForCustomBuild({
                 fileDataOffset: OFFSET_TEST_VALUE,
+                jfifDataOffset: OFFSET_TEST_VALUE,
                 iptcDataOffset: OFFSET_TEST_VALUE
             }, Constants);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
