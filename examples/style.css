@@ -7,6 +7,11 @@ body.container {
     padding-top: 6rem;
 }
 
+.github {
+    display: block;
+    margin-bottom: 2.5rem;
+}
+
 .source-code {
     margin-bottom: 1.5rem;
 }
@@ -38,4 +43,28 @@ form {
 
 input[type="file"] {
     margin-top: 1rem;
+}
+
+@media screen and (min-width: 1024px) {
+    .github {
+        background: black;
+        border-bottom-width: 1px;
+        border-color: #fff;
+        border-left-width: 0;
+        border-right-width: 0;
+        border-style: solid;
+        border-top-width: 1px;
+        box-shadow: 0 0 10px 3px #000;
+        color: #fff;
+        font-size: 1.6rem;
+        font-weight: bold;
+        letter-spacing: .04em;
+        line-height: 1.5;
+        padding: 6px 60px;
+        position: fixed;
+        right: 60px;
+        text-transform: none;
+        top: 60px;
+        transform: translateX(50%) translateY(-50%) rotateZ(45deg);
+    }
 }
