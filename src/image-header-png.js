@@ -19,7 +19,7 @@ const PNG_CHUNK_DATA_OFFSET = PNG_CHUNK_LENGTH_SIZE + PNG_CHUNK_TYPE_SIZE;
 const PNG_XMP_PREFIX = 'XML:com.adobe.xmp\x00';
 
 function isPngFile(dataView) {
-    return getStringFromDataView(dataView, 0, PNG_ID.length) === PNG_ID;
+    return !!dataView && getStringFromDataView(dataView, 0, PNG_ID.length) === PNG_ID;
 }
 
 function findPngOffsets(dataView) {
