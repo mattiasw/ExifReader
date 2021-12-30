@@ -13,7 +13,7 @@ export default {
 function isTiffFile(dataView) {
     const MIN_TIFF_DATA_BUFFER_LENGTH = 4;
 
-    return (dataView.byteLength >= MIN_TIFF_DATA_BUFFER_LENGTH) && hasTiffMarker(dataView);
+    return !!dataView && (dataView.byteLength >= MIN_TIFF_DATA_BUFFER_LENGTH) && hasTiffMarker(dataView);
 }
 
 function hasTiffMarker(dataView) {
