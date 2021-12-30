@@ -16,7 +16,7 @@ function isWebpFile(dataView) {
     const WEBP_MARKER_OFFSET = 8;
     const WEBP_MARKER = 'WEBP';
 
-    return getStringFromDataView(dataView, RIFF_ID_OFFSET, RIFF_ID.length) === RIFF_ID
+    return !!dataView && getStringFromDataView(dataView, RIFF_ID_OFFSET, RIFF_ID.length) === RIFF_ID
         && getStringFromDataView(dataView, WEBP_MARKER_OFFSET, WEBP_MARKER.length) === WEBP_MARKER;
 }
 

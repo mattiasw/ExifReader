@@ -29,6 +29,10 @@ describe('image-header', () => {
         expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
     });
 
+    it('should fail for undefined input value', () => {
+        expect(() => ImageHeader.parseAppMarkers(undefined)).to.throw(/Invalid image format/);
+    });
+
     describe('TIFF files', () => {
         const TIFF_IMAGE_START = '\x49\x49\x2a\x00';
 

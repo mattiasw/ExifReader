@@ -11,6 +11,10 @@ export default {
 };
 
 function isHeicFile(dataView) {
+    if (!dataView) {
+        return false;
+    }
+
     const HEIC_ID = 'ftyp';
     const HEIC_ID_OFFSET = 4;
     const HEIC_MAJOR_BRANDS = ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1'];
