@@ -163,6 +163,21 @@ Where `fileBuffer` is one of
 See the [examples site](https://mattiasw.github.io/ExifReader/) for more
 directions on how to use the library.
 
+#### Using React Native
+
+For local files on the device you need to load the file yourself first, then
+pass in the buffer to ExifReader. Here is a template from user @hungdev:
+
+```javascript
+import RNFS from 'react-native-fs';
+import {decode} from 'base64-arraybuffer';
+import ExifReader from 'exifreader';
+
+const b64Buffer = await RNFS.readFile('YOUR IMAGE URI', 'base64') // Where the URI looks like this: "file:///path/to/image/IMG_0123.HEIC"
+const fileBuffer = decode(b64Buffer)
+const tags = ExifReader.load(fileBuffer, {expanded: true});
+```
+
 #### Grouping
 
 By default, Exif, IPTC and XMP tags are grouped together. This means that if
