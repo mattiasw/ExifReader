@@ -50,7 +50,8 @@ function combineChunks(dataView, chunks) {
 
 function readTags(tags, chunkDataView) {
     try {
-        const doc = getDocument(chunkDataView);
+        const {doc, raw} = getDocument(chunkDataView);
+        tags._raw = (tags._raw || '') + raw;
         const rdf = getRDF(doc);
 
         return objectAssign(tags, parseXMPObject(convertToObject(rdf, true)));
@@ -74,7 +75,10 @@ function getDocument(chunkDataView) {
         throw new Error(doc.documentElement.textContent);
     }
 
-    return doc;
+    return {
+        doc,
+        raw: xmlString,
+    };
 }
 
 function trimXmlSource(xmlSource) {
