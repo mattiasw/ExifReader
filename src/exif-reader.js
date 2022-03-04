@@ -227,6 +227,7 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
             if (expanded) {
                 tags.xmp = readXmpTags;
             } else {
+                delete readXmpTags._raw;
                 tags = objectAssign({}, tags, readXmpTags);
             }
         }
@@ -265,6 +266,7 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         if (expanded) {
             tags.xmp = readTags;
         } else {
+            delete readTags._raw;
             tags = objectAssign({}, tags, readTags);
         }
     }
