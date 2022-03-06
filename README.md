@@ -94,6 +94,8 @@ Usage
 
 ### Importing
 
+*NOTE: See React Native instructions below.*
+
 ES module syntax:
 
 ```javascript
@@ -164,6 +166,14 @@ See the [examples site](https://mattiasw.github.io/ExifReader/) for more
 directions on how to use the library.
 
 #### Using React Native
+
+Import ExifReader like this:
+
+```javascript
+import ExifReader from './node_modules/exifreader/src/exif-reader.js';
+```
+
+Make sure to update the path to point to where your `node_modules` is located.
 
 For local files on the device you need to load the file yourself first, then
 pass in the buffer to ExifReader. Here is a template from user @hungdev:
