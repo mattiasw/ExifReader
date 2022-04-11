@@ -420,7 +420,9 @@ interface Tags {
     'Size Mode'?: NumberArrayTag, // NumberTag
     'Max Subfile Size'?: NumberArrayTag, // NumberTag
     'ObjectData Size Announced'?: NumberArrayTag, // NumberTag
-    'Maximum ObjectData Size'?: NumberArrayTag // NumberTag
+    'Maximum ObjectData Size'?: NumberArrayTag, // NumberTag
+
+    'Thumbnail'?: ThumbnailTags
 }
 
 interface IccTags {
