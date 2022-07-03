@@ -188,6 +188,10 @@ const fileBuffer = decode(b64Buffer)
 const tags = ExifReader.load(fileBuffer, {expanded: true});
 ```
 
+If you're having trouble getting the GPS location, see [this comment and
+thread](https://github.com/mattiasw/ExifReader/issues/177#issuecomment-1172228225)
+for more details.
+
 #### Grouping
 
 By default, Exif, IPTC and XMP tags are grouped together. This means that if
