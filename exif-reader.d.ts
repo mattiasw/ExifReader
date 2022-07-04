@@ -93,7 +93,7 @@ interface StringArrayTag {
 }
 
 interface XmpTag {
-    value: string & Array<XmpTag> & XmpTags,
+    value: string | Array<XmpTag> | XmpTags,
     attributes: {
         [name: string]: string
     },
