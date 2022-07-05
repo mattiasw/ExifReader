@@ -131,7 +131,7 @@ interface ExpandedTags {
     pngFile?: PngFileTags,
     exif?: Tags,
     iptc?: Tags,
-    xmp?: XmpTags,
+    xmp?: { _raw: string } & XmpTags,
     icc?: IccTags,
     Thumbnail?: ThumbnailTags,
     gps?: GpsTags
