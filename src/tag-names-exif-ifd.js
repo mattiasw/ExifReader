@@ -9,6 +9,9 @@ export default {
     0x829a: {
         'name': 'ExposureTime',
         'description': (value) => {
+            if (value[0] >= value[1]) {
+                return `${Math.round(value[0] / value[1])}`;
+            }
             if (value[0] !== 0) {
                 return `1/${Math.round(value[1] / value[0])}`;
             }
@@ -105,7 +108,11 @@ export default {
     0x9201: {
         'name': 'ShutterSpeedValue',
         'description': (value) => {
-            return `1/${Math.round(Math.pow(2, value[0] / value[1]))}`;
+            const denominator = Math.pow(2, value[0] / value[1]);
+            if (denominator <= 1) {
+                return `${Math.round(1 / denominator)}`;
+            }
+            return `1/${Math.round(denominator)}`;
         }
     },
     0x9202: {
