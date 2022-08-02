@@ -21,7 +21,6 @@
     "webpack.config.js"
   ],
   "types": "./exif-reader.d.ts",
-  "dependencies": {},
   "optionalDependencies": {
     "@xmldom/xmldom": "^0.7.5"
   },
