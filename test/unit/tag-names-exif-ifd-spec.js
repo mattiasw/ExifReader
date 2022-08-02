@@ -11,6 +11,8 @@ describe('tag-names-exif-ifd', () => {
     it('should report correct name and description for ExposureTime', () => {
         expect(TagNamesExifIfd[0x829a].name).to.equal('ExposureTime');
         expect(TagNamesExifIfd[0x829a].description([4, 1000])).to.equal('1/250');
+        expect(TagNamesExifIfd[0x829a].description([6, 1])).to.equal('6');
+        expect(TagNamesExifIfd[0x829a].description([1, 1])).to.equal('1');
         expect(TagNamesExifIfd[0x829a].description([0, 1000])).to.equal('0/1000');
     });
 
@@ -130,6 +132,8 @@ describe('tag-names-exif-ifd', () => {
     it('should have tag ShutterSpeedValue', () => {
         expect(TagNamesExifIfd[0x9201].name).to.equal('ShutterSpeedValue');
         expect(TagNamesExifIfd[0x9201].description([46435, 9999])).to.equal('1/25');
+        expect(TagNamesExifIfd[0x9201].description([-2584963, 1000000])).to.equal('6');
+        expect(TagNamesExifIfd[0x9201].description([0, 1])).to.equal('1');
         expect(TagNamesExifIfd[0x9201].description([2000, 0])).to.equal('1/Infinity');
     });
 
