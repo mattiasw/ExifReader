@@ -85,9 +85,9 @@ After that, the transpiled, concatenated and minified ES5 file will be in the
 
 ### Type definitions
 
-Type definitions for TypeScript are included in the package. If you're missing
-any definitions for tags or something else, a pull-request would be very much
-welcome since I'm not using TypeScript myself.
+Type definitions for TypeScript are included in the package. I'm not maintaining
+those so if you're missing any definitions for tags or something else, a
+pull-request would be very welcome.
 
 Usage
 -----
