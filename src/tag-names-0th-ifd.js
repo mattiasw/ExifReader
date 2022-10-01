@@ -93,15 +93,11 @@ export default {
     0x0119: 'MaxSampleValue',
     0x011a: {
         'name': 'XResolution',
-        'description': (value) => {
-            return '' + Math.round(value[0] / value[1]);
-        }
+        'description': TagNamesCommon.XResolution
     },
     0x011b: {
         'name': 'YResolution',
-        'description': (value) => {
-            return '' + Math.round(value[0] / value[1]);
-        }
+        'description': TagNamesCommon.YResolution
     },
     0x011c: 'PlanarConfiguration',
     0x011d: 'PageName',
@@ -129,15 +125,7 @@ export default {
     },
     0x0128: {
         name: 'ResolutionUnit',
-        description: (value) => {
-            if (value === 2) {
-                return 'inches';
-            }
-            if (value === 3) {
-                return 'centimeters';
-            }
-            return 'Unknown';
-        }
+        description: TagNamesCommon.ResolutionUnit
     },
     0x0129: 'PageNumber',
     0x012d: 'TransferFunction',
