@@ -229,7 +229,11 @@ function getLocalName(name) {
 
 function getDescription(value, name = undefined) {
     if (Array.isArray(value)) {
-        return getDescriptionOfArray(value);
+        const arrayDescription = getDescriptionOfArray(value);
+        if ((name) && (typeof XmpTagNames[name] === 'function')) {
+            return XmpTagNames[name](value, arrayDescription);
+        }
+        return arrayDescription;
     }
     if (typeof value === 'object') {
         return getDescriptionOfObject(value);
