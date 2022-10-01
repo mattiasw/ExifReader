@@ -8,46 +8,15 @@ import TagNamesCommon from './tag-names-common.js';
 export default {
     0x829a: {
         'name': 'ExposureTime',
-        'description': (value) => {
-            if (value[0] >= value[1]) {
-                return `${Math.round(value[0] / value[1])}`;
-            }
-            if (value[0] !== 0) {
-                return `1/${Math.round(value[1] / value[0])}`;
-            }
-            return `0/${value[1]}`;
-        }
+        'description': TagNamesCommon.ExposureTime
     },
     0x829d: {
         'name': 'FNumber',
-        'description': (value) => `f/${value[0] / value[1]}`
+        'description': TagNamesCommon.FNumber
     },
     0x8822: {
         'name': 'ExposureProgram',
-        'description': (value) => {
-            if (value === 0) {
-                return 'Undefined';
-            } else if (value === 1) {
-                return 'Manual';
-            } else if (value === 2) {
-                return 'Normal program';
-            } else if (value === 3) {
-                return 'Aperture priority';
-            } else if (value === 4) {
-                return 'Shutter priority';
-            } else if (value === 5) {
-                return 'Creative program';
-            } else if (value === 6) {
-                return 'Action program';
-            } else if (value === 7) {
-                return 'Portrait mode';
-            } else if (value === 8) {
-                return 'Landscape mode';
-            } else if (value === 9) {
-                return 'Bulb';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.ExposureProgram
     },
     0x8824: 'SpectralSensitivity',
     0x8827: 'ISOSpeedRatings',
@@ -86,40 +55,16 @@ export default {
     0x9012: 'OffsetTimeDigitized',
     0x9101: {
         'name': 'ComponentsConfiguration',
-        'description': (value) => {
-            return value.map((character) => {
-                if (character === 0x31) {
-                    return 'Y';
-                } else if (character === 0x32) {
-                    return 'Cb';
-                } else if (character === 0x33) {
-                    return 'Cr';
-                } else if (character === 0x34) {
-                    return 'R';
-                } else if (character === 0x35) {
-                    return 'G';
-                } else if (character === 0x36) {
-                    return 'B';
-                }
-            }).join('');
-        }
+        'description': TagNamesCommon.ComponentsConfiguration
     },
     0x9102: 'CompressedBitsPerPixel',
     0x9201: {
         'name': 'ShutterSpeedValue',
-        'description': (value) => {
-            const denominator = Math.pow(2, value[0] / value[1]);
-            if (denominator <= 1) {
-                return `${Math.round(1 / denominator)}`;
-            }
-            return `1/${Math.round(denominator)}`;
-        }
+        'description': TagNamesCommon.ShutterSpeedValue
     },
     0x9202: {
         'name': 'ApertureValue',
-        'description': (value) => {
-            return Math.pow(Math.sqrt(2), value[0] / value[1]).toFixed(2);
-        }
+        'description': TagNamesCommon.ApertureValue
     },
     0x9203: 'BrightnessValue',
     0x9204: 'ExposureBiasValue',
@@ -135,28 +80,11 @@ export default {
     },
     0x9207: {
         'name': 'MeteringMode',
-        'description': (value) => {
-            if (value === 1) {
-                return 'Average';
-            } else if (value === 2) {
-                return 'CenterWeightedAverage';
-            } else if (value === 3) {
-                return 'Spot';
-            } else if (value === 4) {
-                return 'MultiSpot';
-            } else if (value === 5) {
-                return 'Pattern';
-            } else if (value === 6) {
-                return 'Partial';
-            } else if (value === 255) {
-                return 'Other';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.MeteringMode
     },
     0x9208: {
         'name': 'LightSource',
-        description: TagNamesCommon['LightSource']
+        description: TagNamesCommon.LightSource
     },
     0x9209: {
         'name': 'Flash',
@@ -211,7 +139,7 @@ export default {
     },
     0x920a: {
         'name': 'FocalLength',
-        'description': (value) => (value[0] / value[1]) + ' mm'
+        'description': TagNamesCommon.FocalLength
     },
     0x9211: 'ImageNumber',
     0x9212: {
@@ -279,14 +207,7 @@ export default {
     },
     0xa001: {
         'name': 'ColorSpace',
-        'description': (value) => {
-            if (value === 1) {
-                return 'sRGB';
-            } else if (value === 0xffff) {
-                return 'Uncalibrated';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.ColorSpace
     },
     0xa002: 'PixelXDimension',
     0xa003: 'PixelYDimension',
@@ -301,14 +222,7 @@ export default {
     0xa20f: 'FocalPlaneYResolution',
     0xa210: {
         'name': 'FocalPlaneResolutionUnit',
-        'description': (value) => {
-            if (value === 2) {
-                return 'inches';
-            } else if (value === 3) {
-                return 'centimeters';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.FocalPlaneResolutionUnit
     },
     0xa214: {
         'name': 'SubjectLocation',
@@ -360,38 +274,15 @@ export default {
     },
     0xa401: {
         'name': 'CustomRendered',
-        'description': (value) => {
-            if (value === 0) {
-                return 'Normal process';
-            } else if (value === 1) {
-                return 'Custom process';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.CustomRendered
     },
     0xa402: {
         'name': 'ExposureMode',
-        'description': (value) => {
-            if (value === 0) {
-                return 'Auto exposure';
-            } else if (value === 1) {
-                return 'Manual exposure';
-            } else if (value === 2) {
-                return 'Auto bracket';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.ExposureMode
     },
     0xa403: {
         'name': 'WhiteBalance',
-        'description': (value) => {
-            if (value === 0) {
-                return 'Auto white balance';
-            } else if (value === 1) {
-                return 'Manual white balance';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.WhiteBalance
     },
     0xa404: {
         'name': 'DigitalZoomRatio',
@@ -413,18 +304,7 @@ export default {
     },
     0xa406: {
         'name': 'SceneCaptureType',
-        'description': (value) => {
-            if (value === 0) {
-                return 'Standard';
-            } else if (value === 1) {
-                return 'Landscape';
-            } else if (value === 2) {
-                return 'Portrait';
-            } else if (value === 3) {
-                return 'Night scene';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.SceneCaptureType
     },
     0xa407: {
         'name': 'GainControl',
@@ -445,42 +325,15 @@ export default {
     },
     0xa408: {
         'name': 'Contrast',
-        'description': (value) => {
-            if (value === 0) {
-                return 'Normal';
-            } else if (value === 1) {
-                return 'Soft';
-            } else if (value === 2) {
-                return 'Hard';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.Contrast
     },
     0xa409: {
         'name': 'Saturation',
-        'description': (value) => {
-            if (value === 0) {
-                return 'Normal';
-            } else if (value === 1) {
-                return 'Low saturation';
-            } else if (value === 2) {
-                return 'High saturation';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.Saturation
     },
     0xa40a: {
         'name': 'Sharpness',
-        'description': (value) => {
-            if (value === 0) {
-                return 'Normal';
-            } else if (value === 1) {
-                return 'Soft';
-            } else if (value === 2) {
-                return 'Hard';
-            }
-            return 'Unknown';
-        }
+        'description': TagNamesCommon.Sharpness
     },
     0xa40b: {
         'name': 'DeviceSettingDescription',
