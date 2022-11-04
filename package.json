@@ -22,7 +22,7 @@
   ],
   "types": "./exif-reader.d.ts",
   "optionalDependencies": {
-    "@xmldom/xmldom": "^0.7.5"
+    "@xmldom/xmldom": "^0.7.8"
   },
   "devDependencies": {
     "@babel/core": "^7.15.8",
@@ -44,9 +44,9 @@
     "rimraf": "^3.0.2",
     "string-replace-loader": "^3.0.3",
     "terser-webpack-plugin": "^5.2.4",
-    "webpack": "^5.58.1",
-    "webpack-cli": "^4.9.0",
-    "webpack-dev-server": "^4.3.1"
+    "webpack": "^5.74.0",
+    "webpack-cli": "^4.10.0",
+    "webpack-dev-server": "^4.11.1"
   },
   "scripts": {
     "build": "node bin/build.js",
@@ -66,7 +66,7 @@
   "nyc": {
     "check-coverage": true,
     "statements": 95,
-    "branches": 94,
+    "branches": 93,
     "functions": 98,
     "lines": 96,
     "reporter": [

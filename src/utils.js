@@ -58,6 +58,10 @@ export function deferInit(object, key, initializer) {
 
 export function getBase64Image(image) {
     if (typeof btoa !== 'undefined') {
+        if (typeof image === 'string') {
+            // This only happens during the build tests using Node 16+ (npm run test:build).
+            return btoa(image);
+        }
         // IE11- does not implement reduce on the Uint8Array prototype.
         return btoa(Array.prototype.reduce.call(new Uint8Array(image), (data, byte) => data + String.fromCharCode(byte), ''));
     }
