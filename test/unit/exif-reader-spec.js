@@ -94,6 +94,13 @@ describe('exif-reader', function () {
             let httpResponse;
 
             beforeEach(() => {
+                // In case the tests are run on a newer Node version (18+) with a native fetch function we disable
+                // the fetch function to not accidentally go down that execution path during these tests.
+                this.originalWindow = global.window;
+                this.originalFetch = global.fetch;
+                global.window = {};
+                delete global.fetch;
+
                 getEvents = {
                     data(callback) {
                         setTimeout(() => callback(IMAGE), 0);
@@ -124,6 +131,11 @@ describe('exif-reader', function () {
                         };
                     }
                 };
+            });
+
+            afterEach(() => {
+                global.window = this.originalWindow;
+                global.fetch = this.originalFetch;
             });
 
             it('should load data from a remote location when an HTTPS URL is passed in', (done) => {

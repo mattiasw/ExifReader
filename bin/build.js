@@ -23,8 +23,8 @@ function checkConfig() {
                 'babel-loader@8.2.2',
                 'cross-env@7.0.3',
                 'string-replace-loader@3.0.3',
-                'webpack@5.58.1',
-                'webpack-cli@4.9.0',
+                'webpack@5.74.0',
+                'webpack-cli@4.10.0',
                 'terser-webpack-plugin@5.2.4'
             ];
             execSync(`npm install --production=false --loglevel=error --no-optional --no-package-lock --no-save ${packages.join(' ')}`, {stdio: 'inherit'});
