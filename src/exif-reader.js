@@ -47,11 +47,11 @@ function isFilePathOrURL(data) {
 }
 
 function loadFile(filename) {
-    if (typeof fetch !== 'undefined') {
-        return browserFetchRemoteFile(filename);
-    }
-
     if (/^https?:\/\//.test(filename)) {
+        if (typeof fetch !== 'undefined') {
+            return browserFetchRemoteFile(filename);
+        }
+
         return nodeFetchRemoteFile(filename);
     }
 
