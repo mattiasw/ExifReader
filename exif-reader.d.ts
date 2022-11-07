@@ -299,6 +299,7 @@ interface Tags {
     'OffsetTime'?: StringArrayTag,
     'OffsetTimeDigitized'?: StringArrayTag,
     'OffsetTimeOriginal'?: StringArrayTag,
+    'GPSHPositioningError'?: NumberArrayTag,
 
     // GPS tags
     'GPSVersionID'?: NumberTag,
