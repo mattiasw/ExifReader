@@ -296,6 +296,9 @@ interface Tags {
     'ImageUniqueID'?: StringArrayTag,
     'LensMake'?: StringArrayTag,
     'LensModel'?: StringArrayTag,
+    'OffsetTime'?: StringArrayTag,
+    'OffsetTimeDigitized'?: StringArrayTag,
+    'OffsetTimeOriginal'?: StringArrayTag,
 
     // GPS tags
     'GPSVersionID'?: NumberTag,
