@@ -43,6 +43,10 @@ const APP13_MARKER = 0xffed;
 const APP15_MARKER = 0xffef;
 const COMMENT_MARKER = 0xfffe;
 
+// Any number of fill bytes can be placed before an app marker. It's actually the first 0xff that is the
+// fill byte and the next 0xff is either another fill byte or the first half of the next app marker.
+const FILL_BYTE = 0xffff;
+
 const APP0_JFIF_IDENTIFIER = 'JFIF';
 const APP1_EXIF_IDENTIFIER = 'Exif';
 const APP1_XMP_IDENTIFIER = 'http://ns.adobe.com/xap/1.0/\x00';
@@ -107,6 +111,9 @@ function findJpegOffsets(dataView) {
             mpfDataOffset = appMarkerPosition + MPF_DATA_OFFSET;
         } else if (isAppMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
+        } else if (isFillByte(dataView, appMarkerPosition)) {
+            appMarkerPosition++;
+            continue;
         } else {
             break;
         }
@@ -215,4 +222,8 @@ function isAppMarker(dataView, appMarkerPosition) {
         || (appMarker === DQT_MARKER)
         || (appMarker === DRI_MARKER)
         || (appMarker === SOS_MARKER);
+}
+
+function isFillByte(dataView, appMarkerPosition) {
+    return dataView.getUint16(appMarkerPosition) === FILL_BYTE;
 }
