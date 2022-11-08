@@ -172,6 +172,13 @@ describe('image-header', () => {
             expect(tiffHeaderOffset).to.equal(12);
         });
 
+        it('should handle fill bytes', () => {
+            const FILL_BYTE = '\xff';
+            const dataView = getDataView(`${JPEG_IMAGE_START}\xff\xe2\x00\x07XXXX\x00${FILL_BYTE}\xff\xe0\x00\x07JFXX\x00${SOME_MARKER_CONTENT}`);
+            const {tiffHeaderOffset} = ImageHeader.parseAppMarkers(dataView);
+            expect(tiffHeaderOffset).to.equal(40);
+        });
+
         it('should recognize IPTC data', () => {
             const dataView = getDataView('\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x00');
             const {iptcDataOffset} = ImageHeader.parseAppMarkers(dataView);
