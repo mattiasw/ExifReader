@@ -10,7 +10,7 @@ requirejs(['../exif-reader'], function (ExifReader) {
         return;
     }
 
-    document.getElementById('file').addEventListener('change', handleFile, false);
+    document.querySelector('form').addEventListener('submit', handleSubmit, false);
 
     // >>> IGNORE: Helper code for interactive example.
     document.querySelector('html').setAttribute('data-initialized', '');
@@ -20,11 +20,16 @@ requirejs(['../exif-reader'], function (ExifReader) {
         return window.FileReader !== undefined;
     }
 
-    function handleFile(event) {
+    function handleSubmit(event) {
         // >>> IGNORE: Helper code for interactive example.
         window.exifReaderClear();
         // <<<
-        ExifReader.load(event.target.files[0]).then(function (tags) {
+        event.preventDefault();
+
+        const file = event.target.elements.file.files[0];
+        const url = event.target.elements.url.value;
+
+        ExifReader.load(file || url).then(function (tags) {
             // The MakerNote tag can be really large. Remove it to lower
             // memory usage if you're parsing a lot of files and saving the
             // tags.

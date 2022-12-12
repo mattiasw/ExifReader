@@ -73,6 +73,23 @@ const images = [
         hasThumbnail: false,
         tags: {},
         error: 'MetadataMissingError: No Exif data'
+    },
+    {
+        url: 'https://i.imgur.com/DX2kvpG.jpg',
+        hasThumbnail: false,
+        tags: {
+            'Bits Per Sample': '8',
+            'Image Height': '3024px',
+            'Image Width': '4032px',
+            'Color Components': '3',
+            'Subsampling': 'YCbCr4:2:2 (2 1)',
+            'JFIF Version': '1.1',
+            'Resolution Unit': 'None',
+            'XResolution': '1',
+            'YResolution': '1',
+            'JFIF Thumbnail Width': '0px',
+            'JFIF Thumbnail Height': '0px'
+        }
     }
 ];
 
@@ -94,7 +111,7 @@ for (const moduleType of moduleTypes) {
         });
 
         for (const image of images) {
-            describe(image.name, function () {
+            describe(image.name || image.url, function () {
                 beforeEach(function () {
                     cy
                         .visit(`/${moduleType.path}/`)
@@ -102,12 +119,17 @@ for (const moduleType of moduleTypes) {
                 });
 
                 it('loads the tags', function () {
-                    cy
-                        .get('#file')
-                        .attachFile({
-                            filePath: `images/${image.name}`,
-                            encoding: 'binary'
-                        });
+                    if (image.url) {
+                        cy.get('#url').type(image.url);
+                    } else {
+                        cy
+                            .get('#file')
+                            .attachFile({
+                                filePath: `images/${image.name}`,
+                                encoding: 'binary'
+                            });
+                    }
+                    cy.get('input[value="Load file"]').click();
                     if (image.hasThumbnail) {
                         cy.get('#thumbnail[src^="data"]');
                     }
