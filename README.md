@@ -203,6 +203,28 @@ pass in an options object with the property `expanded` set to `true`:
 const tags = ExifReader.load(fileBuffer, {expanded: true});
 ```
 
+#### Read only part of file
+
+If you only want to read part of the image file you can use the `length` option:
+
+```javascript
+const tags = await ExifReader.load(filename, {length: 128 * 1024});
+```
+
+This will load only the first 128 KiB of the file. This could be useful if you
+know the metadata is located at the beginning of the file. Just be aware that
+it's common for the metadata to be spread out over a larger area so please try
+it out on your set of files to know if it's suitable for your situation.
+
+Note that this option only works when ExifReader handles the loading of the
+file. If e.g. a JavaScript File object from a form file field is passed into
+ExifReader the whole file will already have been loaded into memory and it's too
+late. More specifically the length option will work for 1. local files when
+running through Node.js, and 2. remote files when passing a URL. For the latter,
+if doing this through a web browser, make sure the remote server is either on
+the same origin (domain) as your script or that the server is passing correct
+CORS headers, specifically allowing the `Range` header.
+
 #### Unknown tags
 
 Tags that are unknown, either because they have been excluded by making a custom
@@ -425,7 +447,8 @@ Tips
     yourself to regular Exif tags you can most probably get by with only reading
     the first 128 kB. This may exclude IPTC and XMP metadata though (and
     possibly Exif too if they come in an irregular order) so please check if
-    this optimization fits your use case.
+    this optimization fits your use case. Use the `length` option to only read
+    the beginning of the file. See above for more details on that.
 
 Testing
 -------
