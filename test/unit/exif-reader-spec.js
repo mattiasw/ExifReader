@@ -121,7 +121,7 @@ describe('exif-reader', function () {
                 global.__non_webpack_require__ = function (moduleName) {
                     if (/^https?$/.test(moduleName)) {
                         return {
-                            get(url, callback) {
+                            get(url, options, callback) {
                                 if ((url !== URL) && (url !== HTTP_URL)) {
                                     throw new Error('Error.');
                                 }

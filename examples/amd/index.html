@@ -21,6 +21,12 @@
                 Choose an image file from your computer:<br>
                 <input type="file" id="file" name="file">
             </label>
+            or
+            <label>
+                Enter a URL (the server must send correct CORS headers):<br>
+                <input type="url" id="url" name="url">
+            </label>
+            <input type="submit" value="Load file">
         </form>
 
         <div class="error hidden"></div>
