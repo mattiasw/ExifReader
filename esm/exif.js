@@ -7,18 +7,23 @@
 // already written as ES modules.
 import ExifReader from '../src/exif-reader.js';
 
-document.getElementById('file').addEventListener('change', handleFile);
+document.querySelector('form').addEventListener('submit', handleSubmit);
 
 // >>> IGNORE: Helper code for interactive example.
 document.querySelector('html').setAttribute('data-initialized', '');
 // <<<
 
-async function handleFile(event) {
+async function handleSubmit(event) {
     // >>> IGNORE: Helper code for interactive example.
     window.exifReaderClear();
     // <<<
+    event.preventDefault();
+
+    const file = event.target.elements.file.files[0];
+    const url = event.target.elements.url.value;
+
     try {
-        const tags = await ExifReader.load(event.target.files[0]);
+        const tags = await ExifReader.load(file || url);
 
         // The MakerNote tag can be really large. Remove it to lower
         // memory usage if you're parsing a lot of files and saving the

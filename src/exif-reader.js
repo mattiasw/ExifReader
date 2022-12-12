@@ -34,7 +34,7 @@ export const errors = exifErrors;
 
 export function load(data, options) {
     if (isFilePathOrURL(data)) {
-        return loadFile(data).then((fileContents) => loadFromData(fileContents, options));
+        return loadFile(data, options).then((fileContents) => loadFromData(fileContents, options));
     }
     if (isBrowserFileObject(data)) {
         return loadFileObject(data).then((fileContents) => loadFromData(fileContents, options));
@@ -46,26 +46,39 @@ function isFilePathOrURL(data) {
     return typeof data === 'string';
 }
 
-function loadFile(filename) {
+function loadFile(filename, options) {
     if (/^https?:\/\//.test(filename)) {
         if (typeof fetch !== 'undefined') {
-            return browserFetchRemoteFile(filename);
+            return browserFetchRemoteFile(filename, options);
         }
 
-        return nodeFetchRemoteFile(filename);
+        return nodeFetchRemoteFile(filename, options);
     }
 
-    return loadLocalFile(filename);
+    return loadLocalFile(filename, options);
 }
 
-function browserFetchRemoteFile(url) {
-    return fetch(url).then((response) => response.arrayBuffer());
+function browserFetchRemoteFile(url, {length} = {}) {
+    const options = {method: 'GET'};
+    if (Number.isInteger(length) && length >= 0) {
+        options.headers = {
+            range: `bytes=0-${length - 1}`,
+        };
+    }
+    return fetch(url, options).then((response) => response.arrayBuffer());
 }
 
-function nodeFetchRemoteFile(url) {
+function nodeFetchRemoteFile(url, {length} = {}) {
     return new Promise((resolve, reject) => {
+        const options = {};
+        if (Number.isInteger(length) && length >= 0) {
+            options.headers = {
+                range: `bytes=0-${length - 1}`,
+            };
+        }
+
         const get = requireNodeGet(url);
-        get(url, (response) => {
+        get(url, options, (response) => {
             if ((response.statusCode >= 200) && (response.statusCode <= 299)) {
                 const data = [];
                 response.on('data', (chunk) => data.push(Buffer.from(chunk)));
@@ -86,7 +99,7 @@ function requireNodeGet(url) {
     return __non_webpack_require__('http').get;
 }
 
-function loadLocalFile(filename) {
+function loadLocalFile(filename, {length} = {}) {
     return new Promise((resolve, reject) => {
         const fs = requireNodeFs();
         fs.open(filename, (error, fd) => {
@@ -97,8 +110,13 @@ function loadLocalFile(filename) {
                     if (error) {
                         reject(error);
                     } else {
-                        const buffer = Buffer.alloc(stat.size);
-                        fs.read(fd, {buffer}, (error) => {
+                        const size = Math.min(stat.size, length !== undefined ? length : stat.size);
+                        const buffer = Buffer.alloc(size);
+                        const options = {
+                            buffer,
+                            length: size
+                        };
+                        fs.read(fd, options, (error) => {
                             if (error) {
                                 reject(error);
                             } else {
