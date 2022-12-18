@@ -498,6 +498,8 @@ case is covered.
 Changelog
 ---------
 
+-   **December 2021**:
+    -   Add option `length` to only read the first `length` bytes of the file.
 -   **October 2021**:
     -   Major version update 4.0.0. A couple of small breaking changes that
         shouldn't affect too many users:
