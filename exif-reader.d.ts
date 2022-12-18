@@ -177,14 +177,14 @@ interface MPFImageTags {
 }
 
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags & XmpTags & IccTags;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded: true}): ExpandedTags;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false}): Tags & XmpTags & IccTags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded: true, includeUnknown?: boolean, length?: number}): ExpandedTags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Tags & XmpTags & IccTags;
 export function load(data: string | File): Promise<Tags & XmpTags & IccTags>;
-export function load(data: string | File, options: {expanded: true}): Promise<ExpandedTags>;
-export function load(data: string | File, options: {expanded?: false}): Promise<Tags & XmpTags & IccTags>;
+export function load(data: string | File, options: {expanded: true, includeUnknown?: boolean, length?: number}): Promise<ExpandedTags>;
+export function load(data: string | File, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Promise<Tags & XmpTags & IccTags>;
 export function loadView(data: DataView): Tags & XmpTags & IccTags;
-export function loadView(data: DataView, options: {expanded: true}): ExpandedTags;
-export function loadView(data: DataView, options: {expanded?: false}): Tags & XmpTags & IccTags;
+export function loadView(data: DataView, options: {expanded: true, includeUnknown?: boolean}): ExpandedTags;
+export function loadView(data: DataView, options: {expanded?: false, includeUnknown?: boolean}): Tags & XmpTags & IccTags;
 
 export namespace errors {
     export class MetadataMissingError extends Error {}
