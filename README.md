@@ -356,14 +356,14 @@ tags (resulting bundle will be ~16 % of a full build):
 }
 ```
 
-Then, if you didn't install ExifReader yet, just run `npm install exifreader`.
+Then, if you didn't install ExifReader yet, run `npm install exifreader`.
 Otherwise you have to re-build the library:
 
 ```bash
 npm rebuild exifreader
 ```
 
-If you use `yarn`, simply run `yarn add exifreader` to rebuild the library.
+If you use `yarn`, run `yarn add exifreader` to rebuild the library.
 
 After that the new bundle is here: `node_modules/exifreader/dist/exif-reader.js`
 
