@@ -319,7 +319,7 @@ interface Tags {
     'GPSTrackRef'?: StringArrayTag,
     'GPSTrack'?: NumberTag,
     'GPSImgDirectionRef'?: StringArrayTag,
-    'GPSImgDirection'?: NumberTag,
+    'GPSImgDirection'?: RationalTag,
     'GPSMapDatum'?: StringArrayTag,
     'GPSDestLatitudeRef'?: StringArrayTag,
     'GPSDestLatitude'?: NumberArrayTag,
