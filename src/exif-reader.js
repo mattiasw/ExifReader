@@ -1,7 +1,7 @@
 /**
  * ExifReader
  * http://github.com/mattiasw/exifreader
- * Copyright (C) 2011-2022  Mattias Wallander <mattias@wallander.eu>
+ * Copyright (C) 2011-2023  Mattias Wallander <mattias@wallander.eu>
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
