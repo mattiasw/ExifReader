@@ -20,7 +20,7 @@ const FILE_DATA_COMPRESSION_OFFSET = 10;
 const FILE_DATA_FILTER_OFFSET = 11;
 const FILE_DATA_INTERLACE_OFFSET = 12;
 
-describe('file-tags', () => {
+describe('png-file-tags', () => {
     it('should read image width', () => {
         const dataView = getDataView(FILE_DATA_CONTENT);
         expect(PngFileTags.read(dataView, 0)['Image Width']).to.deep.equal({

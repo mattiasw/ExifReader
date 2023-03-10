@@ -44,6 +44,12 @@ function findPngOffsets(dataView) {
                     length: dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET) - (dataOffset - (offset + PNG_CHUNK_DATA_OFFSET))
                 }];
             }
+        } else if (isPngTextChunk(dataView, offset)) {
+            offsets.hasAppMarkers = true;
+            if (!offsets.pngTextChunks) {
+                offsets.pngTextChunks = [];
+            }
+            offsets.pngTextChunks.push({length: dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET), offset: offset + PNG_CHUNK_DATA_OFFSET});
         }
 
         offset += dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET)
@@ -64,6 +70,11 @@ function isPngXmpChunk(dataView, offset) {
     const PNG_CHUNK_TYPE_INTERNATIONAL_TEXT = 'iTXt';
     return (getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === PNG_CHUNK_TYPE_INTERNATIONAL_TEXT)
         && (getStringFromDataView(dataView, offset + PNG_CHUNK_DATA_OFFSET, PNG_XMP_PREFIX.length) === PNG_XMP_PREFIX);
+}
+
+function isPngTextChunk(dataView, offset) {
+    const PNG_CHUNK_TYPE_TEXTUAL = 'tEXt';
+    return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === PNG_CHUNK_TYPE_TEXTUAL;
 }
 
 function getPngXmpDataOffset(dataView, offset) {

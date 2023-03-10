@@ -53,6 +53,15 @@ interface PngFileTags {
     }
 }
 
+interface PngTextTag {
+    description: string,
+    value: string
+}
+
+interface PngTextTags {
+    [name: string]: PngTextTag
+}
+
 interface NumberFileTag {
     description: string,
     value: number
@@ -129,6 +138,7 @@ interface ExpandedTags {
     file?: FileTags,
     jfif?: JfifTags,
     pngFile?: PngFileTags,
+    pngText?: PngTextTags,
     exif?: Tags,
     iptc?: Tags,
     xmp?: { _raw: string } & XmpTags,

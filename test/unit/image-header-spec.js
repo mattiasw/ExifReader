@@ -329,6 +329,33 @@ describe('image-header', () => {
             });
         });
 
+        it('should find tEXt chunks of textual data', () => {
+            const chunkData = 'MyTag\x00My value.';
+            const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkData.length)}`;
+            const chunkType = 'tEXt';
+            const crc = '\x00\x00\x00\x00';
+            const chunkLengthOther = '\x00\x00\x00\x04';
+            const chunkTypeOther = 'abcd';
+            const chunkDataOther = '\x48\x12\x49\x13';
+            const chunkOther = chunkLengthOther + chunkTypeOther + chunkDataOther + crc;
+
+            const dataView = getDataView(
+                PNG_IMAGE_START
+                + chunkOther
+                + chunkLength + chunkType + chunkData + crc
+            );
+
+            const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
+
+            expect(appMarkerValues).to.deep.equal({
+                hasAppMarkers: true,
+                pngTextChunks: [{
+                    offset: PNG_IMAGE_START.length + chunkOther.length + chunkLength.length + chunkType.length,
+                    length: chunkData.length,
+                }],
+            });
+        });
+
         it('should handle when PNG files have been excluded in a custom build', () => {
             ImageHeaderRewireAPI.__Rewire__('Constants', {USE_PNG: false});
             const dataView = getDataView(PNG_IMAGE_START);

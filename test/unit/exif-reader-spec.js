@@ -10,6 +10,7 @@ import exifErrors from '../../src/errors';
 
 const OFFSET_TEST_VALUE = 4711;
 const XMP_FIELD_LENGTH_TEST_VALUE = 47;
+const PNG_FIELD_LENGTH_TEST_VALUE = 47;
 const OFFSET_TEST_VALUE_ICC2_1 = 27110;
 const OFFSET_TEST_VALUE_ICC2_2 = 47110;
 
@@ -24,6 +25,7 @@ describe('exif-reader', function () {
         ExifReaderRewireAPI.__ResetDependency__('IptcTags');
         ExifReaderRewireAPI.__ResetDependency__('XmpTags');
         ExifReaderRewireAPI.__ResetDependency__('PngFileTags');
+        ExifReaderRewireAPI.__ResetDependency__('PngTextTags');
         ExifReaderRewireAPI.__ResetDependency__('Thumbnail');
     });
 
@@ -424,6 +426,13 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should be able to find PNG text data segment', () => {
+        const myTags = {MyTag: 42};
+        rewireImageHeader({pngTextChunks: [{length: PNG_FIELD_LENGTH_TEST_VALUE, offset: OFFSET_TEST_VALUE}]});
+        rewirePngTextTagsRead(myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
     it('should expand segments into separated properties on return object if specified', () => {
         const myTags = {
             file: {MyFileTag: 42},
@@ -767,6 +776,17 @@ function rewireIccTagsRead(tagsValue) {
         read(dataView, iccData) {
             if (((iccData.length === 2) && (iccData[0] === OFFSET_TEST_VALUE_ICC2_1) && (iccData[1] === OFFSET_TEST_VALUE_ICC2_2))
                 || (iccData.length === 1) && (iccData[0].offset === 0) && (iccData[0].length === dataView.length)) {
+                return tagsValue;
+            }
+            return {};
+        }
+    });
+}
+
+function rewirePngTextTagsRead(tagsValue) {
+    ExifReaderRewireAPI.__Rewire__('PngTextTags', {
+        read(dataView, pngTextChunks) {
+            if ((pngTextChunks[0].offset === OFFSET_TEST_VALUE) && (pngTextChunks[0].length === PNG_FIELD_LENGTH_TEST_VALUE)) {
                 return tagsValue;
             }
             return {};
