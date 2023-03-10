@@ -21,6 +21,7 @@ import IptcTags from './iptc-tags.js';
 import XmpTags from './xmp-tags.js';
 import IccTags from './icc-tags.js';
 import PngFileTags from './png-file-tags.js';
+import PngTextTags from './png-text-tags.js';
 import Thumbnail from './thumbnail.js';
 import exifErrors from './errors.js';
 
@@ -193,7 +194,8 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         xmpChunks,
         iccChunks,
         mpfDataOffset,
-        pngHeaderOffset
+        pngHeaderOffset,
+        pngTextChunks
     } = ImageHeader.parseAppMarkers(dataView);
 
     if (Constants.USE_JPEG && Constants.USE_FILE && hasFileData(fileDataOffset)) {
@@ -319,6 +321,16 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         }
     }
 
+    if (Constants.USE_PNG && hasPngTextData(pngTextChunks)) {
+        foundMetaData = true;
+        const readTags = PngTextTags.read(dataView, pngTextChunks);
+        if (expanded) {
+            tags.pngText = readTags;
+        } else {
+            tags = objectAssign({}, tags, readTags);
+        }
+    }
+
     const thumbnail = (Constants.USE_JPEG || Constants.USE_WEBP)
         && Constants.USE_EXIF
         && Constants.USE_THUMBNAIL
@@ -407,4 +419,8 @@ function hasMpfData(mpfDataOffset) {
 
 function hasPngFileData(pngFileDataOffset) {
     return pngFileDataOffset !== undefined;
+}
+
+function hasPngTextData(pngTextChunks) {
+    return pngTextChunks !== undefined;
 }
