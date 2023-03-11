@@ -53,6 +53,18 @@ interface PngFileTags {
     }
 }
 
+interface PngTag {
+    description: string,
+    value: string | number
+}
+
+interface PngTags extends PngFileTags {
+    'Pixels Per Unit X'?: NumberFileTag
+    'Pixels Per Unit Y'?: NumberFileTag
+    'Pixel Units'?: 'meters' | 'Unknown'
+    [name: string]: PngTag
+}
+
 interface PngTextTag {
     description: string,
     value: string
@@ -139,6 +151,7 @@ interface ExpandedTags {
     jfif?: JfifTags,
     pngFile?: PngFileTags,
     pngText?: PngTextTags,
+    png?: PngTags,
     exif?: Tags,
     iptc?: Tags,
     xmp?: { _raw: string } & XmpTags,

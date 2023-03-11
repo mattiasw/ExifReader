@@ -433,6 +433,12 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should be able to find PNG pHYs data segment', () => {
+        const myTags = {MyTag: 42};
+        rewireForLoadView({pngPhysOffset: OFFSET_TEST_VALUE}, 'PngPhysTags', myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
     it('should expand segments into separated properties on return object if specified', () => {
         const myTags = {
             file: {MyFileTag: 42},
