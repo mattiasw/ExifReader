@@ -282,15 +282,15 @@ describe('image-header', () => {
             const chunkLength = '\x00\x00\x00\x02';
             const chunkType = 'IHDR';
             const chunkData = '\x47\x11';
-            const crc = '\x00\x00\x00\x00';
+            const crcChecksum = '\x00\x00\x00\x00';
             const chunkLengthOther = '\x00\x00\x00\x04';
             const chunkTypeOther = 'abcd';
             const chunkDataOther = '\x48\x12\x49\x13';
 
             const dataView = getDataView(
                 PNG_IMAGE_START
-                + chunkLengthOther + chunkTypeOther + chunkDataOther + crc
-                + chunkLength + chunkType + chunkData + crc
+                + chunkLengthOther + chunkTypeOther + chunkDataOther + crcChecksum
+                + chunkLength + chunkType + chunkData + crcChecksum
             );
 
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
@@ -307,15 +307,15 @@ describe('image-header', () => {
             const chunkLength = `\x00\x00\x00${String.fromCharCode(xmpPrefix.length + chunkAdditionalFields.length + 2)}`;
             const chunkType = 'iTXt';
             const chunkData = `${xmpPrefix}${chunkAdditionalFields}\x47\x11`;
-            const crc = '\x00\x00\x00\x00';
+            const crcChecksum = '\x00\x00\x00\x00';
             const chunkLengthOther = '\x00\x00\x00\x04';
             const chunkTypeOther = 'abcd';
             const chunkDataOther = '\x48\x12\x49\x13';
 
             const dataView = getDataView(
                 PNG_IMAGE_START
-                + chunkLengthOther + chunkTypeOther + chunkDataOther + crc
-                + chunkLength + chunkType + chunkData + crc
+                + chunkLengthOther + chunkTypeOther + chunkDataOther + crcChecksum
+                + chunkLength + chunkType + chunkData + crcChecksum
             );
 
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
@@ -333,16 +333,16 @@ describe('image-header', () => {
             const chunkData = 'MyTag\x00My value.';
             const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkData.length)}`;
             const chunkType = 'tEXt';
-            const crc = '\x00\x00\x00\x00';
+            const crcChecksum = '\x00\x00\x00\x00';
             const chunkLengthOther = '\x00\x00\x00\x04';
             const chunkTypeOther = 'abcd';
             const chunkDataOther = '\x48\x12\x49\x13';
-            const chunkOther = chunkLengthOther + chunkTypeOther + chunkDataOther + crc;
+            const chunkOther = chunkLengthOther + chunkTypeOther + chunkDataOther + crcChecksum;
 
             const dataView = getDataView(
                 PNG_IMAGE_START
                 + chunkOther
-                + chunkLength + chunkType + chunkData + crc
+                + chunkLength + chunkType + chunkData + crcChecksum
             );
 
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
@@ -353,6 +353,25 @@ describe('image-header', () => {
                     offset: PNG_IMAGE_START.length + chunkOther.length + chunkLength.length + chunkType.length,
                     length: chunkData.length,
                 }],
+            });
+        });
+
+        it('should find pHYs chunks', () => {
+            const chunkData = '\x01\x02\x03\x04\x02\x03\x04\x05\x01';
+            const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkData.length)}`;
+            const chunkType = 'pHYs';
+            const crcChecksum = '\x00\x00\x00\x00';
+
+            const dataView = getDataView(
+                PNG_IMAGE_START
+                + chunkLength + chunkType + chunkData + crcChecksum
+            );
+
+            const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
+
+            expect(appMarkerValues).to.deep.equal({
+                hasAppMarkers: true,
+                pngPhysOffset: PNG_IMAGE_START.length,
             });
         });
 
@@ -368,15 +387,15 @@ describe('image-header', () => {
             const chunkLength = '\x00\x00\x00\x02';
             const chunkType = 'IHDR';
             const chunkData = '\x47\x11';
-            const crc = '\x00\x00\x00\x00';
+            const crcChecksum = '\x00\x00\x00\x00';
             const chunkLengthOther = '\x00\x00\x00\x04';
             const chunkTypeOther = 'abcd';
             const chunkDataOther = '\x48\x12\x49\x13';
 
             const dataView = getDataView(
                 PNG_IMAGE_START
-                + chunkLengthOther + chunkTypeOther + chunkDataOther + crc
-                + chunkLength + chunkType + chunkData + crc
+                + chunkLengthOther + chunkTypeOther + chunkDataOther + crcChecksum
+                + chunkLength + chunkType + chunkData + crcChecksum
             );
 
             expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({hasAppMarkers: false});

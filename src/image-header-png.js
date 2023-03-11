@@ -13,9 +13,9 @@ export default {
 const PNG_ID = '\x89\x50\x4e\x47\x0d\x0a\x1a\x0a';
 const PNG_CHUNK_LENGTH_SIZE = 4;
 const PNG_CHUNK_TYPE_SIZE = 4;
-const PNG_CHUNK_LENGTH_OFFSET = 0;
+export const PNG_CHUNK_LENGTH_OFFSET = 0;
 const PNG_CHUNK_TYPE_OFFSET = PNG_CHUNK_LENGTH_SIZE;
-const PNG_CHUNK_DATA_OFFSET = PNG_CHUNK_LENGTH_SIZE + PNG_CHUNK_TYPE_SIZE;
+export const PNG_CHUNK_DATA_OFFSET = PNG_CHUNK_LENGTH_SIZE + PNG_CHUNK_TYPE_SIZE;
 const PNG_XMP_PREFIX = 'XML:com.adobe.xmp\x00';
 
 function isPngFile(dataView) {
@@ -50,6 +50,9 @@ function findPngOffsets(dataView) {
                 offsets.pngTextChunks = [];
             }
             offsets.pngTextChunks.push({length: dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET), offset: offset + PNG_CHUNK_DATA_OFFSET});
+        } else if (isPngPhysChunk(dataView, offset)) {
+            offsets.hasAppMarkers = true;
+            offsets.pngPhysOffset = offset + PNG_CHUNK_LENGTH_OFFSET;
         }
 
         offset += dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET)
@@ -75,6 +78,11 @@ function isPngXmpChunk(dataView, offset) {
 function isPngTextChunk(dataView, offset) {
     const PNG_CHUNK_TYPE_TEXTUAL = 'tEXt';
     return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === PNG_CHUNK_TYPE_TEXTUAL;
+}
+
+function isPngPhysChunk(dataView, offset) {
+    const PNG_CHUNK_TYPE_PHYSICAL_PIXEL = 'pHYs';
+    return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === PNG_CHUNK_TYPE_PHYSICAL_PIXEL;
 }
 
 function getPngXmpDataOffset(dataView, offset) {
