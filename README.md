@@ -23,7 +23,7 @@ You can try it out on the
 | ----------|---------|---------|---------|---------|---------|-----------|
 | JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **yes**   |
 | TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | no        |
-| PNG       | no      | no      | **yes** | no      | no      | no        |
+| PNG       | **yes** | no      | **yes** | no      | no      | no        |
 | HEIC/HEIF | **yes** | no      | no      | **yes** | ???     | no        |
 | WebP      | **yes** | no      | **yes** | **yes** | ???     | **yes**   |
 
