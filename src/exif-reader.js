@@ -22,6 +22,7 @@ import XmpTags from './xmp-tags.js';
 import IccTags from './icc-tags.js';
 import PngFileTags from './png-file-tags.js';
 import PngTextTags from './png-text-tags.js';
+import PngTags from './png-tags.js';
 import Thumbnail from './thumbnail.js';
 import exifErrors from './errors.js';
 
@@ -195,7 +196,8 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         iccChunks,
         mpfDataOffset,
         pngHeaderOffset,
-        pngTextChunks
+        pngTextChunks,
+        pngChunkOffsets
     } = ImageHeader.parseAppMarkers(dataView);
 
     if (Constants.USE_JPEG && Constants.USE_FILE && hasFileData(fileDataOffset)) {
@@ -315,6 +317,7 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         foundMetaData = true;
         const readTags = PngFileTags.read(dataView, pngHeaderOffset);
         if (expanded) {
+            tags.png = !tags.png ? readTags : objectAssign({}, tags.png, readTags);
             tags.pngFile = readTags;
         } else {
             tags = objectAssign({}, tags, readTags);
@@ -325,7 +328,18 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         foundMetaData = true;
         const readTags = PngTextTags.read(dataView, pngTextChunks);
         if (expanded) {
+            tags.png = !tags.png ? readTags : objectAssign({}, tags.png, readTags);
             tags.pngText = readTags;
+        } else {
+            tags = objectAssign({}, tags, readTags);
+        }
+    }
+
+    if (Constants.USE_PNG && hasPngData(pngChunkOffsets)) {
+        foundMetaData = true;
+        const readTags = PngTags.read(dataView, pngChunkOffsets);
+        if (expanded) {
+            tags.png = !tags.png ? readTags : objectAssign({}, tags.png, readTags);
         } else {
             tags = objectAssign({}, tags, readTags);
         }
@@ -423,4 +437,8 @@ function hasPngFileData(pngFileDataOffset) {
 
 function hasPngTextData(pngTextChunks) {
     return pngTextChunks !== undefined;
+}
+
+function hasPngData(pngChunkOffsets) {
+    return pngChunkOffsets !== undefined;
 }
