@@ -401,6 +401,25 @@ describe('image-header', () => {
             });
         });
 
+        it('should find eXIf chunks', () => {
+            const chunkData = '\x01\x02\x03';
+            const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkData.length)}`;
+            const chunkType = 'eXIf';
+            const crcChecksum = '\x00\x00\x00\x00';
+
+            const dataView = getDataView(
+                PNG_IMAGE_START
+                + chunkLength + chunkType + chunkData + crcChecksum
+            );
+
+            const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
+
+            expect(appMarkerValues).to.deep.equal({
+                hasAppMarkers: true,
+                tiffHeaderOffset: PNG_IMAGE_START.length + chunkLength.length + chunkType.length,
+            });
+        });
+
         it('should handle when PNG files have been excluded in a custom build', () => {
             ImageHeaderRewireAPI.__Rewire__('Constants', {USE_PNG: false});
             const dataView = getDataView(PNG_IMAGE_START);

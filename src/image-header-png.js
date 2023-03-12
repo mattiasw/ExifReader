@@ -23,6 +23,7 @@ export const TYPE_TEXT = 'tEXt';
 export const TYPE_ITXT = 'iTXt';
 export const TYPE_PHYS = 'pHYs';
 export const TYPE_TIME = 'tIME';
+export const TYPE_EXIF = 'eXIf';
 
 function isPngFile(dataView) {
     return !!dataView && getStringFromDataView(dataView, 0, PNG_ID.length) === PNG_ID;
@@ -61,6 +62,9 @@ function findPngOffsets(dataView) {
                 type: chunkType,
                 offset: offset + PNG_CHUNK_DATA_OFFSET
             });
+        } else if (isPngExifChunk(dataView, offset)) {
+            offsets.hasAppMarkers = true;
+            offsets.tiffHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
         } else if (isPngChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
             if (!offsets.pngChunkOffsets) {
@@ -94,6 +98,10 @@ function isPngTextChunk(dataView, offset) {
     const PNG_CHUNK_TYPE_ITXT = 'iTXt';
     const chunkType = getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
     return chunkType === PNG_CHUNK_TYPE_TEXT || chunkType === PNG_CHUNK_TYPE_ITXT;
+}
+
+function isPngExifChunk(dataView, offset) {
+    return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === TYPE_EXIF;
 }
 
 function isPngChunk(dataView, offset) {
