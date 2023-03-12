@@ -433,9 +433,10 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
-    it('should be able to find PNG pHYs data segment', () => {
+    it('should be able to find PNG chunk data segment', () => {
         const myTags = {MyTag: 42};
-        rewireForLoadView({pngPhysOffset: OFFSET_TEST_VALUE}, 'PngPhysTags', myTags);
+        rewireImageHeader({pngChunkOffsets: [OFFSET_TEST_VALUE]});
+        rewirePngTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -793,6 +794,17 @@ function rewirePngTextTagsRead(tagsValue) {
     ExifReaderRewireAPI.__Rewire__('PngTextTags', {
         read(dataView, pngTextChunks) {
             if ((pngTextChunks[0].offset === OFFSET_TEST_VALUE) && (pngTextChunks[0].length === PNG_FIELD_LENGTH_TEST_VALUE)) {
+                return tagsValue;
+            }
+            return {};
+        }
+    });
+}
+
+function rewirePngTagsRead(tagsValue) {
+    ExifReaderRewireAPI.__Rewire__('PngTags', {
+        read(dataView, pngChunkOffsets) {
+            if (pngChunkOffsets[0] === OFFSET_TEST_VALUE) {
                 return tagsValue;
             }
             return {};

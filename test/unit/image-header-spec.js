@@ -378,7 +378,26 @@ describe('image-header', () => {
 
             expect(appMarkerValues).to.deep.equal({
                 hasAppMarkers: true,
-                pngPhysOffset: PNG_IMAGE_START.length,
+                pngChunkOffsets: [PNG_IMAGE_START.length],
+            });
+        });
+
+        it('should find tIME chunks', () => {
+            const chunkData = '\x01\x02\x03\x04\x05\x06\x07';
+            const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkData.length)}`;
+            const chunkType = 'tIME';
+            const crcChecksum = '\x00\x00\x00\x00';
+
+            const dataView = getDataView(
+                PNG_IMAGE_START
+                + chunkLength + chunkType + chunkData + crcChecksum
+            );
+
+            const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
+
+            expect(appMarkerValues).to.deep.equal({
+                hasAppMarkers: true,
+                pngChunkOffsets: [PNG_IMAGE_START.length],
             });
         });
 

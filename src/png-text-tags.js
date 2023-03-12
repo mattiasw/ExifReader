@@ -3,13 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {getStringValueFromArray} from './utils.js';
+import {TYPE_TEXT, TYPE_ITXT} from './image-header-png.js';
 
 export default {
     read
 };
 
-const TYPE_TEXT = 'tEXt';
-const TYPE_ITXT = 'iTXt';
 const STATE_KEYWORD = 'STATE_KEYWORD';
 const STATE_COMPRESSION = 'STATE_COMPRESSION';
 const STATE_LANG = 'STATE_LANG';

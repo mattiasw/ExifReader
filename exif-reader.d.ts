@@ -62,6 +62,7 @@ interface PngTags extends PngFileTags {
     'Pixels Per Unit X'?: NumberFileTag
     'Pixels Per Unit Y'?: NumberFileTag
     'Pixel Units'?: 'meters' | 'Unknown'
+    'Modify Date'?: NumberArrayFileTag
     [name: string]: PngTag
 }
 
