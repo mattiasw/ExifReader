@@ -8,7 +8,7 @@
  */
 /* global Buffer, __non_webpack_require__ */
 
-import {objectAssign} from './utils.js';
+import {objectAssign, dataUriToBuffer} from './utils.js';
 import DataViewWrapper from './dataview.js';
 import Constants from './constants.js';
 import {getStringValueFromArray} from './utils.js';
@@ -57,6 +57,10 @@ function loadFile(filename, options) {
         return nodeFetchRemoteFile(filename, options);
     }
 
+    if (isDataUri(filename)) {
+        return Promise.resolve(dataUriToBuffer(filename));
+    }
+
     return loadLocalFile(filename, options);
 }
 
@@ -99,6 +103,10 @@ function requireNodeGet(url) {
         return __non_webpack_require__('https').get;
     }
     return __non_webpack_require__('http').get;
+}
+
+function isDataUri(filename) {
+    return /^data:[^;,]*(;base64)?,/.test(filename);
 }
 
 function loadLocalFile(filename, {length} = {}) {
