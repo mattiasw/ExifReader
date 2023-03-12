@@ -62,6 +62,8 @@ function listTags(tags) {
                 console.log(`${group}:${name}: <base64 encoded image>`);
             } else if ((group === 'mpf') && (name === 'Images')) {
                 console.log(`${group}:${name}: ${getMpfImagesDescription(tags[group][name])}`);
+            } else if ((group === 'xmp') && (name === '_raw')) {
+                console.log(`${group}:${name}: <XMP data string>`);
             } else if (Array.isArray(tags[group][name])) {
                 console.log(`${group}:${name}: ${tags[group][name].map((item) => item.description).join(', ')}`);
             } else {
