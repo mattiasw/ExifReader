@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
-import {getCharacterArray} from '../../src/utils';
+import {getCharacterArray, getBase64Image} from '../../src/utils';
 import * as ExifReader from '../../src/exif-reader';
 import exifErrors from '../../src/errors';
 
@@ -36,13 +36,19 @@ describe('exif-reader', function () {
     describe('managing file loading internally', () => {
         const IMAGE = '<image>';
         const TAGS = {MyTag: 42};
+        const DATA_URI_BASE64 = `data:image/png;base64,${getBase64Image(IMAGE)}`;
+        const DATA_URI_URL_ENC = `data:image/png,${encodeURIComponent(IMAGE)}`;
 
         beforeEach(() => {
             ExifReaderRewireAPI.__Rewire__('isNodeBuffer', function () {
                 return false;
             });
             ExifReaderRewireAPI.__Rewire__('DataViewWrapper', function (buffer) {
-                this.buffer = buffer.slice(0, IMAGE.length).toString();
+                if (buffer.slice(0, 5) === 'data:') {
+                    this.buffer = buffer.slice(buffer.indexOf(',') + 1, IMAGE.length).toString();
+                } else {
+                    this.buffer = buffer.slice(0, IMAGE.length).toString();
+                }
                 if (this.buffer !== IMAGE) {
                     throw new Error('Buffer error, does not match image.');
                 }
@@ -82,6 +88,20 @@ describe('exif-reader', function () {
 
             it('should load data from a remote location when a URL is passed in', (done) => {
                 ExifReader.load(URL).then((tags) => {
+                    expect(tags).to.deep.equal(TAGS);
+                    done();
+                });
+            });
+
+            it('should load data when a base64-encoded data URI is passed in', (done) => {
+                ExifReader.load(DATA_URI_BASE64).then((tags) => {
+                    expect(tags).to.deep.equal(TAGS);
+                    done();
+                });
+            });
+
+            it('should load data when a URL-encoded data URI is passed in', (done) => {
+                ExifReader.load(DATA_URI_URL_ENC).then((tags) => {
                     expect(tags).to.deep.equal(TAGS);
                     done();
                 });

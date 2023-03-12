@@ -73,3 +73,22 @@ export function getBase64Image(image) {
     }
     return (new Buffer(image)).toString('base64'); // eslint-disable-line no-undef
 }
+
+export function dataUriToBuffer(dataUri) {
+    const data = dataUri.substring(dataUri.indexOf(',') + 1);
+
+    if (dataUri.indexOf(';base64') !== -1) {
+        if (typeof atob !== 'undefined') {
+            return atob(dataUri);
+        }
+        if (typeof Buffer === 'undefined') {
+            return undefined;
+        }
+        if (typeof Buffer.from !== undefined) { // eslint-disable-line no-undef
+            return Buffer.from(data, 'base64'); // eslint-disable-line no-undef
+        }
+        return new Buffer(data, 'base64'); // eslint-disable-line no-undef
+    }
+
+    return decodeURIComponent(data);
+}
