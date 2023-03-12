@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+// Specification: http://www.libpng.org/pub/png/spec/1.2/
+
 import {getStringFromDataView} from './utils.js';
 import Constants from './constants.js';
 
@@ -46,10 +48,15 @@ function findPngOffsets(dataView) {
             }
         } else if (isPngTextChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
+            const chunkType = getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
             if (!offsets.pngTextChunks) {
                 offsets.pngTextChunks = [];
             }
-            offsets.pngTextChunks.push({length: dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET), offset: offset + PNG_CHUNK_DATA_OFFSET});
+            offsets.pngTextChunks.push({
+                length: dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET),
+                type: chunkType,
+                offset: offset + PNG_CHUNK_DATA_OFFSET
+            });
         } else if (isPngPhysChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
             offsets.pngPhysOffset = offset + PNG_CHUNK_LENGTH_OFFSET;
@@ -76,8 +83,10 @@ function isPngXmpChunk(dataView, offset) {
 }
 
 function isPngTextChunk(dataView, offset) {
-    const PNG_CHUNK_TYPE_TEXTUAL = 'tEXt';
-    return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === PNG_CHUNK_TYPE_TEXTUAL;
+    const PNG_CHUNK_TYPE_TEXT = 'tEXt';
+    const PNG_CHUNK_TYPE_ITXT = 'iTXt';
+    const chunkType = getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
+    return chunkType === PNG_CHUNK_TYPE_TEXT || chunkType === PNG_CHUNK_TYPE_ITXT;
 }
 
 function isPngPhysChunk(dataView, offset) {

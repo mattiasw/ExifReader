@@ -329,30 +329,37 @@ describe('image-header', () => {
             });
         });
 
-        it('should find tEXt chunks of textual data', () => {
-            const chunkData = 'MyTag\x00My value.';
-            const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkData.length)}`;
-            const chunkType = 'tEXt';
+        it('should find tEXt and non-XMP iTXt chunks of textual data', () => {
             const crcChecksum = '\x00\x00\x00\x00';
-            const chunkLengthOther = '\x00\x00\x00\x04';
-            const chunkTypeOther = 'abcd';
-            const chunkDataOther = '\x48\x12\x49\x13';
-            const chunkOther = chunkLengthOther + chunkTypeOther + chunkDataOther + crcChecksum;
 
-            const dataView = getDataView(
-                PNG_IMAGE_START
-                + chunkOther
-                + chunkLength + chunkType + chunkData + crcChecksum
-            );
+            const chunkType0 = 'tEXt';
+            const chunkData0 = 'MyTag0\x00My value.';
+            const chunkLength0 = `\x00\x00\x00${String.fromCharCode(chunkData0.length)}`;
+            const chunk0 = chunkLength0 + chunkType0 + chunkData0 + crcChecksum;
+
+            const chunkType1 = 'iTXt';
+            const chunkData1 = 'MyTag1\x00\x00\x00\x00\x00My other value.';
+            const chunkLength1 = `\x00\x00\x00${String.fromCharCode(chunkData1.length)}`;
+            const chunk1 = chunkLength1 + chunkType1 + chunkData1 + crcChecksum;
+
+            const dataView = getDataView(PNG_IMAGE_START + chunk0 + chunk1);
 
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
 
             expect(appMarkerValues).to.deep.equal({
                 hasAppMarkers: true,
-                pngTextChunks: [{
-                    offset: PNG_IMAGE_START.length + chunkOther.length + chunkLength.length + chunkType.length,
-                    length: chunkData.length,
-                }],
+                pngTextChunks: [
+                    {
+                        offset: PNG_IMAGE_START.length + chunkLength0.length + chunkType0.length,
+                        type: 'tEXt',
+                        length: chunkData0.length,
+                    },
+                    {
+                        offset: PNG_IMAGE_START.length + chunk0.length + chunkLength0.length + chunkType0.length,
+                        type: 'iTXt',
+                        length: chunkData1.length,
+                    },
+                ],
             });
         });
 
