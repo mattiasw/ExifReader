@@ -8,11 +8,23 @@ import PngTextTags from '../../src/png-text-tags';
 
 describe('png-text-tags', () => {
     it('should read image tag', () => {
-        const tagData = 'MyTag\x00My value.';
-        const dataView = getDataView(tagData);
-        expect(PngTextTags.read(dataView, [{length: tagData.length, offset: 0}])['MyTag']).to.deep.equal({
+        const tagDatatEXt = 'MyTag0\x00My value.';
+        const tagDataiTXt = 'MyTag1\x00\x00\x00fr\x00MyFrTag1\x00My other value.';
+        const dataView = getDataView(tagDatatEXt + tagDataiTXt);
+        const chunks = [
+            {type: 'tEXt', offset: 0, length: tagDatatEXt.length},
+            {type: 'iTXt', offset: tagDatatEXt.length, length: tagDataiTXt.length}
+        ];
+
+        const tags = PngTextTags.read(dataView, chunks);
+
+        expect(tags['MyTag0']).to.deep.equal({
             value: 'My value.',
             description: 'My value.'
+        });
+        expect(tags['MyTag1 (fr)']).to.deep.equal({
+            value: 'My other value.',
+            description: 'My other value.'
         });
     });
 });
