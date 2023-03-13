@@ -73,3 +73,29 @@ export function getBase64Image(image) {
     }
     return (new Buffer(image)).toString('base64'); // eslint-disable-line no-undef
 }
+
+export function dataUriToBuffer(dataUri) {
+    const data = dataUri.substring(dataUri.indexOf(',') + 1);
+
+    if (dataUri.indexOf(';base64') !== -1) {
+        if (typeof atob !== 'undefined') {
+            return Uint8Array.from(atob(data), (char) => char.charCodeAt(0)).buffer;
+        }
+        if (typeof Buffer === 'undefined') {
+            return undefined;
+        }
+        if (typeof Buffer.from !== undefined) { // eslint-disable-line no-undef
+            return Buffer.from(data, 'base64'); // eslint-disable-line no-undef
+        }
+        return new Buffer(data, 'base64'); // eslint-disable-line no-undef
+    }
+
+    const decodedData = decodeURIComponent(data);
+    if (typeof Buffer !== 'undefined') {
+        if (typeof Buffer.from !== undefined) { // eslint-disable-line no-undef
+            return Buffer.from(decodedData); // eslint-disable-line no-undef
+        }
+        return new Buffer(decodedData); // eslint-disable-line no-undef
+    }
+    return Uint8Array.from(decodedData, (char) => char.charCodeAt(0)).buffer;
+}
