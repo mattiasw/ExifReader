@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {getStringValueFromArray} from './utils.js';
+import TagDecoder from './tag-decoder.js';
 import {TYPE_TEXT, TYPE_ITXT} from './image-header-png.js';
 
 export default {
@@ -18,11 +19,11 @@ const COMPRESSION_SECTION_LENGTH = 2;
 
 function read(dataView, pngTextChunks) {
     return pngTextChunks.reduce((tags, {offset, length, type}) => {
-        const {name, value} = getNameAndValue(dataView, offset, length, type);
+        const {name, value, description} = getNameAndValue(dataView, offset, length, type);
         if (name) {
             tags[name] = {
                 value,
-                description: value
+                description
             };
         }
         return tags;
@@ -59,9 +60,12 @@ function getNameAndValue(dataView, offset, length, type) {
         }
     }
 
+    const textValue = getStringValueFromArray(valueChars);
+
     return {
         name: getName(type, langChars, keywordChars),
-        value: getStringValueFromArray(valueChars)
+        value: textValue,
+        description: type === TYPE_ITXT ? TagDecoder.decode('UTF-8', valueChars) : textValue
     };
 }
 
