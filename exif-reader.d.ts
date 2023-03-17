@@ -53,16 +53,22 @@ interface PngFileTags {
     }
 }
 
+interface PngPhysTags {
+    'Pixels Per Unit X'?: NumberFileTag,
+    'Pixels Per Unit Y'?: NumberFileTag,
+    'Pixel Units'?: {
+        value: number,
+        description: 'meters' | 'Unknown'
+    },
+    'Modify Date'?: NumberArrayFileTag
+}
+
 interface PngTag {
     description: string,
     value: string | number
 }
 
-interface PngTags extends PngFileTags {
-    'Pixels Per Unit X'?: NumberFileTag
-    'Pixels Per Unit Y'?: NumberFileTag
-    'Pixel Units'?: 'meters' | 'Unknown'
-    'Modify Date'?: NumberArrayFileTag
+type PngTags = PngFileTags & PngPhysTags & {
     [name: string]: PngTag
 }
 
