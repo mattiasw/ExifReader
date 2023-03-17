@@ -27,4 +27,14 @@ describe('png-text-tags', () => {
             description: 'My other value.'
         });
     });
+
+    it('should ignore tags that use compression', () => {
+        const tagDataiTXt = 'MyTag1\x00\x01\x00fr\x00MyFrTag1\x00Compressed value.';
+        const dataView = getDataView(tagDataiTXt);
+        const chunks = [{type: 'iTXt', offset: 0, length: tagDataiTXt.length}];
+
+        const tags = PngTextTags.read(dataView, chunks);
+
+        expect(tags).to.deep.equal({});
+    });
 });

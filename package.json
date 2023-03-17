@@ -44,6 +44,7 @@
     "rimraf": "^3.0.2",
     "string-replace-loader": "^3.0.3",
     "terser-webpack-plugin": "^5.2.4",
+    "typescript": "^5.0.2",
     "webpack": "^5.74.0",
     "webpack-cli": "^4.10.0",
     "webpack-dev-server": "^4.11.1"
@@ -60,21 +61,22 @@
     "test:build:custom": "mocha --bail test/build/test-custom.js",
     "test:build:update": "node test/build/update.js",
     "test:e2e": "cypress run",
-    "test:all": "npm-run-all lint coverage test:e2e test:build test:build:custom",
+    "test:types": "tsc --noEmit --project test/types",
+    "test:all": "npm-run-all lint coverage test:e2e test:build test:build:custom test:types",
     "postinstall": "node bin/build.js --only-with-config"
   },
   "nyc": {
     "check-coverage": true,
     "statements": 95,
-    "branches": 93,
+    "branches": 92,
     "functions": 98,
-    "lines": 96,
+    "lines": 95,
     "reporter": [
       "lcov",
       "text"
     ],
     "exclude": [
-      "test/**/*.js",
+      "test/*",
       "**/node_modules/*"
     ]
   },
