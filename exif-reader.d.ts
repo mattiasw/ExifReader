@@ -120,6 +120,14 @@ interface StringArrayTag {
     value: Array<string>
 }
 
+interface DateTimeTag {
+    attributes: {
+        [name: string]: string,
+    };
+    description: string,
+    value: string
+}
+
 interface XmpTag {
     value: string | Array<XmpTag> | XmpTags,
     attributes: {
@@ -274,7 +282,7 @@ interface Tags {
     'ISOSpeedRatings'?: NumberTag & NumberArrayTag,
     'OECF'?: NumberTag & NumberArrayTag,
     'ExifVersion'?: NumberArrayTag,
-    'DateTimeOriginal'?: StringArrayTag,
+    'DateTimeOriginal'?: DateTimeTag,
     'DateTimeDigitized'?: StringArrayTag,
     'ComponentsConfiguration'?: NumberArrayTag,
     'CompressedBitsPerPixel'?: NumberTag,
