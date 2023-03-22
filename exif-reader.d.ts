@@ -120,14 +120,6 @@ interface StringArrayTag {
     value: Array<string>
 }
 
-interface DateTimeTag {
-    attributes: {
-        [name: string]: string,
-    };
-    description: string,
-    value: string
-}
-
 interface XmpTag {
     value: string | Array<XmpTag> | XmpTags,
     attributes: {
@@ -214,21 +206,21 @@ interface MPFImageTags {
     base64: string
 }
 
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags & XmpTags & IccTags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded: true, includeUnknown?: boolean, length?: number}): ExpandedTags;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Tags & XmpTags & IccTags;
-export function load(data: string | File): Promise<Tags & XmpTags & IccTags>;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Tags;
+export function load(data: string | File): Promise<Tags>;
 export function load(data: string | File, options: {expanded: true, includeUnknown?: boolean, length?: number}): Promise<ExpandedTags>;
-export function load(data: string | File, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Promise<Tags & XmpTags & IccTags>;
-export function loadView(data: DataView): Tags & XmpTags & IccTags;
+export function load(data: string | File, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Promise<Tags>;
+export function loadView(data: DataView): Tags;
 export function loadView(data: DataView, options: {expanded: true, includeUnknown?: boolean}): ExpandedTags;
-export function loadView(data: DataView, options: {expanded?: false, includeUnknown?: boolean}): Tags & XmpTags & IccTags;
+export function loadView(data: DataView, options: {expanded?: false, includeUnknown?: boolean}): Tags;
 
 export namespace errors {
     export class MetadataMissingError extends Error {}
 }
 
-interface Tags {
+interface ExifTags {
     // Interoperability tags
     'InteroperabilityIndex'?: StringArrayTag,
 
@@ -282,7 +274,7 @@ interface Tags {
     'ISOSpeedRatings'?: NumberTag & NumberArrayTag,
     'OECF'?: NumberTag & NumberArrayTag,
     'ExifVersion'?: NumberArrayTag,
-    'DateTimeOriginal'?: DateTimeTag,
+    'DateTimeOriginal'?: StringArrayTag,
     'DateTimeDigitized'?: StringArrayTag,
     'ComponentsConfiguration'?: NumberArrayTag,
     'CompressedBitsPerPixel'?: NumberTag,
@@ -469,4 +461,8 @@ interface Tags {
 
 interface IccTags {
     [name: string]: ValueTag;
+}
+
+export type Tags = {
+    [K in keyof ExifTags]: ExifTags[K] | XmpTag | ValueTag;
 }
