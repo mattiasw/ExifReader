@@ -9,7 +9,8 @@ const expandedTags = await load('', {expanded: true});
 
 ////////
 // PNG
-tags['Color Type']?.description === 'Grayscale';
+tags['Audio Duration']?.description === 'Grayscale';
+tags['Audio Duration']?.id === 1234;
 
 expandedTags.png?.['Color Type']?.description === 'Grayscale';
 expandedTags.png?.['Pixel Units']?.value === 1;

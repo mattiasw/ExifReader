@@ -464,5 +464,5 @@ interface IccTags {
 }
 
 export type Tags = {
-    [K in keyof ExifTags]: ExifTags[K] | XmpTag | ValueTag;
+    [K in keyof ExifTags]: ExifTags[K] & XmpTag & ValueTag;
 }
