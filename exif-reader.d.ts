@@ -91,42 +91,34 @@ interface NumberArrayFileTag {
     value: Array<number>
 }
 
-interface NumberTag {
+type TypedTag<V> = {
     id: number,
     description: string,
-    value: number
+    value: V
 }
 
-interface RationalTag {
-    id: number,
-    description: string,
-    value: [number, number]
-}
+type RationalTag = TypedTag<[number, number]>
 
-interface NumberArrayTag {
-    id: number,
-    description: string,
-    value: Array<number>
-}
+type NumberTag = TypedTag<number>;
+
+type NumberArrayTag = TypedTag<number[]>
+
+type StringArrayTag = TypedTag<string[]>
 
 interface ValueTag {
     description: string,
-    value: String
+    value: string
 }
 
-interface StringArrayTag {
-    id: number,
-    description: string,
-    value: Array<string>
-}
-
-interface XmpTag {
-    value: string | Array<XmpTag> | XmpTags,
+interface XmpTagValue<V = string> {
+    value: V,
     attributes: {
         [name: string]: string
     },
     description: string
 }
+
+type XmpTag = XmpTagValue<string | Array<XmpTag> | XmpTags>
 
 interface XmpTags {
     [name: string]: XmpTag
@@ -159,8 +151,8 @@ interface ExpandedTags {
     pngFile?: PngFileTags,
     pngText?: PngTextTags,
     png?: PngTags,
-    exif?: Tags,
-    iptc?: Tags,
+    exif?: ExifTags,
+    iptc?: ExifTags,
     xmp?: { _raw: string } & XmpTags,
     icc?: IccTags,
     Thumbnail?: ThumbnailTags,
@@ -463,6 +455,9 @@ interface IccTags {
     [name: string]: ValueTag;
 }
 
-export type Tags = {
-    [K in keyof ExifTags]: ExifTags[K] & XmpTag & ValueTag;
+export type Tags = XmpTags & IccTags & PngTags & {
+    'Thumbnail'?: ThumbnailTags;
+    'Images'?: Array<MPFImageTags>,
+} & {
+    [K in keyof ExifTags]: ExifTags[K] | XmpTagValue;
 }
