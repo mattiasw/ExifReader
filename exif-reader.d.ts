@@ -110,15 +110,13 @@ interface ValueTag {
     value: string
 }
 
-interface XmpTagValue<V = string> {
-    value: V,
+interface XmpTag {
+    value: string | XmpTag[] | XmpTags,
     attributes: {
         [name: string]: string
     },
     description: string
 }
-
-type XmpTag = XmpTagValue<string | Array<XmpTag> | XmpTags>
 
 interface XmpTags {
     [name: string]: XmpTag
@@ -167,7 +165,7 @@ interface GpsTags {
 
 interface MPFImageTags {
     ImageFlags: {
-        value: Array<number>,
+        value: number[],
         description: string
     },
     ImageFormat: {
@@ -362,7 +360,7 @@ interface ExifTags {
     'MPEntry'?: NumberArrayTag,
     'ImageUIDList'?: NumberArrayTag,
     'TotalFrames'?: NumberTag,
-    'Images'?: Array<MPFImageTags>,
+    'Images'?: MPFImageTags[],
 
     // IPTC tags
     // IPTC tags don't have explicit types. Therefore the raw value will always
@@ -457,7 +455,7 @@ interface IccTags {
 
 export type Tags = XmpTags & IccTags & PngTags & {
     'Thumbnail'?: ThumbnailTags;
-    'Images'?: Array<MPFImageTags>,
+    'Images'?: MPFImageTags[],
 } & {
-    [K in keyof ExifTags]: ExifTags[K] | XmpTagValue;
+    [K in keyof ExifTags]: ExifTags[K] | XmpTag;
 }
