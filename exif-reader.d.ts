@@ -91,37 +91,27 @@ interface NumberArrayFileTag {
     value: Array<number>
 }
 
-interface NumberTag {
+type TypedTag<V> = {
     id: number,
     description: string,
-    value: number
+    value: V
 }
 
-interface RationalTag {
-    id: number,
-    description: string,
-    value: [number, number]
-}
+type RationalTag = TypedTag<[number, number]>
 
-interface NumberArrayTag {
-    id: number,
-    description: string,
-    value: Array<number>
-}
+type NumberTag = TypedTag<number>;
+
+type NumberArrayTag = TypedTag<number[]>
+
+type StringArrayTag = TypedTag<string[]>
 
 interface ValueTag {
     description: string,
-    value: String
-}
-
-interface StringArrayTag {
-    id: number,
-    description: string,
-    value: Array<string>
+    value: string
 }
 
 interface XmpTag {
-    value: string | Array<XmpTag> | XmpTags,
+    value: string | XmpTag[] | XmpTags,
     attributes: {
         [name: string]: string
     },
@@ -159,8 +149,8 @@ interface ExpandedTags {
     pngFile?: PngFileTags,
     pngText?: PngTextTags,
     png?: PngTags,
-    exif?: Tags,
-    iptc?: Tags,
+    exif?: ExifTags,
+    iptc?: ExifTags,
     xmp?: { _raw: string } & XmpTags,
     icc?: IccTags,
     Thumbnail?: ThumbnailTags,
@@ -175,7 +165,7 @@ interface GpsTags {
 
 interface MPFImageTags {
     ImageFlags: {
-        value: Array<number>,
+        value: number[],
         description: string
     },
     ImageFormat: {
@@ -206,21 +196,21 @@ interface MPFImageTags {
     base64: string
 }
 
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags & XmpTags & IccTags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded: true, includeUnknown?: boolean, length?: number}): ExpandedTags;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Tags & XmpTags & IccTags;
-export function load(data: string | File): Promise<Tags & XmpTags & IccTags>;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Tags;
+export function load(data: string | File): Promise<Tags>;
 export function load(data: string | File, options: {expanded: true, includeUnknown?: boolean, length?: number}): Promise<ExpandedTags>;
-export function load(data: string | File, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Promise<Tags & XmpTags & IccTags>;
-export function loadView(data: DataView): Tags & XmpTags & IccTags;
+export function load(data: string | File, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Promise<Tags>;
+export function loadView(data: DataView): Tags;
 export function loadView(data: DataView, options: {expanded: true, includeUnknown?: boolean}): ExpandedTags;
-export function loadView(data: DataView, options: {expanded?: false, includeUnknown?: boolean}): Tags & XmpTags & IccTags;
+export function loadView(data: DataView, options: {expanded?: false, includeUnknown?: boolean}): Tags;
 
 export namespace errors {
     export class MetadataMissingError extends Error {}
 }
 
-interface Tags {
+interface ExifTags {
     // Interoperability tags
     'InteroperabilityIndex'?: StringArrayTag,
 
@@ -370,7 +360,7 @@ interface Tags {
     'MPEntry'?: NumberArrayTag,
     'ImageUIDList'?: NumberArrayTag,
     'TotalFrames'?: NumberTag,
-    'Images'?: Array<MPFImageTags>,
+    'Images'?: MPFImageTags[],
 
     // IPTC tags
     // IPTC tags don't have explicit types. Therefore the raw value will always
@@ -461,4 +451,11 @@ interface Tags {
 
 interface IccTags {
     [name: string]: ValueTag;
+}
+
+export type Tags = XmpTags & IccTags & PngTags & {
+    'Thumbnail'?: ThumbnailTags;
+    'Images'?: MPFImageTags[],
+} & {
+    [K in keyof ExifTags]: ExifTags[K] | XmpTag;
 }
