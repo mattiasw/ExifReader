@@ -23,20 +23,22 @@ describe('dom-parser', function () {
     });
 
     it('should return DOMParser if it is globally defined', () => {
-        global.DOMParser = 'The DOMParser object.';
-        expect(DOMParserModule.get()).to.equal(global.DOMParser);
+        global.DOMParser = MockDOMParser;
+        expect(DOMParserModule.get() instanceof MockDOMParser).to.equal(true);
     });
 
     it('should return DOMParser from the XMLDOM module if available', () => {
-        const Parser = DOMParserModule.get();
-        expect(typeof new Parser().parseFromString('<tag>content</tag>', 'application/xml')).to.equal('object');
+        const parser = DOMParserModule.get();
+        expect(typeof parser.parseFromString('<tag>content</tag>', 'application/xml')).to.equal('object');
     });
 
     it('should return undefined if DOMParser was not available', () => {
         global.__non_webpack_require__ = function () {
             throw new Error();
         };
-        const Parser = DOMParserModule.get();
-        expect(Parser).to.be.undefined;
+        const parser = DOMParserModule.get();
+        expect(parser).to.be.undefined;
     });
 });
+
+class MockDOMParser {}
