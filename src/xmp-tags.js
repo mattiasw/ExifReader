@@ -61,13 +61,12 @@ function readTags(tags, chunkDataView) {
 }
 
 function getDocument(chunkDataView) {
-    const Parser = DOMParser.get();
-    if (!Parser) {
+    const domParser = DOMParser.get();
+    if (!domParser) {
         console.warn('Warning: DOMParser is not available. It is needed to be able to parse XMP tags.'); // eslint-disable-line no-console
         throw new Error();
     }
 
-    const domParser = new Parser();
     const xmlString = typeof chunkDataView === 'string' ? chunkDataView : getStringFromDataView(chunkDataView, 0, chunkDataView.byteLength);
     const doc = domParser.parseFromString(trimXmlSource(xmlString), 'application/xml');
 
