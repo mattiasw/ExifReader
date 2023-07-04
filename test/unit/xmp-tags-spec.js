@@ -878,6 +878,31 @@ describe('xmp-tags', function () {
         });
     });
 
+    // This is non-spec but there are files in the wild using this format.
+    it('should be able to handle multiple chunks where they are all part of a single XMP metadata tree', function () {
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711">
+            </rdf:Description>
+        `);
+        const xmlString0 = xmlString.substr(0, 40);
+        const xmlString1 = xmlString.substr(40);
+        const dataView = getDataView(xmlString0 + xmlString1);
+
+        const tags = XmpTags.read(dataView, [
+            {dataOffset: 0, length: xmlString0.length},
+            {dataOffset: xmlString0.length, length: xmlString1.length},
+        ]);
+
+        expect(tags).to.deep.equal({
+            _raw: xmlString0 + xmlString1,
+            MyXMPTag: {
+                value: '4711',
+                attributes: {},
+                description: '4711'
+            }
+        });
+    });
+
     it('should handle when input is a regular string', () => {
         const xmlString = getXmlString(`
             <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="4711">
