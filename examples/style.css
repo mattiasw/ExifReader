@@ -45,6 +45,10 @@ input[type="file"] {
     margin-top: 1rem;
 }
 
+td {
+    vertical-align: top;
+}
+
 @media screen and (min-width: 1024px) {
     .github {
         background: black;
