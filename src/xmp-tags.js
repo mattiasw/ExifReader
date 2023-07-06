@@ -11,10 +11,31 @@ export default {
 };
 
 function read(dataView, chunks) {
+    const tags = {};
+
     if (typeof dataView === 'string') {
-        return readTags({}, dataView);
+        readTags(tags, dataView);
+        return tags;
     }
-    return extractCompleteChunks(dataView, chunks).reduce(readTags, {});
+
+    const [standardXmp, extendedXmp] = extractCompleteChunks(dataView, chunks);
+
+    const hasStandardTags = readTags(tags, standardXmp);
+
+    if (extendedXmp) {
+        const hasExtendedTags = readTags(tags, extendedXmp);
+
+        if (!hasStandardTags && !hasExtendedTags) {
+            // Some writers are not spec-compliant in that they split an XMP
+            // metadata tree over both the standard XMP block and the extended
+            // XMP block. If we failed parsing both of the XMPs in the regular
+            // way, we try to combine them to see if that works better.
+            delete tags._raw;
+            readTags(tags, combineChunks(dataView, chunks));
+        }
+    }
+
+    return tags;
 }
 
 // The first chunk is always the regular XMP document. Then there is something
@@ -54,20 +75,20 @@ function readTags(tags, chunkDataView) {
         tags._raw = (tags._raw || '') + raw;
         const rdf = getRDF(doc);
 
-        return objectAssign(tags, parseXMPObject(convertToObject(rdf, true)));
+        objectAssign(tags, parseXMPObject(convertToObject(rdf, true)));
+        return true;
     } catch (error) {
-        return tags;
+        return false;
     }
 }
 
 function getDocument(chunkDataView) {
-    const Parser = DOMParser.get();
-    if (!Parser) {
+    const domParser = DOMParser.get();
+    if (!domParser) {
         console.warn('Warning: DOMParser is not available. It is needed to be able to parse XMP tags.'); // eslint-disable-line no-console
         throw new Error();
     }
 
-    const domParser = new Parser();
     const xmlString = typeof chunkDataView === 'string' ? chunkDataView : getStringFromDataView(chunkDataView, 0, chunkDataView.byteLength);
     const doc = domParser.parseFromString(trimXmlSource(xmlString), 'application/xml');
 

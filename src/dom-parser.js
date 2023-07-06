@@ -8,10 +8,17 @@ export default {
 
 function get() {
     if (typeof DOMParser !== 'undefined') {
-        return DOMParser;
+        return new DOMParser();
     }
     try {
-        return __non_webpack_require__('@xmldom/xmldom').DOMParser; // eslint-disable-line no-undef
+        // eslint-disable-next-line no-undef
+        return new (__non_webpack_require__('@xmldom/xmldom').DOMParser)({
+            errorHandler: {
+                error: () => {
+                    throw new Error('Faulty XML');
+                }
+            }
+        });
     } catch (error) {
         return undefined;
     }
