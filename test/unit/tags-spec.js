@@ -237,10 +237,17 @@ describe('tags', () => {
             // Field count + field + offset to next IFD.
             + '\x00\x01' + '\x48\x12\x00\x01\x00\x00\x00\x01\x43\x00\x00\x00' + '\x00\x00\x00\x00'
         );
-        Tags.__set__('TagNames', {'0th': {
-            0x4711: 'MyExifTag1',
-            0x4812: 'MyExifTag2'
-        }});
+        Tags.__set__(
+            'TagNames',
+            {
+                '0th': {
+                    0x4711: 'MyExifTag1'
+                },
+                '1st': {
+                    0x4812: 'MyExifTag2'
+                }
+            }
+        );
 
         const tags = read0thIfd(dataView, 0, ByteOrder.BIG_ENDIAN);
 
@@ -249,8 +256,9 @@ describe('tags', () => {
     });
 
     it('should be able to read Exif IFD', () => {
-        // Padding + field count + field.
-        const dataView = getDataView('\x00\x00\x00\x00' + '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00');
+        // Padding + field count + field + offset to next IFD + padding for fake IFD.
+        // Next IFD should be ignored when coming from other IFD than 0th.
+        const dataView = getDataView('\x00\x00\x00\x00' + '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x04' + '\x01\x02');
         let tags = {'Exif IFD Pointer': {value: 4}};
         Tags.__set__('TagNames', {'exif': {0x4711: 'MyExifTag'}});
         tags = readExifIfd(tags, dataView, 0, ByteOrder.BIG_ENDIAN);
