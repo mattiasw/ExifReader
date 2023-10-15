@@ -540,6 +540,18 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView({}, {expanded: true})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
     });
 
+    it('should add file type', () => {
+        const myTags = {MyTag: 42, FileType: 'will be overwritten'};
+        rewireForLoadView({fileType: {value: 'heic', description: 'HEIC'}, tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+        expect(ExifReader.loadView({})).to.deep.equal({...myTags, FileType: {value: 'heic', description: 'HEIC'}});
+    });
+
+    it('should add file type when using expanded result', () => {
+        const myTags = {exif: {MyTag: 42}, file: {FileType: 'will be overwritten'}};
+        rewireForLoadView({fileType: {value: 'webp', description: 'WebP'}, tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags.exif);
+        expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({...myTags, file: {FileType: {value: 'webp', description: 'WebP'}}});
+    });
+
     describe('gps group', () => {
         it('should not create a "gps" group if there are no GPS values', () => {
             const myTags = {MyExifTag: 43};
