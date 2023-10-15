@@ -197,6 +197,7 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
     let tags = {};
 
     const {
+        fileType,
         fileDataOffset,
         jfifDataOffset,
         tiffHeaderOffset,
@@ -374,6 +375,17 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         tags.Thumbnail = thumbnail;
     } else {
         delete tags.Thumbnail;
+    }
+
+    if (fileType) {
+        if (expanded) {
+            if (!tags.file) {
+                tags.file = {};
+            }
+            tags.file.FileType = fileType;
+        } else {
+            tags.FileType = fileType;
+        }
     }
 
     if (!foundMetaData) {

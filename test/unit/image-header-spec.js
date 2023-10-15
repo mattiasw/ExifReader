@@ -50,8 +50,9 @@ describe('image-header', () => {
             const dataView = getDataView(TIFF_IMAGE_START);
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
             expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'tiff', description: 'TIFF'},
                 hasAppMarkers: true,
-                tiffHeaderOffset: 0
+                tiffHeaderOffset: 0,
             });
         });
 
@@ -85,6 +86,7 @@ describe('image-header', () => {
             const dataView = getDataView('\xff\xd8----------');
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
             expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'jpeg', description: 'JPEG'},
                 hasAppMarkers: false,
                 fileDataOffset: undefined,
                 jfifDataOffset: undefined,
@@ -100,6 +102,7 @@ describe('image-header', () => {
             const dataView = getDataView('\xff\xd8\xff\xe1--------');
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
             expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'jpeg', description: 'JPEG'},
                 hasAppMarkers: true,
                 fileDataOffset: undefined,
                 jfifDataOffset: undefined,
@@ -115,6 +118,7 @@ describe('image-header', () => {
             const dataView = getDataView('\xff\xd8\xfe\xdc\x00\x6fJFIF\x65\x01\x01\x01\x00\x48');
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
             expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'jpeg', description: 'JPEG'},
                 hasAppMarkers: false,
                 fileDataOffset: undefined,
                 jfifDataOffset: undefined,
@@ -296,6 +300,7 @@ describe('image-header', () => {
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
 
             expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'png', description: 'PNG'},
                 hasAppMarkers: true,
                 pngHeaderOffset: PNG_IMAGE_START.length + 16 + 8,
             });
@@ -321,6 +326,7 @@ describe('image-header', () => {
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
 
             expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'png', description: 'PNG'},
                 hasAppMarkers: true,
                 xmpChunks: [{
                     dataOffset: PNG_IMAGE_START.length + 16 + 8 + xmpPrefix.length + chunkAdditionalFields.length,
@@ -347,6 +353,7 @@ describe('image-header', () => {
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
 
             expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'png', description: 'PNG'},
                 hasAppMarkers: true,
                 pngTextChunks: [
                     {
@@ -377,6 +384,7 @@ describe('image-header', () => {
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
 
             expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'png', description: 'PNG'},
                 hasAppMarkers: true,
                 pngChunkOffsets: [PNG_IMAGE_START.length],
             });
@@ -396,6 +404,7 @@ describe('image-header', () => {
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
 
             expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'png', description: 'PNG'},
                 hasAppMarkers: true,
                 pngChunkOffsets: [PNG_IMAGE_START.length],
             });
@@ -415,6 +424,7 @@ describe('image-header', () => {
             const appMarkerValues = ImageHeader.parseAppMarkers(dataView);
 
             expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'png', description: 'PNG'},
                 hasAppMarkers: true,
                 tiffHeaderOffset: PNG_IMAGE_START.length + chunkLength.length + chunkType.length,
             });
@@ -443,7 +453,7 @@ describe('image-header', () => {
                 + chunkLength + chunkType + chunkData + crcChecksum
             );
 
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({hasAppMarkers: false});
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({fileType: {value: 'png', description: 'PNG'}, hasAppMarkers: false});
         });
     });
 
@@ -459,7 +469,7 @@ describe('image-header', () => {
         });
 
         it('should handle HEIC files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal(offsets);
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'heic', description: 'HEIC'}});
         });
 
         it('should ignore file when it\'s not a HEIC image', () => {
@@ -488,7 +498,7 @@ describe('image-header', () => {
         });
 
         it('should handle WebP files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal(offsets);
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'webp', description: 'WebP'}});
         });
 
         it('should ignore file when it\'s not a WebP image', () => {
