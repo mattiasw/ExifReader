@@ -40,12 +40,19 @@ describe('image-header-webp', () => {
         expect(ImageHeaderWebp.findOffsets(getWebpDataView()).tiffHeaderOffset).to.be.undefined;
     });
 
+    it('should find VP8X chunk', () => {
+        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView());
+
+        expect(offsets.hasAppMarkers).to.be.true;
+        expect(offsets.vp8xChunkOffset).to.equal(44);
+    });
+
     it('should find XMP chunk', () => {
         const offsets = ImageHeaderWebp.findOffsets(getWebpDataView());
 
         expect(offsets.hasAppMarkers).to.be.true;
         expect(offsets.xmpChunks).to.deep.equal([{
-            dataOffset: 44,
+            dataOffset: 62,
             length: 4
         }]);
     });
@@ -61,7 +68,7 @@ describe('image-header-webp', () => {
 
         expect(offsets.hasAppMarkers).to.be.true;
         expect(offsets.iccChunks).to.deep.equal([{
-            offset: 56,
+            offset: 74,
             length: 4,
             chunkNumber: 1,
             chunksTotal: 1
@@ -80,7 +87,7 @@ describe('image-header-webp', () => {
 
         expect(offsets.hasAppMarkers).to.be.true;
         expect(offsets.xmpChunks).to.deep.equal([{
-            dataOffset: 58,
+            dataOffset: 76,
             length: 4
         }]);
     });
@@ -90,6 +97,7 @@ describe('image-header-webp', () => {
 
         expect(offsets.hasAppMarkers).to.be.false;
         expect(offsets.tiffHeaderOffset).to.be.undefined;
+        expect(offsets.vp8xChunkOffset).to.be.undefined;
         expect(offsets.xmpChunks).to.be.undefined;
     });
 
@@ -100,6 +108,8 @@ describe('image-header-webp', () => {
             + (missingMetaData || withExifIdentifier ? '' : 'EXIF\x04\x00\x00\x00abcd')
             + (withExifIdentifier ? 'EXIF\x04\x00\x00\x00Exif\x00\x00abcd' : '')
             + (oddSizedChunk ? 'VP8 \x05\x00\x00\x00abcde\x00' : '')
+            // https://developers.google.com/speed/webp/docs/riff_container#extended_file_format
+            + (missingMetaData ? '' : 'VP8X\x0a\x00\x00\x00\x3e\x00\x00\x00\x03\x02\x01\x04\x03\x02')
             + (missingMetaData ? '' : 'XMP \x04\x00\x00\x00abcd')
             + (missingMetaData ? '' : 'ICCP\x04\x00\x00\x00abcd')
         );

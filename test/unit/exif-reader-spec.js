@@ -26,6 +26,7 @@ describe('exif-reader', function () {
         ExifReaderRewireAPI.__ResetDependency__('XmpTags');
         ExifReaderRewireAPI.__ResetDependency__('PngFileTags');
         ExifReaderRewireAPI.__ResetDependency__('PngTextTags');
+        ExifReaderRewireAPI.__ResetDependency__('Vp8xTags');
         ExifReaderRewireAPI.__ResetDependency__('Thumbnail');
     });
 
@@ -460,6 +461,13 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should be able to find RIFF chunk data segment', () => {
+        const myTags = {MyTag: 42};
+        rewireImageHeader({vp8xChunkOffset: OFFSET_TEST_VALUE});
+        rewireVp8xTagsRead(myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
     it('should expand segments into separated properties on return object if specified', () => {
         const myTags = {
             file: {MyFileTag: 42},
@@ -469,6 +477,7 @@ describe('exif-reader', function () {
             xmp: {MyXmpTag: 45},
             icc: {MyIccTag: 42},
             mpf: {MyMpfTag: 47},
+            riff: {MyRiffTag: 49},
             Thumbnail: {type: 'image/jpeg'}
         };
         rewireImageHeader({
@@ -481,7 +490,8 @@ describe('exif-reader', function () {
                 length: XMP_FIELD_LENGTH_TEST_VALUE
             }],
             iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2],
-            mpfDataOffset: OFFSET_TEST_VALUE
+            mpfDataOffset: OFFSET_TEST_VALUE,
+            vp8xChunkOffset: OFFSET_TEST_VALUE
         });
         rewireTagsRead('FileTags', myTags.file);
         rewireTagsRead('JfifTags', myTags.jfif);
@@ -489,6 +499,7 @@ describe('exif-reader', function () {
         rewireTagsRead('IptcTags', myTags.iptc);
         rewireXmpTagsRead(myTags.xmp);
         rewireIccTagsRead(myTags.icc);
+        rewireTagsRead('Vp8xTags', myTags.riff);
 
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
     });
@@ -825,6 +836,17 @@ function rewirePngTagsRead(tagsValue) {
     ExifReaderRewireAPI.__Rewire__('PngTags', {
         read(dataView, pngChunkOffsets) {
             if (pngChunkOffsets[0] === OFFSET_TEST_VALUE) {
+                return tagsValue;
+            }
+            return {};
+        }
+    });
+}
+
+function rewireVp8xTagsRead(tagsValue) {
+    ExifReaderRewireAPI.__Rewire__('Vp8xTags', {
+        read(dataView, vp8xChunkOffset) {
+            if (vp8xChunkOffset === OFFSET_TEST_VALUE) {
                 return tagsValue;
             }
             return {};

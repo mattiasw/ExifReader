@@ -38,7 +38,7 @@ describe('image outputs', () => {
 
                         for (const group in result.expanded) {
                             describe(`group "${group}"`, () => {
-                                checkTags(result.expanded[group], storedResult.expanded[group]);
+                                checkTags(result.expanded && result.expanded[group], storedResult.expanded && storedResult.expanded[group]);
                             });
                         }
                     } else {
