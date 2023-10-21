@@ -31,6 +31,7 @@ function findOffsets(dataView) {
     let tiffHeaderOffset;
     let xmpChunks;
     let iccChunks;
+    let vp8xChunkOffset;
 
     while (offset + CHUNK_HEADER_SIZE < dataView.byteLength) {
         const chunkId = getStringFromDataView(dataView, offset, 4);
@@ -57,6 +58,9 @@ function findOffsets(dataView) {
                 chunkNumber: 1,
                 chunksTotal: 1
             }];
+        } else if (chunkId === 'VP8X') {
+            hasAppMarkers = true;
+            vp8xChunkOffset = offset + CHUNK_HEADER_SIZE;
         }
 
         offset += CHUNK_HEADER_SIZE + (chunkSize % 2 === 0 ? chunkSize : chunkSize + 1);
@@ -66,6 +70,7 @@ function findOffsets(dataView) {
         hasAppMarkers,
         tiffHeaderOffset,
         xmpChunks,
-        iccChunks
+        iccChunks,
+        vp8xChunkOffset
     };
 }

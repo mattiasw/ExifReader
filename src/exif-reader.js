@@ -23,6 +23,7 @@ import IccTags from './icc-tags.js';
 import PngFileTags from './png-file-tags.js';
 import PngTextTags from './png-text-tags.js';
 import PngTags from './png-tags.js';
+import Vp8xTags from './vp8x-tags.js';
 import Thumbnail from './thumbnail.js';
 import exifErrors from './errors.js';
 
@@ -196,6 +197,7 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
     let tags = {};
 
     const {
+        fileType,
         fileDataOffset,
         jfifDataOffset,
         tiffHeaderOffset,
@@ -205,7 +207,8 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         mpfDataOffset,
         pngHeaderOffset,
         pngTextChunks,
-        pngChunkOffsets
+        pngChunkOffsets,
+        vp8xChunkOffset,
     } = ImageHeader.parseAppMarkers(dataView);
 
     if (Constants.USE_JPEG && Constants.USE_FILE && hasFileData(fileDataOffset)) {
@@ -353,6 +356,16 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         }
     }
 
+    if (Constants.USE_WEBP && hasVp8xData(vp8xChunkOffset)) {
+        foundMetaData = true;
+        const readTags = Vp8xTags.read(dataView, vp8xChunkOffset);
+        if (expanded) {
+            tags.riff = !tags.riff ? readTags : objectAssign({}, tags.riff, readTags);
+        } else {
+            tags = objectAssign({}, tags, readTags);
+        }
+    }
+
     const thumbnail = (Constants.USE_JPEG || Constants.USE_WEBP)
         && Constants.USE_EXIF
         && Constants.USE_THUMBNAIL
@@ -362,6 +375,17 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         tags.Thumbnail = thumbnail;
     } else {
         delete tags.Thumbnail;
+    }
+
+    if (fileType) {
+        if (expanded) {
+            if (!tags.file) {
+                tags.file = {};
+            }
+            tags.file.FileType = fileType;
+        } else {
+            tags.FileType = fileType;
+        }
     }
 
     if (!foundMetaData) {
@@ -449,4 +473,8 @@ function hasPngTextData(pngTextChunks) {
 
 function hasPngData(pngChunkOffsets) {
     return pngChunkOffsets !== undefined;
+}
+
+function hasVp8xData(vp8xChunkOffset) {
+    return vp8xChunkOffset !== undefined;
 }
