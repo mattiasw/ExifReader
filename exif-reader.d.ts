@@ -81,6 +81,25 @@ interface PngTextTags {
     [name: string]: PngTextTag
 }
 
+interface RiffTags {
+    'Alpha'?: {
+        value: 0 | 1,
+        description: 'No' | 'Yes'
+    },
+    'Animation'?: {
+        value: 0 | 1,
+        description: 'No' | 'Yes'
+    },
+    'ImageWidth'?: {
+        value: number,
+        description: string
+    },
+    'ImageHeight'?: {
+        value: number,
+        description: string
+    }
+}
+
 interface NumberFileTag {
     description: string,
     value: number
@@ -153,6 +172,7 @@ interface ExpandedTags {
     iptc?: ExifTags,
     xmp?: { _raw: string } & XmpTags,
     icc?: IccTags,
+    riff?: RiffTags,
     Thumbnail?: ThumbnailTags,
     gps?: GpsTags
 }
@@ -453,7 +473,7 @@ interface IccTags {
     [name: string]: ValueTag;
 }
 
-export type Tags = XmpTags & IccTags & PngTags & {
+export type Tags = XmpTags & IccTags & PngTags & RiffTags & {
     'Thumbnail'?: ThumbnailTags;
     'Images'?: MPFImageTags[],
 } & {
