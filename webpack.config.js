@@ -62,7 +62,7 @@ module.exports = {
                 watch: !process.env.CI
             }
         ],
-        https: true,
+        server: 'https',
         open: !process.env.CI,
         liveReload: !process.env.CI
     },
