@@ -8,8 +8,7 @@ IPTC, XMP, ICC, and MPF metadata (depending on file type).
 
 ExifReader is highly and easily configurable and the resulting bundle can be as
 small as **3 KiB** (gzipped) if you're only interested in a few tags (e.g. date
-and/or GPS values). See section below on
-[making a custom build](#configure-a-custom-build).
+and/or GPS values).
 
 ExifReader supports module formats ESM, AMD, CommonJS, and globals and can
 therefore easily be used from Webpack, RequireJS, Browserify, Node etc.
@@ -38,9 +37,6 @@ with an attached example image and I'll see what I can do.
 If you come here from the popular but now dead exif-js package, please let me
 know if you're missing anything from it and I will try to help you. Some notes:
 
--   Questions, bug reports, suggestions, and pull requests are very much
-    welcome. If you've been using another Exif package you probably have some
-    good insights on what's missing in this one.
 -   ExifReader has a different API, hopefully better. :-)
 -   XMP support in exif-js does not seem perfect. ExifReader should be a bit
     better on that part.
@@ -48,12 +44,30 @@ know if you're missing anything from it and I will try to help you. Some notes:
 -   I've been maintaining this package since 2012 and I have no plans to stop
     doing that anytime soon.
 
+Table of Contents
+-----------------
+
+1. [Support](#support)
+2. [Installation](#installation)
+3. [Usage](#usage)
+4. [Configure a Custom Build](#configure-a-custom-build)
+5. [Notes](#notes)
+6. [Client/Browser Support](#clientbrowser-support)
+7. [Examples](#examples)
+8. [Tips](#tips)
+9. [Known Limitations](#known-limitations)
+10. [Contributing](#contributing)
+11. [Code of Conduct](#code-of-conduct)
+12. [License](#license)
+13. [Changelog](#changelog)
+
 Support
 -------
 
 Monetary support is not necessary for me to continue working on this, but in
 case you like this library and want to support its development you are very
-welcome to click the button below.
+welcome to click the button below. You can also use GitHub's sponsor feature on
+the right-hand side on the repository's main page.
 
 <a href="https://www.buymeacoffee.com/mattiasw" target="_blank">
     <img src="https://cdn.buymeacoffee.com/buttons/v2/default-violet.png" alt="Buy me a coffee" width="181" height="50">
@@ -85,9 +99,9 @@ After that, the transpiled, concatenated and minified ES5 file will be in the
 
 ### Type definitions
 
-Type definitions for TypeScript are included in the package. I'm not maintaining
-those so if you're missing any definitions for tags or something else, a
-pull-request would be very welcome.
+Type definitions for TypeScript are included in the package. I'm not perfect in
+maintaining those so if you're missing any definitions for tags or something
+else, a pull-request would be very welcome.
 
 Usage
 -----
@@ -291,7 +305,8 @@ sure to add this to your Webpack config (probably the `webpack.config.js` file):
 include a `Buffer` shim for browsers. This configuration will stop Webpack from
 doing that. Webpack 5 does this automatically.
 
-### Configure a custom build
+Configure a Custom Build
+------------------------
 
 Configuring a custom build can reduce the bundle size significantly.
 
@@ -450,22 +465,6 @@ Tips
     this optimization fits your use case. Use the `length` option to only read
     the beginning of the file. See above for more details on that.
 
-Testing
--------
-
-Testing is done with [Mocha](https://mochajs.org/) and
-[Chai](http://chaijs.com/). Run with:
-
-```bash
-npm test
-```
-
-Test coverage can be generated like this:
-
-```bash
-npm run coverage
-```
-
 Known Limitations
 -----------------
 
@@ -475,7 +474,10 @@ Known Limitations
 Contributing
 ------------
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+Questions, bug reports, suggestions, and pull requests are very much welcome. If
+you've been using another Exif package, you probably have some good insights on
+what's missing in this one. See [CONTRIBUTING.md](CONTRIBUTING.md) for more
+info.
 
 Code of Conduct
 ---------------
@@ -498,7 +500,9 @@ case is covered.
 Changelog
 ---------
 
--   **December 2021**:
+A selection of notable changes.
+
+-   **December 2022**:
     -   Add option `length` to only read the first `length` bytes of the file.
 -   **October 2021**:
     -   Major version update 4.0.0. A couple of small breaking changes that

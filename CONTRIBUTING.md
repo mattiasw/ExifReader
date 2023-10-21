@@ -35,6 +35,9 @@ npm run lint
 npm test
 ```
 
+Testing is done with [Mocha](https://mochajs.org/) and
+[Chai](http://chaijs.com/).
+
 To specifically look at test code coverage:
 
 ```bash
