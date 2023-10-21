@@ -2,11 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import DataViewWrapper from '../../src/dataview';
-
 export {
     getArrayBuffer,
     getDataView,
+    concatDataViews,
     getByteStringFromNumber,
     getConsoleWarnSpy
 };
@@ -16,7 +15,19 @@ function getArrayBuffer(data) {
 }
 
 function getDataView(data) {
-    return new DataViewWrapper(getArrayBuffer(data));
+    // Bytes in data are not always ASCII characters so TextEncoder sometimes encodes them as two bytes which we don't want.
+    const dataView = new DataView(new ArrayBuffer(data.length));
+    for (let i = 0; i < data.length; i++) {
+        dataView.setUint8(i, data.charCodeAt(i));
+    }
+    return dataView;
+}
+
+function concatDataViews(dataView0, dataView1) {
+    const data = new Uint8Array(dataView0.byteLength + dataView1.byteLength);
+    data.set(new Uint8Array(dataView0.buffer), 0);
+    data.set(new Uint8Array(dataView1.buffer), dataView0.byteLength);
+    return new DataView(data.buffer);
 }
 
 function getByteStringFromNumber(number, numBytes) {

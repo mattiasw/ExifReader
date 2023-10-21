@@ -457,11 +457,17 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
-    it('should be able to find PNG text data segment', () => {
+    it('should be able to find PNG text data segment', async () => {
         const myTags = {MyTag: 42};
-        rewireImageHeader({pngTextChunks: [{length: PNG_FIELD_LENGTH_TEST_VALUE, offset: OFFSET_TEST_VALUE}]});
-        rewirePngTextTagsRead(myTags);
-        expect(ExifReader.loadView()).to.deep.equal(myTags);
+        const myAsyncTags = {MyAsyncTag: 42};
+        rewireImageHeader({
+            pngTextChunks: [
+                {type: 'tEXt', length: PNG_FIELD_LENGTH_TEST_VALUE, offset: OFFSET_TEST_VALUE},
+                {type: 'zTXt', length: PNG_FIELD_LENGTH_TEST_VALUE, offset: OFFSET_TEST_VALUE}
+            ]
+        });
+        rewirePngTextTagsRead(myTags, myAsyncTags);
+        expect(await ExifReader.loadView(undefined, {async: true})).to.deep.equal({...myTags, ...myAsyncTags});
     });
 
     it('should be able to find PNG chunk data segment', () => {
@@ -862,11 +868,12 @@ function rewireIccTagsRead(tagsValue) {
     });
 }
 
-function rewirePngTextTagsRead(tagsValue) {
+function rewirePngTextTagsRead(tagsValue, asyncTagsValue) {
     ExifReaderRewireAPI.__Rewire__('PngTextTags', {
-        read(dataView, pngTextChunks) {
-            if ((pngTextChunks[0].offset === OFFSET_TEST_VALUE) && (pngTextChunks[0].length === PNG_FIELD_LENGTH_TEST_VALUE)) {
-                return tagsValue;
+        read(dataView, pngTextChunks, async) {
+            if ((pngTextChunks[0].type === 'tEXt' && pngTextChunks[0].offset === OFFSET_TEST_VALUE) && (pngTextChunks[0].length === PNG_FIELD_LENGTH_TEST_VALUE)
+                && (pngTextChunks[1].type === 'zTXt' && pngTextChunks[1].offset === OFFSET_TEST_VALUE) && (pngTextChunks[1].length === PNG_FIELD_LENGTH_TEST_VALUE)) {
+                return {readTags: tagsValue, readTagsPromise: async ? Promise.resolve([asyncTagsValue]) : undefined};
             }
             return {};
         }

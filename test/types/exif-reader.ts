@@ -1,8 +1,16 @@
-import { load } from "../../exif-reader.js";
+import { load, loadView, type Tags, type ExpandedTags } from "../../exif-reader.js";
 
 load("", { includeUnknown: true });
 load("", { length: 1024 });
 load("", { expanded: false, includeUnknown: true, length: 1024 });
+load("", { async: true });
+const syncTags0: Tags = load(new ArrayBuffer(0));
+const asyncTags0: Promise<Tags> = load(new ArrayBuffer(0), { async: true });
+// @ts-expect-error
+const syncTags1: Tags = load(new ArrayBuffer(0), { async: true });
+const syncTags2: Tags = loadView(new DataView(new ArrayBuffer(0)), { includeUnknown: true });
+const syncTags3: ExpandedTags = loadView(new DataView(new ArrayBuffer(0)), { expanded: true });
+const asyncTags1: Promise<Tags> = loadView(new DataView(new ArrayBuffer(0)), { async: true });
 
 const tags = await load("");
 const expandedTags = await load("", { expanded: true });

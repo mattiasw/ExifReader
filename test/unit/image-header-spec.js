@@ -371,6 +371,31 @@ describe('image-header', () => {
             });
         });
 
+        it('should find zTXt chunks of compressed textual data', () => {
+            const crcChecksum = '\x00\x00\x00\x00';
+
+            const chunkType = 'zTXt';
+            const chunkData = 'MyTag0\x00\x00My compressed value.';
+            const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkData.length)}`;
+            const chunk = chunkLength + chunkType + chunkData + crcChecksum;
+
+            const dataView = getDataView(PNG_IMAGE_START + chunk);
+
+            const appMarkerValues = ImageHeader.parseAppMarkers(dataView, true);
+
+            expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'png', description: 'PNG'},
+                hasAppMarkers: true,
+                pngTextChunks: [
+                    {
+                        offset: PNG_IMAGE_START.length + chunkLength.length + chunkType.length,
+                        type: 'zTXt',
+                        length: chunkData.length,
+                    },
+                ],
+            });
+        });
+
         it('should find pHYs chunks', () => {
             const chunkData = '\x01\x02\x03\x04\x02\x03\x04\x05\x01';
             const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkData.length)}`;

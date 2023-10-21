@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
+import {getArrayBuffer} from './test-utils';
 import {getCharacterArray} from '../../src/utils';
 import TagDecoder from '../../src/tag-decoder';
 
@@ -39,7 +39,7 @@ describe('tag-decoder', () => {
         const {encoding, data} = TagDecoder.decode('UTF-8', tagValue);
 
         expect(encoding).to.equal('UTF-8');
-        expect(Array.from(data)).to.deep.equal(Array.from(getDataView(TAG_VALUE_STRING).buffer));
+        expect(Array.from(data)).to.deep.equal(Array.from(getArrayBuffer(TAG_VALUE_STRING)));
     });
 
     it('should still try to use value for non-ASCII string if decoding is not possible', () => {

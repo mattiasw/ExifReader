@@ -155,7 +155,7 @@ requirejs(['/path/to/exif-reader.js'], function (ExifReader) {
 There are two ways to load the tags. Either have ExifReader do the loading of
 the image file, or load the file yourself first and pass in the file buffer. The
 main difference is that the first one is asynchronous and the second one is
-synchronous.
+synchronous unless specified.
 
 #### Let ExifReader load the file (asynchronous API)
 
@@ -180,11 +180,30 @@ const tags = ExifReader.load(fileBuffer);
 
 Where `fileBuffer` is one of
 
-*  `ArrayBuffer` or `SharedArrayBuffer` (browser)
+*  `ArrayBuffer` or `SharedArrayBuffer` (browser, Node.js)
 *  `Buffer` (Node.js)
 
 See the [examples site](https://mattiasw.github.io/ExifReader/) for more
 directions on how to use the library.
+
+#### Asynchronous tags
+
+Some tags need to be parsed asynchronously. Currently this is the case for some
+PNG tags, more specifically compressed tags in zTXt and iTXt chunks. To enable
+this, either use the asynchronous API mentioned above or pass in `async: true`
+in the options parameter:
+
+```javascript
+const tags = await ExifReader.load(file);
+// or
+const tags = await ExifReader.load(fileBuffer, {async: true});
+```
+
+For the compressed tags to work, the environment needs to support the
+[Compression Streams API](https://developer.mozilla.org/en-US/docs/Web/API/Compression_Streams_API#browser_compatibility).
+
+The reason for having an option to enable this is to not break backwards
+compatibility. This will probably be the default in the next major version.
 
 #### Using React Native
 
@@ -522,6 +541,10 @@ A selection of notable changes.
 -   **December 2023**:
     -   Add support for extracting Photoshop paths.
     -   Add basic support for GIF images (image dimensions, bit depths).
+    -   Add support for compressed tags in PNG files (in zTXt and iTXt chunks).
+        Pass in `async: true` in `options` parameter to enable. Works in
+        environments that support the
+        [Compression Streams API](https://developer.mozilla.org/en-US/docs/Web/API/Compression_Streams_API#browser_compatibility).
 -   **December 2022**:
     -   Add option `length` to only read the first `length` bytes of the file.
 -   **October 2021**:
