@@ -23,7 +23,7 @@ async function handleSubmit(event) {
     const url = event.target.elements.url.value;
 
     try {
-        const tags = await ExifReader.load(file || url);
+        const tags = await ExifReader.load(file || url, {async: true});
 
         // The MakerNote tag can be really large. Remove it to lower
         // memory usage if you're parsing a lot of files and saving the

@@ -15,7 +15,8 @@ const JFIF_DATA_CONTENT_RESOLUTION_UNIT_CM = `\x00\x0a${JFIF_IDENTIFIER}${JFIF_V
 const JFIF_DATA_CONTENT_RESOLUTION_UNIT_UNKNOWN = `\x00\x0a${JFIF_IDENTIFIER}${JFIF_VERSION}\x99`;
 const JFIF_DATA_CONTENT_XRESOLUTION = `\x00\x0c${JFIF_IDENTIFIER}${JFIF_VERSION}\x99\x00\xab`;
 const JFIF_DATA_CONTENT_YRESOLUTION = `\x00\x0e${JFIF_IDENTIFIER}${JFIF_VERSION}\x99\x00\xab\x00\xbc`;
-const JFIF_DATA_CONTENT_THUMBNAIL = `\x00\x16${JFIF_IDENTIFIER}${JFIF_VERSION}\x99\x00\xab\x00\xbc\x01\x02\x0a\x0b\x0c\x0d\x0e\x0f`;
+const JFIF_THUMBNAIL_PIXEL_DATA = '\x0a\x0b\x0c\x0d\x0e\x0f';
+const JFIF_DATA_CONTENT_THUMBNAIL = `\x00\x16${JFIF_IDENTIFIER}${JFIF_VERSION}\x99\x00\xab\x00\xbc\x01\x02${JFIF_THUMBNAIL_PIXEL_DATA}`;
 const OFFSET = 0;
 
 describe('jfif-tags', () => {
@@ -86,9 +87,9 @@ describe('jfif-tags', () => {
             value: 0x02,
             description: '2px'
         });
-        expect(tags['JFIF Thumbnail']).to.deep.equal({
-            value: getArrayBuffer('\x0a\x0b\x0c\x0d\x0e\x0f'),
-            description: '<24-bit RGB pixel data>'
-        });
+        const thumbnailValue = Array.from(new Uint8Array(tags['JFIF Thumbnail'].value));
+        const expectedValue = Array.from(getArrayBuffer(JFIF_THUMBNAIL_PIXEL_DATA));
+        expect(thumbnailValue).to.deep.equal(expectedValue);
+        expect(tags['JFIF Thumbnail'].description).to.equal('<24-bit RGB pixel data>');
     });
 });

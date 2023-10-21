@@ -191,7 +191,7 @@ interface ThumbnailTags {
     StripByteCounts?: NumberArrayTag
 }
 
-interface ExpandedTags {
+export interface ExpandedTags {
     file?: FileTags,
     jfif?: JfifTags,
     pngFile?: PngFileTags,
@@ -256,14 +256,18 @@ interface PhotoshopTags {
 }
 
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded: true, includeUnknown?: boolean, length?: number}): ExpandedTags;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Tags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded: true, includeUnknown?: boolean, length?: number, async?: false}): ExpandedTags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false, includeUnknown?: boolean, length?: number, async?: false}): Tags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded: true, includeUnknown?: boolean, length?: number, async: true}): Promise<ExpandedTags>;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false, includeUnknown?: boolean, length?: number, async: true}): Promise<Tags>;
 export function load(data: string | File): Promise<Tags>;
-export function load(data: string | File, options: {expanded: true, includeUnknown?: boolean, length?: number}): Promise<ExpandedTags>;
-export function load(data: string | File, options: {expanded?: false, includeUnknown?: boolean, length?: number}): Promise<Tags>;
+export function load(data: string | File, options: {expanded: true, includeUnknown?: boolean, length?: number, async?: boolean}): Promise<ExpandedTags>;
+export function load(data: string | File, options: {expanded?: false, includeUnknown?: boolean, length?: number, async?: boolean}): Promise<Tags>;
 export function loadView(data: DataView): Tags;
-export function loadView(data: DataView, options: {expanded: true, includeUnknown?: boolean}): ExpandedTags;
-export function loadView(data: DataView, options: {expanded?: false, includeUnknown?: boolean}): Tags;
+export function loadView(data: DataView, options: {expanded: true, includeUnknown?: boolean, async?: false}): ExpandedTags;
+export function loadView(data: DataView, options: {expanded?: false, includeUnknown?: boolean, async?: false}): Tags;
+export function loadView(data: DataView, options: {expanded: true, includeUnknown?: boolean, async: true}): Promise<ExpandedTags>;
+export function loadView(data: DataView, options: {expanded?: false, includeUnknown?: boolean, async: true}): Promise<Tags>;
 
 export namespace errors {
     export class MetadataMissingError extends Error {}

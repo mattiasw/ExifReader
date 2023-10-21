@@ -15,7 +15,7 @@ export default {
     parseAppMarkers
 };
 
-function parseAppMarkers(dataView) {
+function parseAppMarkers(dataView, async) {
     if (Constants.USE_TIFF && Tiff.isTiffFile(dataView)) {
         return addFileType(Tiff.findTiffOffsets(), 'tiff', 'TIFF');
     }
@@ -25,7 +25,7 @@ function parseAppMarkers(dataView) {
     }
 
     if (Constants.USE_PNG && Png.isPngFile(dataView)) {
-        return addFileType(Png.findPngOffsets(dataView), 'png', 'PNG');
+        return addFileType(Png.findPngOffsets(dataView, async), 'png', 'PNG');
     }
 
     if (Constants.USE_HEIC && Heic.isHeicFile(dataView)) {

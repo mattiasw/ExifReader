@@ -15,7 +15,7 @@ function decode(encoding, tagValue) {
     const Decoder = TextDecoder.get();
     if ((typeof Decoder !== 'undefined') && (encoding !== undefined)) {
         try {
-            return new Decoder(encoding).decode(Uint8Array.from(tagValue));
+            return new Decoder(encoding).decode(tagValue instanceof DataView ? tagValue.buffer : Uint8Array.from(tagValue));
         } catch (error) {
             // Pass through and fall back to ASCII decoding.
         }
