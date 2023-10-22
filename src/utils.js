@@ -68,7 +68,7 @@ export function getBase64Image(image) {
     if (typeof Buffer === 'undefined') {
         return undefined;
     }
-    if (typeof Buffer.from !== undefined) { // eslint-disable-line no-undef
+    if (typeof Buffer.from !== 'undefined') { // eslint-disable-line no-undef
         return Buffer.from(image).toString('base64'); // eslint-disable-line no-undef
     }
     return (new Buffer(image)).toString('base64'); // eslint-disable-line no-undef
@@ -84,7 +84,7 @@ export function dataUriToBuffer(dataUri) {
         if (typeof Buffer === 'undefined') {
             return undefined;
         }
-        if (typeof Buffer.from !== undefined) { // eslint-disable-line no-undef
+        if (typeof Buffer.from !== 'undefined') { // eslint-disable-line no-undef
             return Buffer.from(data, 'base64'); // eslint-disable-line no-undef
         }
         return new Buffer(data, 'base64'); // eslint-disable-line no-undef
@@ -92,7 +92,7 @@ export function dataUriToBuffer(dataUri) {
 
     const decodedData = decodeURIComponent(data);
     if (typeof Buffer !== 'undefined') {
-        if (typeof Buffer.from !== undefined) { // eslint-disable-line no-undef
+        if (typeof Buffer.from !== 'undefined') { // eslint-disable-line no-undef
             return Buffer.from(decodedData); // eslint-disable-line no-undef
         }
         return new Buffer(decodedData); // eslint-disable-line no-undef
