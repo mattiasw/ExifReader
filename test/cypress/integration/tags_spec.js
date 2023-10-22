@@ -158,9 +158,8 @@ for (const moduleType of moduleTypes) {
                     } else {
                         cy
                             .get('#file')
-                            .attachFile({
-                                filePath: `images/${image.name}`,
-                                encoding: 'binary'
+                            .selectFile({
+                                contents: `test/fixtures/images/${image.name}`,
                             });
                     }
                     cy.get('input[value="Load file"]').click();
