@@ -12,7 +12,7 @@ describe('dom-parser', function () {
         originalNonWebpackRequire = global.__non_webpack_require__;
         global.__non_webpack_require__ = require;
         this.originalDOMParser = global.DOMParser;
-        if (typeof global.DOMParser !== undefined) {
+        if (typeof global.DOMParser !== 'undefined') {
             delete global.DOMParser;
         }
     });

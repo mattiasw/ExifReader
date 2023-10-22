@@ -130,26 +130,28 @@ const images = [
 for (const moduleType of moduleTypes) {
     describe(moduleType.name, function () {
         it('shows the source code', function () {
+            cy.visit('/');
             cy
-                .visit('/')
                 .get(`a[href^="${moduleType.path}"]`)
-                .click()
+                .click();
+            cy
                 .get('.source-code pre.hidden')
                 .get('.show-button')
-                .click()
+                .click();
+            cy
                 .get('.source-code pre:not(.hidden)')
-                .contains(moduleType.codeIdentifier)
+                .contains(moduleType.codeIdentifier);
+            cy
                 .get('.show-button')
-                .click()
-                .get('.source-code pre.hidden');
+                .click();
+            cy.get('.source-code pre.hidden');
         });
 
         for (const image of images) {
             describe(image.name || image.url, function () {
                 beforeEach(function () {
-                    cy
-                        .visit(`/${moduleType.path}/`)
-                        .get('html[data-initialized]');
+                    cy.visit(`/${moduleType.path}/`);
+                    cy.get('html[data-initialized]');
                 });
 
                 it('loads the tags', function () {
@@ -158,12 +160,13 @@ for (const moduleType of moduleTypes) {
                     } else {
                         cy
                             .get('#file')
-                            .attachFile({
-                                filePath: `images/${image.name}`,
-                                encoding: 'binary'
+                            .selectFile({
+                                contents: `test/fixtures/images/${image.name}`,
                             });
                     }
-                    cy.get('input[value="Load file"]').click();
+                    cy
+                        .get('input[value="Load file"]')
+                        .click();
                     if (image.hasThumbnail) {
                         cy.get('#thumbnail[src^="data"]');
                     }

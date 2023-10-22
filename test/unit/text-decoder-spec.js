@@ -8,7 +8,7 @@ import TextDecoderModule from '../../src/text-decoder';
 describe('text-decoder', function () {
     beforeEach(() => {
         this.originalTextDecoder = global.TextDecoder;
-        if (typeof global.TextDecoder !== undefined) {
+        if (typeof global.TextDecoder !== 'undefined') {
             delete global.TextDecoder;
         }
     });
@@ -23,7 +23,7 @@ describe('text-decoder', function () {
     });
 
     it('should return undefined if TextDecoder was not available', () => {
-        if (typeof global.TextDecoder !== undefined) {
+        if (typeof global.TextDecoder !== 'undefined') {
             delete global.TextDecoder;
         }
         const Decoder = TextDecoderModule.get();

@@ -1,7 +1,7 @@
 const {expect} = require('chai');
 const path = require('path');
 const fs = require('fs');
-const rimraf = require('rimraf');
+const {rimrafSync} = require('rimraf');
 const {execSync} = require('child_process');
 const Exif = require('./exif');
 const configurations = require('./custom-builds.json');
@@ -92,8 +92,8 @@ describe('custom configuration image outputs', () => {
 
     function cleanUp() {
         process.chdir(ORIGINAL_DIR);
-        rimraf.sync(PACKAGE, {disableGlob: true});
-        rimraf.sync(TEMP_PROJECT_DIR, {disableGlob: true});
+        rimrafSync(PACKAGE, {disableGlob: true});
+        rimrafSync(TEMP_PROJECT_DIR, {disableGlob: true});
     }
 
     function updatePackageJson(config) {

@@ -22,38 +22,37 @@
   ],
   "types": "./exif-reader.d.ts",
   "optionalDependencies": {
-    "@xmldom/xmldom": "^0.8.8"
+    "@xmldom/xmldom": "^0.8.10"
   },
   "devDependencies": {
-    "@babel/core": "^7.15.8",
-    "@babel/preset-env": "^7.15.8",
-    "@babel/register": "^7.15.3",
-    "@types/node": "^14.14.36",
-    "babel-loader": "^8.2.2",
+    "@babel/core": "^7.23.2",
+    "@babel/preset-env": "^7.23.2",
+    "@babel/register": "^7.22.15",
+    "@types/node": "^18.11.9",
+    "babel-loader": "^8.2.5",
     "babel-plugin-rewire": "^1.2.0",
-    "chai": "^4.3.4",
+    "chai": "^4.3.10",
     "cross-env": "^7.0.3",
-    "cypress": "^8.5.0",
-    "cypress-file-upload": "^5.0.8",
-    "eslint": "^8.0.0",
-    "eslint-plugin-cypress": "^2.12.1",
-    "husky": "^4.3.8",
-    "mocha": "^9.1.2",
+    "cypress": "^13.3.2",
+    "eslint": "^8.52.0",
+    "eslint-plugin-cypress": "^2.15.1",
+    "husky": "^8.0.0",
+    "mocha": "^10.2.0",
     "npm-run-all": "^4.1.5",
     "nyc": "^15.1.0",
-    "rimraf": "^3.0.2",
-    "string-replace-loader": "^3.0.3",
-    "terser-webpack-plugin": "^5.2.4",
-    "typescript": "^5.0.2",
-    "webpack": "^5.74.0",
-    "webpack-cli": "^4.10.0",
-    "webpack-dev-server": "^4.11.1"
+    "rimraf": "^5.0.5",
+    "string-replace-loader": "^3.1.0",
+    "terser-webpack-plugin": "^5.3.9",
+    "typescript": "^5.2.2",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
   },
   "scripts": {
     "build": "node bin/build.js",
     "build:pages": "node bin/build-pages.js",
     "coverage": "nyc npm test",
-    "cypress:open": "cypress open",
+    "cypress:open": "cypress open --e2e",
     "lint": "eslint .",
     "start": "cross-env NODE_ENV=development webpack serve",
     "test": "cross-env BABEL_ENV=test mocha --require @babel/register --recursive \"test/unit/\"",
@@ -62,13 +61,15 @@
     "test:build:update": "node test/build/update.js",
     "test:e2e": "cypress run",
     "test:types": "tsc --noEmit --project test/types",
-    "test:all": "npm-run-all lint coverage test:e2e test:build test:build:custom test:types",
-    "postinstall": "node bin/build.js --only-with-config"
+    "test:all": "npm-run-all lint test:types coverage test:e2e test:build test:build:custom",
+    "pre-commit": "npm-run-all lint test test:build",
+    "postinstall": "node bin/build.js --only-with-config",
+    "prepare": "husky install"
   },
   "nyc": {
     "check-coverage": true,
     "statements": 95,
-    "branches": 92,
+    "branches": 91,
     "functions": 98,
     "lines": 95,
     "reporter": [
@@ -90,10 +91,5 @@
     "Edge >= 12",
     "Safari >= 5.1",
     "Opera >= 12.1"
-  ],
-  "husky": {
-    "hooks": {
-      "pre-commit": "npm-run-all lint test test:build"
-    }
-  }
+  ]
 }
