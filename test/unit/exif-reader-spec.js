@@ -55,7 +55,8 @@ describe('exif-reader', function () {
                 }
             });
             ExifReaderRewireAPI.__Rewire__('loadView', function (dataView) {
-                if (dataView.buffer !== IMAGE) {
+                if ((dataView.buffer instanceof Buffer && dataView.buffer !== IMAGE)
+                    || (dataView instanceof DataView && new TextDecoder().decode(dataView) !== IMAGE)) {
                     throw new Error('DataView error, does not match image.');
                 }
                 return TAGS;
