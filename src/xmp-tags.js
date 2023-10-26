@@ -221,12 +221,16 @@ function parseNodeAttributesAsTags(attributes) {
     const tags = {};
 
     for (const name in attributes) {
-        if (isTagAttribute(name)) {
-            tags[getLocalName(name)] = {
-                value: attributes[name],
-                attributes: {},
-                description: getDescription(attributes[name], name)
-            };
+        try {
+            if (isTagAttribute(name)) {
+                tags[getLocalName(name)] = {
+                    value: attributes[name],
+                    attributes: {},
+                    description: getDescription(attributes[name], name)
+                };
+            }
+        } catch (error) {
+            // Keep going and try to parse the rest of the tags.
         }
     }
 
@@ -321,8 +325,12 @@ function parseNodeChildrenAsTags(children) {
     const tags = {};
 
     for (const name in children) {
-        if (!isNamespaceDefinition(name)) {
-            tags[getLocalName(name)] = parseNodeAsTag(children[name], name);
+        try {
+            if (!isNamespaceDefinition(name)) {
+                tags[getLocalName(name)] = parseNodeAsTag(children[name], name);
+            }
+        } catch (error) {
+            // Keep going and try to parse the rest of the tags.
         }
     }
 
@@ -330,6 +338,12 @@ function parseNodeChildrenAsTags(children) {
 }
 
 function parseNodeAsTag(node, name) {
+    if (isDuplicateTag(node)) {
+        return parseNodeAsDuplicateTag(node, name);
+    }
+    if (isEmptyResourceTag(node)) {
+        return {value: '', attributes: {}, description: ''};
+    }
     if (hasNestedSimpleRdfDescription(node)) {
         return parseNodeAsSimpleRdfDescription(node, name);
     }
@@ -343,6 +357,20 @@ function parseNodeAsTag(node, name) {
         return parseNodeAsArray(node, name);
     }
     return parseNodeAsSimpleValue(node, name);
+}
+
+function isEmptyResourceTag(node) {
+    return (node.attributes['rdf:parseType'] === 'Resource')
+        && (typeof node.value === 'string')
+        && (node.value.trim() === '');
+}
+
+function isDuplicateTag(node) {
+    return Array.isArray(node);
+}
+
+function parseNodeAsDuplicateTag(node, name) {
+    return parseNodeAsSimpleValue(node[node.length - 1], name);
 }
 
 function hasNestedSimpleRdfDescription(node) {
