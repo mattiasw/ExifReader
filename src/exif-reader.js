@@ -15,6 +15,7 @@ import {getStringValueFromArray} from './utils.js';
 import {getCalculatedGpsValue} from './tag-names-utils.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
+import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
 import JfifTags from './jfif-tags.js';
 import IptcTags from './iptc-tags.js';
@@ -316,7 +317,7 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
 
     if (Constants.USE_MPF && hasMpfData(mpfDataOffset)) {
         foundMetaData = true;
-        const readMpfTags = Tags.readMpf(dataView, mpfDataOffset, includeUnknown);
+        const readMpfTags = MpfTags.read(dataView, mpfDataOffset, includeUnknown);
         if (expanded) {
             tags.mpf = readMpfTags;
         } else {

@@ -7,7 +7,7 @@ browser or from Node. Supports JPEG, TIFF, PNG, HEIC, and WebP files with Exif,
 IPTC, XMP, ICC, and MPF metadata (depending on file type).
 
 ExifReader is highly and easily configurable and the resulting bundle can be as
-small as **3 KiB** (gzipped) if you're only interested in a few tags (e.g. date
+small as **~4 KiB** (gzipped) if you're only interested in a few tags (e.g. date
 and/or GPS values).
 
 ExifReader supports module formats ESM, AMD, CommonJS, and globals and can
@@ -342,7 +342,7 @@ almost half the size of the full one (non-gzipped)):
 ```
 
 **Example 2:** Only include TIFF files, and the Exif `DateTime` tag and the GPS
-tags (resulting bundle will be ~16 % of a full build):
+tags (resulting bundle will be ~19 % of a gzipped full build):
 
 ```javascript
 "exifreader": {
