@@ -100,6 +100,44 @@ describe('xmp-tags', function () {
         });
     });
 
+    it('should be able to handle duplicate tags', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:exif='http://ns.adobe.com/exif/1.0/'>
+                <xmp:MyXMPTag>4812</xmp:MyXMPTag>
+                <xmp:MyXMPTag>4813</xmp:MyXMPTag>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
+        expect(tags).to.deep.equal({
+            _raw: xmlString,
+            MyXMPTag: {
+                value: '4813',
+                attributes: {},
+                description: '4813'
+            }
+        });
+    });
+
+    it('should be able to handle resource tags with non-zero length, white space-only content', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:exif='http://ns.adobe.com/exif/1.0/'>
+                <exif:MyXMPTag rdf:parseType="Resource">
+                </exif:MyXMPTag>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
+        expect(tags).to.deep.equal({
+            _raw: xmlString,
+            MyXMPTag: {
+                value: '',
+                attributes: {},
+                description: ''
+            }
+        });
+    });
+
     it('should be able to read a UTF-8 value', () => {
         const xmlString = getXmlString(`
             <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
