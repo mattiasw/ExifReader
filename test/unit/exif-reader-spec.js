@@ -438,7 +438,7 @@ describe('exif-reader', function () {
     it('should be able to find MPF APP segment', () => {
         const myTags = {MyMpfTag: 42};
         rewireImageHeader({mpfDataOffset: OFFSET_TEST_VALUE});
-        rewireTagsRead('Tags', {}, myTags);
+        rewireMpfTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -496,7 +496,8 @@ describe('exif-reader', function () {
         });
         rewireTagsRead('FileTags', myTags.file);
         rewireTagsRead('JfifTags', myTags.jfif);
-        rewireTagsRead('Tags', {...myTags.exif, Thumbnail: myTags.Thumbnail}, myTags.mpf);
+        rewireTagsRead('Tags', {...myTags.exif, Thumbnail: myTags.Thumbnail});
+        rewireMpfTagsRead(myTags.mpf);
         rewireTagsRead('IptcTags', myTags.iptc);
         rewireXmpTagsRead(myTags.xmp);
         rewireIccTagsRead(myTags.icc);
@@ -791,7 +792,7 @@ function rewireImageHeader(appMarkersValue) {
     });
 }
 
-function rewireTagsRead(tagsObject, tagsValue, mpfTagsValue = {}) {
+function rewireTagsRead(tagsObject, tagsValue) {
     ExifReaderRewireAPI.__Rewire__(tagsObject, {
         read(dataView, offset) {
             if (Array.isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
@@ -799,9 +800,14 @@ function rewireTagsRead(tagsObject, tagsValue, mpfTagsValue = {}) {
             }
             return {};
         },
-        readMpf(dataView, offset) {
+    });
+}
+
+function rewireMpfTagsRead(tagsValue) {
+    ExifReaderRewireAPI.__Rewire__('MpfTags', {
+        read(dataView, offset) {
             if (Array.isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
-                return mpfTagsValue;
+                return tagsValue;
             }
             return {};
         }
