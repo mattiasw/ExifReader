@@ -113,6 +113,7 @@ describe('exif-reader', function () {
         describe('loading from URL in a Node.js context', () => {
             const URL = 'https://domain.com/path/to/image.jpg';
             const HTTP_URL = URL.replace('https', 'http');
+            const OTHER_PROTOCOL_URL = 'app://domain.com/path/to/image.jpg';
             let getEvents;
             let getResult;
             let httpResponse;
@@ -146,7 +147,7 @@ describe('exif-reader', function () {
                     if (/^https?$/.test(moduleName)) {
                         return {
                             get(url, options, callback) {
-                                if ((url !== URL) && (url !== HTTP_URL)) {
+                                if ((url !== URL) && (url !== HTTP_URL) && (url !== OTHER_PROTOCOL_URL)) {
                                     throw new Error('Error.');
                                 }
                                 setTimeout(() => callback(httpResponse), 0);
@@ -171,6 +172,13 @@ describe('exif-reader', function () {
 
             it('should load data from a remote location when an HTTP URL is passed in', (done) => {
                 ExifReader.load(HTTP_URL).then((tags) => {
+                    expect(tags).to.deep.equal(TAGS);
+                    done();
+                });
+            });
+
+            it('should load data from a remote location when a URL with another protocol is passed in', (done) => {
+                ExifReader.load(OTHER_PROTOCOL_URL).then((tags) => {
                     expect(tags).to.deep.equal(TAGS);
                     done();
                 });
