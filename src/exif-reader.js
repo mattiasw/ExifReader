@@ -51,12 +51,12 @@ function isFilePathOrURL(data) {
 }
 
 function loadFile(filename, options) {
-    if (/^https?:\/\//.test(filename)) {
+    if (/^\w+:\/\//.test(filename)) {
         if (typeof fetch !== 'undefined') {
-            return browserFetchRemoteFile(filename, options);
+            return fetchRemoteFile(filename, options);
         }
 
-        return nodeFetchRemoteFile(filename, options);
+        return nodeGetRemoteFile(filename, options);
     }
 
     if (isDataUri(filename)) {
@@ -66,7 +66,7 @@ function loadFile(filename, options) {
     return loadLocalFile(filename, options);
 }
 
-function browserFetchRemoteFile(url, {length} = {}) {
+function fetchRemoteFile(url, {length} = {}) {
     const options = {method: 'GET'};
     if (Number.isInteger(length) && length >= 0) {
         options.headers = {
@@ -76,7 +76,7 @@ function browserFetchRemoteFile(url, {length} = {}) {
     return fetch(url, options).then((response) => response.arrayBuffer());
 }
 
-function nodeFetchRemoteFile(url, {length} = {}) {
+function nodeGetRemoteFile(url, {length} = {}) {
     return new Promise((resolve, reject) => {
         const options = {};
         if (Number.isInteger(length) && length >= 0) {
