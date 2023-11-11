@@ -6,15 +6,17 @@ const path = require('path');
 const {execSync} = require('child_process');
 const dependentHasExifReaderConfig = require('./findDependentConfig');
 
+const WEBPACK_VERSION = '5.89.0';
+
 process.chdir(path.join(__dirname, '..'));
 
 if (!process.argv.includes('--only-with-config') || checkConfig()) {
-    execSync('webpack', {stdio: 'inherit'});
+    execSync(`npx webpack@${WEBPACK_VERSION}`, {stdio: 'inherit'});
 }
 
 function checkConfig() {
     if (dependentHasExifReaderConfig()) {
-        if (!isDependenciesInstalled()) {
+        if (!areDependenciesInstalled()) {
             console.log('Installing ExifReader custom build dependencies...'); // eslint-disable-line no-console
             const packages = [
                 '@babel/core@7.23.2',
@@ -23,7 +25,7 @@ function checkConfig() {
                 'babel-loader@8.2.5',
                 'cross-env@7.0.3',
                 'string-replace-loader@3.1.0',
-                'webpack@5.89.0',
+                `webpack@${WEBPACK_VERSION}`,
                 'webpack-cli@5.1.4',
                 'terser-webpack-plugin@5.3.9'
             ];
@@ -35,7 +37,7 @@ function checkConfig() {
     return false;
 }
 
-function isDependenciesInstalled() {
+function areDependenciesInstalled() {
     try {
         execSync('npm ls webpack');
         return true;
