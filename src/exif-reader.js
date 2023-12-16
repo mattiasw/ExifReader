@@ -20,6 +20,7 @@ import FileTags from './file-tags.js';
 import JfifTags from './jfif-tags.js';
 import IptcTags from './iptc-tags.js';
 import XmpTags from './xmp-tags.js';
+import PhotoshopTags from './photoshop-tags.js';
 import IccTags from './icc-tags.js';
 import PngFileTags from './png-file-tags.js';
 import PngTextTags from './png-text-tags.js';
@@ -263,6 +264,15 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
             } else {
                 delete readXmpTags._raw;
                 tags = objectAssign({}, tags, readXmpTags);
+            }
+        }
+
+        if (Constants.USE_PHOTOSHOP && readTags['ImageSourceData']) {
+            const readPhotoshopTags = PhotoshopTags.read(readTags['PhotoshopSettings'].value, includeUnknown);
+            if (expanded) {
+                tags.photoshop = readPhotoshopTags;
+            } else {
+                tags = objectAssign({}, tags, readPhotoshopTags);
             }
         }
 

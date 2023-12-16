@@ -88,33 +88,48 @@ expandedTags.png?.["Custom Tag Name"]?.description === "Should work";
 /////////
 // RIFF
 tags["Alpha"]?.value === 0;
-tags["Alpha"]?.description === 'Yes';
-tags["Alpha"]?.description === 'No';
+tags["Alpha"]?.description === "Yes";
+tags["Alpha"]?.description === "No";
 // @ts-expect-error
-tags["Alpha"]?.description === 'Maybe';
+tags["Alpha"]?.description === "Maybe";
 expandedTags["riff"]?.["Alpha"]?.value === 0;
-expandedTags["riff"]?.["Alpha"]?.description === 'Yes';
-expandedTags["riff"]?.["Alpha"]?.description === 'No';
+expandedTags["riff"]?.["Alpha"]?.description === "Yes";
+expandedTags["riff"]?.["Alpha"]?.description === "No";
 // @ts-expect-error
-expandedTags["riff"]?.["Alpha"]?.description === 'Maybe';
+expandedTags["riff"]?.["Alpha"]?.description === "Maybe";
 
 tags["Animation"]?.value === 0;
-tags["Animation"]?.description === 'Yes';
-tags["Animation"]?.description === 'No';
+tags["Animation"]?.description === "Yes";
+tags["Animation"]?.description === "No";
 // @ts-expect-error
-tags["Animation"]?.description === 'Maybe';
+tags["Animation"]?.description === "Maybe";
 expandedTags["riff"]?.["Animation"]?.value === 0;
-expandedTags["riff"]?.["Animation"]?.description === 'Yes';
-expandedTags["riff"]?.["Animation"]?.description === 'No';
+expandedTags["riff"]?.["Animation"]?.description === "Yes";
+expandedTags["riff"]?.["Animation"]?.description === "No";
 // @ts-expect-error
-expandedTags["riff"]?.["Animation"]?.description === 'Maybe';
+expandedTags["riff"]?.["Animation"]?.description === "Maybe";
 
 tags["ImageWidth"]?.value === 100;
-tags["ImageWidth"]?.description === '100px';
+tags["ImageWidth"]?.description === "100px";
 expandedTags["riff"]?.["ImageWidth"]?.value === 100;
-expandedTags["riff"]?.["ImageWidth"]?.description === '100px';
+expandedTags["riff"]?.["ImageWidth"]?.description === "100px";
 
 tags["ImageHeight"]?.value === 100;
-tags["ImageHeight"]?.description === '100px';
+tags["ImageHeight"]?.description === "100px";
 expandedTags["riff"]?.["ImageHeight"]?.value === 100;
-expandedTags["riff"]?.["ImageHeight"]?.description === '100px';
+expandedTags["riff"]?.["ImageHeight"]?.description === "100px";
+
+//////////////
+// Photoshop
+// expandedTags.photoshop?.["CaptionDigest"]?.id === 4711;
+// expandedTags.photoshop?.["CaptionDigest"]?.value === "string";
+// expandedTags.photoshop?.["CaptionDigest"]?.description === "abcd1234";
+// expandedTags.photoshop?.["PrintInformation"]?.description === '{"a": 1}';
+// expandedTags.photoshop?.["PrintStyle"]?.description === '{"a": 1}';
+expandedTags.photoshop?.["PathInformation"]?.description === '{"a": 1}';
+expandedTags.photoshop?.["ClippingPathName"]?.description === '{"a": 1}';
+// tags["CaptionDigest"]?.id === 4711;
+// tags["CaptionDigest"]?.value === "string";
+// tags["CaptionDigest"]?.description === "abcd1234";
+tags["PathInformation"]?.description === '{"a": 1}';
+tags["ClippingPathName"]?.description === '{"a": 1}';

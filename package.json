@@ -62,7 +62,7 @@
     "test:e2e": "cypress run",
     "test:types": "tsc --noEmit --project test/types",
     "test:all": "npm-run-all lint test:types coverage test:e2e test:build test:build:custom",
-    "pre-commit": "npm-run-all lint test test:build",
+    "pre-commit": "npm-run-all lint test:types test test:build",
     "postinstall": "node bin/build.js --only-with-config",
     "prepare": "husky install"
   },

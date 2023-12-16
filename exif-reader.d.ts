@@ -124,6 +124,8 @@ type NumberArrayTag = TypedTag<number[]>
 
 type StringArrayTag = TypedTag<string[]>
 
+type StringTag = TypedTag<string>;
+
 interface ValueTag {
     description: string,
     value: string
@@ -175,6 +177,7 @@ interface ExpandedTags {
     riff?: RiffTags,
     Thumbnail?: ThumbnailTags,
     gps?: GpsTags
+    photoshop?: PhotoshopTags;
 }
 
 interface GpsTags {
@@ -214,6 +217,14 @@ interface MPFImageTags {
     },
     image: ArrayBuffer | SharedArrayBuffer | Buffer,
     base64: string
+}
+
+interface PhotoshopTags {
+    // CaptionDigest: StringTag;
+    // PrintInformation: StringTag;
+    // PrintStyle: StringTag;
+    PathInformation: StringTag;
+    ClippingPathName: StringTag;
 }
 
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;
@@ -473,7 +484,7 @@ interface IccTags {
     [name: string]: ValueTag;
 }
 
-export type Tags = XmpTags & IccTags & PngTags & RiffTags & {
+export type Tags = XmpTags & IccTags & PngTags & RiffTags & PhotoshopTags & {
     'Thumbnail'?: ThumbnailTags;
     'Images'?: MPFImageTags[],
 } & {
