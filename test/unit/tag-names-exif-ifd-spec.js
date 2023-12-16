@@ -262,6 +262,10 @@ describe('tag-names-exif-ifd', () => {
         expect(TagNamesExifIfd[0x9292]).to.equal('SubSecTimeDigitized');
     });
 
+    it('should have tag ImageSourceData', () => {
+        expect(TagNamesExifIfd[0x935c]).to.equal('ImageSourceData');
+    });
+
     it('should have tag AmbientTemperature', () => {
         expect(TagNamesExifIfd[0x9400].name).to.equal('AmbientTemperature');
         expect(TagNamesExifIfd[0x9400].description([6, 5])).to.equal('1.2 °C');

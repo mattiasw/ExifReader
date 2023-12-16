@@ -18,16 +18,21 @@ You can try it out on the
 
 **Support table**
 
-| File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Thumbnail |
-| ----------|---------|---------|---------|---------|---------|-----------|
-| JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **yes**   |
-| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | no        |
-| PNG       | **yes** | no      | **yes** | no      | ???     | no        |
-| HEIC/HEIF | **yes** | no      | no      | **yes** | ???     | no        |
-| WebP      | **yes** | no      | **yes** | **yes** | ???     | **yes**   |
+| File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | Thumbnail |
+| ----------|---------|---------|---------|---------|---------|---------------|-----------|
+| JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **yes**   |
+| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | ???           | no        |
+| PNG       | **yes** | no      | **yes** | no      | ???     | ???           | no        |
+| HEIC/HEIF | **yes** | no      | no      | **yes** | ???     | ???           | no        |
+| WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   |
 
-??? = MPF may be supported in any file type using Exif since it's an Exif
-extension, but it has only been tested on JPEGs.
+- ??? = may be supported in any file type using Exif but it has only been tested
+    on JPEGs.
+- &ast; = A draft implementation of Photoshop tags have been added with
+    `ClippingPathName` and `PathInformation` currently supported. Photoshop tags
+    are very different from other tags and need a lot of extra code so they have
+    deliberately not been fully implemented. File an issue if there is something
+    you think should really be supported.
 
 If you're missing something that you think should be supported, file an issue
 with an attached example image and I'll see what I can do.
@@ -410,11 +415,12 @@ Possible modules to include or exclude:
 | `file`      | JPEG file details: image width, height etc.                    |
 | `jfif`      | JFIF details in JPEG files: resolution, thumbnail etc.         |
 | `png_file`  | PNG file details: image width, height etc.                     |
-| `exif`      | Regular Exif tags. If excluded, will also exclude `mpf` and `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
+| `exif`      | Regular Exif tags. If excluded, will also exclude `mpf`, `photoshop` and `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
 | `iptc`      | IPTC tags.                                                     |
 | `xmp`       | XMP tags.                                                      |
 | `icc`       | ICC color profile tags.                                        |
 | `mpf`       | Multi-picture Format tags.                                     |
+| `photoshop` | Photoshop tags.                                                |
 | `thumbnail` | Thumbnail. Needs `exif`.                                       |
 
 Notes

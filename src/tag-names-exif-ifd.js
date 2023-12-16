@@ -177,6 +177,7 @@ export default {
     0x9290: 'SubSecTime',
     0x9291: 'SubSecTimeOriginal',
     0x9292: 'SubSecTimeDigitized',
+    0x935c: 'ImageSourceData',
     0x9400: {
         'name': 'AmbientTemperature',
         'description': (value) => (value[0] / value[1]) + ' °C'

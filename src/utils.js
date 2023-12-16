@@ -2,6 +2,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import DataViewWrapper from './dataview.js';
+
+export function getDataView(data, byteOffset, byteLength) {
+    try {
+        return new DataView(data, byteOffset, byteLength);
+    } catch (error) {
+        return new DataViewWrapper(data, byteOffset, byteLength);
+    }
+}
+
 export function getStringFromDataView(dataView, offset, length) {
     const chars = [];
     for (let i = 0; i < length && offset + i < dataView.byteLength; i++) {
@@ -15,7 +25,16 @@ export function getUnicodeStringFromDataView(dataView, offset, length) {
     for (let i = 0; i < length && offset + i < dataView.byteLength; i += 2) {
         chars.push(dataView.getUint16(offset + i));
     }
+    if (chars[chars.length - 1] === 0) {
+        chars.pop();
+    }
     return getStringValueFromArray(chars);
+}
+
+export function getPascalStringFromDataView(dataView, offset) {
+    const size = dataView.getUint8(offset);
+    const string = getStringFromDataView(dataView, offset + 1, size);
+    return [size, string];
 }
 
 export function getStringValueFromArray(charArray) {
@@ -98,4 +117,18 @@ export function dataUriToBuffer(dataUri) {
         return new Buffer(decodedData); // eslint-disable-line no-undef
     }
     return Uint8Array.from(decodedData, (char) => char.charCodeAt(0)).buffer;
+}
+
+export function padStart(string, length, character) {
+    const padding = strRepeat(character, length - string.length);
+    return padding + string;
+}
+
+export function parseFloatRadix(string, radix) {
+    return parseInt(string.replace('.', ''), radix)
+        / Math.pow(radix, (string.split('.')[1] || '').length);
+}
+
+export function strRepeat(string, num) {
+    return new Array(num + 1).join(string);
 }

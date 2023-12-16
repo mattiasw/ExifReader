@@ -11,6 +11,7 @@
                 "xmp": true,
                 "icc": true,
                 "mpf": true,
+                "photoshop": true,
                 "thumbnail": true,
                 "tiff": true,
                 "jpeg": true,
@@ -28,7 +29,8 @@
                 "exif": true,
                 "iptc": true,
                 "xmp": true,
-                "icc": true
+                "icc": true,
+                "photoshop": true
             }
         }
     },
@@ -53,6 +55,7 @@
                 "xmp": true,
                 "icc": true,
                 "mpf": true,
+                "photoshop": true,
                 "thumbnail": true
             }
         }
