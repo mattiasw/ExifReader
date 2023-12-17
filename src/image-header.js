@@ -8,6 +8,7 @@ import Jpeg from './image-header-jpeg.js';
 import Png from './image-header-png.js';
 import Heic from './image-header-heic.js';
 import Webp from './image-header-webp.js';
+import Gif from './image-header-gif.js';
 import {objectAssign} from './utils.js';
 
 export default {
@@ -33,6 +34,10 @@ function parseAppMarkers(dataView) {
 
     if (Constants.USE_WEBP && Webp.isWebpFile(dataView)) {
         return addFileType(Webp.findOffsets(dataView), 'webp', 'WebP');
+    }
+
+    if (Constants.USE_GIF && Gif.isGifFile(dataView)) {
+        return addFileType(Gif.findOffsets(dataView), 'gif', 'GIF');
     }
 
     throw new Error('Invalid image format');

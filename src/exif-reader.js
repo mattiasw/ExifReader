@@ -26,6 +26,7 @@ import PngFileTags from './png-file-tags.js';
 import PngTextTags from './png-text-tags.js';
 import PngTags from './png-tags.js';
 import Vp8xTags from './vp8x-tags.js';
+import GifFileTags from './gif-file-tags.js';
 import Thumbnail from './thumbnail.js';
 import exifErrors from './errors.js';
 
@@ -211,6 +212,7 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         pngTextChunks,
         pngChunkOffsets,
         vp8xChunkOffset,
+        gifHeaderOffset
     } = ImageHeader.parseAppMarkers(dataView);
 
     if (Constants.USE_JPEG && Constants.USE_FILE && hasFileData(fileDataOffset)) {
@@ -377,6 +379,16 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         }
     }
 
+    if (Constants.USE_GIF && hasGifFileData(gifHeaderOffset)) {
+        foundMetaData = true;
+        const readTags = GifFileTags.read(dataView, gifHeaderOffset);
+        if (expanded) {
+            tags.gif = !tags.gif ? readTags : objectAssign({}, tags.gif, readTags);
+        } else {
+            tags = objectAssign({}, tags, readTags);
+        }
+    }
+
     const thumbnail = (Constants.USE_JPEG || Constants.USE_WEBP)
         && Constants.USE_EXIF
         && Constants.USE_THUMBNAIL
@@ -488,4 +500,8 @@ function hasPngData(pngChunkOffsets) {
 
 function hasVp8xData(vp8xChunkOffset) {
     return vp8xChunkOffset !== undefined;
+}
+
+function hasGifFileData(gifHeaderOffset) {
+    return gifHeaderOffset !== undefined;
 }
