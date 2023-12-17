@@ -16,6 +16,7 @@ describe('image-header', () => {
         ImageHeaderRewireAPI.__ResetDependency__('Png');
         ImageHeaderRewireAPI.__ResetDependency__('Heic');
         ImageHeaderRewireAPI.__ResetDependency__('Webp');
+        ImageHeaderRewireAPI.__ResetDependency__('Gif');
         ImageHeaderPngRewireAPI.__ResetDependency__('Constants');
     });
 
@@ -511,6 +512,36 @@ describe('image-header', () => {
 
         it('should handle when WebP files have been excluded in a custom build', () => {
             ImageHeaderRewireAPI.__Rewire__('Constants', {USE_WEBP: false});
+            expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
+        });
+    });
+
+    describe('GIF files', () => {
+        const dataView = {};
+        const offsets = {};
+
+        beforeEach(() => {
+            ImageHeaderRewireAPI.__Rewire__('Gif', {
+                isGifFile: (_dataView) => _dataView === dataView,
+                findOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+            });
+        });
+
+        it('should handle GIF files', () => {
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'gif', description: 'GIF'}});
+        });
+
+        it('should ignore file when it\'s not a GIF image', () => {
+            ImageHeaderRewireAPI.__Rewire__('Gif', {
+                isGifFile: () => false,
+                findOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+            });
+
+            expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
+        });
+
+        it('should handle when Gif files have been excluded in a custom build', () => {
+            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_GIF: false});
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });

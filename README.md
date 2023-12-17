@@ -18,17 +18,19 @@ You can try it out on the
 
 **Support table**
 
-| File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | Thumbnail |
-| ----------|---------|---------|---------|---------|---------|---------------|-----------|
-| JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **yes**   |
-| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | ???           | no        |
-| PNG       | **yes** | no      | **yes** | no      | ???     | ???           | no        |
-| HEIC/HEIF | **yes** | no      | no      | **yes** | ???     | ???           | no        |
-| WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   |
+| File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | Thumbnail | Image details |
+| ----------|---------|---------|---------|---------|---------|---------------|-----------|---------------|
+| JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **yes**   | **yes**       |
+| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | ???           | no        | no            |
+| PNG       | **yes** | no      | **yes** | no      | ???     | ???           | no        | **yes**       |
+| HEIC/HEIF | **yes** | no      | no      | **yes** | ???     | ???           | no        | no            |
+| WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   | **yes**       |
+| GIF       | no      | no      | no      | no      | no      | no            | no        | **yes**       |
 
-- ??? = may be supported in any file type using Exif but it has only been tested
+- `Image details` = image width, height, etc. read from image header.
+- `???` = may be supported in any file type using Exif but it has only been tested
     on JPEGs.
-- &ast; = A draft implementation of Photoshop tags have been added with
+- `*` = A draft implementation of Photoshop tags have been added with
     `ClippingPathName` and `PathInformation` currently supported. Photoshop tags
     are very different from other tags and need a lot of extra code so they have
     deliberately not been fully implemented. File an issue if there is something
@@ -412,6 +414,7 @@ Possible modules to include or exclude:
 | `png`       | PNG images.                                                    |
 | `heic`      | HEIC/HEIF images.                                              |
 | `webp`      | WebP images.                                                   |
+| `gif`       | GIF images.                                                    |
 | `file`      | JPEG file details: image width, height etc.                    |
 | `jfif`      | JFIF details in JPEG files: resolution, thumbnail etc.         |
 | `png_file`  | PNG file details: image width, height etc.                     |
@@ -516,6 +519,9 @@ Changelog
 
 A selection of notable changes.
 
+-   **December 2023**:
+    -   Add support for extracting Photoshop paths.
+    -   Add basic support for GIF images (image dimensions, bit depths).
 -   **December 2022**:
     -   Add option `length` to only read the first `length` bytes of the file.
 -   **October 2021**:

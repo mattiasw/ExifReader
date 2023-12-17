@@ -63,6 +63,19 @@ const images = [
         }
     },
     {
+        name: 'test.gif',
+        hasThumbnail: false,
+        tags: {
+            'GIF Version': '89a',
+            'Image Width': '50px',
+            'Image Height': '50px',
+            'Global Color Map': 'Yes',
+            'Bits Per Pixel': '1 bit',
+            'Color Resolution Depth': '1 bit',
+            'FileType': 'GIF'
+        }
+    },
+    {
         name: 'test-not-an-image.txt',
         hasThumbnail: false,
         tags: {},

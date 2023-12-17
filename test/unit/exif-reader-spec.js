@@ -27,6 +27,7 @@ describe('exif-reader', function () {
         ExifReaderRewireAPI.__ResetDependency__('PngFileTags');
         ExifReaderRewireAPI.__ResetDependency__('PngTextTags');
         ExifReaderRewireAPI.__ResetDependency__('Vp8xTags');
+        ExifReaderRewireAPI.__ResetDependency__('GifFileTags');
         ExifReaderRewireAPI.__ResetDependency__('Thumbnail');
     });
 
@@ -477,6 +478,12 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should be able to find GIF file data segment', () => {
+        const myTags = {MyTag: 42};
+        rewireForLoadView({gifHeaderOffset: OFFSET_TEST_VALUE}, 'GifFileTags', myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
     it('should expand segments into separated properties on return object if specified', () => {
         const myTags = {
             file: {MyFileTag: 42},
@@ -669,7 +676,8 @@ describe('exif-reader', function () {
                 USE_JPEG: true,
                 USE_PNG: true,
                 USE_HEIC: true,
-                USE_WEBP: true
+                USE_WEBP: true,
+                USE_GIF: true
             };
         });
 
@@ -741,6 +749,12 @@ describe('exif-reader', function () {
         it('should handle when PNG files have been excluded', () => {
             Constants.USE_PNG = false;
             rewireForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, Constants);
+            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+        });
+
+        it('should handle when GIF files have been excluded', () => {
+            Constants.USE_GIF = false;
+            rewireForCustomBuild({gifHeaderOffset: OFFSET_TEST_VALUE}, Constants);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
