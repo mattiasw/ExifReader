@@ -17,5 +17,6 @@ export default {
     USE_JPEG: true,
     USE_PNG: true,
     USE_HEIC: true,
-    USE_WEBP: true
+    USE_WEBP: true,
+    USE_GIF: true
 };

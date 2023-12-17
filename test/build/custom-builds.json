@@ -17,7 +17,8 @@
                 "jpeg": true,
                 "png": true,
                 "heic": true,
-                "webp": true
+                "webp": true,
+                "gif": true
             }
         }
     },
@@ -129,6 +130,14 @@
             "include": {
                 "webp": true,
                 "exif": ["DateTime", "ExposureProgram", "DateTimeOriginal", "ComponentsConfiguration", "Flash", "GPSLatitude", "GPSLatitudeRef"]
+            }
+        }
+    },
+    {
+        "id": "full-gif",
+        "config": {
+            "include": {
+                "gif": true
             }
         }
     },
