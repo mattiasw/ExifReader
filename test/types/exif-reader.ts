@@ -119,6 +119,58 @@ tags["ImageHeight"]?.description === "100px";
 expandedTags["riff"]?.["ImageHeight"]?.value === 100;
 expandedTags["riff"]?.["ImageHeight"]?.description === "100px";
 
+////////
+// GIF
+tags["GIF Version"]?.value === "87a";
+tags["GIF Version"]?.description === "87a";
+tags["GIF Version"]?.description === "89a";
+// @ts-expect-error
+tags["GIF Version"]?.description === "70a";
+expandedTags["gif"]?.["GIF Version"]?.value === "87a";
+expandedTags["gif"]?.["GIF Version"]?.description === "87a";
+expandedTags["gif"]?.["GIF Version"]?.description === "89a";
+// @ts-expect-error
+expandedTags["gif"]?.["GIF Version"]?.description === "70a";
+
+tags["Image Width"]?.value === 100;
+tags["Image Width"]?.description === "100px";
+expandedTags["gif"]?.["Image Width"]?.value === 100;
+expandedTags["gif"]?.["Image Width"]?.description === "100px";
+
+tags["Image Height"]?.value === 100;
+tags["Image Height"]?.description === "100px";
+expandedTags["gif"]?.["Image Height"]?.value === 100;
+expandedTags["gif"]?.["Image Height"]?.description === "100px";
+
+tags["Global Color Map"]?.value === 1;
+tags["Global Color Map"]?.description === "Yes";
+expandedTags["gif"]?.["Global Color Map"]?.value === 1;
+expandedTags["gif"]?.["Global Color Map"]?.value === 0;
+// @ts-expect-error
+expandedTags["gif"]?.["Global Color Map"]?.value === 2;
+expandedTags["gif"]?.["Global Color Map"]?.description === "Yes";
+expandedTags["gif"]?.["Global Color Map"]?.description === "No";
+// @ts-expect-error
+expandedTags["gif"]?.["Global Color Map"]?.description === "Maybe";
+
+tags["Bits Per Pixel"]?.value === 8;
+tags["Bits Per Pixel"]?.description === "8 bits";
+expandedTags["gif"]?.["Bits Per Pixel"]?.value === 4;
+// @ts-expect-error
+expandedTags["gif"]?.["Bits Per Pixel"]?.value === 0;
+// @ts-expect-error
+expandedTags["gif"]?.["Bits Per Pixel"]?.value === 9;
+expandedTags["gif"]?.["Bits Per Pixel"]?.description === "8 bits";
+
+tags["Color Resolution Depth"]?.value === 8;
+tags["Color Resolution Depth"]?.description === "8 bits";
+expandedTags["gif"]?.["Color Resolution Depth"]?.value === 4;
+// @ts-expect-error
+expandedTags["gif"]?.["Color Resolution Depth"]?.value === 0;
+// @ts-expect-error
+expandedTags["gif"]?.["Color Resolution Depth"]?.value === 9;
+expandedTags["gif"]?.["Color Resolution Depth"]?.description === "8 bits";
+
 //////////////
 // Photoshop
 // expandedTags.photoshop?.["CaptionDigest"]?.id === 4711;

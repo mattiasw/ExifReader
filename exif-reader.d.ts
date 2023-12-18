@@ -97,7 +97,34 @@ interface RiffTags {
     'ImageHeight'?: {
         value: number,
         description: string
-    }
+    },
+}
+
+interface GifTags {
+    'GIF Version': {
+        value: '87a' | '89a',
+        description: '87a' | '89a'
+    },
+    'Image Width'?: {
+        value: number,
+        description: string
+    },
+    'Image Height'?: {
+        value: number,
+        description: string
+    },
+    'Global Color Map'?: {
+        value: 0 | 1,
+        description: 'No' | 'Yes'
+    },
+    'Bits Per Pixel'?: {
+        value: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+        description: string
+    },
+    'Color Resolution Depth'?: {
+        value: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8,
+        description: string
+    },
 }
 
 interface NumberFileTag {
@@ -175,6 +202,7 @@ interface ExpandedTags {
     xmp?: { _raw: string } & XmpTags,
     icc?: IccTags,
     riff?: RiffTags,
+    gif?: GifTags,
     Thumbnail?: ThumbnailTags,
     gps?: GpsTags
     photoshop?: PhotoshopTags;
@@ -484,7 +512,7 @@ interface IccTags {
     [name: string]: ValueTag;
 }
 
-export type Tags = XmpTags & IccTags & PngTags & RiffTags & PhotoshopTags & {
+export type Tags = XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & {
     'Thumbnail'?: ThumbnailTags;
     'Images'?: MPFImageTags[],
 } & {
