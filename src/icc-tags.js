@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 import {iccTags, iccProfile} from './icc-tag-names.js';
-import {getStringFromDataView, getUnicodeStringFromDataView} from './utils.js';
+import {getStringFromDataView, getUnicodeStringFromDataView, decompress, COMPRESSION_METHOD_NONE, COMPRESSION_METHOD_DEFLATE} from './utils.js';
 
 export default {
     read
@@ -20,8 +20,31 @@ const TAG_TABLE_SINGLE_TAG_DATA = 12;
 // ICC profile data can be longer than application segment max length of ~64k.
 // so it can be split into multiple APP2 segments. Each segment includes
 // total chunk count and chunk number.
-// Here we read all chunks into single continious array of bytes.
-function read(dataView, iccData) {
+// Here we read all chunks into single continuous array of bytes.
+// Compressed ICC profile data only has support for a single chunk.
+function read(dataView, iccData, async) {
+    if (async && iccData[0].compressionMethod !== COMPRESSION_METHOD_NONE) {
+        return readCompressedIcc(dataView, iccData);
+    }
+
+    return readIcc(dataView, iccData);
+}
+
+function readCompressedIcc(dataView, iccData) {
+    if (!compressionMethodIsSupported(iccData[0].compressionMethod)) {
+        return {};
+    }
+    const compressedDataView = new DataView(dataView.buffer.slice(iccData[0].offset, iccData[0].offset + iccData[0].length));
+    return decompress(compressedDataView, iccData[0].compressionMethod, 'dataview')
+        .then(parseTags)
+        .catch(() => ({}));
+}
+
+function compressionMethodIsSupported(compressionMethod) {
+    return compressionMethod === COMPRESSION_METHOD_DEFLATE;
+}
+
+function readIcc(dataView, iccData) {
     try {
         const totalIccProfileLength = iccData.reduce((sum, icc) => sum + icc.length, 0);
 

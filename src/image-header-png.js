@@ -4,7 +4,7 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringFromDataView} from './utils.js';
+import {getStringFromDataView, getNullTerminatedStringFromDataView} from './utils.js';
 import Constants from './constants.js';
 
 export default {
@@ -25,6 +25,7 @@ export const TYPE_ZTXT = 'zTXt';
 export const TYPE_PHYS = 'pHYs';
 export const TYPE_TIME = 'tIME';
 export const TYPE_EXIF = 'eXIf';
+export const TYPE_ICCP = 'iCCP';
 
 function isPngFile(dataView) {
     return !!dataView && getStringFromDataView(dataView, 0, PNG_ID.length) === PNG_ID;
@@ -66,6 +67,22 @@ function findPngOffsets(dataView, async) {
         } else if (isPngExifChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
             offsets.tiffHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
+        } else if (Constants.USE_ICC && async && isPngIccpChunk(dataView, offset)) {
+            offsets.hasAppMarkers = true;
+            const chunkDataLength = dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET);
+            const iccHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
+            const {profileName, compressionMethod, compressedProfileOffset} = parseIccHeader(dataView, iccHeaderOffset);
+            if (!offsets.iccChunks) {
+                offsets.iccChunks = [];
+            }
+            offsets.iccChunks.push({
+                offset: compressedProfileOffset,
+                length: chunkDataLength - (compressedProfileOffset - iccHeaderOffset),
+                chunkNumber: 1,
+                chunksTotal: 1,
+                profileName,
+                compressionMethod
+            });
         } else if (isPngChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
             if (!offsets.pngChunkOffsets) {
@@ -102,6 +119,10 @@ function isPngExifChunk(dataView, offset) {
     return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === TYPE_EXIF;
 }
 
+function isPngIccpChunk(dataView, offset) {
+    return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === TYPE_ICCP;
+}
+
 function isPngChunk(dataView, offset) {
     const SUPPORTED_PNG_CHUNK_TYPES = [TYPE_PHYS, TYPE_TIME];
     const chunkType = getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
@@ -125,4 +146,21 @@ function getPngXmpDataOffset(dataView, offset) {
         return undefined;
     }
     return offset;
+}
+
+function parseIccHeader(dataView, offset) {
+    const NULL_SEPARATOR_SIZE = 1;
+    const COMPRESSION_METHOD_SIZE = 1;
+
+    const profileName = getNullTerminatedStringFromDataView(dataView, offset);
+    offset += profileName.length + NULL_SEPARATOR_SIZE;
+
+    const compressionMethod = dataView.getUint8(offset);
+    offset += COMPRESSION_METHOD_SIZE;
+
+    return {
+        profileName,
+        compressionMethod,
+        compressedProfileOffset: offset
+    };
 }

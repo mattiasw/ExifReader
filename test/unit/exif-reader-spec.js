@@ -13,6 +13,7 @@ const XMP_FIELD_LENGTH_TEST_VALUE = 47;
 const PNG_FIELD_LENGTH_TEST_VALUE = 47;
 const OFFSET_TEST_VALUE_ICC2_1 = 27110;
 const OFFSET_TEST_VALUE_ICC2_2 = 47110;
+const OFFSET_TEST_VALUE_ICC2_3 = 67110;
 
 describe('exif-reader', function () {
     afterEach(() => {
@@ -444,6 +445,14 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should be able to find compressed ICC segment', async () => {
+        const myTags = {MyIccTag: 42};
+
+        rewireImageHeader({iccChunks: [OFFSET_TEST_VALUE_ICC2_3]});
+        rewireIccTagsRead(myTags, true);
+        expect(await ExifReader.loadView(undefined, {async: true})).to.deep.equal(myTags);
+    });
+
     it('should be able to find MPF APP segment', () => {
         const myTags = {MyMpfTag: 42};
         rewireImageHeader({mpfDataOffset: OFFSET_TEST_VALUE});
@@ -856,9 +865,12 @@ function rewireXmpTagsRead(tagsValue) {
     });
 }
 
-function rewireIccTagsRead(tagsValue) {
+function rewireIccTagsRead(tagsValue, async = false) {
     ExifReaderRewireAPI.__Rewire__('IccTags', {
         read(dataView, iccData) {
+            if (async && iccData.length === 1 && iccData[0] === OFFSET_TEST_VALUE_ICC2_3) {
+                return Promise.resolve(tagsValue);
+            }
             if (((iccData.length === 2) && (iccData[0] === OFFSET_TEST_VALUE_ICC2_1) && (iccData[1] === OFFSET_TEST_VALUE_ICC2_2))
                 || (iccData.length === 1) && (iccData[0].offset === 0) && (iccData[0].length === dataView.length)) {
                 return tagsValue;
