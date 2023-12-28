@@ -3,11 +3,18 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
+import {__RewireAPI__ as PngTextTagsRewireAPI} from '../../src/png-text-tags';
 import {getDataView, concatDataViews} from './test-utils';
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../src/image-header-png.js';
 import PngTextTags from '../../src/png-text-tags';
+import {getStringFromDataView} from '../../src/utils';
 
 describe('png-text-tags', () => {
+    afterEach(() => {
+        PngTextTagsRewireAPI.__ResetDependency__('Tags');
+        PngTextTagsRewireAPI.__ResetDependency__('IptcTags');
+    });
+
     it('should read image tags', () => {
         const tagDatatEXt = 'MyTag0\x00My value.';
         const tagDataiTXt = 'MyTag1\x00\x00\x00fr\x00MyFrTag1\x00My second value.';
@@ -62,6 +69,38 @@ describe('png-text-tags', () => {
     //     });
     // });
 
+    it('should read zTXt tags with Exif data', async () => {
+        PngTextTagsRewireAPI.__Rewire__('Tags', {
+            read: (data, offset) => getStringFromDataView(data, offset, data.byteLength)
+        });
+        const EXIF_DATA = 'Exif\0\0<Exif\ndata>';
+        const dataView = await getCompressedTagData(TYPE_ZTXT, 'Raw profile type exif', `\nexif\n${('' + EXIF_DATA.length).padStart(8, ' ')}\n${stringToHex(EXIF_DATA)}`);
+        const chunks = [
+            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
+        ];
+
+        const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+        const tags = await readTagsPromise;
+
+        expect(tags[0]['__exif']).to.equal(EXIF_DATA.substring(6));
+    });
+
+    it('should read zTXt tags with IPTC data', async () => {
+        PngTextTagsRewireAPI.__Rewire__('IptcTags', {
+            read: (data, offset) => getStringFromDataView(data, offset, data.byteLength)
+        });
+        const IPTC_DATA = '<IPTC data>';
+        const dataView = await getCompressedTagData(TYPE_ZTXT, 'Raw profile type iptc', `\niptc\n${('' + IPTC_DATA.length).padStart(8, ' ')}\n${stringToHex(IPTC_DATA)}`);
+        const chunks = [
+            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
+        ];
+
+        const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+        const tags = await readTagsPromise;
+
+        expect(tags[0]['__iptc']).to.equal(IPTC_DATA);
+    });
+
     it('should ignore tags that use compression when async is not passed', async () => {
         const dataView = await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.');
         const chunks = [
@@ -87,5 +126,9 @@ describe('png-text-tags', () => {
             new CompressionStream('deflate')
         );
         return new DataView(await new Response(compressedStream).arrayBuffer());
+    }
+
+    function stringToHex(text) {
+        return text.split('').map((char) => char.charCodeAt(0).toString(16).padStart(2, '0')).join('');
     }
 });
