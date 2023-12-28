@@ -38,11 +38,13 @@ export default {
 
 export const errors = exifErrors;
 
-export function load(data, options) {
+export function load(data, options = {}) {
     if (isFilePathOrURL(data)) {
+        options.async = true;
         return loadFile(data, options).then((fileContents) => loadFromData(fileContents, options));
     }
     if (isBrowserFileObject(data)) {
+        options.async = true;
         return loadFileObject(data).then((fileContents) => loadFromData(fileContents, options));
     }
     return loadFromData(data, options);
@@ -195,9 +197,13 @@ function getDataView(data) {
     }
 }
 
-export function loadView(dataView, {expanded = false, includeUnknown = false} = {expanded: false, includeUnknown: false}) {
+export function loadView(
+    dataView,
+    {expanded = false, async = false, includeUnknown = false} = {expanded: false, async: false, includeUnknown: false}
+) {
     let foundMetaData = false;
     let tags = {};
+    const tagsPromises = [];
 
     const {
         fileType,
@@ -213,7 +219,7 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         pngChunkOffsets,
         vp8xChunkOffset,
         gifHeaderOffset
-    } = ImageHeader.parseAppMarkers(dataView);
+    } = ImageHeader.parseAppMarkers(dataView, async);
 
     if (Constants.USE_JPEG && Constants.USE_FILE && hasFileData(fileDataOffset)) {
         foundMetaData = true;
@@ -319,11 +325,11 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
 
     if ((Constants.USE_JPEG || Constants.USE_WEBP) && Constants.USE_ICC && hasIccData(iccChunks)) {
         foundMetaData = true;
-        const readTags = IccTags.read(dataView, iccChunks);
-        if (expanded) {
-            tags.icc = readTags;
+        const readTags = IccTags.read(dataView, iccChunks, async);
+        if (readTags instanceof Promise) {
+            tagsPromises.push(readTags.then(addIccTags));
         } else {
-            tags = objectAssign({}, tags, readTags);
+            addIccTags(readTags);
         }
     }
 
@@ -350,12 +356,10 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
 
     if (Constants.USE_PNG && hasPngTextData(pngTextChunks)) {
         foundMetaData = true;
-        const readTags = PngTextTags.read(dataView, pngTextChunks);
-        if (expanded) {
-            tags.png = !tags.png ? readTags : objectAssign({}, tags.png, readTags);
-            tags.pngText = readTags;
-        } else {
-            tags = objectAssign({}, tags, readTags);
+        const {readTags, readTagsPromise} = PngTextTags.read(dataView, pngTextChunks, async, includeUnknown);
+        addPngTextTags(readTags);
+        if (readTagsPromise) {
+            tagsPromises.push(readTagsPromise.then((tagList) => tagList.forEach(addPngTextTags)));
         }
     }
 
@@ -415,7 +419,40 @@ export function loadView(dataView, {expanded = false, includeUnknown = false} = 
         throw new exifErrors.MetadataMissingError();
     }
 
+    if (async) {
+        return Promise.all(tagsPromises).then(() => tags);
+    }
     return tags;
+
+    function addIccTags(readTags) {
+        if (expanded) {
+            tags.icc = readTags;
+        } else {
+            tags = objectAssign({}, tags, readTags);
+        }
+    }
+
+    function addPngTextTags(readTags) {
+        if (expanded) {
+            for (const group of ['exif', 'iptc']) {
+                const groupKey = `__${group}`;
+                if (readTags[groupKey]) {
+                    tags[group] = !tags[group] ? readTags[groupKey] : objectAssign({}, tags.exif, readTags[groupKey]);
+                    delete readTags[groupKey];
+                }
+            }
+            tags.png = !tags.png ? readTags : objectAssign({}, tags.png, readTags);
+            tags.pngText = !tags.pngText ? readTags : objectAssign({}, tags.png, readTags);
+        } else {
+            tags = objectAssign(
+                {},
+                tags,
+                readTags.__exif ? readTags.__exif : {},
+                readTags.__iptc ? readTags.__iptc : {},
+                readTags
+            );
+        }
+    }
 }
 
 function hasFileData(fileDataOffset) {

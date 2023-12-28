@@ -31,7 +31,7 @@
         const file = event.target.elements.file.files[0];
         const url = event.target.elements.url.value;
 
-        ExifReader.load(file || url).then(function (tags) {
+        ExifReader.load(file || url, {async: true}).then(function (tags) {
             // The MakerNote tag can be really large. Remove it to lower
             // memory usage if you're parsing a lot of files and saving the
             // tags.

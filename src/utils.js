@@ -20,6 +20,20 @@ export function getStringFromDataView(dataView, offset, length) {
     return getStringValueFromArray(chars);
 }
 
+export function getNullTerminatedStringFromDataView(dataView, offset) {
+    const chars = [];
+    let i = 0;
+    while (offset + i < dataView.byteLength) {
+        const char = dataView.getUint8(offset + i);
+        if (char === 0) {
+            break;
+        }
+        chars.push(char);
+        i++;
+    }
+    return getStringValueFromArray(chars);
+}
+
 export function getUnicodeStringFromDataView(dataView, offset, length) {
     const chars = [];
     for (let i = 0; i < length && offset + i < dataView.byteLength; i += 2) {
@@ -131,4 +145,24 @@ export function parseFloatRadix(string, radix) {
 
 export function strRepeat(string, num) {
     return new Array(num + 1).join(string);
+}
+
+export const COMPRESSION_METHOD_NONE = undefined;
+export const COMPRESSION_METHOD_DEFLATE = 0;
+
+export function decompress(dataView, compressionMethod, returnType = 'string') {
+    if (compressionMethod === COMPRESSION_METHOD_DEFLATE) {
+        if (typeof DecompressionStream === 'function') {
+            const decompressionStream = new DecompressionStream('deflate');
+            const decompressedStream = new Blob([dataView]).stream().pipeThrough(decompressionStream);
+            if (returnType === 'dataview') {
+                return new Response(decompressedStream).arrayBuffer().then((arrayBuffer) => new DataView(arrayBuffer));
+            }
+            return new Response(decompressedStream).text();
+        }
+    }
+    if (compressionMethod !== undefined) {
+        return Promise.reject(`Unknown compression method ${compressionMethod}.`);
+    }
+    return dataView;
 }
