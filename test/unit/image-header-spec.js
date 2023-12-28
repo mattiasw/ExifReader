@@ -396,6 +396,35 @@ describe('image-header', () => {
             });
         });
 
+        it('should find iCCP chunks of compressed color profile', () => {
+            const crcChecksum = '\x00\x00\x00\x00';
+
+            const chunkType = 'iCCP';
+            const chunkDataHeader = 'ProfileName\x00\x00';
+            const compressedProfile = '<compressed profile>';
+            const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkDataHeader.length + compressedProfile.length)}`;
+            const chunk = chunkLength + chunkType + chunkDataHeader + compressedProfile + crcChecksum;
+
+            const dataView = getDataView(PNG_IMAGE_START + chunk);
+
+            const appMarkerValues = ImageHeader.parseAppMarkers(dataView, true);
+
+            expect(appMarkerValues).to.deep.equal({
+                fileType: {value: 'png', description: 'PNG'},
+                hasAppMarkers: true,
+                iccChunks: [
+                    {
+                        offset: PNG_IMAGE_START.length + chunkLength.length + chunkType.length + chunkDataHeader.length,
+                        length: compressedProfile.length,
+                        chunkNumber: 1,
+                        chunksTotal: 1,
+                        profileName: 'ProfileName',
+                        compressionMethod: 0
+                    },
+                ],
+            });
+        });
+
         it('should find pHYs chunks', () => {
             const chunkData = '\x01\x02\x03\x04\x02\x03\x04\x05\x01';
             const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkData.length)}`;

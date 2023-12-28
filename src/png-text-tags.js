@@ -4,7 +4,7 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringValueFromArray, getStringFromDataView} from './utils.js';
+import {getStringValueFromArray, getStringFromDataView, decompress, COMPRESSION_METHOD_NONE} from './utils.js';
 import TagDecoder from './tag-decoder.js';
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
 import Tags from './tags.js';
@@ -22,8 +22,6 @@ const STATE_TRANSLATED_KEYWORD = 'STATE_TRANSLATED_KEYWORD';
 const STATE_TEXT = 'STATE_TEXT';
 const COMPRESSION_SECTION_ITXT_EXTRA_BYTE = 1;
 const COMPRESSION_FLAG_COMPRESSED = 1;
-const COMPRESSION_METHOD_NONE = undefined;
-const COMPRESSION_METHOD_DEFLATE = 0;
 const EXIF_OFFSET = 6;
 
 function read(dataView, pngTextChunks, async, includeUnknown) {
@@ -108,9 +106,11 @@ function getNameAndValue(dataView, offset, length, type, async) {
     if (compressionMethod !== COMPRESSION_METHOD_NONE && !async) {
         return {};
     }
-    const decompressedValueChars = getDecompressedValueChars(valueChars, compressionMethod);
+    const decompressedValueChars = decompress(valueChars, compressionMethod);
     if (decompressedValueChars instanceof Promise) {
-        return decompressedValueChars.then((_decompressedValueChars) => constructTag(_decompressedValueChars, type, langChars, keywordChars));
+        return decompressedValueChars
+            .then((_decompressedValueChars) => constructTag(_decompressedValueChars, type, langChars, keywordChars))
+            .catch(() => constructTag('<text using unknown compression>'.split(''), type, langChars, keywordChars));
     }
     return constructTag(decompressedValueChars, type, langChars, keywordChars);
 }
@@ -140,20 +140,6 @@ function moveToNextState(type, parsingState) {
         return STATE_TRANSLATED_KEYWORD;
     }
     return STATE_TEXT;
-}
-
-function getDecompressedValueChars(valueChars, compressionMethod) {
-    if (compressionMethod === COMPRESSION_METHOD_DEFLATE) {
-        if (typeof DecompressionStream === 'function') {
-            const decompressionStream = new DecompressionStream('deflate');
-            const decompressedStream = new Blob([valueChars]).stream().pipeThrough(decompressionStream);
-            return new Response(decompressedStream).text();
-        }
-    }
-    if (compressionMethod !== undefined) {
-        return Promise.resolve('<text using unknown compression>'.split(''));
-    }
-    return valueChars;
 }
 
 function constructTag(valueChars, type, langChars, keywordChars) {

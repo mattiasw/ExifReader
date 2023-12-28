@@ -325,11 +325,11 @@ export function loadView(
 
     if ((Constants.USE_JPEG || Constants.USE_WEBP) && Constants.USE_ICC && hasIccData(iccChunks)) {
         foundMetaData = true;
-        const readTags = IccTags.read(dataView, iccChunks);
-        if (expanded) {
-            tags.icc = readTags;
+        const readTags = IccTags.read(dataView, iccChunks, async);
+        if (readTags instanceof Promise) {
+            tagsPromises.push(readTags.then(addIccTags));
         } else {
-            tags = objectAssign({}, tags, readTags);
+            addIccTags(readTags);
         }
     }
 
@@ -423,6 +423,14 @@ export function loadView(
         return Promise.all(tagsPromises).then(() => tags);
     }
     return tags;
+
+    function addIccTags(readTags) {
+        if (expanded) {
+            tags.icc = readTags;
+        } else {
+            tags = objectAssign({}, tags, readTags);
+        }
+    }
 
     function addPngTextTags(readTags) {
         if (expanded) {
