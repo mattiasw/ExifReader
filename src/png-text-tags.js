@@ -7,6 +7,9 @@
 import {getStringValueFromArray, getStringFromDataView} from './utils.js';
 import TagDecoder from './tag-decoder.js';
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
+import Tags from './tags.js';
+import IptcTags from './iptc-tags.js';
+import Constants from './constants.js';
 
 export default {
     read
@@ -21,8 +24,9 @@ const COMPRESSION_SECTION_ITXT_EXTRA_BYTE = 1;
 const COMPRESSION_FLAG_COMPRESSED = 1;
 const COMPRESSION_METHOD_NONE = undefined;
 const COMPRESSION_METHOD_DEFLATE = 0;
+const EXIF_OFFSET = 6;
 
-function read(dataView, pngTextChunks, async) {
+function read(dataView, pngTextChunks, async, includeUnknown) {
     const tags = {};
     const tagsPromises = [];
     for (let i = 0; i < pngTextChunks.length; i++) {
@@ -30,13 +34,25 @@ function read(dataView, pngTextChunks, async) {
         const nameAndValue = getNameAndValue(dataView, offset, length, type, async);
         if (nameAndValue instanceof Promise) {
             tagsPromises.push(nameAndValue.then(({name, value, description}) => {
-                if (name) {
-                    return {
-                        [name]: {
-                            value,
-                            description
-                        }
-                    };
+                try {
+                    if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
+                        return {
+                            __exif: Tags.read(decodeRawData(value), EXIF_OFFSET, includeUnknown)
+                        };
+                    } else if (Constants.USE_IPTC && isIptcGroupTag(name, value)) {
+                        return {
+                            __iptc: IptcTags.read(decodeRawData(value), 0, includeUnknown)
+                        };
+                    } else if (name) {
+                        return {
+                            [name]: {
+                                value,
+                                description
+                            }
+                        };
+                    }
+                } catch (error) {
+                    // Ignore the broken tag.
                 }
                 return {};
             }));
@@ -167,4 +183,25 @@ function getValue(valueChars) {
 
 function getDescription(valueChars) {
     return TagDecoder.decode('UTF-8', valueChars);
+}
+
+function isExifGroupTag(name, value) {
+    return name.toLowerCase() === 'raw profile type exif' && value.substring(1, 5) === 'exif';
+}
+
+function isIptcGroupTag(name, value) {
+    return name.toLowerCase() === 'raw profile type iptc' && value.substring(1, 5) === 'iptc';
+}
+
+function decodeRawData(value) {
+    const parts = value.match(/\n(exif|iptc)\n\s*\d+\n([\s\S]*)$/);
+    return hexToDataView(parts[2].replace(/\n/g, ''));
+}
+
+function hexToDataView(hex) {
+    const dataView = new DataView(new ArrayBuffer(hex.length / 2));
+    for (let i = 0; i < hex.length; i += 2) {
+        dataView.setUint8(i / 2, parseInt(hex.substring(i, i + 2), 16));
+    }
+    return dataView;
 }

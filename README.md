@@ -22,7 +22,7 @@ You can try it out on the
 | ----------|---------|---------|---------|---------|---------|---------------|-----------|---------------|
 | JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **yes**   | **yes**       |
 | TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | ???           | no        | no            |
-| PNG       | **yes** | no      | **yes** | no      | ???     | ???           | no        | **yes**       |
+| PNG       | **yes** | **yes** | **yes** | no      | ???     | ???           | no        | **yes**       |
 | HEIC/HEIF | **yes** | no      | no      | **yes** | ???     | ???           | no        | no            |
 | WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   | **yes**       |
 | GIF       | no      | no      | no      | no      | no      | no            | no        | **yes**       |
@@ -541,9 +541,9 @@ A selection of notable changes.
 -   **December 2023**:
     -   Add support for extracting Photoshop paths.
     -   Add basic support for GIF images (image dimensions, bit depths).
-    -   Add support for compressed tags in PNG files (in zTXt and iTXt chunks).
-        Pass in `async: true` in `options` parameter to enable. Works in
-        environments that support the
+    -   Add support for compressed tags in PNG files (in zTXt and iTXt chunks),
+        including IPTC. Pass in `async: true` in `options` parameter to enable.
+        Works in environments that support the
         [Compression Streams API](https://developer.mozilla.org/en-US/docs/Web/API/Compression_Streams_API#browser_compatibility).
 -   **December 2022**:
     -   Add option `length` to only read the first `length` bytes of the file.

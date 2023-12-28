@@ -356,7 +356,7 @@ export function loadView(
 
     if (Constants.USE_PNG && hasPngTextData(pngTextChunks)) {
         foundMetaData = true;
-        const {readTags, readTagsPromise} = PngTextTags.read(dataView, pngTextChunks, async);
+        const {readTags, readTagsPromise} = PngTextTags.read(dataView, pngTextChunks, async, includeUnknown);
         addPngTextTags(readTags);
         if (readTagsPromise) {
             tagsPromises.push(readTagsPromise.then((tagList) => tagList.forEach(addPngTextTags)));
@@ -426,10 +426,23 @@ export function loadView(
 
     function addPngTextTags(readTags) {
         if (expanded) {
+            for (const group of ['exif', 'iptc']) {
+                const groupKey = `__${group}`;
+                if (readTags[groupKey]) {
+                    tags[group] = !tags[group] ? readTags[groupKey] : objectAssign({}, tags.exif, readTags[groupKey]);
+                    delete readTags[groupKey];
+                }
+            }
             tags.png = !tags.png ? readTags : objectAssign({}, tags.png, readTags);
             tags.pngText = !tags.pngText ? readTags : objectAssign({}, tags.png, readTags);
         } else {
-            tags = objectAssign({}, tags, readTags);
+            tags = objectAssign(
+                {},
+                tags,
+                readTags.__exif ? readTags.__exif : {},
+                readTags.__iptc ? readTags.__iptc : {},
+                readTags
+            );
         }
     }
 }

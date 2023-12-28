@@ -155,7 +155,7 @@ function isApp2MPFMarker(dataView, appMarkerPosition) {
 }
 
 function isApp0JfifMarker(dataView, appMarkerPosition) {
-    const markerIdLength = APP1_EXIF_IDENTIFIER.length;
+    const markerIdLength = APP0_JFIF_IDENTIFIER.length;
 
     return (dataView.getUint16(appMarkerPosition) === APP0_MARKER)
         && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP0_JFIF_IDENTIFIER)
