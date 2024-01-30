@@ -14,6 +14,13 @@ describe('tag-names-exif-ifd', () => {
         expect(TagNamesExifIfd[0x829a].description([6, 1])).to.equal('6');
         expect(TagNamesExifIfd[0x829a].description([1, 1])).to.equal('1');
         expect(TagNamesExifIfd[0x829a].description([0, 1000])).to.equal('0/1000');
+        expect(TagNamesExifIfd[0x829a].description([8, 10])).to.equal('0.8');
+        expect(TagNamesExifIfd[0x829a].description([1, 4])).to.equal('1/4');
+        expect(TagNamesExifIfd[0x829a].description([1, 3])).to.equal('0.3');
+        expect(TagNamesExifIfd[0x829a].description([100, 399])).to.equal('0.3');
+        expect(TagNamesExifIfd[0x829a].description([13, 10])).to.equal('1.3');
+        expect(TagNamesExifIfd[0x829a].description([15, 10])).to.equal('1.5');
+        expect(TagNamesExifIfd[0x829a].description([4, 3]).substring(0, 6)).to.equal('1.3');
     });
 
     it('should have tag FNumber', () => {

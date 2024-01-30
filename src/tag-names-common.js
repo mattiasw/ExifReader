@@ -82,8 +82,12 @@ export default {
         return 'Unknown';
     },
     ExposureTime(value) {
-        if (value[0] >= value[1]) {
-            return `${Math.round(value[0] / value[1])}`;
+        if (value[0] / value[1] > 0.25) {
+            const decimal = value[0] / value[1];
+            if (Number.isInteger(decimal)) {
+                return '' + decimal;
+            }
+            return decimal.toFixed(1);
         }
         if (value[0] !== 0) {
             return `1/${Math.round(value[1] / value[0])}`;
