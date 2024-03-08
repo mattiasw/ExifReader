@@ -71,8 +71,10 @@ function findJpegOffsets(dataView) {
 
     while (appMarkerPosition + APP_ID_OFFSET + 5 <= dataView.byteLength) {
         if (Constants.USE_FILE && isSOF0Marker(dataView, appMarkerPosition)) {
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             sof0DataOffset = appMarkerPosition + APP_MARKER_SIZE;
         } else if (Constants.USE_FILE && isSOF2Marker(dataView, appMarkerPosition)) {
+            fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             sof2DataOffset = appMarkerPosition + APP_MARKER_SIZE;
         } else if (Constants.USE_JFIF && isApp0JfifMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
