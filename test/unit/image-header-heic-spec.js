@@ -77,7 +77,7 @@ describe('image-header-heic', () => {
         });
     }
 
-    it('should ignore other atoms than meta', () => {
+    it('should ignore other boxes than meta', () => {
         const {dataView, tiffHeaderOffset} = getHeicDataView({ilocItemPadding: true});
         const appMarkerValues = ImageHeaderHeic.findHeicOffsets(dataView);
         expect(appMarkerValues.tiffHeaderOffset).to.equal(tiffHeaderOffset);
@@ -132,28 +132,28 @@ describe('image-header-heic', () => {
         expect(appMarkerValues.hasAppMarkers).to.be.false;
     });
 
-    it('should handle when atom size extends to end of file', () => {
+    it('should handle when box size extends to end of file', () => {
         const {dataView, tiffHeaderOffset} = getHeicDataView({metaLength: 0});
         const appMarkerValues = ImageHeaderHeic.findHeicOffsets(dataView);
         expect(appMarkerValues.tiffHeaderOffset).to.equal(tiffHeaderOffset);
         expect(appMarkerValues.hasAppMarkers).to.be.true;
     });
 
-    it('should handle extended size atoms', () => {
+    it('should handle extended size boxes', () => {
         const {dataView, tiffHeaderOffset} = getHeicDataView({metaLength: 1});
         const appMarkerValues = ImageHeaderHeic.findHeicOffsets(dataView);
         expect(appMarkerValues.tiffHeaderOffset).to.equal(tiffHeaderOffset);
         expect(appMarkerValues.hasAppMarkers).to.be.true;
     });
 
-    it('should (for now) ignore atoms with extended size larger than 32 bits', () => {
+    it('should (for now) ignore boxes with extended size larger than 32 bits', () => {
         const {dataView} = getHeicDataView({metaLength: 'huge'});
         const appMarkerValues = ImageHeaderHeic.findHeicOffsets(dataView);
         expect(appMarkerValues.tiffHeaderOffset).to.be.undefined;
         expect(appMarkerValues.hasAppMarkers).to.be.false;
     });
 
-    function getHeicDataView({brand, iloc, ilocItemPadding, exifLoc, colorType, atomPadding, metaLength, pointerOverreach} = {}) {
+    function getHeicDataView({brand, iloc, ilocItemPadding, exifLoc, colorType, boxPadding, metaLength, pointerOverreach} = {}) {
         const META_HEADER_SIZE = 8;
         const ITEM_HEADER_SIZE = 12;
         const EXIF_OFFSET_SIZE = 4;
@@ -186,7 +186,7 @@ describe('image-header-heic', () => {
 
         const dataView = getDataView(
             `${HEIC_PREFIX}${brand}`
-            + (atomPadding ? '\x00\x00\x00\x0cmoov\x00\x00\x00\x00' : '')
+            + (boxPadding ? '\x00\x00\x00\x0cmoov\x00\x00\x00\x00' : '')
             + `${getMetaLength(metaLength, metaContent)}meta`
             + getExtendedLength(metaLength, metaContent)
             + metaContent

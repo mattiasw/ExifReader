@@ -28,7 +28,7 @@ function isHeicFile(dataView) {
 
 function findHeicOffsets(dataView) {
     if (Constants.USE_EXIF || Constants.USE_ICC) {
-        const {offset: metaOffset, length: metaLength} = findMetaAtom(dataView);
+        const {offset: metaOffset, length: metaLength} = findMetaBox(dataView);
         if (metaOffset === undefined) {
             return {hasAppMarkers: false};
         }
@@ -48,27 +48,27 @@ function findHeicOffsets(dataView) {
     return {hasAppMarkers: false};
 }
 
-function findMetaAtom(dataView) {
-    const ATOM_LENGTH_SIZE = 4;
-    const ATOM_TYPE_SIZE = 4;
-    const ATOM_MIN_LENGTH = 8;
-    const ATOM_TYPE_OFFSET = 4;
+function findMetaBox(dataView) {
+    const BOX_LENGTH_SIZE = 4;
+    const BOX_TYPE_SIZE = 4;
+    const BOX_MIN_LENGTH = 8;
+    const BOX_TYPE_OFFSET = 4;
 
     let offset = 0;
 
-    while (offset + ATOM_LENGTH_SIZE + ATOM_TYPE_SIZE <= dataView.byteLength) {
-        const atomLength = getAtomLength(dataView, offset);
-        if (atomLength >= ATOM_MIN_LENGTH) {
-            const atomType = getStringFromDataView(dataView, offset + ATOM_TYPE_OFFSET, ATOM_TYPE_SIZE);
-            if (atomType === 'meta') {
+    while (offset + BOX_LENGTH_SIZE + BOX_TYPE_SIZE <= dataView.byteLength) {
+        const boxLength = getBoxLength(dataView, offset);
+        if (boxLength >= BOX_MIN_LENGTH) {
+            const boxType = getStringFromDataView(dataView, offset + BOX_TYPE_OFFSET, BOX_TYPE_SIZE);
+            if (boxType === 'meta') {
                 return {
                     offset,
-                    length: atomLength
+                    length: boxLength
                 };
             }
         }
 
-        offset += atomLength;
+        offset += boxLength;
     }
 
     return {
@@ -77,35 +77,35 @@ function findMetaAtom(dataView) {
     };
 }
 
-function getAtomLength(dataView, offset) {
-    const ATOM_EXTENDED_SIZE_LOW_OFFSET = 12;
+function getBoxLength(dataView, offset) {
+    const BOX_EXTENDED_SIZE_LOW_OFFSET = 12;
 
-    const atomLength = dataView.getUint32(offset);
-    if (extendsToEndOfFile(atomLength)) {
+    const boxLength = dataView.getUint32(offset);
+    if (extendsToEndOfFile(boxLength)) {
         return dataView.byteLength - offset;
     }
-    if (hasExtendedSize(atomLength)) {
+    if (hasExtendedSize(boxLength)) {
         if (hasEmptyHighBits(dataView, offset)) {
             // It's a bit tricky to handle 64 bit numbers in JavaScript. Let's
             // wait until there are real-world examples where it is necessary.
-            return dataView.getUint32(offset + ATOM_EXTENDED_SIZE_LOW_OFFSET);
+            return dataView.getUint32(offset + BOX_EXTENDED_SIZE_LOW_OFFSET);
         }
     }
 
-    return atomLength;
+    return boxLength;
 }
 
-function extendsToEndOfFile(atomLength) {
-    return atomLength === 0;
+function extendsToEndOfFile(boxLength) {
+    return boxLength === 0;
 }
 
-function hasExtendedSize(atomLength) {
-    return atomLength === 1;
+function hasExtendedSize(boxLength) {
+    return boxLength === 1;
 }
 
 function hasEmptyHighBits(dataView, offset) {
-    const ATOM_EXTENDED_SIZE_OFFSET = 8;
-    return dataView.getUint32(offset + ATOM_EXTENDED_SIZE_OFFSET) === 0;
+    const BOX_EXTENDED_SIZE_OFFSET = 8;
+    return dataView.getUint32(offset + BOX_EXTENDED_SIZE_OFFSET) === 0;
 }
 
 function findMetaItems(dataView, offset, metaEndOffset) {
@@ -181,7 +181,7 @@ function findIccChunks(dataView, offset, metaEndOffset) {
 
     return [{
         offset: offset + ITEM_CONTENT_OFFSET,
-        length: getAtomLength(dataView, offset) - ITEM_CONTENT_OFFSET,
+        length: getBoxLength(dataView, offset) - ITEM_CONTENT_OFFSET,
         chunkNumber: 1,
         chunksTotal: 1
     }];
