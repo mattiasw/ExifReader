@@ -413,6 +413,7 @@ export function loadView(
         } else {
             tags.FileType = fileType;
         }
+        foundMetaData = true;
     }
 
     if (!foundMetaData) {

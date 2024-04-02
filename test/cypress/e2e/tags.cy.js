@@ -23,7 +23,8 @@ const images = [
         tags: {
             'Image Width': '12px', // File
             'DateTimeDigitized': '2011:06:28 12:06:14', // Exif
-            'CreatorTool': 'GIMP 2.10' // XMP
+            'CreatorTool': 'GIMP 2.10', // XMP
+            'FileType': 'JPEG', // File
         }
     },
     {
@@ -34,7 +35,8 @@ const images = [
             'LensModel': 'EF24-105mm f/4L IS USM', // Exif
             'Sub-location': 'My Sublocation', // IPTC
             'AuthorsPosition': 'Photographer', // XMP
-            'ICC Signature': 'acsp' // ICC profile
+            'ICC Signature': 'acsp', // ICC profile
+            'FileType': 'JPEG', // File
         }
     },
     {
@@ -44,7 +46,8 @@ const images = [
             'ImageWidth': '50', // Exif
             'ResolutionUnit': 'inches', // Exif
             'Date Created': '2020-04-08', // IPTC
-            'subject': 'My Keyword 1, Another Keyword, A third keyword' // XMP
+            'subject': 'My Keyword 1, Another Keyword, A third keyword', // XMP
+            'FileType': 'TIFF', // File
         }
     },
     {
@@ -52,14 +55,33 @@ const images = [
         hasThumbnail: false,
         tags: {
             'Image Width': '14px', // File,
-            'format': 'image/png' // XMP
+            'format': 'image/png', // XMP
+            'FileType': 'PNG', // File
         }
     },
     {
         name: 'test.heic',
         hasThumbnail: false,
         tags: {
-            'LensModel': 'iPhone 7 back camera 3.99mm f/1.8' // Exif
+            'LensModel': 'iPhone 7 back camera 3.99mm f/1.8', // Exif
+            'FileType': 'HEIC', // File
+        }
+    },
+    {
+        name: 'test.avif',
+        hasThumbnail: false,
+        tags: {
+            'XResolution': '180', // Exif
+            'YResolution': '180', // Exif
+            'ResolutionUnit': 'inches', // Exif
+            'YCbCrPositioning': 'centered', // Exif
+            'Exif IFD Pointer': '90', // Exif
+            'ExifVersion': '0232', // Exif
+            'DateTimeDigitized': '2011:06:28 12:06:14', // Exif
+            'FlashpixVersion': '0100', // Exif
+            'ColorSpace': 'Uncalibrated', // Exif
+            'CreatorTool': 'GIMP 2.10', // XMP
+            'FileType': 'AVIF', // File
         }
     },
     {
@@ -84,8 +106,9 @@ const images = [
     {
         name: 'test-no-meta-data.heic',
         hasThumbnail: false,
-        tags: {},
-        error: 'MetadataMissingError: No Exif data'
+        tags: {
+            FileType: 'HEIC'
+        }
     },
     {
         url: 'https://i.imgur.com/DX2kvpG.jpg',
@@ -101,7 +124,8 @@ const images = [
             'XResolution': '1',
             'YResolution': '1',
             'JFIF Thumbnail Width': '0px',
-            'JFIF Thumbnail Height': '0px'
+            'JFIF Thumbnail Height': '0px',
+            'FileType': 'JPEG', // File
         }
     },
     {
@@ -118,7 +142,8 @@ const images = [
             'Pixels Per Unit X': '3780',
             'Pixels Per Unit Y': '3780',
             'Pixel Units': 'meters',
-            'Modify Date': '1996-06-07 17:58:08'
+            'Modify Date': '1996-06-07 17:58:08',
+            'FileType': 'PNG', // File
         }
     },
     {
@@ -135,7 +160,8 @@ const images = [
             'Pixels Per Unit X': '3780',
             'Pixels Per Unit Y': '3780',
             'Pixel Units': 'meters',
-            'Modify Date': '1996-06-07 17:58:08'
+            'Modify Date': '1996-06-07 17:58:08',
+            'FileType': 'PNG', // File
         }
     }
 ];
