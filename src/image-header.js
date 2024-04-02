@@ -7,6 +7,7 @@ import Tiff from './image-header-tiff.js';
 import Jpeg from './image-header-jpeg.js';
 import Png from './image-header-png.js';
 import Heic from './image-header-heic.js';
+import Avif from './image-header-avif.js';
 import Webp from './image-header-webp.js';
 import Gif from './image-header-gif.js';
 import {objectAssign} from './utils.js';
@@ -30,6 +31,10 @@ function parseAppMarkers(dataView, async) {
 
     if (Constants.USE_HEIC && Heic.isHeicFile(dataView)) {
         return addFileType(Heic.findHeicOffsets(dataView), 'heic', 'HEIC');
+    }
+
+    if (Constants.USE_AVIF && Avif.isAvifFile(dataView)) {
+        return addFileType(Avif.findAvifOffsets(dataView), 'avif', 'AVIF');
     }
 
     if (Constants.USE_WEBP && Webp.isWebpFile(dataView)) {

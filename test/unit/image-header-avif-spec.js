@@ -4,40 +4,40 @@
 
 import {expect} from 'chai';
 import {getDataView} from './test-utils';
-import {__RewireAPI__ as ImageHeaderHeicRewireAPI} from '../../src/image-header-heic';
-import ImageHeaderHeic from '../../src/image-header-heic';
+import {__RewireAPI__ as ImageHeaderAvifRewireAPI} from '../../src/image-header-avif';
+import ImageHeaderAvif from '../../src/image-header-avif';
 
-describe('image-header-heic', () => {
+describe('image-header-avif', () => {
     afterEach(() => {
-        ImageHeaderHeicRewireAPI.__ResetDependency__('parseBox');
-        ImageHeaderHeicRewireAPI.__ResetDependency__('findOffsets');
+        ImageHeaderAvifRewireAPI.__ResetDependency__('parseBox');
+        ImageHeaderAvifRewireAPI.__ResetDependency__('findOffsets');
     });
 
     it('should fail for too short data buffer', () => {
         const dataView = getDataView('\x00');
-        expect(ImageHeaderHeic.isHeicFile(dataView)).to.be.false;
+        expect(ImageHeaderAvif.isAvifFile(dataView)).to.be.false;
     });
 
     it('should fail for invalid image format', () => {
         const dataView = getDataView('------------');
-        expect(ImageHeaderHeic.isHeicFile(dataView)).to.be.false;
+        expect(ImageHeaderAvif.isAvifFile(dataView)).to.be.false;
     });
 
     it('should pass for valid image format', () => {
-        ImageHeaderHeicRewireAPI.__Rewire__('parseBox', () => ({majorBrand: 'heic'}));
+        ImageHeaderAvifRewireAPI.__Rewire__('parseBox', () => ({majorBrand: 'avif'}));
         const dataView = getDataView('');
-        expect(ImageHeaderHeic.isHeicFile(dataView)).to.be.true;
+        expect(ImageHeaderAvif.isAvifFile(dataView)).to.be.true;
     });
 
     describe('major brand recognition', () => {
-        const majorBrands = ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1'];
+        const majorBrands = ['avif'];
 
         for (const brand of majorBrands) {
             it(`should find header offset in HEIC file with major brand ${brand}`, () => {
                 // Totally fake the dependency.
-                ImageHeaderHeicRewireAPI.__Rewire__('findOffsets', (_dataView) => ({[brand]: {hasAppMarkers: true}}[_dataView]));
+                ImageHeaderAvifRewireAPI.__Rewire__('findOffsets', (_dataView) => ({[brand]: {hasAppMarkers: true}}[_dataView]));
                 const dataView = brand;
-                const appMarkerValues = ImageHeaderHeic.findHeicOffsets(dataView);
+                const appMarkerValues = ImageHeaderAvif.findAvifOffsets(dataView);
                 expect(appMarkerValues.hasAppMarkers).to.be.true;
             });
         }

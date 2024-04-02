@@ -21,13 +21,15 @@ You can try it out on the
 | File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | Thumbnail | Image details |
 | ----------|---------|---------|---------|---------|---------|---------------|-----------|---------------|
 | JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **yes**   | **yes**       |
-| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | ???           | no        | no            |
+| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | ???           | N/A       | N/A           |
 | PNG       | **yes** | **yes** | **yes** | **yes** | ???     | ???           | no        | **yes**       |
-| HEIC/HEIF | **yes** | no      | no      | **yes** | ???     | ???           | no        | no            |
+| HEIC/HEIF | **yes** | no      | **yes** | **yes** | ???     | ???           | no        | no            |
+| AVIF      | **yes** | no      | **yes** | **yes** | ???     | ???           | no        | no            |
 | WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   | **yes**       |
-| GIF       | no      | no      | no      | no      | no      | no            | no        | **yes**       |
+| GIF       | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | N/A       | **yes**       |
 
 - `Image details` = image width, height, etc. read from image header.
+- `N/A` = The feature is not applicable to this file type.
 - `???` = may be supported in any file type using Exif but it has only been tested
     on JPEGs.
 - `*` = A draft implementation of Photoshop tags have been added with

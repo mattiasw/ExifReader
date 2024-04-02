@@ -15,6 +15,7 @@ describe('image-header', () => {
         ImageHeaderRewireAPI.__ResetDependency__('Jpeg');
         ImageHeaderRewireAPI.__ResetDependency__('Png');
         ImageHeaderRewireAPI.__ResetDependency__('Heic');
+        ImageHeaderRewireAPI.__ResetDependency__('Avif');
         ImageHeaderRewireAPI.__ResetDependency__('Webp');
         ImageHeaderRewireAPI.__ResetDependency__('Gif');
         ImageHeaderPngRewireAPI.__ResetDependency__('Constants');
@@ -537,6 +538,35 @@ describe('image-header', () => {
 
         it('should handle when HEIC files have been excluded in a custom build', () => {
             ImageHeaderRewireAPI.__Rewire__('Constants', {USE_HEIC: false});
+            expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
+        });
+    });
+
+    describe('AVIF files', () => {
+        const dataView = {};
+        const offsets = {};
+
+        beforeEach(() => {
+            ImageHeaderRewireAPI.__Rewire__('Avif', {
+                isAvifFile: (_dataView) => _dataView === dataView,
+                findAvifOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+            });
+        });
+
+        it('should handle AVIF files', () => {
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'avif', description: 'AVIF'}});
+        });
+
+        it('should ignore file when it\'s not a AVIF image', () => {
+            ImageHeaderRewireAPI.__Rewire__('Avif', {
+                isAvifFile: () => false
+            });
+
+            expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
+        });
+
+        it('should handle when AVIF files have been excluded in a custom build', () => {
+            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_AVIF: false});
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });

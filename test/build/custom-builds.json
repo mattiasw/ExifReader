@@ -17,6 +17,7 @@
                 "jpeg": true,
                 "png": true,
                 "heic": true,
+                "avif": true,
                 "webp": true,
                 "gif": true
             }
@@ -99,6 +100,7 @@
             "include": {
                 "heic": true,
                 "exif": true,
+                "xmp": true,
                 "icc": true
             }
         }
@@ -109,6 +111,26 @@
             "include": {
                 "heic": true,
                 "exif": ["DateTime", "ExposureProgram", "DateTimeOriginal", "ComponentsConfiguration", "Flash", "GPSLatitude", "GPSLatitudeRef"]
+            }
+        }
+    },
+    {
+        "id": "full-avif",
+        "config": {
+            "include": {
+                "avif": true,
+                "exif": true,
+                "xmp": true,
+                "icc": true
+            }
+        }
+    },
+    {
+        "id": "partial-avif",
+        "config": {
+            "include": {
+                "avif": true,
+                "exif": ["DateTimeDigitized", "FlashpixVersion"]
             }
         }
     },

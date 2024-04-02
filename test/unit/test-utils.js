@@ -14,6 +14,12 @@ function getArrayBuffer(data) {
     return Buffer.from(Array.from(data).map((character) => character.charCodeAt(0)));
 }
 
+/**
+ * Converts a string of data into a DataView.
+ *
+ * @param {string} data - The string of data to convert.
+ * @returns {DataView} The resulting DataView.
+ */
 function getDataView(data) {
     // Bytes in data are not always ASCII characters so TextEncoder sometimes encodes them as two bytes which we don't want.
     const dataView = new DataView(new ArrayBuffer(data.length));
@@ -30,6 +36,13 @@ function concatDataViews(dataView0, dataView1) {
     return new DataView(data.buffer);
 }
 
+/**
+ * Converts a number into a byte string of a specified length.
+ *
+ * @param {number} number - The number to convert.
+ * @param {number} numBytes - The desired length of the byte string.
+ * @returns {string} The resulting byte string.
+ */
 function getByteStringFromNumber(number, numBytes) {
     const bytes = [];
     for (let i = 0; i < numBytes; i++) {
