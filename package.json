@@ -64,7 +64,7 @@
     "test:all": "npm-run-all lint test:types coverage test:e2e test:build test:build:custom",
     "pre-commit": "npm-run-all lint test:types coverage test:build",
     "postinstall": "node bin/build.js --only-with-config",
-    "prepare": "husky install"
+    "prepare": "husky"
   },
   "nyc": {
     "check-coverage": true,
