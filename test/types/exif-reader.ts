@@ -16,6 +16,18 @@ const tags = await load("");
 const expandedTags = await load("", { expanded: true });
 
 /////////
+// File
+expandedTags["file"]?.["FileType"] === "TIFF";
+expandedTags["file"]?.["FileType"] === "JPEG";
+expandedTags["file"]?.["FileType"] === "PNG";
+expandedTags["file"]?.["FileType"] === "HEIC";
+expandedTags["file"]?.["FileType"] === "AVIF";
+expandedTags["file"]?.["FileType"] === "WebP";
+expandedTags["file"]?.["FileType"] === "GIF";
+// @ts-expect-error
+expandedTags["file"]?.["FileType"] === "PCX";
+
+/////////
 // Exif
 if (tags["DateTimeOriginal"]) {
     if ("id" in tags["DateTimeOriginal"]) {

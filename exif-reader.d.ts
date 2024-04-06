@@ -4,6 +4,7 @@
 export as namespace ExifReader;
 
 interface FileTags {
+    'FileType'?: 'TIFF' | 'JPEG' | 'PNG' | 'HEIC' | 'AVIF' | 'WebP' | 'GIF',
     'Bits Per Sample'?: NumberFileTag,
     'Image Height'?: NumberFileTag,
     'Image Width'?: NumberFileTag,
