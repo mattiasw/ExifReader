@@ -23,8 +23,8 @@ You can try it out on the
 | JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **yes**   | **yes**       |
 | TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | ???           | N/A       | N/A           |
 | PNG       | **yes** | **yes** | **yes** | **yes** | ???     | ???           | no        | **yes**       |
-| HEIC/HEIF | **yes** | no      | **yes** | **yes** | ???     | ???           | no        | no            |
-| AVIF      | **yes** | no      | **yes** | **yes** | ???     | ???           | no        | no            |
+| HEIC/HEIF | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   | no            |
+| AVIF      | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   | no            |
 | WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   | **yes**       |
 | GIF       | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | N/A       | **yes**       |
 

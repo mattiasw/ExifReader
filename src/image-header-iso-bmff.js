@@ -207,7 +207,8 @@ function findMetaBox(dataView) {
 function findExifOffset(dataView, metaBox) {
     try {
         const exifItemId = findIinfExifItemId(metaBox).itemId;
-        const exifOffset = findIlocItem(metaBox, exifItemId).extents[0].extentOffset;
+        const ilocItem = findIlocItem(metaBox, exifItemId);
+        const exifOffset = ilocItem.baseOffset + ilocItem.extents[0].extentOffset;
         return getTiffHeaderOffset(dataView, exifOffset);
     } catch (error) {
         return undefined;
@@ -232,11 +233,12 @@ function getTiffHeaderOffset(dataView, exifOffset) {
 function findXmpChunks(metaBox) {
     try {
         const xmpItemId = findIinfXmpItemId(metaBox).itemId;
-        const ilocItem = findIlocItem(metaBox, xmpItemId).extents[0];
+        const ilocItem = findIlocItem(metaBox, xmpItemId);
+        const ilocItemExtent = findIlocItem(metaBox, xmpItemId).extents[0];
         return [
             {
-                dataOffset: ilocItem.extentOffset,
-                length: ilocItem.extentLength,
+                dataOffset: ilocItem.baseOffset + ilocItemExtent.extentOffset,
+                length: ilocItemExtent.extentLength,
             }
         ];
     } catch (error) {

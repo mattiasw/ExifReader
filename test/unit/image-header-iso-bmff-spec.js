@@ -257,6 +257,7 @@ describe('image-header-iso-bmff', () => {
             const exifItemType = getByteStringFromNumber(ITEM_INFO_TYPE_EXIF, 4);
             const exifPrefix = 'Exif\x00\x00';
             const tiffHeaderOffset = getByteStringFromNumber(exifPrefix.length, 4);
+            const exifDataPadding = '\x00\x00\x00\x00\x00\x00\x00\x00\x00';
             const exifData = tiffHeaderOffset + exifPrefix + '<Exif data>';
             // XMP
             const xmpItemId = getByteStringFromNumber(3, 2);
@@ -268,11 +269,12 @@ describe('image-header-iso-bmff', () => {
             const iccLength = iccContent.length;
 
             // iloc
+            const baseOffsetValue = exifDataPadding.length;
             const offsetSizeAndLengthSize = getByteStringFromNumber(0x44, 1);
             const baseOffsetSizeAndReserved = getByteStringFromNumber(0x40, 1);
             const itemCount = getByteStringFromNumber(2, 2);
             const dataReferenceIndex = getByteStringFromNumber(4711, 2);
-            const baseOffset = getByteStringFromNumber(4812, 4);
+            const baseOffset = getByteStringFromNumber(baseOffsetValue, 4);
             const exifExtentLength = getByteStringFromNumber(128, 4);
             const xmpExtentLength = getByteStringFromNumber(256, 4);
             const extentCount = getByteStringFromNumber(1, 2);
@@ -316,13 +318,13 @@ describe('image-header-iso-bmff', () => {
                 )
             );
 
-            const dataView = getDataView(boxes + exifData);
+            const dataView = getDataView(boxes + exifDataPadding + exifData);
 
             expect(findOffsets(dataView)).to.deep.equal({
                 hasAppMarkers: true,
-                tiffHeaderOffset: boxes.length + tiffHeaderOffset.length + exifPrefix.length,
+                tiffHeaderOffset: boxes.length + exifDataPadding.length + tiffHeaderOffset.length + exifPrefix.length,
                 xmpChunks: [{
-                    dataOffset: 5014,
+                    dataOffset: baseOffsetValue + 5014,
                     length: 256
                 }],
                 iccChunks: [{
