@@ -136,6 +136,8 @@ function getVariableSizedValue(dataView, offset, size) {
         return dataView.getUint32(offset);
     }
     if (size === 8) {
+        // eslint-disable-next-line no-console
+        console.warn('This file uses an 8-bit offset which is currently not supported by ExifReader. Contact the maintainer to get it fixed.');
         return get64BitValue(dataView, offset);
     }
     return 0;
