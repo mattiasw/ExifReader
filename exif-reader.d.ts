@@ -207,6 +207,7 @@ export interface ExpandedTags {
     Thumbnail?: ThumbnailTags,
     gps?: GpsTags
     photoshop?: PhotoshopTags;
+    [name: string]: any
 }
 
 interface GpsTags {
