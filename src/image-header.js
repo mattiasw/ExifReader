@@ -10,6 +10,7 @@ import Heic from './image-header-heic.js';
 import Avif from './image-header-avif.js';
 import Webp from './image-header-webp.js';
 import Gif from './image-header-gif.js';
+import Xml from './xml.js';
 import {objectAssign} from './utils.js';
 
 export default {
@@ -43,6 +44,10 @@ function parseAppMarkers(dataView, async) {
 
     if (Constants.USE_GIF && Gif.isGifFile(dataView)) {
         return addFileType(Gif.findOffsets(dataView), 'gif', 'GIF');
+    }
+
+    if (Constants.USE_XMP && Xml.isXMLFile(dataView)) {
+        return addFileType(Xml.findOffsets(dataView), 'xml', 'XML');
     }
 
     throw new Error('Invalid image format');
