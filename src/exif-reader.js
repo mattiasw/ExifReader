@@ -452,6 +452,8 @@ export function loadView(
                 readTags.__iptc ? readTags.__iptc : {},
                 readTags
             );
+            delete tags.__exif;
+            delete tags.__iptc;
         }
     }
 }
