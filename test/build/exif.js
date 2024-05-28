@@ -6,7 +6,7 @@ module.exports = {
     parse
 };
 
-function parse(imagePath, libraryDir = '../..') {
+async function parse(imagePath, libraryDir = '../..') {
     const exifReaderPath = require.resolve(path.join(libraryDir, 'dist/exif-reader'));
     delete require.cache[exifReaderPath];
     const ExifReader = require(exifReaderPath);
@@ -14,8 +14,8 @@ function parse(imagePath, libraryDir = '../..') {
 
     try {
         const result = {
-            combined: hashDetails(ExifReader.load(data, {includeUnknown: true})),
-            expanded: hashGroupDetails(ExifReader.load(data, {expanded: true, includeUnknown: true}))
+            combined: hashDetails(await ExifReader.load(data, {includeUnknown: true, async: true})),
+            expanded: hashGroupDetails(await ExifReader.load(data, {expanded: true, includeUnknown: true, async: true}))
         };
         return result;
     } catch (error) {
