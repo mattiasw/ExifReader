@@ -150,7 +150,7 @@ export function strRepeat(string, num) {
 export const COMPRESSION_METHOD_NONE = undefined;
 export const COMPRESSION_METHOD_DEFLATE = 0;
 
-export function decompress(dataView, compressionMethod, returnType = 'string') {
+export function decompress(dataView, compressionMethod, encoding, returnType = 'string') {
     if (compressionMethod === COMPRESSION_METHOD_DEFLATE) {
         if (typeof DecompressionStream === 'function') {
             const decompressionStream = new DecompressionStream('deflate');
@@ -158,7 +158,8 @@ export function decompress(dataView, compressionMethod, returnType = 'string') {
             if (returnType === 'dataview') {
                 return new Response(decompressedStream).arrayBuffer().then((arrayBuffer) => new DataView(arrayBuffer));
             }
-            return new Response(decompressedStream).text();
+            return new Response(decompressedStream).arrayBuffer()
+                .then((buffer) => new TextDecoder(encoding).decode(buffer));
         }
     }
     if (compressionMethod !== undefined) {

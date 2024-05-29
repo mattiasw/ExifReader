@@ -35,7 +35,7 @@ function readCompressedIcc(dataView, iccData) {
         return {};
     }
     const compressedDataView = new DataView(dataView.buffer.slice(iccData[0].offset, iccData[0].offset + iccData[0].length));
-    return decompress(compressedDataView, iccData[0].compressionMethod, 'dataview')
+    return decompress(compressedDataView, iccData[0].compressionMethod, 'utf-8', 'dataview')
         .then(parseTags)
         .catch(() => ({}));
 }
