@@ -106,7 +106,7 @@ function getNameAndValue(dataView, offset, length, type, async) {
     if (compressionMethod !== COMPRESSION_METHOD_NONE && !async) {
         return {};
     }
-    const decompressedValueChars = decompress(valueChars, compressionMethod);
+    const decompressedValueChars = decompress(valueChars, compressionMethod, getEncodingFromType(type));
     if (decompressedValueChars instanceof Promise) {
         return decompressedValueChars
             .then((_decompressedValueChars) => constructTag(_decompressedValueChars, type, langChars, keywordChars))
@@ -140,6 +140,13 @@ function moveToNextState(type, parsingState) {
         return STATE_TRANSLATED_KEYWORD;
     }
     return STATE_TEXT;
+}
+
+function getEncodingFromType(type) {
+    if (type === TYPE_TEXT || type === TYPE_ZTXT) {
+        return 'latin1';
+    }
+    return 'utf-8';
 }
 
 function constructTag(valueChars, type, langChars, keywordChars) {
