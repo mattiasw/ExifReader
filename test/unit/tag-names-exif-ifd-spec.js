@@ -500,6 +500,8 @@ describe('tag-names-exif-ifd', () => {
         expect(TagNamesExifIfd[0xa432].description([[700, 10], [2000, 10], [40, 10], [40, 10]])).to.equal('70-200 mm f/4');
         expect(TagNamesExifIfd[0xa432].description([[17, 1], [85, 1], [0, 1], [0, 1]])).to.equal('17-85 mm f/0');
         expect(TagNamesExifIfd[0xa432].description([[24, 1], [105, 1], [0, 0], [0, 0]])).to.equal('24-105 mm f/?');
+        expect(TagNamesExifIfd[0xa432].description([[160, 10], [500, 10], [350, 100], [630, 100]])).to.equal('16-50 mm f/6.3');
+        expect(TagNamesExifIfd[0xa432].description([[4183519, 1048501], [4183519, 1048501], [9, 5], [9, 5]])).to.equal('3.99-3.99 mm f/1.8');
     });
 
     it('should have tag LensMake', () => {
