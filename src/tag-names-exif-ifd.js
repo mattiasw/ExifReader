@@ -359,11 +359,14 @@ export default {
     0xa432: {
         'name': 'LensSpecification',
         'description': (value) => {
-            const focalLengths = `${value[0][0] / value[0][1]}-${value[1][0] / value[1][1]} mm`;
+            const focalLengthFrom = parseFloat((value[0][0] / value[0][1]).toFixed(5));
+            const focalLengthTo = parseFloat((value[1][0] / value[1][1]).toFixed(5));
+            const focalLengths = `${focalLengthFrom}-${focalLengthTo} mm`;
             if (value[3][1] === 0) {
                 return `${focalLengths} f/?`;
             }
-            return `${focalLengths} f/${1 / ((value[2][1] / value[2][1]) / (value[3][0] / value[3][1]))}`;
+            const maxAperture = 1 / ((value[2][1] / value[2][1]) / (value[3][0] / value[3][1]));
+            return `${focalLengths} f/${parseFloat(maxAperture.toFixed(5))}`;
         }
     },
     0xa433: 'LensMake',
