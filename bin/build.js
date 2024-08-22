@@ -8,52 +8,40 @@ const {execSync} = require('child_process');
 const dependentHasExifReaderConfig = require('./findDependentConfig');
 
 const WEBPACK_VERSION = '5.89.0';
+const WEBPACK_CLI_VERSION = '5.1.4';
 
 const EXIFREADER_ROOT_DIR = path.join(__dirname, '..');
 process.chdir(EXIFREADER_ROOT_DIR);
 
 if (!process.argv.includes('--only-with-config') || checkConfig()) {
-    execSync(`npx webpack@${WEBPACK_VERSION}`, {stdio: 'inherit'});
+    execSync(`npx -p webpack-cli@${WEBPACK_CLI_VERSION} -p webpack@${WEBPACK_VERSION} webpack`, {stdio: 'inherit'});
 }
 
 function checkConfig() {
     if (dependentHasExifReaderConfig()) {
-        if (!areDependenciesInstalled()) {
-            console.log('Installing ExifReader custom build dependencies...'); // eslint-disable-line no-console
-            const packages = [
-                '@babel/core@7.23.2',
-                '@babel/preset-env@7.23.2',
-                '@babel/register@7.22.15',
-                'babel-loader@8.2.5',
-                'cross-env@7.0.3',
-                'string-replace-loader@3.1.0',
-                `webpack@${WEBPACK_VERSION}`,
-                'webpack-cli@5.1.4',
-                'terser-webpack-plugin@5.3.9'
-            ];
-            const tmpDir = path.join(EXIFREADER_ROOT_DIR, '__tmp');
-            try {
-                initTmpDir(tmpDir);
-                execSync(`npm install --production --loglevel=error --no-optional --no-package-lock --no-save ${packages.join(' ')}`, {stdio: 'inherit'});
-                console.log('Done.'); // eslint-disable-line no-console
-            } catch (error) {
-                console.error('Could not install requirements for a custom build:', error); // eslint-disable-line no-console
-            } finally {
-                cleanUpTmpDir(tmpDir);
-            }
+        console.log('Installing ExifReader custom build dependencies...'); // eslint-disable-line no-console
+        const packages = [
+            '@babel/core@7.23.2',
+            '@babel/preset-env@7.23.2',
+            '@babel/register@7.22.15',
+            'babel-loader@8.2.5',
+            'cross-env@7.0.3',
+            'string-replace-loader@3.1.0',
+            'terser-webpack-plugin@5.3.9'
+        ];
+        const tmpDir = path.join(EXIFREADER_ROOT_DIR, '__tmp');
+        try {
+            initTmpDir(tmpDir);
+            execSync(`npm install --production --loglevel=error --no-optional --no-package-lock --no-save ${packages.join(' ')}`, {stdio: 'inherit'});
+            console.log('Done.'); // eslint-disable-line no-console
+        } catch (error) {
+            console.error('Could not install requirements for a custom build:', error); // eslint-disable-line no-console
+        } finally {
+            cleanUpTmpDir(tmpDir);
         }
         return true;
     }
     return false;
-}
-
-function areDependenciesInstalled() {
-    try {
-        execSync('npm ls webpack');
-        return true;
-    } catch (error) {
-        return false;
-    }
 }
 
 function initTmpDir(tmpDir) {
