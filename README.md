@@ -288,6 +288,11 @@ be negative for values that are south of the equator, west of the IRM, or below
 sealevel. These are often more convenient values for regular use. For some
 elaboration or if you need the original values, see [Notes](#notes) below.
 
+If you're having trouble getting the GPS values on Android and are using a
+`type="file"` input to upload the image, make sure you are not setting the
+`accept` attribute on the input element. Apparently setting the `accept` [will
+strip the GPS values](https://github.com/mattiasw/ExifReader/issues/378#issuecomment-2302705983).
+
 ### Using the thumbnail
 
 The thumbnail and its details will be accessible through `tags['Thumbnail']`.
