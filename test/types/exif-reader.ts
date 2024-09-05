@@ -54,11 +54,30 @@ expandedTags["exif"]?.["DateTimeOriginal"]?.description ===
     "2014:09:21 16:00:56";
 // @ts-expect-error
 expandedTags["exif"]?.["DateTimeOriginal"].attributes;
+
+expandedTags["exif"]?.["GPSLatitude"]?.value[0][0] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSLatitude"]?.value[0][2] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSLatitude"]?.value[3][0] === 1;
+expandedTags["exif"]?.["GPSLongitude"]?.value[0][0] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSLongitude"]?.value[0][2] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSLongitude"]?.value[3][0] === 1;
+expandedTags["exif"]?.["GPSAltitude"]?.value[0] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSAltitude"]?.value[2] === 1;
+expandedTags["gps"]?.["Latitude"] === 12.345
+expandedTags["gps"]?.["Longitude"] === 12.345;
+expandedTags["gps"]?.["Altitude"] === 12.345
+
 expandedTags["exif"]?.["Thumbnail"]?.type === "image/jpeg";
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.id === 4711;
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.value === 32946;
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.description === "Deflate";
 expandedTags["exif"]?.["Images"]?.[0];
+
 // @ts-expect-error
 expandedTags["exif"]?.["NonExistent"];
 
