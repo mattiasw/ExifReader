@@ -232,9 +232,7 @@ const tags = ExifReader.load(fileBuffer, {expanded: true});
 
 If you're having trouble getting the GPS location, see [this comment and
 thread](https://github.com/mattiasw/ExifReader/issues/177#issuecomment-1172228225)
-for more details.
-
-Also see the [GPS section below](#gps) for more details.
+and the [GPS section below](#gps) for more details.
 
 #### Grouping
 
