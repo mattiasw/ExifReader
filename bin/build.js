@@ -7,28 +7,25 @@ const fs = require('fs');
 const {execSync} = require('child_process');
 const dependentHasExifReaderConfig = require('./findDependentConfig');
 
-const WEBPACK_VERSION = '5.89.0';
-const WEBPACK_CLI_VERSION = '5.1.4';
-
 const EXIFREADER_ROOT_DIR = path.join(__dirname, '..');
 process.chdir(EXIFREADER_ROOT_DIR);
 
 if (!process.argv.includes('--only-with-config') || checkConfig()) {
-    execSync(`npx -p webpack-cli@${WEBPACK_CLI_VERSION} -p webpack@${WEBPACK_VERSION} webpack`, {stdio: 'inherit'});
+    execSync(`npx -p ${getPackage('webpack-cli')} -p ${getPackage('webpack')} webpack`, {stdio: 'inherit'});
 }
 
 function checkConfig() {
     if (dependentHasExifReaderConfig()) {
         console.log('Installing ExifReader custom build dependencies...'); // eslint-disable-line no-console
         const packages = [
-            '@babel/core@7.23.2',
-            '@babel/preset-env@7.23.2',
-            '@babel/register@7.22.15',
-            'babel-loader@8.2.5',
-            'cross-env@7.0.3',
-            'string-replace-loader@3.1.0',
-            'terser-webpack-plugin@5.3.9'
-        ];
+            '@babel/core',
+            '@babel/preset-env',
+            '@babel/register',
+            'babel-loader',
+            'cross-env',
+            'string-replace-loader',
+            'terser-webpack-plugin'
+        ].map((_package) => getPackage(_package));
         const tmpDir = path.join(EXIFREADER_ROOT_DIR, '__tmp');
         try {
             initTmpDir(tmpDir);
@@ -42,6 +39,11 @@ function checkConfig() {
         return true;
     }
     return false;
+}
+
+function getPackage(name) {
+    const version = require(path.join(EXIFREADER_ROOT_DIR, 'package.json')).devDependencies[name].replace(/^\^/, '');
+    return `${name}@${version}`;
 }
 
 function initTmpDir(tmpDir) {
