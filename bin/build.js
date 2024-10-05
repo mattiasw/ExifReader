@@ -33,6 +33,7 @@ function checkConfig() {
             console.log('Done.'); // eslint-disable-line no-console
         } catch (error) {
             console.error('Could not install requirements for a custom build:', error); // eslint-disable-line no-console
+            process.exit(1);
         } finally {
             cleanUpTmpDir(tmpDir);
         }

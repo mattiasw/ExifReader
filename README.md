@@ -352,10 +352,10 @@ not the source code. That means it's not possible to use the ES module (from the
 `src` folder) or any tree shaking to get the benefit of a custom build. Tree
 shaking will actually have close to no effect at all here so don't rely on it.
 
-This is for npm users that use the built file. To specify what functionality you
-want you can either use include pattern (start with an empty set and include) or
-exclude pattern (start with full functionality and exclude). If an include
-pattern is set, excludes will not be used.
+This is for npm and yarn users that use the built file. To specify what
+functionality you want you can either use include pattern (start with an empty
+set and include) or exclude pattern (start with full functionality and exclude).
+If an include pattern is set, excludes will not be used.
 
 For Exif and IPTC it's also possible to specify which tags you're interested in.
 Those tag groups have huge dictionaries of tags and you may not be interested in
@@ -413,6 +413,11 @@ npm rebuild exifreader
 ```
 
 With yarn 2+:
+
+From my experience, you need a `node_modules` folder for the rebuild command to
+work with yarn 2+. If you don't have it, run `yarn config set nodeLinker
+node-modules` and then run `yarn`. Then you can try to rebuild:
+
 ```bash
 yarn rebuild exifreader
 ```
