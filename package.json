@@ -28,7 +28,7 @@
     "@babel/core": "^7.25.2",
     "@babel/preset-env": "^7.25.4",
     "@babel/register": "^7.24.6",
-    "@types/node": "^18.11.9",
+    "@types/node": "^20.16.10",
     "babel-loader": "^9.2.1",
     "babel-plugin-rewire": "^1.2.0",
     "chai": "^4.3.10",
