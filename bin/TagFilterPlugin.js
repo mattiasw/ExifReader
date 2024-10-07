@@ -4,16 +4,16 @@
 
 const modules = {
     exif: [
-        'src/tag-names-0th-ifd.js',
-        'src/tag-names-exif-ifd.js',
-        'src/tag-names-gps-ifd.js',
-        'src/tag-names-interoperability-ifd.js'
+        'src[/\\\\]tag-names-0th-ifd.js',
+        'src[/\\\\]tag-names-exif-ifd.js',
+        'src[/\\\\]tag-names-gps-ifd.js',
+        'src[/\\\\]tag-names-interoperability-ifd.js'
     ],
     iptc: [
-        'src/iptc-tag-names.js'
+        'src[/\\\\]iptc-tag-names.js'
     ],
     mpf: [
-        'src/tag-names-mpf-ifd.js'
+        'src[/\\\\]tag-names-mpf-ifd.js'
     ]
 };
 
@@ -70,10 +70,14 @@ module.exports = function TagFilter() {
 function getFileModuleType(filename) {
     for (const module in modules) {
         for (const file of modules[module]) {
-            if (filename.endsWith(file)) {
+            if (endsWith(filename, file)) {
                 return module;
             }
         }
     }
     return false;
+}
+
+function endsWith(string, suffix) {
+    return new RegExp(`${suffix}$`).test(string);
 }
