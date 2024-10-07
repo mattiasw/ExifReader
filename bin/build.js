@@ -11,6 +11,7 @@ const EXIFREADER_ROOT_DIR = path.join(__dirname, '..');
 process.chdir(EXIFREADER_ROOT_DIR);
 
 if (!process.argv.includes('--only-with-config') || checkConfig()) {
+    execSync(`npm install --production --loglevel=error --no-optional --no-package-lock --no-save ${getPackage('webpack-cli')}`, {stdio: 'inherit'});
     execSync(`npx -p ${getPackage('webpack-cli')} -p ${getPackage('webpack')} webpack`, {stdio: 'inherit'});
 }
 
