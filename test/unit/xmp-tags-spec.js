@@ -103,8 +103,8 @@ describe('xmp-tags', function () {
     it('should be able to handle duplicate tags', () => {
         const xmlString = getXmlString(`
             <rdf:Description xmlns:exif='http://ns.adobe.com/exif/1.0/'>
-                <xmp:MyXMPTag>4812</xmp:MyXMPTag>
-                <xmp:MyXMPTag>4813</xmp:MyXMPTag>
+                <exif:MyXMPTag>4812</exif:MyXMPTag>
+                <exif:MyXMPTag>4813</exif:MyXMPTag>
             </rdf:Description>
         `);
         const dataView = getDataView(xmlString);
@@ -960,8 +960,8 @@ describe('xmp-tags', function () {
     describe('exceptions', () => {
         it('should rename MicrosoftPhoto:Rating to RatingPercent', () => {
             const xmlString = getXmlString(`
-                <rdf:Description xmlns:tiff="http://ns.adobe.com/tiff/1.0/">
-                    <xmp:Rating>3</xmp:Rating>
+                <rdf:Description xmlns:tiff="http://ns.adobe.com/tiff/1.0/" xmlns:MicrosoftPhoto="http://ns.microsoft.com/photo/1.0/" xmlns:MicroSoftPhoto_1_="http://ns.microsoft.com/photo/1.0/">
+                    <tiff:Rating>3</tiff:Rating>
                     <MicrosoftPhoto:Rating>50</MicrosoftPhoto:Rating>
                     <MicroSoftPhoto_1_:Rating>50</MicroSoftPhoto_1_:Rating>
                 </rdf:Description>
