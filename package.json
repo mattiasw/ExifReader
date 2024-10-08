@@ -22,7 +22,7 @@
   ],
   "types": "./exif-reader.d.ts",
   "optionalDependencies": {
-    "@xmldom/xmldom": "^0.8.10"
+    "@xmldom/xmldom": "^0.9.4"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
