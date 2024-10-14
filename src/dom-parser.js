@@ -12,13 +12,8 @@ function get() {
     }
     try {
         // eslint-disable-next-line no-undef
-        return new (__non_webpack_require__('@xmldom/xmldom').DOMParser)({
-            errorHandler: {
-                error: () => {
-                    throw new Error('Faulty XML');
-                }
-            }
-        });
+        const {DOMParser, onErrorStopParsing} = __non_webpack_require__('@xmldom/xmldom');
+        return new DOMParser({onError: onErrorStopParsing});
     } catch (error) {
         return undefined;
     }
