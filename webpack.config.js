@@ -163,6 +163,9 @@ function getConfig() {
             if (packageJson.include.icc) {
                 packageJson.include.exif.push('ICC_Profile');
             }
+            if (packageJson.include.thumbnail) {
+                packageJson.include.exif.push('JPEGInterchangeFormat', 'JPEGInterchangeFormatLength');
+            }
         }
         return {include: packageJson.include};
     }

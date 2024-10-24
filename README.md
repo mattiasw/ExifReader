@@ -456,7 +456,7 @@ Possible modules to include or exclude:
 | `icc`       | ICC color profile tags.                                        |
 | `mpf`       | Multi-picture Format tags.                                     |
 | `photoshop` | Photoshop tags.                                                |
-| `thumbnail` | Thumbnail. Needs `exif`.                                       |
+| `thumbnail` | Thumbnail image. Needs `exif`.                                 |
 
 Notes
 -----

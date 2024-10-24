@@ -8,7 +8,7 @@
 # Add `--no-cache` to force a rebuild, e.g. when there is a new version of exifreader (when using a locally built package this is not necessary).
 #
 # Run:
-#   docker run -it --rm -v /path/to/image.jpg:/image -v [/path/to/file/with/custom/config.json:/custom.json] [-v /path/to/locally/built/package.tgz:/exifreader.tgz] exifreader
+#   docker run -it --rm -v ./path/to/image.jpg:/image [-v ./path/to/file/with/custom/config.json:/custom.json] [-v ./path/to/locally/built/package.tgz:/exifreader.tgz] exifreader
 # The JSON file should contain what would be placed in package.json for the `exifreader` property, e.g. {include: {jpeg: true, exif: ["DateTimeDigitized"]}}.
 # Build a local package with `npm pack`.
 
