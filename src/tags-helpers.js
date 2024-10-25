@@ -50,7 +50,7 @@ export function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder, 
     if (Constants.USE_THUMBNAIL && (offset < dataView.byteLength - Types.getTypeSize('LONG'))) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
         if (nextIfdOffset !== 0 && ifdType === IFD_TYPE_0TH) {
-            tags['Thumbnail'] = readIfd(dataView, IFD_TYPE_1ST, tiffHeaderOffset, tiffHeaderOffset + nextIfdOffset, byteOrder, true);
+            tags['Thumbnail'] = readIfd(dataView, IFD_TYPE_1ST, tiffHeaderOffset, tiffHeaderOffset + nextIfdOffset, byteOrder, includeUnknown);
         }
     }
 
