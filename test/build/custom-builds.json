@@ -12,6 +12,7 @@
                 "icc": true,
                 "mpf": true,
                 "photoshop": true,
+                "maker_notes": true,
                 "thumbnail": true,
                 "tiff": true,
                 "jpeg": true,

@@ -7,6 +7,7 @@ import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
 import {getCharacterArray, getBase64Image} from '../../src/utils';
 import * as ExifReader from '../../src/exif-reader';
 import exifErrors from '../../src/errors';
+import {BIG_ENDIAN} from '../../src/byte-order';
 
 const OFFSET_TEST_VALUE = 4711;
 const XMP_FIELD_LENGTH_TEST_VALUE = 47;
@@ -14,6 +15,7 @@ const PNG_FIELD_LENGTH_TEST_VALUE = 47;
 const OFFSET_TEST_VALUE_ICC2_1 = 27110;
 const OFFSET_TEST_VALUE_ICC2_2 = 47110;
 const OFFSET_TEST_VALUE_ICC2_3 = 67110;
+const OFFSET_TEST_VALUE_MAKER_NOTE = 4812;
 
 describe('exif-reader', function () {
     afterEach(() => {
@@ -420,6 +422,18 @@ describe('exif-reader', function () {
         const myTags = {...myExifTags, ...myIccTags};
         rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
         rewireIccTagsRead(myIccTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
+    it('should be able to find Canon MakerNote segment', () => {
+        const myExifTags = {
+            Make: {value: ['Canon']},
+            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+        };
+        const myCanonTags = {AutoRotate: 42};
+        const myTags = {...myExifTags, ...myCanonTags};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
+        rewireMakerNoteTagsRead(myCanonTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -833,7 +847,13 @@ function rewireTagsRead(tagsObject, tagsValue) {
     ExifReaderRewireAPI.__Rewire__(tagsObject, {
         read(dataView, offset) {
             if (Array.isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
+                if (tagsObject === 'Tags') {
+                    return {tags: tagsValue, byteOrder: BIG_ENDIAN};
+                }
                 return tagsValue;
+            }
+            if (tagsObject === 'Tags') {
+                return {tags: {}, byteOrder: BIG_ENDIAN};
             }
             return {};
         },
@@ -873,6 +893,17 @@ function rewireIccTagsRead(tagsValue, async = false) {
             }
             if (((iccData.length === 2) && (iccData[0] === OFFSET_TEST_VALUE_ICC2_1) && (iccData[1] === OFFSET_TEST_VALUE_ICC2_2))
                 || (iccData.length === 1) && (iccData[0].offset === 0) && (iccData[0].length === dataView.length)) {
+                return tagsValue;
+            }
+            return {};
+        }
+    });
+}
+
+function rewireMakerNoteTagsRead(tagsValue) {
+    ExifReaderRewireAPI.__Rewire__('CanonTags', {
+        read(dataView, tiffHeaderOffset, makerNoteOffset) {
+            if (tiffHeaderOffset === OFFSET_TEST_VALUE && makerNoteOffset === OFFSET_TEST_VALUE_MAKER_NOTE) {
                 return tagsValue;
             }
             return {};

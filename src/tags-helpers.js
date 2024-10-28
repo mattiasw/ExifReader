@@ -42,6 +42,9 @@ export function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder, 
                 'value': tag.value,
                 'description': tag.description
             };
+            if (tag.name === 'MakerNote') {
+                tags[tag.name].__offset = tag.__offset;
+            }
         }
 
         offset += FIELD_SIZE;
@@ -74,15 +77,17 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder, include
     const tagType = Types.getShortAt(dataView, offset + TAG_TYPE_OFFSET, byteOrder);
     const tagCount = Types.getLongAt(dataView, offset + TAG_COUNT_OFFSET, byteOrder);
     let tagValue;
+    let tagValueOffset;
 
     if (Types.typeSizes[tagType] === undefined || (!includeUnknown && TagNames[ifdType][tagCode] === undefined)) {
         return undefined;
     }
 
     if (tagValueFitsInOffsetSlot(tagType, tagCount)) {
-        tagValue = getTagValue(dataView, offset + TAG_VALUE_OFFSET, tagType, tagCount, byteOrder);
+        tagValueOffset = offset + TAG_VALUE_OFFSET;
+        tagValue = getTagValue(dataView, tagValueOffset, tagType, tagCount, byteOrder);
     } else {
-        const tagValueOffset = Types.getLongAt(dataView, offset + TAG_VALUE_OFFSET, byteOrder);
+        tagValueOffset = Types.getLongAt(dataView, offset + TAG_VALUE_OFFSET, byteOrder);
         if (tagValueFitsInDataView(dataView, tiffHeaderOffset, tagValueOffset, tagType, tagCount)) {
             const forceByteType = tagCode === TAG_CODE_IPTC_NAA;
             tagValue = getTagValue(dataView, tiffHeaderOffset + tagValueOffset, tagType, tagCount, byteOrder, forceByteType);
@@ -120,7 +125,8 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder, include
         id: tagCode,
         name: tagName,
         value: tagValue,
-        description: tagDescription
+        description: tagDescription,
+        __offset: tagValueOffset
     };
 }
 

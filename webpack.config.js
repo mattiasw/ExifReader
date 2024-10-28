@@ -100,6 +100,7 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
         'iptc',
         'xmp',
         'icc',
+        'maker_notes',
         'mpf',
         'thumbnail',
         'tiff',
@@ -165,6 +166,9 @@ function getConfig() {
             }
             if (packageJson.include.thumbnail) {
                 packageJson.include.exif.push('JPEGInterchangeFormat', 'JPEGInterchangeFormatLength');
+            }
+            if (packageJson.include.maker_notes) {
+                packageJson.include.exif.push('MakerNote', 'Make');
             }
         }
         return {include: packageJson.include};

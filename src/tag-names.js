@@ -9,6 +9,7 @@ import TagNamesExifIfd from './tag-names-exif-ifd.js';
 import TagNamesGpsIfd from './tag-names-gps-ifd.js';
 import TagNamesInteroperabilityIfd from './tag-names-interoperability-ifd.js';
 import TagNamesMpfIfd from './tag-names-mpf-ifd.js';
+import TagNamesCanonIfd from './tag-names-canon-ifd.js';
 
 const tagNames0thExifIfds = objectAssign({}, TagNames0thIfd, TagNamesExifIfd);
 
@@ -18,6 +19,7 @@ export const IFD_TYPE_EXIF = 'exif';
 export const IFD_TYPE_GPS = 'gps';
 export const IFD_TYPE_INTEROPERABILITY = 'interoperability';
 export const IFD_TYPE_MPF = 'mpf';
+export const IFD_TYPE_CANON = 'canon';
 
 export default {
     [IFD_TYPE_0TH]: tagNames0thExifIfds,
@@ -26,4 +28,5 @@ export default {
     [IFD_TYPE_GPS]: TagNamesGpsIfd,
     [IFD_TYPE_INTEROPERABILITY]: TagNamesInteroperabilityIfd,
     [IFD_TYPE_MPF]: Constants.USE_MPF ? TagNamesMpfIfd : {},
+    [IFD_TYPE_CANON]: Constants.USE_MAKER_NOTES ? TagNamesCanonIfd : {},
 };

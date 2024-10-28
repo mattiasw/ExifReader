@@ -22,7 +22,7 @@ function read(dataView, tiffHeaderOffset, includeUnknown) {
     tags = readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown);
     tags = readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown);
 
-    return tags;
+    return {tags, byteOrder};
 }
 
 function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown) {

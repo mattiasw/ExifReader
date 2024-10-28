@@ -35,7 +35,7 @@ function read(dataView, pngTextChunks, async, includeUnknown) {
                 try {
                     if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
                         return {
-                            __exif: Tags.read(decodeRawData(value), EXIF_OFFSET, includeUnknown)
+                            __exif: Tags.read(decodeRawData(value), EXIF_OFFSET, includeUnknown).tags
                         };
                     } else if (Constants.USE_IPTC && isIptcGroupTag(name, value)) {
                         return {
