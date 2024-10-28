@@ -82,7 +82,12 @@
             "include": {
                 "png": true,
                 "png_file": true,
-                "xmp": true
+                "exif": true,
+                "iptc": true,
+                "icc": true,
+                "xmp": true,
+                "maker_notes": true,
+                "thumbnail": true
             }
         }
     },

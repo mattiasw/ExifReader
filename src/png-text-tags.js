@@ -41,7 +41,7 @@ function read(dataView, pngTextChunks, async, includeUnknown) {
                         return {
                             __iptc: IptcTags.read(decodeRawData(value), 0, includeUnknown)
                         };
-                    } else if (name) {
+                    } else if (name && !isExifGroupTag(name, value) && !isIptcGroupTag(name, value)) {
                         return {
                             [name]: {
                                 value,

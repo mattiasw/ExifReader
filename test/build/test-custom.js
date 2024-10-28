@@ -113,5 +113,12 @@ describe('custom configuration image outputs', () => {
         ));
 
         expect(result).to.deep.equal(storedResult);
+        // try {
+        //     expect(result).to.deep.equal(storedResult);
+        // } catch (error) {
+        //     console.log('STORED:', storedResult);
+        //     console.log('RESULT:', result);
+        //     throw error;
+        // }
     }
 });
