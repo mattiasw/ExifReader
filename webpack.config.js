@@ -100,6 +100,7 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
         'iptc',
         'xmp',
         'icc',
+        'photoshop',
         'maker_notes',
         'mpf',
         'thumbnail',

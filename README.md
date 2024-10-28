@@ -21,7 +21,7 @@ You can try it out on the
 | File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | Canon              | Thumbnail | Image details |
 | ----------|---------|---------|---------|---------|---------|---------------|--------------------|-----------|---------------|
 | JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
-| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | N/A       | N/A           |
+| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | **some**&ast; | **some**&ast;&ast; | N/A       | N/A           |
 | PNG       | **yes** | **yes** | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | no        | **yes**       |
 | HEIC/HEIF | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
 | AVIF      | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |

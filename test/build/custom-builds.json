@@ -171,7 +171,8 @@
                 "tiff": true,
                 "png": true,
                 "exif": true,
-                "xmp": true
+                "xmp": true,
+                "photoshop": true
             }
         }
     },
