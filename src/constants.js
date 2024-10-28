@@ -19,5 +19,6 @@ export default {
     USE_HEIC: true,
     USE_AVIF: true,
     USE_WEBP: true,
-    USE_GIF: true
+    USE_GIF: true,
+    USE_MAKER_NOTES: true
 };
