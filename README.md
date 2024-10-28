@@ -18,16 +18,17 @@ You can try it out on the
 
 **Support table**
 
-| File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | Thumbnail | Image details |
-| ----------|---------|---------|---------|---------|---------|---------------|-----------|---------------|
-| JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **yes**   | **yes**       |
-| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | ???           | N/A       | N/A           |
-| PNG       | **yes** | **yes** | **yes** | **yes** | ???     | ???           | no        | **yes**       |
-| HEIC/HEIF | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   | no            |
-| AVIF      | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   | no            |
-| WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **yes**   | **yes**       |
-| GIF       | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | N/A       | **yes**       |
+| File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | Canon              | Thumbnail | Image details |
+| ----------|---------|---------|---------|---------|---------|---------------|--------------------|-----------|---------------|
+| JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
+| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | N/A       | N/A           |
+| PNG       | **yes** | **yes** | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | no        | **yes**       |
+| HEIC/HEIF | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
+| AVIF      | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
+| WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | **yes**       |
+| GIF       | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | **some**&ast;&ast; | N/A       | **yes**       |
 
+- `Canon` = Canon's proprietary MakerNote tags.
 - `Image details` = image width, height, etc. read from image header.
 - `N/A` = The feature is not applicable to this file type.
 - `???` = may be supported in any file type using Exif but it has only been tested
@@ -37,6 +38,8 @@ You can try it out on the
     are very different from other tags and need a lot of extra code so they have
     deliberately not been fully implemented. File an issue if there is something
     you think should really be supported.
+- `**` = Some of the Canon-specific tags have been added. File an issue if you
+    think something should be supported.
 
 If you're missing something that you think should be supported, file an issue
 with an attached example image and I'll see what I can do.
@@ -439,24 +442,25 @@ types no tags will be found.
 
 Possible modules to include or exclude:
 
-| Module      | Description                                                    |
-| ----------- | -------------------------------------------------------------- |
-| `jpeg`      | JPEG images.                                                   |
-| `tiff`      | TIFF images.                                                   |
-| `png`       | PNG images.                                                    |
-| `heic`      | HEIC/HEIF images.                                              |
-| `webp`      | WebP images.                                                   |
-| `gif`       | GIF images.                                                    |
-| `file`      | JPEG file details: image width, height etc.                    |
-| `jfif`      | JFIF details in JPEG files: resolution, thumbnail etc.         |
-| `png_file`  | PNG file details: image width, height etc.                     |
-| `exif`      | Regular Exif tags. If excluded, will also exclude `mpf`, `photoshop` and `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
-| `iptc`      | IPTC tags.                                                     |
-| `xmp`       | XMP tags.                                                      |
-| `icc`       | ICC color profile tags.                                        |
-| `mpf`       | Multi-picture Format tags.                                     |
-| `photoshop` | Photoshop tags.                                                |
-| `thumbnail` | Thumbnail image. Needs `exif`.                                 |
+| Module        | Description                                            |
+| ------------- | -------------------------------------------------------|
+| `jpeg`        | JPEG images.                                           |
+| `tiff`        | TIFF images.                                           |
+| `png`         | PNG images.                                            |
+| `heic`        | HEIC/HEIF images.                                      |
+| `webp`        | WebP images.                                           |
+| `gif`         | GIF images.                                            |
+| `file`        | JPEG file details: image width, height etc.            |
+| `jfif`        | JFIF details in JPEG files: resolution, thumbnail etc. |
+| `png_file`    | PNG file details: image width, height etc.             |
+| `exif`        | Regular Exif tags. If excluded, will also exclude `mpf`, `photoshop` and `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
+| `iptc`        | IPTC tags.                                             |
+| `xmp`         | XMP tags.                                              |
+| `icc`         | ICC color profile tags.                                |
+| `mpf`         | Multi-picture Format tags.                             |
+| `photoshop`   | Photoshop tags.                                        |
+| `maker_notes` | Proprietary camera maker tags. Needs `exif`.           |
+| `thumbnail`   | Thumbnail image. Needs `exif`.                         |
 
 Notes
 -----
@@ -551,6 +555,8 @@ Changelog
 
 A selection of notable changes.
 
+-   **October 2024**:
+    -   Add support for some proprietary tags from Canon cameras.
 -   **December 2023**:
     -   Add support for extracting Photoshop paths.
     -   Add basic support for GIF images (image dimensions, bit depths).

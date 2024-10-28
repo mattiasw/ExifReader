@@ -71,7 +71,7 @@ describe('png-text-tags', () => {
 
     it('should read zTXt tags with Exif data', async () => {
         PngTextTagsRewireAPI.__Rewire__('Tags', {
-            read: (data, offset) => getStringFromDataView(data, offset, data.byteLength)
+            read: (data, offset) => ({tags: getStringFromDataView(data, offset, data.byteLength)})
         });
         const EXIF_DATA = 'Exif\0\0<Exif\ndata>';
         const dataView = await getCompressedTagData(TYPE_ZTXT, 'Raw profile type exif', `\nexif\n${('' + EXIF_DATA.length).padStart(8, ' ')}\n${stringToHex(EXIF_DATA)}`);

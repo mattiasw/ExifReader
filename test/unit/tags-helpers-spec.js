@@ -63,6 +63,15 @@ describe('tags-helpers', () => {
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyExifTag'].id).to.equal(0x4711);
         expect(tags['MyExifTag'].description).to.equal(0x42);
+        expect(tags['MyExifTag'].__offset).to.be.undefined;
+    });
+
+    it('should be able to read a one-field IFD and pass on the offset for MakerNote', () => {
+        // Field count + field + offset to next IFD.
+        const dataView = getDataView('\x00\x01' + '\x92\x7c\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
+        TagsHelpers.__set__('TagNames', {'0th': {0x927c: 'MakerNote'}});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MakerNote'].__offset).to.equal(0xa);
     });
 
     it('should be able to read a multi-field IFD', () => {
@@ -154,6 +163,25 @@ describe('tags-helpers', () => {
                 id: 0x4711,
                 value: ['ABCDE'],
                 description: 'ABCDE'
+            }
+        });
+    });
+
+    it('should pass on the offset for the MakerNote tag', () => {
+        TagsHelpers.__set__('TagNames', {'0th': {0x927c: 'MakerNote'}});
+        const dataView = getDataView(
+            '\x00\x00\x00\x00' + '\x00\x00' // Padding to test offset.
+            + '\x00\x01' // Number of fields.
+            + '\x92\x7c\x00\x02\x00\x00\x00\x06\x00\x00\x00\x14'
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+            + '\x41\x42\x43\x44\x45\x00' // Value.
+        );
+        expect(readIfd(dataView, '0th', 4, 6, ByteOrder.BIG_ENDIAN)).to.deep.equal({
+            MakerNote: {
+                id: 0x927c,
+                value: ['ABCDE'],
+                description: 'ABCDE',
+                __offset: 0x14
             }
         });
     });

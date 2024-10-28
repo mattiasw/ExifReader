@@ -207,6 +207,7 @@ export interface ExpandedTags {
     Thumbnail?: ThumbnailTags,
     gps?: GpsTags
     photoshop?: PhotoshopTags;
+    makerNotes?: CanonTags;
 }
 
 interface GpsTags {
@@ -254,6 +255,13 @@ interface PhotoshopTags {
     // PrintStyle: StringTag;
     PathInformation: StringTag;
     ClippingPathName: StringTag;
+}
+
+interface CanonTags {
+    AutoRotate: {
+        value: number,
+        description: 'None' | 'Rotate 90 CW' | 'Rotate 180' | 'Rotate 270 CW' | 'Unknown'
+    };
 }
 
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;
@@ -517,7 +525,7 @@ interface IccTags {
     [name: string]: ValueTag;
 }
 
-export type Tags = XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & {
+export type Tags = XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & {
     'Thumbnail'?: ThumbnailTags;
     'Images'?: MPFImageTags[],
 } & {

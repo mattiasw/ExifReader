@@ -22,6 +22,7 @@ import IptcTags from './iptc-tags.js';
 import XmpTags from './xmp-tags.js';
 import PhotoshopTags from './photoshop-tags.js';
 import IccTags from './icc-tags.js';
+import CanonTags from './canon-tags.js';
 import PngFileTags from './png-file-tags.js';
 import PngTextTags from './png-text-tags.js';
 import PngTags from './png-tags.js';
@@ -243,7 +244,7 @@ export function loadView(
 
     if (Constants.USE_EXIF && hasExifData(tiffHeaderOffset)) {
         foundMetaData = true;
-        const readTags = Tags.read(dataView, tiffHeaderOffset, includeUnknown);
+        const {tags: readTags, byteOrder} = Tags.read(dataView, tiffHeaderOffset, includeUnknown);
         if (readTags.Thumbnail) {
             tags.Thumbnail = readTags.Thumbnail;
             delete readTags.Thumbnail;
@@ -299,6 +300,21 @@ export function loadView(
             } else {
                 tags = objectAssign({}, tags, readIccTags);
             }
+        }
+
+        if (Constants.USE_MAKER_NOTES) {
+            if (hasCanonData(readTags)) {
+                const readCanonTags = CanonTags.read(dataView, tiffHeaderOffset, readTags['MakerNote'].__offset, byteOrder, includeUnknown);
+                if (expanded) {
+                    tags.makerNotes = readCanonTags;
+                } else {
+                    tags = objectAssign({}, tags, readCanonTags);
+                }
+            }
+        }
+
+        if (readTags['MakerNote']) {
+            delete readTags['MakerNote'].__offset;
         }
     }
 
@@ -520,6 +536,11 @@ function hasXmpData(xmpChunks) {
 
 function hasIccData(iccDataOffsets) {
     return Array.isArray(iccDataOffsets) && iccDataOffsets.length > 0;
+}
+
+function hasCanonData(tags) {
+    return tags['Make'] && tags['Make'].value && Array.isArray(tags['Make'].value) && tags['Make'].value[0] === 'Canon'
+        && tags['MakerNote'] && tags['MakerNote'].__offset;
 }
 
 function hasMpfData(mpfDataOffset) {

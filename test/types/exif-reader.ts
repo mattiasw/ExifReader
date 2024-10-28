@@ -224,3 +224,10 @@ expandedTags.photoshop?.["ClippingPathName"]?.description === '{"a": 1}';
 // tags["CaptionDigest"]?.description === "abcd1234";
 tags["PathInformation"]?.description === '{"a": 1}';
 tags["ClippingPathName"]?.description === '{"a": 1}';
+
+////////////////
+// Maker Notes
+expandedTags.makerNotes?.["AutoRotate"]?.value === 1;
+expandedTags.makerNotes?.["AutoRotate"]?.description === 'Rotate 90 CW';
+tags["AutoRotate"]?.value === 1;
+tags["AutoRotate"]?.description === 'Rotate 90 CW';

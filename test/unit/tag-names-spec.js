@@ -21,4 +21,12 @@ describe('tag-names', () => {
     it('should have Interoperability IFD tag names', () => {
         expect(TagNames['interoperability']).to.not.be.undefined;
     });
+
+    it('should have MPF tag names', () => {
+        expect(TagNames['mpf']).to.not.be.undefined;
+    });
+
+    it('should have Canon IFD tag names', () => {
+        expect(TagNames['canon']).to.not.be.undefined;
+    });
 });
