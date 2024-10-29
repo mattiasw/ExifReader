@@ -31,7 +31,7 @@
     "@types/node": "^20.16.10",
     "babel-loader": "^9.2.1",
     "babel-plugin-rewire": "^1.2.0",
-    "chai": "^4.3.10",
+    "chai": "^5.1.2",
     "cross-env": "^7.0.3",
     "cypress": "^13.3.2",
     "eslint": "^8.52.0",
