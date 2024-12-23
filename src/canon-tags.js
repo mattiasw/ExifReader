@@ -3,6 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 // Reverse-engineered docs:
+// https://exiftool.org/makernote_types.html
+// https://exiv2.org/makernote.html
 // https://exiv2.org/tags-canon.html
 // https://gist.github.com/redaktor/bae0ef2377ab70bc5276
 // https://www.ozhiker.com/electronics/pjmt/jpeg_info/canon_mn.html
