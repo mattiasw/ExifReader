@@ -78,6 +78,13 @@ expandedTags["exif"]?.["Thumbnail"]?.Compression?.value === 32946;
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.description === "Deflate";
 expandedTags["exif"]?.["Images"]?.[0];
 
+tags["SceneType"]?.value === 1;
+tags["SceneType"]?.value === "1";
+expandedTags["exif"]?.["SceneType"]?.value === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["SceneType"]?.value === "1";
+expandedTags["xmp"]?.["SceneType"]?.value === "1";
+
 // @ts-expect-error
 expandedTags["exif"]?.["NonExistent"];
 
