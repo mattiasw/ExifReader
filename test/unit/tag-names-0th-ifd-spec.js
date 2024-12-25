@@ -359,23 +359,28 @@ describe('tag-names-0th-ifd', () => {
     });
 
     it('should have tag XPTitle', () => {
-        expect(TagNames0thIfd[0x9c9b]).to.equal('XPTitle');
+        expect(TagNames0thIfd[0x9c9b].name).to.equal('XPTitle');
+        expect(TagNames0thIfd[0x9c9b].description([116, 0, 105, 0, 116, 0, 108, 0, 101, 0])).to.equal('title');
     });
 
     it('should have tag XPComment', () => {
-        expect(TagNames0thIfd[0x9c9c]).to.equal('XPComment');
+        expect(TagNames0thIfd[0x9c9c].name).to.equal('XPComment');
+        expect(TagNames0thIfd[0x9c9c].description([99, 0, 111, 0, 109, 0, 109, 0, 101, 0, 110, 0, 116, 0])).to.equal('comment');
     });
 
     it('should have tag XPAuthor', () => {
-        expect(TagNames0thIfd[0x9c9d]).to.equal('XPAuthor');
+        expect(TagNames0thIfd[0x9c9d].name).to.equal('XPAuthor');
+        expect(TagNames0thIfd[0x9c9d].description([97, 0, 117, 0, 116, 0, 104, 0, 111, 0, 114, 0])).to.equal('author');
     });
 
     it('should have tag XPKeywords', () => {
-        expect(TagNames0thIfd[0x9c9e]).to.equal('XPKeywords');
+        expect(TagNames0thIfd[0x9c9e].name).to.equal('XPKeywords');
+        expect(TagNames0thIfd[0x9c9e].description([107, 0, 101, 0, 121, 0, 119, 0, 111, 0, 114, 0, 100, 0, 115, 0])).to.equal('keywords');
     });
 
     it('should have tag XPSubject', () => {
-        expect(TagNames0thIfd[0x9c9f]).to.equal('XPSubject');
+        expect(TagNames0thIfd[0x9c9f].name).to.equal('XPSubject');
+        expect(TagNames0thIfd[0x9c9f].description([115, 0, 117, 0, 98, 0, 106, 0, 101, 0, 99, 0, 116, 0])).to.equal('subject');
     });
 
     it('should have tag GDALMetadata', () => {

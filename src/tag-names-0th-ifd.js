@@ -230,11 +230,26 @@ export default {
     0x87b0: 'GeoTiffDoubleParams',
     0x87b1: 'GeoTiffAsciiParams',
     0x8825: 'GPS Info IFD Pointer',
-    0x9c9b: 'XPTitle',
-    0x9c9c: 'XPComment',
-    0x9c9d: 'XPAuthor',
-    0x9c9e: 'XPKeywords',
-    0x9c9f: 'XPSubject',
+    0x9c9b: {
+        name: 'XPTitle',
+        description: decodeXPValue,
+    },
+    0x9c9c: {
+        name: 'XPComment',
+        description: decodeXPValue
+    },
+    0x9c9d: {
+        name: 'XPAuthor',
+        description: decodeXPValue,
+    },
+    0x9c9e: {
+        name: 'XPKeywords',
+        description: decodeXPValue,
+    },
+    0x9c9f: {
+        name: 'XPSubject',
+        description: decodeXPValue,
+    },
     0xa480: 'GDALMetadata',
     0xa481: 'GDALNoData',
     0xc4a5: 'PrintIM',
@@ -355,3 +370,12 @@ export default {
     0xc7a7: 'NewRawImageDigest',
     0xc7a8: 'RawToPreviewGain'
 };
+
+function decodeXPValue(value) {
+    // The XP tags are encoded as UCS-2 which uses two bytes per character but
+    // it's close to UTF-16 so we can use that to decode them.
+    // https://www.loc.gov/preservation/digital/formats/content/tiff_tags.shtml
+    const decodedValue = new TextDecoder('utf-16').decode(new Uint8Array(value));
+    // Some softwares pad the string with null characters so we remove them.
+    return decodedValue.replace(/\u0000+$/, ''); // eslint-disable-line no-control-regex
+}
