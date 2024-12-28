@@ -26,7 +26,7 @@ You can try it out on the
 | HEIC/HEIF | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
 | AVIF      | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
 | WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | **yes**       |
-| GIF       | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | **some**&ast;&ast; | N/A       | **yes**       |
+| GIF       | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | N/A                | N/A       | **yes**       |
 
 - `Canon` = Canon's proprietary MakerNote tags.
 - `Image details` = image width, height, etc. read from image header.
