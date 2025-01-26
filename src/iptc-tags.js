@@ -7,8 +7,12 @@ import TagDecoder from './tag-decoder.js';
 
 const BYTES_8BIM = 0x3842494d;
 const BYTES_8BIM_SIZE = 4;
-const RESOURCE_BLOCK_HEADER_SIZE = BYTES_8BIM_SIZE + 8;
-const NAA_RESOURCE_BLOCK_TYPE = 0x0404;
+const RESOURCE_ID_SIZE = 2;
+const RESOURCE_NAME_SIZE_SIZE = 1;
+const RESOURCE_NAME_MIN_SIZE = 2;
+const RESOURCE_SIZE_SIZE = 4;
+const RESOURCE_BLOCK_MIN_HEADER_SIZE = BYTES_8BIM_SIZE + RESOURCE_ID_SIZE + RESOURCE_NAME_MIN_SIZE + RESOURCE_SIZE_SIZE;
+const NAA_RESOURCE_BLOCK_TYPE = 0x0404; // Sometimes called resource ID.
 const TAG_HEADER_SIZE = 5;
 
 export default {
@@ -28,26 +32,29 @@ function read(dataView, dataOffset, includeUnknown) {
 }
 
 function getNaaResourceBlock(dataView, dataOffset) {
-    while (dataOffset + RESOURCE_BLOCK_HEADER_SIZE <= dataView.byteLength) {
+    while (dataOffset + RESOURCE_BLOCK_MIN_HEADER_SIZE <= dataView.byteLength) {
         const resourceBlock = getResourceBlock(dataView, dataOffset);
         if (isNaaResourceBlock(resourceBlock)) {
-            return {naaBlock: resourceBlock, dataOffset: dataOffset + RESOURCE_BLOCK_HEADER_SIZE};
+            return {naaBlock: resourceBlock, dataOffset: dataOffset + resourceBlock.headerSize};
         }
-        dataOffset += RESOURCE_BLOCK_HEADER_SIZE + resourceBlock.size + getBlockPadding(resourceBlock);
+        dataOffset += resourceBlock.headerSize + resourceBlock.size + getBlockPadding(resourceBlock);
     }
     throw new Error('No IPTC NAA resource block.');
 }
 
 function getResourceBlock(dataView, dataOffset) {
-    const RESOURCE_BLOCK_SIZE_OFFSET = 10;
-
     if (dataView.getUint32(dataOffset, false) !== BYTES_8BIM) {
         throw new Error('Not an IPTC resource block.');
     }
 
+    // We currently do not use the resource name for anything, we just need to know the size.
+    const resourceNameSize = dataView.getUint8(dataOffset + BYTES_8BIM_SIZE + RESOURCE_ID_SIZE);
+    const resourceNameTotalSize = (resourceNameSize % 2 === 0 ? resourceNameSize + 1 : resourceNameSize) + RESOURCE_NAME_SIZE_SIZE;
+
     return {
+        headerSize: BYTES_8BIM_SIZE + RESOURCE_ID_SIZE + resourceNameTotalSize + RESOURCE_SIZE_SIZE,
         type: dataView.getUint16(dataOffset + BYTES_8BIM_SIZE),
-        size: dataView.getUint16(dataOffset + RESOURCE_BLOCK_SIZE_OFFSET)
+        size: dataView.getUint32(dataOffset + BYTES_8BIM_SIZE + RESOURCE_ID_SIZE + resourceNameTotalSize),
     };
 }
 
