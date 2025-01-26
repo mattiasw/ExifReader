@@ -49,6 +49,18 @@ describe('iptc-tags', function () {
         expect(naaBlock['size']).to.equal(0x42);
     });
 
+    it('should find the IPTC NAA resource block with non-empty resource name (without padding)', () => {
+        const dataView = getDataView('8BIM\x04\x04\x05aname\x00\x00\x00\x42');
+        const {naaBlock} = getNaaResourceBlock(dataView, 0);
+        expect(naaBlock['size']).to.equal(0x42);
+    });
+
+    it('should find the IPTC NAA resource block with non-empty resource name (with padding)', () => {
+        const dataView = getDataView('8BIM\x04\x04\x04name\x00\x00\x00\x00\x42');
+        const {naaBlock} = getNaaResourceBlock(dataView, 0);
+        expect(naaBlock['size']).to.equal(0x42);
+    });
+
     it('should fail for IPTC header with no NAA resource block', () => {
         const dataView = getDataView('8BIM\x04\x05\x00\x00\x00\x00\x00\x42');
         expect(() => getNaaResourceBlock(dataView, 0)).to.throw(/No IPTC NAA resource block./);
