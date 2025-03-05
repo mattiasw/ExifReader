@@ -161,7 +161,7 @@ function requireNodeFs() {
 }
 
 function isBrowserFileObject(data) {
-    return (typeof window !== 'undefined') && (typeof File !== 'undefined') && (data instanceof File);
+    return (typeof File !== 'undefined') && (data instanceof File);
 }
 
 function loadFileObject(file) {
