@@ -957,6 +957,24 @@ describe('xmp-tags', function () {
         });
     });
 
+    it('should be able to auto-correct when a prefix is not bound to a namespace', () => {
+        const xmlString = getXmlString(`
+            <rdf:Description>
+                <xmp:MyXMPTag>4711</xmp:MyXMPTag>
+            </rdf:Description>
+        `);
+        const dataView = getDataView(xmlString);
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
+        expect(tags).to.deep.equal({
+            _raw: xmlString,
+            MyXMPTag: {
+                value: '4711',
+                attributes: {},
+                description: '4711'
+            }
+        });
+    });
+
     describe('exceptions', () => {
         it('should rename MicrosoftPhoto:Rating to RatingPercent', () => {
             const xmlString = getXmlString(`
@@ -987,34 +1005,34 @@ describe('xmp-tags', function () {
 
 function getXmlStringWithPacketWrapper(content) {
     return `${PACKET_WRAPPER_START}
-      ${getXmlString(content)}
+        ${getXmlString(content)}
     ${PACKET_WRAPPER_END}`;
 }
 
 function getXmlStringWithMetaElement(content) {
     return `${META_ELEMENT_START}
-      ${getXmlString(content)}
+        ${getXmlString(content)}
     ${META_ELEMENT_END}`;
 }
 
 function getXmlStringWithMetaElementInsidePacketWrapper(content) {
     return `${PACKET_WRAPPER_START}
-      ${META_ELEMENT_START}
-        ${getXmlString(content)}
-      ${META_ELEMENT_END}
+        ${META_ELEMENT_START}
+            ${getXmlString(content)}
+        ${META_ELEMENT_END}
     ${PACKET_WRAPPER_END}`;
 }
 
 function getXmlStringWithPacketWrapperInsideMetaElement(content) {
     return `${META_ELEMENT_START}
-      ${PACKET_WRAPPER_START}
-        ${getXmlString(content)}
-      ${PACKET_WRAPPER_END}
+        ${PACKET_WRAPPER_START}
+            ${getXmlString(content)}
+        ${PACKET_WRAPPER_END}
     ${META_ELEMENT_END}`;
 }
 
 function getXmlString(content) {
     return `<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-      ${content}
+        ${content}
     </rdf:RDF>`;
 }
