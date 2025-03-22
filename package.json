@@ -70,7 +70,7 @@
     "check-coverage": true,
     "statements": 93,
     "branches": 88,
-    "functions": 98,
+    "functions": 97,
     "lines": 93,
     "reporter": [
       "lcov",

@@ -5,10 +5,18 @@
 import {getStringFromDataView, objectAssign} from './utils.js';
 import XmpTagNames from './xmp-tag-names.js';
 import DOMParser from './dom-parser.js';
+import {isMissingNamespaceError, addMissingNamespaces} from './xmp-namespaces.js';
 
 export default {
     read
 };
+
+class ParseError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = 'ParseError';
+    }
+}
 
 function read(dataView, chunks) {
     const tags = {};
@@ -90,11 +98,7 @@ function getDocument(chunkDataView) {
     }
 
     const xmlString = typeof chunkDataView === 'string' ? chunkDataView : getStringFromDataView(chunkDataView, 0, chunkDataView.byteLength);
-    const doc = domParser.parseFromString(trimXmlSource(xmlString), 'application/xml');
-
-    if (doc.documentElement.nodeName === 'parsererror') {
-        throw new Error(doc.documentElement.textContent);
-    }
+    const doc = parseFromString(domParser, trimXmlSource(xmlString));
 
     return {
         doc,
@@ -104,6 +108,23 @@ function getDocument(chunkDataView) {
 
 function trimXmlSource(xmlSource) {
     return xmlSource.replace(/^.+(<\?xpacket begin)/, '$1').replace(/(<\?xpacket end=".*"\?>).+$/, '$1');
+}
+
+function parseFromString(domParser, xmlString, isRetry = false) {
+    try {
+        const doc = domParser.parseFromString(xmlString, 'application/xml');
+        const errors = doc.getElementsByTagName('parsererror');
+        if (errors.length > 0) {
+            throw new ParseError(errors[0].textContent);
+        }
+        return doc;
+    } catch (error) {
+        if (error.name === 'ParseError' && isMissingNamespaceError(error) && !isRetry) {
+            // Retry once after trying to fix the invalid XML.
+            return parseFromString(domParser, addMissingNamespaces(xmlString), true);
+        }
+        throw error;
+    }
 }
 
 function getRDF(node) {
