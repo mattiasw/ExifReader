@@ -6,7 +6,12 @@ export default {
     get
 };
 
-function get() {
+function get(domParser, domParserArgs) {
+    if (domParser) {
+        const args = [null].concat(domParserArgs);
+        return new (Function.prototype.bind.apply(domParser, args));
+    }
+
     if (typeof DOMParser !== 'undefined') {
         return new DOMParser();
     }
