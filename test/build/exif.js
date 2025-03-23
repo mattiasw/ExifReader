@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const {DOMParser, onErrorStopParsing} = require('@xmldom/xmldom');
 
 module.exports = {
     parse
@@ -14,8 +15,8 @@ async function parse(imagePath, libraryDir = '../..') {
 
     try {
         const result = {
-            combined: hashDetails(await ExifReader.load(data, {includeUnknown: true, async: true})),
-            expanded: hashGroupDetails(await ExifReader.load(data, {expanded: true, includeUnknown: true, async: true}))
+            combined: hashDetails(await ExifReader.load(data, {includeUnknown: true, async: true, domParser: DOMParser, domParserArgs: [{onError: onErrorStopParsing}]})),
+            expanded: hashGroupDetails(await ExifReader.load(data, {expanded: true, includeUnknown: true, async: true, domParser: DOMParser, domParserArgs: [{onError: onErrorStopParsing}]}))
         };
         return result;
     } catch (error) {
