@@ -208,6 +208,47 @@ For the compressed tags to work, the environment needs to support the
 The reason for having an option to enable this is to not break backwards
 compatibility. This will probably be the default in the next major version.
 
+#### Grouping
+
+By default, Exif, IPTC and XMP tags are grouped together. This means that if
+e.g. `Orientation` exists in both Exif and XMP, the first value (Exif) will be
+overwritten by the second (XMP). If you need to separate between these values,
+pass in an options object with the property `expanded` set to `true`:
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {expanded: true});
+```
+
+#### Parsing XMP tags when not in a DOM environment
+
+When using for example Node.js or a web worker, there is no native
+[`DOMParser`](https://developer.mozilla.org/en-US/docs/Web/API/DOMParser)
+available for parsing the XML used in XMP. In this case – and if XMP support is
+important to you – you can pass in a third-party parser to ExifReader. The
+parser needs to have a `parseFromString` method with the same API as the
+[`parseFromString` from the DOMParser Web
+API](https://developer.mozilla.org/en-US/docs/Web/API/DOMParser/parseFromString).
+
+Two libraries have been tested,
+[`xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) and
+[`linkedom`](https://www.npmjs.com/package/linkedom), but more might work if
+they follow the spec.
+
+Here is an example using `xmldom`:
+
+```javascript
+import {DOMParser, onErrorStopParsing} from '@xmldom/xmldom';
+// ...
+const tags = ExifReader.load(fileBuffer, {domParser: new DOMParser({onError: onErrorStopParsing})});
+```
+
+The `onError` option is needed to avoid a [seemingly infinite loop for some
+XMLs](https://github.com/xmldom/xmldom/issues/501). Unfortunately `linkedom` has
+the same problem but does not have this option and will therefore get stuck on
+these XMLs. If this happens to you, switch to `xmldom` and pass in the `onError`
+option. (NOTE: The native `DOMParser` that a web browser uses does not seem to
+have this issue.)
+
 #### Using React Native
 
 Import ExifReader like this:
@@ -234,17 +275,6 @@ const tags = ExifReader.load(fileBuffer, {expanded: true});
 If you're having trouble getting the GPS location, see [this comment and
 thread](https://github.com/mattiasw/ExifReader/issues/177#issuecomment-1172228225)
 and the [GPS section below](#gps) for more details.
-
-#### Grouping
-
-By default, Exif, IPTC and XMP tags are grouped together. This means that if
-e.g. `Orientation` exists in both Exif and XMP, the first value (Exif) will be
-overwritten by the second (XMP). If you need to separate between these values,
-pass in an options object with the property `expanded` set to `true`:
-
-```javascript
-const tags = ExifReader.load(fileBuffer, {expanded: true});
-```
 
 #### Read only part of file
 
