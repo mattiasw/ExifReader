@@ -14,9 +14,10 @@ async function parse(imagePath, libraryDir = '../..') {
     const data = fs.readFileSync(imagePath);
 
     try {
+        const domParser = new DOMParser({onError: onErrorStopParsing});
         const result = {
-            combined: hashDetails(await ExifReader.load(data, {includeUnknown: true, async: true, domParser: DOMParser, domParserArgs: [{onError: onErrorStopParsing}]})),
-            expanded: hashGroupDetails(await ExifReader.load(data, {expanded: true, includeUnknown: true, async: true, domParser: DOMParser, domParserArgs: [{onError: onErrorStopParsing}]}))
+            combined: hashDetails(await ExifReader.load(data, {includeUnknown: true, async: true, domParser})),
+            expanded: hashGroupDetails(await ExifReader.load(data, {expanded: true, includeUnknown: true, async: true, domParser}))
         };
         return result;
     } catch (error) {
