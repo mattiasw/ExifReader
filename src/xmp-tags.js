@@ -18,20 +18,20 @@ class ParseError extends Error {
     }
 }
 
-function read(dataView, chunks) {
+function read(dataView, chunks, domParser) {
     const tags = {};
 
     if (typeof dataView === 'string') {
-        readTags(tags, dataView);
+        readTags(tags, dataView, domParser);
         return tags;
     }
 
     const [standardXmp, extendedXmp] = extractCompleteChunks(dataView, chunks);
 
-    const hasStandardTags = readTags(tags, standardXmp);
+    const hasStandardTags = readTags(tags, standardXmp, domParser);
 
     if (extendedXmp) {
-        const hasExtendedTags = readTags(tags, extendedXmp);
+        const hasExtendedTags = readTags(tags, extendedXmp, domParser);
 
         if (!hasStandardTags && !hasExtendedTags) {
             // Some writers are not spec-compliant in that they split an XMP
@@ -39,7 +39,7 @@ function read(dataView, chunks) {
             // XMP block. If we failed parsing both of the XMPs in the regular
             // way, we try to combine them to see if that works better.
             delete tags._raw;
-            readTags(tags, combineChunks(dataView, chunks));
+            readTags(tags, combineChunks(dataView, chunks), domParser);
         }
     }
 
@@ -77,9 +77,9 @@ function combineChunks(dataView, chunks) {
     return new DataView(combinedChunks.buffer);
 }
 
-function readTags(tags, chunkDataView) {
+function readTags(tags, chunkDataView, domParser) {
     try {
-        const {doc, raw} = getDocument(chunkDataView);
+        const {doc, raw} = getDocument(chunkDataView, domParser);
         tags._raw = (tags._raw || '') + raw;
         const rdf = getRDF(doc);
 
@@ -90,8 +90,8 @@ function readTags(tags, chunkDataView) {
     }
 }
 
-function getDocument(chunkDataView) {
-    const domParser = DOMParser.get();
+function getDocument(chunkDataView, _domParser) {
+    const domParser = DOMParser.get(_domParser);
     if (!domParser) {
         console.warn('Warning: DOMParser is not available. It is needed to be able to parse XMP tags.'); // eslint-disable-line no-console
         throw new Error();

@@ -200,7 +200,17 @@ function getDataView(data) {
 
 export function loadView(
     dataView,
-    {expanded = false, async = false, includeUnknown = false} = {expanded: false, async: false, includeUnknown: false}
+    {
+        expanded = false,
+        async = false,
+        includeUnknown = false,
+        domParser = undefined,
+    } = {
+        expanded: false,
+        async: false,
+        includeUnknown: false,
+        domParser: undefined,
+    }
 ) {
     let foundMetaData = false;
     let tags = {};
@@ -267,7 +277,7 @@ export function loadView(
         }
 
         if (Constants.USE_TIFF && Constants.USE_XMP && readTags['ApplicationNotes'] && !hasXmpData(xmpChunks)) {
-            const readXmpTags = XmpTags.read(getStringValueFromArray(readTags['ApplicationNotes'].value));
+            const readXmpTags = XmpTags.read(getStringValueFromArray(readTags['ApplicationNotes'].value), undefined, domParser);
             if (expanded) {
                 tags.xmp = readXmpTags;
             } else {
@@ -330,7 +340,7 @@ export function loadView(
 
     if (Constants.USE_XMP && hasXmpData(xmpChunks)) {
         foundMetaData = true;
-        const readTags = XmpTags.read(dataView, xmpChunks);
+        const readTags = XmpTags.read(dataView, xmpChunks, domParser);
         if (expanded) {
             tags.xmp = readTags;
         } else {

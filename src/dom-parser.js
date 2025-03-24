@@ -6,7 +6,11 @@ export default {
     get
 };
 
-function get() {
+function get(domParser) {
+    if (domParser) {
+        return domParser;
+    }
+
     if (typeof DOMParser !== 'undefined') {
         return new DOMParser();
     }
