@@ -32,6 +32,7 @@ describe('exif-reader', function () {
         ExifReaderRewireAPI.__ResetDependency__('Vp8xTags');
         ExifReaderRewireAPI.__ResetDependency__('GifFileTags');
         ExifReaderRewireAPI.__ResetDependency__('Thumbnail');
+        ExifReaderRewireAPI.__ResetDependency__('Composite');
     });
 
     it('should throw an error if the passed buffer is non-compliant', () => {
@@ -596,6 +597,19 @@ describe('exif-reader', function () {
         const myTags = {exif: {MyTag: 42}, file: {FileType: 'will be overwritten'}};
         rewireForLoadView({fileType: {value: 'webp', description: 'WebP'}, tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags.exif);
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({...myTags, file: {FileType: {value: 'webp', description: 'WebP'}}});
+    });
+
+    it('should calculate composite values', () => {
+        const myTags = {MyExifTag: 42};
+        const compositeTags = {MyCompositeTag: 4711};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+        ExifReaderRewireAPI.__Rewire__('Composite', {
+            get() {
+                return compositeTags;
+            }
+        });
+
+        expect(ExifReader.loadView()).to.deep.equal({...myTags, ...compositeTags});
     });
 
     describe('gps group', () => {

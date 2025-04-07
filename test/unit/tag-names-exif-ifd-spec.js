@@ -424,7 +424,7 @@ describe('tag-names-exif-ifd', () => {
     it('should report correct name and description for FocalLengthIn35mmFilm', () => {
         expect(TagNamesExifIfd[0xa405].name).to.equal('FocalLengthIn35mmFilm');
         expect(TagNamesExifIfd[0xa405].description(0)).to.equal('Unknown');
-        expect(TagNamesExifIfd[0xa405].description(4711)).to.equal(4711);
+        expect(TagNamesExifIfd[0xa405].description(4711)).to.equal('4711 mm');
     });
 
     it('should report correct name and description for SceneCaptureType', () => {

@@ -295,12 +295,12 @@ export default {
         }
     },
     0xa405: {
-        'name': 'FocalLengthIn35mmFilm',
+        'name': 'FocalLengthIn35mmFilm', // Sometimes called FocalLengthIn35mmFormat.
         'description': (value) => {
             if (value === 0) {
                 return 'Unknown';
             }
-            return value;
+            return value + ' mm';
         }
     },
     0xa406: {
