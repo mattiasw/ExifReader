@@ -29,6 +29,7 @@ import PngTags from './png-tags.js';
 import Vp8xTags from './vp8x-tags.js';
 import GifFileTags from './gif-file-tags.js';
 import Thumbnail from './thumbnail.js';
+import Composite from './composite.js';
 import exifErrors from './errors.js';
 
 export default {
@@ -416,6 +417,15 @@ export function loadView(
             tags.gif = !tags.gif ? readTags : objectAssign({}, tags.gif, readTags);
         } else {
             tags = objectAssign({}, tags, readTags);
+        }
+    }
+
+    const composite = Composite.get(tags, expanded);
+    if (composite) {
+        if (expanded) {
+            tags.composite = composite;
+        } else {
+            tags = objectAssign({}, tags, composite);
         }
     }
 
