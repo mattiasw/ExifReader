@@ -265,11 +265,11 @@ interface CanonTags {
 }
 
 interface CompositeTags {
-    ScaleFactorTo35mmEquivalent: {
+    ScaleFactorTo35mmEquivalent?: {
         value: number,
         description: string,
     },
-    FieldOfView: {
+    FieldOfView?: {
         value: number,
         description: string,
     }
