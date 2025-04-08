@@ -264,6 +264,17 @@ interface CanonTags {
     };
 }
 
+interface CompositeTags {
+    ScaleFactorTo35mmEquivalent: {
+        value: number,
+        description: string,
+    },
+    FieldOfView: {
+        value: number,
+        description: string,
+    }
+}
+
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded: true, includeUnknown?: boolean, length?: number, async?: false}): ExpandedTags;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: {expanded?: false, includeUnknown?: boolean, length?: number, async?: false}): Tags;
