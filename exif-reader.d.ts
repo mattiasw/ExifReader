@@ -536,7 +536,7 @@ interface IccTags {
     [name: string]: ValueTag;
 }
 
-export type Tags = XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & {
+export type Tags = XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & CompositeTags & {
     'Thumbnail'?: ThumbnailTags;
     'Images'?: MPFImageTags[],
 } & {
