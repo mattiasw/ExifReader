@@ -238,3 +238,10 @@ expandedTags.makerNotes?.["AutoRotate"]?.value === 1;
 expandedTags.makerNotes?.["AutoRotate"]?.description === 'Rotate 90 CW';
 tags["AutoRotate"]?.value === 1;
 tags["AutoRotate"]?.description === 'Rotate 90 CW';
+
+//////////////
+// Composite
+expandedTags.composite?.["FieldOfView"]?.value === 42;
+expandedTags.composite?.["FieldOfView"]?.description === '42 deg';
+tags["FieldOfView"]?.value === 42;
+tags["FieldOfView"]?.description === '42 deg';

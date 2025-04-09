@@ -208,6 +208,7 @@ export interface ExpandedTags {
     gps?: GpsTags
     photoshop?: PhotoshopTags;
     makerNotes?: CanonTags;
+    composite?: CompositeTags;
 }
 
 interface GpsTags {
@@ -262,6 +263,17 @@ interface CanonTags {
         value: number,
         description: 'None' | 'Rotate 90 CW' | 'Rotate 180' | 'Rotate 270 CW' | 'Unknown'
     };
+}
+
+interface CompositeTags {
+    ScaleFactorTo35mmEquivalent?: {
+        value: number,
+        description: string,
+    },
+    FieldOfView?: {
+        value: number,
+        description: string,
+    }
 }
 
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;
@@ -525,7 +537,7 @@ interface IccTags {
     [name: string]: ValueTag;
 }
 
-export type Tags = XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & {
+export type Tags = XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & CompositeTags & {
     'Thumbnail'?: ThumbnailTags;
     'Images'?: MPFImageTags[],
 } & {
