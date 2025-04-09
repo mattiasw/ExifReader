@@ -208,6 +208,7 @@ export interface ExpandedTags {
     gps?: GpsTags
     photoshop?: PhotoshopTags;
     makerNotes?: CanonTags;
+    composite?: CompositeTags;
 }
 
 interface GpsTags {
