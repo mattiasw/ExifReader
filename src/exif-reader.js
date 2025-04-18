@@ -23,6 +23,7 @@ import XmpTags from './xmp-tags.js';
 import PhotoshopTags from './photoshop-tags.js';
 import IccTags from './icc-tags.js';
 import CanonTags from './canon-tags.js';
+import PentaxTags from './pentax-tags.js';
 import PngFileTags from './png-file-tags.js';
 import PngTextTags from './png-text-tags.js';
 import PngTags from './png-tags.js';
@@ -313,13 +314,20 @@ export function loadView(
             }
         }
 
-        if (Constants.USE_MAKER_NOTES) {
+        if (Constants.USE_MAKER_NOTES && readTags['MakerNote']) {
             if (hasCanonData(readTags)) {
                 const readCanonTags = CanonTags.read(dataView, tiffHeaderOffset, readTags['MakerNote'].__offset, byteOrder, includeUnknown);
                 if (expanded) {
                     tags.makerNotes = readCanonTags;
                 } else {
                     tags = objectAssign({}, tags, readCanonTags);
+                }
+            } else if (hasPentaxType1Data(readTags)) {
+                const readPentaxTags = PentaxTags.read(dataView, tiffHeaderOffset, readTags['MakerNote'].__offset, includeUnknown);
+                if (expanded) {
+                    tags.makerNotes = readPentaxTags;
+                } else {
+                    tags = objectAssign({}, tags, readPentaxTags);
                 }
             }
         }
@@ -561,6 +569,13 @@ function hasIccData(iccDataOffsets) {
 function hasCanonData(tags) {
     return tags['Make'] && tags['Make'].value && Array.isArray(tags['Make'].value) && tags['Make'].value[0] === 'Canon'
         && tags['MakerNote'] && tags['MakerNote'].__offset;
+}
+
+function hasPentaxType1Data(tags) {
+    const PENTAX_ID_STRING = 'PENTAX ';
+    return tags['MakerNote'].value.length > PENTAX_ID_STRING.length
+        && getStringValueFromArray(tags['MakerNote'].value.slice(0, PENTAX_ID_STRING.length)) === PENTAX_ID_STRING
+        && tags['MakerNote'].__offset;
 }
 
 function hasMpfData(mpfDataOffset) {
