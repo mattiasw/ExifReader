@@ -94,7 +94,7 @@ export default {
         }
         return `0/${value[1]}`;
     },
-    FNumber: (value) => `f/${value[0] / value[1]}`,
+    FNumber: (value) => `f/${Number(value[0] / value[1]).toFixed(1)}`,
     FocalLength: (value) => (value[0] / value[1]) + ' mm',
     FocalPlaneResolutionUnit(value) {
         if (value === 2) {
