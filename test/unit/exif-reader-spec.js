@@ -434,7 +434,21 @@ describe('exif-reader', function () {
         const myCanonTags = {AutoRotate: 42};
         const myTags = {...myExifTags, ...myCanonTags};
         rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
-        rewireMakerNoteTagsRead(myCanonTags);
+        rewireMakerNoteTagsRead(myCanonTags, 'CanonTags');
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
+    it('should be able to find Pentax Type 1 MakerNote segment', () => {
+        const myExifTags = {
+            MakerNote: {
+                __offset: OFFSET_TEST_VALUE_MAKER_NOTE,
+                value: getCharacterArray('PENTAX \x00')
+            }
+        };
+        const myPentaxTags = {Artist: 'Arty'};
+        const myTags = {...myExifTags, ...myPentaxTags};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
+        rewireMakerNoteTagsRead(myPentaxTags, 'PentaxTags');
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -914,8 +928,8 @@ function rewireIccTagsRead(tagsValue, async = false) {
     });
 }
 
-function rewireMakerNoteTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('CanonTags', {
+function rewireMakerNoteTagsRead(tagsValue, type) {
+    ExifReaderRewireAPI.__Rewire__(type, {
         read(dataView, tiffHeaderOffset, makerNoteOffset) {
             if (tiffHeaderOffset === OFFSET_TEST_VALUE && makerNoteOffset === OFFSET_TEST_VALUE_MAKER_NOTE) {
                 return tagsValue;
