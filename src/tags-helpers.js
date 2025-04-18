@@ -4,7 +4,7 @@
 
 import Constants from './constants.js';
 import Types from './types.js';
-import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST} from './tag-names.js';
+import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './tag-names.js';
 
 const getTagValueAt = {
     1: Types.getByteAt,
@@ -22,7 +22,7 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
     return tiffHeaderOffset + Types.getLongAt(dataView, tiffHeaderOffset + 4, byteOrder);
 }
 
-export function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder, includeUnknown) {
+export function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown) {
     const FIELD_COUNT_SIZE = Types.getTypeSize('SHORT');
     const FIELD_SIZE = 12;
 
@@ -35,14 +35,14 @@ export function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder, 
             break;
         }
 
-        const tag = readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder, includeUnknown);
+        const tag = readTag(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown);
         if (tag !== undefined) {
             tags[tag.name] = {
                 'id': tag.id,
                 'value': tag.value,
                 'description': tag.description
             };
-            if (tag.name === 'MakerNote') {
+            if (tag.name === 'MakerNote' || (ifdType === IFD_TYPE_PENTAX && tag.name === 'LevelInfo')) {
                 tags[tag.name].__offset = tag.__offset;
             }
         }
@@ -53,7 +53,7 @@ export function readIfd(dataView, ifdType, tiffHeaderOffset, offset, byteOrder, 
     if (Constants.USE_THUMBNAIL && (offset < dataView.byteLength - Types.getTypeSize('LONG'))) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
         if (nextIfdOffset !== 0 && ifdType === IFD_TYPE_0TH) {
-            tags['Thumbnail'] = readIfd(dataView, IFD_TYPE_1ST, tiffHeaderOffset, tiffHeaderOffset + nextIfdOffset, byteOrder, includeUnknown);
+            tags['Thumbnail'] = readIfd(dataView, IFD_TYPE_1ST, offsetOrigin, offsetOrigin + nextIfdOffset, byteOrder, includeUnknown);
         }
     }
 
@@ -67,7 +67,7 @@ function getNumberOfFields(dataView, offset, byteOrder) {
     return 0;
 }
 
-function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder, includeUnknown) {
+function readTag(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown) {
     const TAG_CODE_IPTC_NAA = 0x83bb;
     const TAG_TYPE_OFFSET = Types.getTypeSize('SHORT');
     const TAG_COUNT_OFFSET = TAG_TYPE_OFFSET + Types.getTypeSize('SHORT');
@@ -88,9 +88,9 @@ function readTag(dataView, ifdType, tiffHeaderOffset, offset, byteOrder, include
         tagValue = getTagValue(dataView, tagValueOffset, tagType, tagCount, byteOrder);
     } else {
         tagValueOffset = Types.getLongAt(dataView, offset + TAG_VALUE_OFFSET, byteOrder);
-        if (tagValueFitsInDataView(dataView, tiffHeaderOffset, tagValueOffset, tagType, tagCount)) {
+        if (tagValueFitsInDataView(dataView, offsetOrigin, tagValueOffset, tagType, tagCount)) {
             const forceByteType = tagCode === TAG_CODE_IPTC_NAA;
-            tagValue = getTagValue(dataView, tiffHeaderOffset + tagValueOffset, tagType, tagCount, byteOrder, forceByteType);
+            tagValue = getTagValue(dataView, offsetOrigin + tagValueOffset, tagType, tagCount, byteOrder, forceByteType);
         } else {
             tagValue = '<faulty value>';
         }
@@ -155,8 +155,8 @@ function getTagValue(dataView, offset, type, count, byteOrder, forceByteType = f
     return value;
 }
 
-function tagValueFitsInDataView(dataView, tiffHeaderOffset, tagValueOffset, tagType, tagCount) {
-    return tiffHeaderOffset + tagValueOffset + Types.typeSizes[tagType] * tagCount <= dataView.byteLength;
+function tagValueFitsInDataView(dataView, offsetOrigin, tagValueOffset, tagType, tagCount) {
+    return offsetOrigin + tagValueOffset + Types.typeSizes[tagType] * tagCount <= dataView.byteLength;
 }
 
 function splitNullSeparatedAsciiString(string) {

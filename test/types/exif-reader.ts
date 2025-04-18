@@ -238,6 +238,10 @@ expandedTags.makerNotes?.["AutoRotate"]?.value === 1;
 expandedTags.makerNotes?.["AutoRotate"]?.description === 'Rotate 90 CW';
 tags["AutoRotate"]?.value === 1;
 tags["AutoRotate"]?.description === 'Rotate 90 CW';
+expandedTags.makerNotes?.["RollAngle"]?.value === 42;
+expandedTags.makerNotes?.["RollAngle"]?.description === '-21';
+tags["RollAngle"]?.value === 42;
+tags["RollAngle"]?.description === '-21';
 
 //////////////
 // Composite

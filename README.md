@@ -18,7 +18,7 @@ You can try it out on the
 
 **Support table**
 
-| File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | Canon              | Thumbnail | Image details |
+| File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | MakerNote          | Thumbnail | Image details |
 | ----------|---------|---------|---------|---------|---------|---------------|--------------------|-----------|---------------|
 | JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
 | TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | **some**&ast; | **some**&ast;&ast; | N/A       | N/A           |
@@ -28,7 +28,7 @@ You can try it out on the
 | WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | **yes**       |
 | GIF       | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | N/A                | N/A       | **yes**       |
 
-- `Canon` = Canon's proprietary MakerNote tags.
+- `MakerNote` = Manufacturers' proprietary MakerNote tags.
 - `Image details` = image width, height, etc. read from image header.
 - `N/A` = The feature is not applicable to this file type.
 - `???` = may be supported in any file type using Exif but it has only been tested
@@ -38,8 +38,8 @@ You can try it out on the
     are very different from other tags and need a lot of extra code so they have
     deliberately not been fully implemented. File an issue if there is something
     you think should really be supported.
-- `**` = Some of the Canon-specific tags have been added. File an issue if you
-    think something should be supported.
+- `**` = Some of the Canon-specific and Pentax-specific tags have been added.
+    File an issue if you think something more should be supported.
 
 If you're missing something that you think should be supported, file an issue
 with an attached example image and I'll see what I can do.
