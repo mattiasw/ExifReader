@@ -207,7 +207,7 @@ export interface ExpandedTags {
     Thumbnail?: ThumbnailTags,
     gps?: GpsTags
     photoshop?: PhotoshopTags;
-    makerNotes?: CanonTags;
+    makerNotes?: CanonTags & PentaxTags;
     composite?: CompositeTags;
 }
 
@@ -260,8 +260,31 @@ interface PhotoshopTags {
 
 interface CanonTags {
     AutoRotate: {
-        value: number,
-        description: 'None' | 'Rotate 90 CW' | 'Rotate 180' | 'Rotate 270 CW' | 'Unknown'
+        value: number;
+        description: 'None' | 'Rotate 90 CW' | 'Rotate 180' | 'Rotate 270 CW' | 'Unknown';
+    };
+}
+
+interface PentaxTags {
+    PentaxVersion: {
+        value: number[];
+        description: string;
+    };
+    PentaxModelID: {
+        value: number;
+        description: string;
+    };
+    Orientation: {
+        value: number;
+        description: 'Horizontal (normal)' | 'Rotate 270 CW' | 'Rotate 180' | 'Rotate 90 CW' | 'Upwards' | 'Downwards' | 'Unknown';
+    };
+    RollAngle: {
+        value: number;
+        description: string;
+    };
+    PitchAngle: {
+        value: number;
+        description: string;
     };
 }
 
@@ -537,7 +560,7 @@ interface IccTags {
     [name: string]: ValueTag;
 }
 
-export type Tags = XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & CompositeTags & {
+export type Tags = XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & PentaxTags & CompositeTags & {
     'Thumbnail'?: ThumbnailTags;
     'Images'?: MPFImageTags[],
 } & {
