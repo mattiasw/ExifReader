@@ -288,7 +288,7 @@ export function loadView(
             }
         }
 
-        if (Constants.USE_PHOTOSHOP && readTags['ImageSourceData']) {
+        if (Constants.USE_PHOTOSHOP && readTags['ImageSourceData'] && readTags['PhotoshopSettings']) {
             const readPhotoshopTags = PhotoshopTags.read(readTags['PhotoshopSettings'].value, includeUnknown);
             if (expanded) {
                 tags.photoshop = readPhotoshopTags;
