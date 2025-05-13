@@ -22,11 +22,22 @@ describe('composite', () => {
         expect(Composite.get({exif: tags}, true).ScaleFactorTo35mmEquivalent).to.deep.equal(expected);
     });
 
-    it('should calculate FieldOfView', () => {
+    it('should calculate FieldOfView from FocalLengthIn35mmFilm', () => {
         const tags = {FocalLengthIn35mmFilm: {value: 24}};
         const expected = {
             value: 73.73979529168804,
             description: '73.7 deg'
+        };
+
+        expect(Composite.get(tags, false).FieldOfView).to.deep.equal(expected);
+        expect(Composite.get({exif: tags}, true).FieldOfView).to.deep.equal(expected);
+    });
+
+    it('should calculate FieldOfView from focalPlaneXResolution', () => {
+        const tags = {FocalLength: {value: [250, 10]}, 'Image Width': {value: 6240}, FocalPlaneXResolution: {value: [10420, 39]}};
+        const expected = {
+            value: 50.074718874620004,
+            description: '50.1 deg'
         };
 
         expect(Composite.get(tags, false).FieldOfView).to.deep.equal(expected);

@@ -11,7 +11,18 @@ function get(tags, expanded) {
     let hasCompositeTags = false;
 
     const focalLength = getTagValue(tags, 'FocalLength', expanded);
-    const focalLengthIn35mmFilm = getTagValue(tags, 'FocalLengthIn35mmFilm', expanded);
+    let focalLengthIn35mmFilm = getTagValue(tags, 'FocalLengthIn35mmFilm', expanded);
+    const focalPlaneXResolution = getTagValue(tags, 'FocalPlaneXResolution', expanded);
+    const imageWidth = getTagValue(tags, 'Image Width', expanded);
+
+    if (!focalLengthIn35mmFilm) {
+        focalLengthIn35mmFilm = getFocalLengthIn35mmFilm(focalPlaneXResolution, imageWidth, focalLength);
+    }
+
+    if (focalLengthIn35mmFilm) {
+        compositeTags.FocalLengthIn35mmFilm = focalLengthIn35mmFilm;
+        hasCompositeTags = true;
+    }
 
     const scaleFactorTo35mmEquivalent = getScaleFactorTo35mmEquivalent(focalLength, focalLengthIn35mmFilm);
     if (scaleFactorTo35mmEquivalent) {
@@ -42,6 +53,19 @@ function getTagValue(tags, tagName, expanded) {
     return undefined;
 }
 
+function getFocalLengthIn35mmFilm(focalPlaneXResolution, imageWidth, focalLength) {
+    if (focalPlaneXResolution && imageWidth && focalLength) {
+        try {
+            const sensorWidthMm = imageWidth / (focalPlaneXResolution[0] / focalPlaneXResolution[1]);
+            const fullFrameWidthMm = 36.0;
+            const focalLength35mm = (focalLength[0] / focalLength[1]) * (fullFrameWidthMm / sensorWidthMm);
+            return focalLength35mm;
+        } catch (error) {
+            // Ignore.
+        }
+    }
+    return undefined;
+}
 function getScaleFactorTo35mmEquivalent(focalLength, focalLengthIn35mmFilm) {
     if (focalLength && focalLengthIn35mmFilm) {
         try {
