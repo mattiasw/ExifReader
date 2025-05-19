@@ -11,6 +11,34 @@ describe('composite', () => {
         expect(Composite.get({exif: {}}, true)).to.be.undefined;
     });
 
+    it('should copy FocalLengthIn35mmFilm to FocalLength35efl when it exists', () => {
+        const tags = {FocalLengthIn35mmFilm: {value: 24}};
+        const expected = {
+            value: 24,
+            description: '24 mm'
+        };
+
+        expect(Composite.get(tags, false).FocalLength35efl).to.deep.equal(expected);
+        expect(Composite.get({exif: tags}, true).FocalLength35efl).to.deep.equal(expected);
+    });
+
+    it('should calculate FocalLength35efl', () => {
+        const fileTags = {
+            'Image Width': {value: 2592},
+        };
+        const exifTags = {
+            FocalLength: {value: [5000, 1000]},
+            FocalPlaneXResolution: {value: [2592000, 243]}
+        };
+        const expected = {
+            value: 28.1,
+            description: '28.1 mm'
+        };
+
+        expect(Composite.get({...fileTags, ...exifTags}, false).FocalLength35efl).to.deep.equal(expected);
+        expect(Composite.get({file: fileTags, exif: exifTags}, true).FocalLength35efl).to.deep.equal(expected);
+    });
+
     it('should calculate ScaleFactorTo35mmEquivalent', () => {
         const tags = {FocalLength: {value: [4500, 1000]}, FocalLengthIn35mmFilm: {value: 24}};
         const expected = {
@@ -34,13 +62,19 @@ describe('composite', () => {
     });
 
     it('should calculate FieldOfView from focalPlaneXResolution', () => {
-        const tags = {FocalLength: {value: [250, 10]}, 'Image Width': {value: 6240}, FocalPlaneXResolution: {value: [10420, 39]}};
+        const fileTags = {
+            'Image Width': {value: 6240},
+        };
+        const exifTags = {
+            FocalLength: {value: [250, 10]},
+            FocalPlaneXResolution: {value: [10420, 39]}
+        };
         const expected = {
             value: 50.074718874620004,
             description: '50.1 deg'
         };
 
-        expect(Composite.get(tags, false).FieldOfView).to.deep.equal(expected);
-        expect(Composite.get({exif: tags}, true).FieldOfView).to.deep.equal(expected);
+        expect(Composite.get({...fileTags, ...exifTags}, false).FieldOfView).to.deep.equal(expected);
+        expect(Composite.get({file: fileTags, exif: exifTags}, true).FieldOfView).to.deep.equal(expected);
     });
 });

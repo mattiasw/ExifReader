@@ -185,6 +185,12 @@ export default {
         }
         return 'Unknown';
     },
+    FocalLengthIn35mmFilm(value) {
+        if (value === 0) {
+            return 'Unknown';
+        }
+        return value + ' mm';
+    },
     SceneCaptureType(value) {
         if (value === 0) {
             return 'Standard';

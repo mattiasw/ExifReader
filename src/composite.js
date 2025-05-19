@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import TagNamesCommon from './tag-names-common.js';
+
 export default {
     get,
 };
@@ -10,17 +12,17 @@ function get(tags, expanded) {
     const compositeTags = {};
     let hasCompositeTags = false;
 
-    const focalLength = getTagValue(tags, 'FocalLength', expanded);
-    let focalLengthIn35mmFilm = getTagValue(tags, 'FocalLengthIn35mmFilm', expanded);
-    const focalPlaneXResolution = getTagValue(tags, 'FocalPlaneXResolution', expanded);
-    const imageWidth = getTagValue(tags, 'Image Width', expanded);
-
-    if (!focalLengthIn35mmFilm) {
-        focalLengthIn35mmFilm = getFocalLengthIn35mmFilm(focalPlaneXResolution, imageWidth, focalLength);
-    }
+    const focalLength = getTagValue(tags, 'exif', 'FocalLength', expanded);
+    const focalPlaneXResolution = getTagValue(tags, 'exif', 'FocalPlaneXResolution', expanded);
+    const imageWidth = getTagValue(tags, 'file', 'Image Width', expanded);
+    const focalLengthIn35mmFilm = getTagValue(tags, 'exif', 'FocalLengthIn35mmFilm', expanded)
+        || getFocalLengthIn35mmFilmValue(focalPlaneXResolution, imageWidth, focalLength);
 
     if (focalLengthIn35mmFilm) {
-        compositeTags.FocalLengthIn35mmFilm = focalLengthIn35mmFilm;
+        compositeTags.FocalLength35efl = {
+            value: focalLengthIn35mmFilm,
+            description: TagNamesCommon.FocalLengthIn35mmFilm(focalLengthIn35mmFilm)
+        };
         hasCompositeTags = true;
     }
 
@@ -43,9 +45,9 @@ function get(tags, expanded) {
     return undefined;
 }
 
-function getTagValue(tags, tagName, expanded) {
-    if (expanded && tags.exif && tags.exif[tagName]) {
-        return tags.exif[tagName].value;
+function getTagValue(tags, group, tagName, expanded) {
+    if (expanded && tags[group] && tags[group][tagName]) {
+        return tags[group][tagName].value;
     }
     if (!expanded && tags[tagName]) {
         return tags[tagName].value;
@@ -53,7 +55,7 @@ function getTagValue(tags, tagName, expanded) {
     return undefined;
 }
 
-function getFocalLengthIn35mmFilm(focalPlaneXResolution, imageWidth, focalLength) {
+function getFocalLengthIn35mmFilmValue(focalPlaneXResolution, imageWidth, focalLength) {
     if (focalPlaneXResolution && imageWidth && focalLength) {
         try {
             const sensorWidthMm = imageWidth / (focalPlaneXResolution[0] / focalPlaneXResolution[1]);
@@ -66,6 +68,7 @@ function getFocalLengthIn35mmFilm(focalPlaneXResolution, imageWidth, focalLength
     }
     return undefined;
 }
+
 function getScaleFactorTo35mmEquivalent(focalLength, focalLengthIn35mmFilm) {
     if (focalLength && focalLengthIn35mmFilm) {
         try {
