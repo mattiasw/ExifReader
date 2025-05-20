@@ -24,15 +24,19 @@ describe('composite', () => {
 
     it('should calculate FocalLength35efl', () => {
         const fileTags = {
-            'Image Width': {value: 2592},
+            'Image Width': {value: 6240},
+            'Image Height': {value: 4168},
         };
         const exifTags = {
-            FocalLength: {value: [5000, 1000]},
-            FocalPlaneXResolution: {value: [2592000, 243]}
+            FocalLength: {value: [250, 10]},
+            FocalPlaneXResolution: {value: [10420, 39]},
+            FocalPlaneYResolution: {value: [10420, 39]},
+            FocalPlaneResolutionUnit: {value: 4}
+
         };
         const expected = {
-            value: 28.1,
-            description: '28.1 mm'
+            value: 38.515712019609595,
+            description: '38.515712019609595 mm'
         };
 
         expect(Composite.get({...fileTags, ...exifTags}, false).FocalLength35efl).to.deep.equal(expected);
@@ -64,13 +68,16 @@ describe('composite', () => {
     it('should calculate FieldOfView from focalPlaneXResolution', () => {
         const fileTags = {
             'Image Width': {value: 6240},
+            'Image Height': {value: 4168},
         };
         const exifTags = {
             FocalLength: {value: [250, 10]},
-            FocalPlaneXResolution: {value: [10420, 39]}
+            FocalPlaneXResolution: {value: [10420, 39]},
+            FocalPlaneYResolution: {value: [10420, 39]},
+            FocalPlaneResolutionUnit: {value: 4}
         };
         const expected = {
-            value: 50.074718874620004,
+            value: 50.09729449522534,
             description: '50.1 deg'
         };
 

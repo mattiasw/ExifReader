@@ -14,9 +14,12 @@ function get(tags, expanded) {
 
     const focalLength = getTagValue(tags, 'exif', 'FocalLength', expanded);
     const focalPlaneXResolution = getTagValue(tags, 'exif', 'FocalPlaneXResolution', expanded);
+    const focalPlaneYResolution = getTagValue(tags, 'exif', 'FocalPlaneYResolution', expanded);
+    const focalPlaneResolutionUnit = getTagValue(tags, 'exif', 'FocalPlaneResolutionUnit', expanded);
     const imageWidth = getTagValue(tags, 'file', 'Image Width', expanded);
+    const imageHeight = getTagValue(tags, 'file', 'Image Height', expanded);
     const focalLengthIn35mmFilm = getTagValue(tags, 'exif', 'FocalLengthIn35mmFilm', expanded)
-        || getFocalLengthIn35mmFilmValue(focalPlaneXResolution, imageWidth, focalLength);
+        || getFocalLengthIn35mmFilmValue(focalPlaneXResolution, focalPlaneYResolution, focalPlaneResolutionUnit, imageWidth, imageHeight, focalLength);
 
     if (focalLengthIn35mmFilm) {
         compositeTags.FocalLength35efl = {
@@ -55,12 +58,34 @@ function getTagValue(tags, group, tagName, expanded) {
     return undefined;
 }
 
-function getFocalLengthIn35mmFilmValue(focalPlaneXResolution, imageWidth, focalLength) {
-    if (focalPlaneXResolution && imageWidth && focalLength) {
+function getFocalLengthIn35mmFilmValue(focalPlaneXResolution, focalPlaneYResolution, focalPlaneResolutionUnit, imageWidth, imageHeight, focalLength) {
+    const DIAGNOAL_35mm = 43.27;
+
+    if (focalPlaneXResolution && focalPlaneYResolution && focalPlaneResolutionUnit && imageWidth && imageHeight && focalLength) {
         try {
-            const sensorWidthMm = imageWidth / (focalPlaneXResolution[0] / focalPlaneXResolution[1]);
-            const fullFrameWidthMm = 36.0;
-            const focalLength35mm = (focalLength[0] / focalLength[1]) * (fullFrameWidthMm / sensorWidthMm);
+            let resolutionUnitFactor;
+            switch (focalPlaneResolutionUnit) {
+                case 2: // Inches
+                    resolutionUnitFactor = 25.4; // 1 inch = 25.4 mm
+                    break;
+                case 3: // Centimeters
+                    resolutionUnitFactor = 10; // 1 cm = 10 mm
+                    break;
+                case 4: // Millimeters
+                    resolutionUnitFactor = 1; // Already in mm
+                    break;
+                default:
+                    return undefined;
+            }
+
+            const focalPlaneXResolutionMm = focalPlaneXResolution[0] / focalPlaneXResolution[1] * resolutionUnitFactor;
+            const focalPlaneYResolutionMm = focalPlaneYResolution[0] / focalPlaneYResolution[1] * resolutionUnitFactor;
+
+            const sensorWidthMm = imageWidth / focalPlaneXResolutionMm;
+            const sensorHeightMm = imageHeight / focalPlaneYResolutionMm;
+
+            const sensorDiagonal = Math.sqrt(sensorWidthMm ** 2 + sensorHeightMm ** 2);
+            const focalLength35mm = (focalLength[0] / focalLength[1]) * (DIAGNOAL_35mm / sensorDiagonal);
             return focalLength35mm;
         } catch (error) {
             // Ignore.

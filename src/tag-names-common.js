@@ -101,6 +101,8 @@ export default {
             return 'inches';
         } else if (value === 3) {
             return 'centimeters';
+        } else if (value === 4) {
+            return 'millimeters';
         }
         return 'Unknown';
     },
