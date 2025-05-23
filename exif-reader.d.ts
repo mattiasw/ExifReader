@@ -289,6 +289,10 @@ interface PentaxTags {
 }
 
 interface CompositeTags {
+    FocalLength35efl?: {
+        value: number,
+        description: string,
+    }
     ScaleFactorTo35mmEquivalent?: {
         value: number,
         description: string,

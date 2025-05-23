@@ -514,6 +514,8 @@ Notes
 -   The `description` property of tags can change in a minor update. If you
     want to process a tag's value somehow, use the `value` property to be sure
     nothing breaks between updates.
+-   Some of the composite tags may have values that are very off if e.g. the
+    image has been resized.
 
 Client/Browser Support
 ----------------------

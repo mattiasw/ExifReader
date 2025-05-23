@@ -352,6 +352,7 @@ describe('tag-names-exif-ifd', () => {
         expect(TagNamesExifIfd[0xa210].name).to.equal('FocalPlaneResolutionUnit');
         expect(TagNamesExifIfd[0xa210].description(2)).to.equal('inches');
         expect(TagNamesExifIfd[0xa210].description(3)).to.equal('centimeters');
+        expect(TagNamesExifIfd[0xa210].description(4)).to.equal('millimeters');
         expect(TagNamesExifIfd[0xa210].description(4711)).to.equal('Unknown');
     });
 

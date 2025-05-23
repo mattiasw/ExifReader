@@ -48,6 +48,7 @@ describe('xmp-tag-names', () => {
         expect(XmpTagNames['exif:FocalPlaneResolutionUnit']('1')).to.equal('Unknown');
         expect(XmpTagNames['exif:FocalPlaneResolutionUnit']('2')).to.equal('inches');
         expect(XmpTagNames['exif:FocalPlaneResolutionUnit']('3')).to.equal('centimeters');
+        expect(XmpTagNames['exif:FocalPlaneResolutionUnit']('4')).to.equal('millimeters');
     });
 
     it('should report correct description for exif:ApertureValue', () => {
