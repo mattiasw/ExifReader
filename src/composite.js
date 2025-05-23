@@ -4,9 +4,23 @@
 
 import TagNamesCommon from './tag-names-common.js';
 
+const FOCAL_PLANE_RESOLUTION_UNIT = {
+    INCHES: 2,
+    CENTIMETERS: 3,
+    MILLIMETERS: 4
+};
+
+const UNIT_FACTORS = {
+    INCHES_TO_MM: 25.4, // 1 inch = 25.4 mm
+    CM_TO_MM: 10, // 1 cm = 10 mm
+    MM_TO_MM: 1 // Already in mm
+};
+
 export default {
     get,
 };
+
+export {FOCAL_PLANE_RESOLUTION_UNIT};
 
 function get(tags, expanded) {
     const compositeTags = {};
@@ -58,21 +72,38 @@ function getTagValue(tags, group, tagName, expanded) {
     return undefined;
 }
 
+/**
+ * Calculates the 35mm equivalent focal length from camera sensor data.
+ *
+ * This function determines how the field of view of a camera's sensor compares to a
+ * standard 35mm film frame (36mm × 24mm). The conversion involves:
+ *
+ * 1. **Sensor dimensions**: Calculated from image pixel count and focal plane
+ *    resolution (pixels per unit area)
+ * 2. **Crop factor**: The ratio between the sensor diagonal and the standard
+ *    35mm diagonal (43.27mm)
+ * 3. **Equivalent focal length**: Actual focal length multiplied by the crop factor
+ *
+ * For example, a 50mm lens on a camera with a 1.5x crop factor gives an equivalent
+ * field of view of a 75mm lens on a 35mm camera. This doesn't change the actual
+ * focal length or depth of field characteristics, only the angle of view.
+ */
 function getFocalLengthIn35mmFilmValue(focalPlaneXResolution, focalPlaneYResolution, focalPlaneResolutionUnit, imageWidth, imageHeight, focalLength) {
-    const DIAGNOAL_35mm = 43.27;
+    // Standard 35mm film diagonal is 43.27mm (calculated from 36mm x 24mm frame)
+    const DIAGONAL_35mm = 43.27;
 
     if (focalPlaneXResolution && focalPlaneYResolution && focalPlaneResolutionUnit && imageWidth && imageHeight && focalLength) {
         try {
             let resolutionUnitFactor;
             switch (focalPlaneResolutionUnit) {
-                case 2: // Inches
-                    resolutionUnitFactor = 25.4; // 1 inch = 25.4 mm
+                case FOCAL_PLANE_RESOLUTION_UNIT.INCHES:
+                    resolutionUnitFactor = UNIT_FACTORS.INCHES_TO_MM;
                     break;
-                case 3: // Centimeters
-                    resolutionUnitFactor = 10; // 1 cm = 10 mm
+                case FOCAL_PLANE_RESOLUTION_UNIT.CENTIMETERS:
+                    resolutionUnitFactor = UNIT_FACTORS.CM_TO_MM;
                     break;
-                case 4: // Millimeters
-                    resolutionUnitFactor = 1; // Already in mm
+                case FOCAL_PLANE_RESOLUTION_UNIT.MILLIMETERS:
+                    resolutionUnitFactor = UNIT_FACTORS.MM_TO_MM;
                     break;
                 default:
                     return undefined;
@@ -85,7 +116,7 @@ function getFocalLengthIn35mmFilmValue(focalPlaneXResolution, focalPlaneYResolut
             const sensorHeightMm = imageHeight / focalPlaneYResolutionMm;
 
             const sensorDiagonal = Math.sqrt(sensorWidthMm ** 2 + sensorHeightMm ** 2);
-            const focalLength35mm = (focalLength[0] / focalLength[1]) * (DIAGNOAL_35mm / sensorDiagonal);
+            const focalLength35mm = (focalLength[0] / focalLength[1]) * (DIAGONAL_35mm / sensorDiagonal);
             return focalLength35mm;
         } catch (error) {
             // Ignore.
