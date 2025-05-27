@@ -101,6 +101,8 @@ export default {
             return 'inches';
         } else if (value === 3) {
             return 'centimeters';
+        } else if (value === 4) {
+            return 'millimeters';
         }
         return 'Unknown';
     },
@@ -184,6 +186,12 @@ export default {
             return 'High saturation';
         }
         return 'Unknown';
+    },
+    FocalLengthIn35mmFilm(value) {
+        if (value === 0) {
+            return 'Unknown';
+        }
+        return value + ' mm';
     },
     SceneCaptureType(value) {
         if (value === 0) {

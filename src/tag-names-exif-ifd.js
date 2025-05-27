@@ -296,12 +296,7 @@ export default {
     },
     0xa405: {
         'name': 'FocalLengthIn35mmFilm', // Sometimes called FocalLengthIn35mmFormat.
-        'description': (value) => {
-            if (value === 0) {
-                return 'Unknown';
-            }
-            return value + ' mm';
-        }
+        'description': TagNamesCommon.FocalLengthIn35mmFilm
     },
     0xa406: {
         'name': 'SceneCaptureType',
