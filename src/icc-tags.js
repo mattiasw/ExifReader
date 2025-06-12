@@ -94,7 +94,7 @@ export function parseTags(dataView) {
         throw new Error('ICC profile length not matching');
     }
 
-    if (dataView.length < PROFILE_HEADER_LENGTH) {
+    if (dataView.byteLength < PROFILE_HEADER_LENGTH) {
         throw new Error('ICC profile too short');
     }
 
