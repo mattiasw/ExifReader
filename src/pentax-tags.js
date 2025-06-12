@@ -12,7 +12,7 @@ import {objectAssign} from './utils.js';
 import {readIfd} from './tags-helpers.js';
 import {IFD_TYPE_PENTAX} from './tag-names.js';
 
-const BYTE_ORDER_OFFSET = 8; // Pextax5: https://exiftool.org/makernote_types.html
+const BYTE_ORDER_OFFSET = 8; // Pentax5: https://exiftool.org/makernote_types.html
 const PENTAX_IFD_OFFSET = BYTE_ORDER_OFFSET + 2; // https://exiftool.org/makernote_types.html
 
 const MODEL_ID = {
