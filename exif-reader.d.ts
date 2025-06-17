@@ -502,7 +502,7 @@ interface ExifTags {
     'Category'?: NumberArrayTag, // StringTag
     'Supplemental Category'?: NumberArrayTag, // StringTag
     'Fixture Identifier'?: NumberArrayTag, // StringTag
-    'Keywords'?: NumberArrayTag[], // StringTag
+    'Keywords'?: NumberArrayTag | NumberArrayTag[], // StringTag
     'Content Location Code'?: NumberArrayTag, // StringTag
     'Content Location Name'?: NumberArrayTag, // StringTag
     'Release Date'?: NumberArrayTag, // StringTag
