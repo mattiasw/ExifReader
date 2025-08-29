@@ -249,3 +249,25 @@ expandedTags.composite?.["FieldOfView"]?.value === 42;
 expandedTags.composite?.["FieldOfView"]?.description === '42 deg';
 tags["FieldOfView"]?.value === 42;
 tags["FieldOfView"]?.description === '42 deg';
+
+/////////////////////
+// domParser option
+const minimalDomParser = {
+    parseFromString(xml: string, mimeType: string) {
+        return {};
+    }
+};
+
+load(new ArrayBuffer(0), { domParser: minimalDomParser });
+loadView(new DataView(new ArrayBuffer(0)), { domParser: minimalDomParser });
+
+// xmldom usage
+import { DOMParser, onErrorStopParsing } from '@xmldom/xmldom';
+const xmldomParser = new DOMParser({ onError: onErrorStopParsing });
+load(new ArrayBuffer(0), { domParser: xmldomParser });
+loadView(new DataView(new ArrayBuffer(0)), { domParser: xmldomParser });
+
+// @ts-expect-error
+load(new ArrayBuffer(0), { domParser: 42 });
+// @ts-expect-error
+loadView(new DataView(new ArrayBuffer(0)), { domParser: 42 });
