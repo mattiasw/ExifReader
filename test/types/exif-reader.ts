@@ -90,11 +90,22 @@ expandedTags["exif"]?.["NonExistent"];
 
 /////////
 // IPTC
-expandedTags["iptc"]?.["Destination"]?.id === 0x0105;
-expandedTags["iptc"]?.["Destination"]?.value[0] === 42;
-expandedTags["iptc"]?.["Destination"]?.description === "Description.";
-// @ts-expect-error
-expandedTags["iptc"]?.["Destination"]?.attributes;
+const iptcDestination = expandedTags["iptc"]?.["Destination"];
+if (iptcDestination) {
+    if (Array.isArray(iptcDestination)) {
+        iptcDestination[0].id === 0x0105;
+        iptcDestination[0].value[0] === 42;
+        iptcDestination[0].description === "Description.";
+        // @ts-expect-error
+        iptcDestination[0].attributes;
+    } else {
+        iptcDestination.id === 0x0105;
+        iptcDestination.value[0] === 42;
+        iptcDestination.description === "Description.";
+        // @ts-expect-error
+        iptcDestination.attributes;
+    }
+}
 
 ////////
 // XMP
