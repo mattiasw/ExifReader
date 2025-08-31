@@ -488,7 +488,7 @@ interface ExifTags {
     // be an array of numbers. Maybe it could be changed in the code to add the
     // types afterwards. In that case the types are listed as comments below.
     'Model Version'?: NumberArrayTag, // NumberTag
-    'Destination'?: NumberArrayTag, // StringTag
+    'Destination'?: NumberArrayTag | NumberArrayTag[], // StringTag
     'File Format'?: NumberArrayTag, // NumberTag
     'File Format Version'?: NumberArrayTag, // NumberTag
     'Service Identifier'?: NumberArrayTag, // StringTag
@@ -508,22 +508,22 @@ interface ExifTags {
     'Edit Status'?: NumberArrayTag, // StringTag
     'Editorial Update'?: NumberArrayTag, // StringTag
     'Urgency'?: NumberArrayTag, // StringTag
-    'Subject Reference'?: NumberArrayTag, // StringTag
+    'Subject Reference'?: NumberArrayTag | NumberArrayTag[], // StringTag
     'Category'?: NumberArrayTag, // StringTag
-    'Supplemental Category'?: NumberArrayTag, // StringTag
+    'Supplemental Category'?: NumberArrayTag | NumberArrayTag[], // StringTag
     'Fixture Identifier'?: NumberArrayTag, // StringTag
     'Keywords'?: NumberArrayTag | NumberArrayTag[], // StringTag
-    'Content Location Code'?: NumberArrayTag, // StringTag
-    'Content Location Name'?: NumberArrayTag, // StringTag
+    'Content Location Code'?: NumberArrayTag | NumberArrayTag[], // StringTag
+    'Content Location Name'?: NumberArrayTag | NumberArrayTag[], // StringTag
     'Release Date'?: NumberArrayTag, // StringTag
     'Release Time'?: NumberArrayTag, // StringTag
     'Expiration Date'?: NumberArrayTag, // StringTag
     'Expiration Time'?: NumberArrayTag, // StringTag
     'Special Instructions'?: NumberArrayTag, // StringTag
     'Action Advised'?: NumberArrayTag, // StringTag
-    'Reference Service'?: NumberArrayTag, // StringTag
-    'Reference Date'?: NumberArrayTag, // StringTag
-    'Reference Number'?: NumberArrayTag, // StringTag
+    'Reference Service'?: NumberArrayTag | NumberArrayTag[], // StringTag
+    'Reference Date'?: NumberArrayTag | NumberArrayTag[], // StringTag
+    'Reference Number'?: NumberArrayTag | NumberArrayTag[], // StringTag
     'Date Created'?: NumberArrayTag, // StringTag
     'Time Created'?: NumberArrayTag, // StringTag
     'Digital Creation Date'?: NumberArrayTag, // StringTag
@@ -531,8 +531,8 @@ interface ExifTags {
     'Originating Program'?: NumberArrayTag, // StringTag
     'Program Version'?: NumberArrayTag, // StringTag
     'Object Cycle'?: NumberArrayTag, // StringTag
-    'By-line'?: NumberArrayTag, // StringTag
-    'By-line Title'?: NumberArrayTag, // StringTag
+    'By-line'?: NumberArrayTag | NumberArrayTag[], // StringTag
+    'By-line Title'?: NumberArrayTag | NumberArrayTag[], // StringTag
     'City'?: NumberArrayTag, // StringTag
     'Sub-location'?: NumberArrayTag, // StringTag
     'Province/State'?: NumberArrayTag, // StringTag
@@ -543,9 +543,9 @@ interface ExifTags {
     'Credit'?: NumberArrayTag, // StringTag
     'Source'?: NumberArrayTag, // StringTag
     'Copyright Notice'?: NumberArrayTag, // StringTag
-    'Contact'?: NumberArrayTag, // StringTag
+    'Contact'?: NumberArrayTag | NumberArrayTag[], // StringTag
     'Caption/Abstract'?: NumberArrayTag, // StringTag
-    'Writer/Editor'?: NumberArrayTag, // StringTag
+    'Writer/Editor'?: NumberArrayTag | NumberArrayTag[], // StringTag
     'Rasterized Caption'?: NumberArrayTag, // NumberArrayTag
     'Image Type'?: NumberArrayTag, // StringTag
     'Image Orientation'?: NumberArrayTag, // StringTag
