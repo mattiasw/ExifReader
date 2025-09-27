@@ -175,6 +175,9 @@ Where `file` is one of
 *  URL (browser or Node.js; remember that in a browser context the remote server
    has to set CORS headers that allow for remote loading of the file)
 
+**Tip:** To read metadata from an `HTMLImageElement`, wait for its `load` event
+and call `ExifReader.load(image.src)`. The browser should reuse the cached file.
+
 #### Load the file yourself (synchronous API)
 
 ```javascript
