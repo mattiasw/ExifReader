@@ -293,13 +293,14 @@ it's common for the metadata to be spread out over a larger area so please try
 it out on your set of files to know if it's suitable for your situation.
 
 Note that this option only works when ExifReader handles the loading of the
-file. If e.g. a JavaScript File object from a form file field is passed into
-ExifReader the whole file will already have been loaded into memory and it's too
-late. More specifically the length option will work for 1. local files when
-running through Node.js, and 2. remote files when passing a URL. For the latter,
-if doing this through a web browser, make sure the remote server is either on
-the same origin (domain) as your script or that the server is passing correct
-CORS headers, specifically allowing the `Range` header.
+file. If e.g. an already loaded ArrayBuffer or Buffer is passed into ExifReader,
+the whole file will already have been loaded into memory and it's too late.
+More specifically the length option will work for 1. local files when running
+through Node.js, 2. remote files when passing a URL, and 3. browser File objects
+(e.g., from form file fields). For remote files accessed through a web browser,
+make sure the remote server is either on the same origin (domain) as your script
+or that the server is passing correct CORS headers, specifically allowing the
+`Range` header.
 
 #### Unknown tags
 
