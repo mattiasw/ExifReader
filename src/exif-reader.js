@@ -48,7 +48,7 @@ export function load(data, options = {}) {
     }
     if (isBrowserFileObject(data)) {
         options.async = true;
-        return loadFileObject(data).then((fileContents) => loadFromData(fileContents, options));
+        return loadFileObject(data, options).then((fileContents) => loadFromData(fileContents, options));
     }
     return loadFromData(data, options);
 }
@@ -166,12 +166,16 @@ function isBrowserFileObject(data) {
     return (typeof File !== 'undefined') && (data instanceof File);
 }
 
-function loadFileObject(file) {
+function loadFileObject(file, {length}) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (readerEvent) => resolve(readerEvent.target.result);
         reader.onerror = () => reject(reader.error);
-        reader.readAsArrayBuffer(file);
+        if (Number.isInteger(length) && length >= 0 && file.slice !== undefined) {
+            reader.readAsArrayBuffer(file.slice(0, length));
+        } else {
+            reader.readAsArrayBuffer(file);
+        }
     });
 }
 
