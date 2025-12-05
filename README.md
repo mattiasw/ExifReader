@@ -3,8 +3,8 @@ ExifReader
 
 ExifReader is a JavaScript library that parses image files and extracts the
 metadata. It can also extract an embedded thumbnail. It can be used either in a
-browser or from Node. Supports JPEG, TIFF, PNG, HEIC, WebP, and GIF files with
-Exif, IPTC, XMP, ICC, and MPF metadata (depending on file type).
+browser or from Node. Supports JPEG, TIFF, PNG, HEIC, AVIF, WebP, and GIF files
+with Exif, IPTC, XMP, ICC, MPF, and more metadata (depending on file type).
 
 ExifReader is highly and easily configurable and the resulting bundle can be as
 small as **~4 KiB** (gzipped) if you're only interested in a few tags (e.g. date
