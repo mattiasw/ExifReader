@@ -15,39 +15,72 @@ export default {
     read,
 };
 
-function read(dataView, tiffHeaderOffset, includeUnknown) {
+function read(dataView, tiffHeaderOffset, includeUnknown, computed = false) {
     const byteOrder = ByteOrder.getByteOrder(dataView, tiffHeaderOffset);
-    let tags = read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown);
-    tags = readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown);
-    tags = readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown);
-    tags = readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown);
+    let tags = read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed);
+    tags = readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed);
+    tags = readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed);
+    tags = readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed);
 
     return {tags, byteOrder};
 }
 
-function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown) {
-    return readIfd(dataView, IFD_TYPE_0TH, tiffHeaderOffset, get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder), byteOrder, includeUnknown);
+function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed) {
+    return readIfd(dataView, IFD_TYPE_0TH, tiffHeaderOffset, get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder), byteOrder, includeUnknown, computed);
 }
 
-function readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown) {
+function readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed) {
     if (tags[EXIF_IFD_POINTER_KEY] !== undefined) {
-        return objectAssign(tags, readIfd(dataView, IFD_TYPE_EXIF, tiffHeaderOffset, tiffHeaderOffset + tags[EXIF_IFD_POINTER_KEY].value, byteOrder, includeUnknown));
+        return objectAssign(
+            tags,
+            readIfd(
+                dataView,
+                IFD_TYPE_EXIF,
+                tiffHeaderOffset,
+                tiffHeaderOffset + tags[EXIF_IFD_POINTER_KEY].value,
+                byteOrder,
+                includeUnknown,
+                computed
+            )
+        );
     }
 
     return tags;
 }
 
-function readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown) {
+function readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed) {
     if (tags[GPS_INFO_IFD_POINTER_KEY] !== undefined) {
-        return objectAssign(tags, readIfd(dataView, IFD_TYPE_GPS, tiffHeaderOffset, tiffHeaderOffset + tags[GPS_INFO_IFD_POINTER_KEY].value, byteOrder, includeUnknown));
+        return objectAssign(
+            tags,
+            readIfd(
+                dataView,
+                IFD_TYPE_GPS,
+                tiffHeaderOffset,
+                tiffHeaderOffset + tags[GPS_INFO_IFD_POINTER_KEY].value,
+                byteOrder,
+                includeUnknown,
+                computed
+            )
+        );
     }
 
     return tags;
 }
 
-function readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown) {
+function readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed) {
     if (tags[INTEROPERABILITY_IFD_POINTER_KEY] !== undefined) {
-        return objectAssign(tags, readIfd(dataView, IFD_TYPE_INTEROPERABILITY, tiffHeaderOffset, tiffHeaderOffset + tags[INTEROPERABILITY_IFD_POINTER_KEY].value, byteOrder, includeUnknown));
+        return objectAssign(
+            tags,
+            readIfd(
+                dataView,
+                IFD_TYPE_INTEROPERABILITY,
+                tiffHeaderOffset,
+                tiffHeaderOffset + tags[INTEROPERABILITY_IFD_POINTER_KEY].value,
+                byteOrder,
+                includeUnknown,
+                computed
+            )
+        );
     }
 
     return tags;

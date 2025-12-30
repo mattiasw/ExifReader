@@ -20,8 +20,8 @@ export default {
     SHOT_INFO_AUTO_ROTATE
 };
 
-function read(dataView, tiffHeaderOffset, offset, byteOrder, includeUnknown) {
-    let tags = readIfd(dataView, IFD_TYPE_CANON, tiffHeaderOffset, tiffHeaderOffset + offset, byteOrder, includeUnknown);
+function read(dataView, tiffHeaderOffset, offset, byteOrder, includeUnknown, computed = false) {
+    let tags = readIfd(dataView, IFD_TYPE_CANON, tiffHeaderOffset, tiffHeaderOffset + offset, byteOrder, includeUnknown, computed);
 
     if (tags['ShotInfo']) {
         tags = objectAssign({}, tags, parseShotInfo(tags['ShotInfo'].value));

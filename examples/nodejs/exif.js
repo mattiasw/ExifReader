@@ -18,7 +18,7 @@ if (process.argv.length < 3) {
 
 const filePath = process.argv[2];
 
-ExifReader.load(filePath, {expanded: true}).then(function (tags) {
+ExifReader.load(filePath, {expanded: true, computed: true}).then(function (tags) {
     // The MakerNote tag can be really large. Remove it to lower memory
     // usage if you're parsing a lot of files and saving the tags.
     if (tags.exif) {

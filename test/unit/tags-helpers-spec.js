@@ -245,4 +245,112 @@ describe('tags-helpers', () => {
             }
         });
     });
+
+    it('should add a computed value for an ASCII tag when enabled', function () {
+        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x47\x11\x00\x02\x00\x00\x00\x04\x41\x42\x43\x00' // Field: ASCII "ABC\0".
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+        );
+
+        const tags = readIfd(
+            dataView,
+            '0th',
+            0,
+            0,
+            ByteOrder.BIG_ENDIAN,
+            false,
+            true
+        );
+
+        expect(tags['MyAsciiTag']).to.deep.equal({
+            id: 0x4711,
+            value: ['ABC'],
+            description: 'ABC',
+            computed: 'ABC',
+        });
+    });
+
+    it('should add a computed value for a multi-value ASCII tag when enabled', function () {
+        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x12' // Field: ASCII offset.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+            + 'ab\x00cd\x00' // Value at offset 0x12.
+        );
+
+        const tags = readIfd(
+            dataView,
+            '0th',
+            0,
+            0,
+            ByteOrder.BIG_ENDIAN,
+            false,
+            true
+        );
+
+        expect(tags['MyAsciiTag']).to.deep.equal({
+            id: 0x4711,
+            value: ['ab', 'cd'],
+            description: 'ab, cd',
+            computed: ['ab', 'cd'],
+        });
+    });
+
+    it('should add a computed value for a RATIONAL tag when enabled', function () {
+        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyRationalTag'}});
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x47\x11\x00\x05\x00\x00\x00\x01\x00\x00\x00\x12' // Field: RATIONAL offset.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+            + '\x00\x00\x00\x09\x00\x00\x00\x02' // Value at offset 0x12: 9/2.
+        );
+
+        const tags = readIfd(
+            dataView,
+            '0th',
+            0,
+            0,
+            ByteOrder.BIG_ENDIAN,
+            false,
+            true
+        );
+
+        expect(tags['MyRationalTag']).to.deep.equal({
+            id: 0x4711,
+            value: [9, 2],
+            description: '4.5',
+            computed: 4.5,
+        });
+    });
+
+    it('should add computed values for arrays of RATIONAL values when enabled', function () {
+        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyRationalTag'}});
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x47\x11\x00\x05\x00\x00\x00\x02\x00\x00\x00\x12' // Field: RATIONAL offset.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+            + '\x00\x00\x00\x09\x00\x00\x00\x02' // Value at offset 0x12: 9/2.
+            + '\x00\x00\x00\x01\x00\x00\x00\x00' // Value at offset 0x1a: 1/0.
+        );
+
+        const tags = readIfd(
+            dataView,
+            '0th',
+            0,
+            0,
+            ByteOrder.BIG_ENDIAN,
+            false,
+            true
+        );
+
+        expect(tags['MyRationalTag']).to.deep.equal({
+            id: 0x4711,
+            value: [[9, 2], [1, 0]],
+            description: 'NaN',
+            computed: [4.5, null],
+        });
+    });
 });
