@@ -138,19 +138,20 @@ interface NumberArrayFileTag {
     value: Array<number>
 }
 
-type TypedTag<V> = {
+type TypedTag<V, C = V> = {
     id: number,
     description: string,
+    computed?: C,
     value: V
 }
 
-type RationalTag = TypedTag<[number, number]>
+type RationalTag = TypedTag<[number, number], number | null>
 
 type NumberTag = TypedTag<number>;
 
 type NumberArrayTag = TypedTag<number[]>
 
-type StringArrayTag = TypedTag<string[]>
+type StringArrayTag = TypedTag<string[], string | string[]>
 
 type StringTag = TypedTag<string>;
 
@@ -310,6 +311,7 @@ interface XmlDomParser {
 
 type CommonOptions = {
     includeUnknown?: boolean,
+    computed?: boolean,
     domParser?: XmlDomParser
 };
 
@@ -445,9 +447,15 @@ interface ExifTags {
     // GPS tags
     'GPSVersionID'?: NumberTag,
     'GPSLatitudeRef'?: StringArrayTag,
-    'GPSLatitude'?: TypedTag<[[number, number], [number, number], [number, number]]>,
+    'GPSLatitude'?: TypedTag<
+        [[number, number], [number, number], [number, number]],
+        [number | null, number | null, number | null]
+    >,
     'GPSLongitudeRef'?: StringArrayTag,
-    'GPSLongitude'?: TypedTag<[[number, number], [number, number], [number, number]]>,
+    'GPSLongitude'?: TypedTag<
+        [[number, number], [number, number], [number, number]],
+        [number | null, number | null, number | null]
+    >,
     'GPSAltitudeRef'?: NumberTag,
     'GPSAltitude'?: RationalTag,
     'GPSTimeStamp'?: NumberArrayTag,

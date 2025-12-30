@@ -22,7 +22,7 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
     return tiffHeaderOffset + Types.getLongAt(dataView, tiffHeaderOffset + 4, byteOrder);
 }
 
-export function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown) {
+export function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown, computed = false) {
     const FIELD_COUNT_SIZE = Types.getTypeSize('SHORT');
     const FIELD_SIZE = 12;
 
@@ -42,6 +42,9 @@ export function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, incl
                 'value': tag.value,
                 'description': tag.description
             };
+            if (computed) {
+                tags[tag.name].computed = getComputedTagValue(tag.tagType, tag.value);
+            }
             if (tag.name === 'MakerNote' || (ifdType === IFD_TYPE_PENTAX && tag.name === 'LevelInfo')) {
                 tags[tag.name].__offset = tag.__offset;
             }
@@ -53,7 +56,15 @@ export function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, incl
     if (Constants.USE_THUMBNAIL && (offset < dataView.byteLength - Types.getTypeSize('LONG'))) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
         if (nextIfdOffset !== 0 && ifdType === IFD_TYPE_0TH) {
-            tags['Thumbnail'] = readIfd(dataView, IFD_TYPE_1ST, offsetOrigin, offsetOrigin + nextIfdOffset, byteOrder, includeUnknown);
+            tags['Thumbnail'] = readIfd(
+                dataView,
+                IFD_TYPE_1ST,
+                offsetOrigin,
+                offsetOrigin + nextIfdOffset,
+                byteOrder,
+                includeUnknown,
+                computed
+            );
         }
     }
 
@@ -126,6 +137,7 @@ function readTag(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnkn
         name: tagName,
         value: tagValue,
         description: tagDescription,
+        tagType,
         __offset: tagValueOffset
     };
 }
@@ -190,4 +202,54 @@ function getDescriptionFromTagValue(tagValue) {
         return tagValue.join(', ');
     }
     return tagValue;
+}
+
+function getComputedTagValue(tagType, value) {
+    if (tagType === Types.tagTypes['ASCII']) {
+        if (Array.isArray(value) && value.length === 1) {
+            return value[0];
+        }
+
+        return value;
+    }
+
+    if (tagType === Types.tagTypes['RATIONAL'] || tagType === Types.tagTypes['SRATIONAL']) {
+        if (isSingleRationalValue(value)) {
+            return getComputedRationalValue(value);
+        }
+
+        if (Array.isArray(value)) {
+            return value.map((rational) => getComputedRationalValue(rational));
+        }
+
+        return value;
+    }
+
+    return value;
+}
+
+function isSingleRationalValue(value) {
+    if (!Array.isArray(value) || value.length !== 2) {
+        return false;
+    }
+
+    return typeof value[0] === 'number' && typeof value[1] === 'number';
+}
+
+function getComputedRationalValue(rational) {
+    if (!Array.isArray(rational) || rational.length !== 2) {
+        return rational;
+    }
+
+    const numerator = rational[0];
+    const denominator = rational[1];
+    if (!Number.isFinite(numerator) || !Number.isFinite(denominator)) {
+        return rational;
+    }
+
+    if (denominator === 0) {
+        return null;
+    }
+
+    return numerator / denominator;
 }

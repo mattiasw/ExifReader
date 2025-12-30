@@ -1,19 +1,29 @@
 import { load, loadView, type Tags, type ExpandedTags } from "../../exif-reader.js";
 
 load("", { includeUnknown: true });
+load("", { computed: true });
 load("", { length: 1024 });
 load("", { expanded: false, includeUnknown: true, length: 1024 });
 load("", { async: true });
+load("", { async: true, computed: true });
 const syncTags0: Tags = load(new ArrayBuffer(0));
 const asyncTags0: Promise<Tags> = load(new ArrayBuffer(0), { async: true });
 // @ts-expect-error
 const syncTags1: Tags = load(new ArrayBuffer(0), { async: true });
 const syncTags2: Tags = loadView(new DataView(new ArrayBuffer(0)), { includeUnknown: true });
+const syncTags2Computed: Tags = loadView(new DataView(new ArrayBuffer(0)), {
+    computed: true,
+});
 const syncTags3: ExpandedTags = loadView(new DataView(new ArrayBuffer(0)), { expanded: true });
+const syncTags3Computed: ExpandedTags = loadView(new DataView(new ArrayBuffer(0)), {
+    expanded: true,
+    computed: true,
+});
 const asyncTags1: Promise<Tags> = loadView(new DataView(new ArrayBuffer(0)), { async: true });
 
 const tags = await load("");
 const expandedTags = await load("", { expanded: true });
+const computedExpandedTags = await load("", { expanded: true, computed: true });
 
 /////////
 // File
@@ -55,6 +65,18 @@ expandedTags["exif"]?.["DateTimeOriginal"]?.description ===
 // @ts-expect-error
 expandedTags["exif"]?.["DateTimeOriginal"].attributes;
 
+// Computed values (only exist at runtime if the computed option is enabled).
+const exifDateTimeComputed = computedExpandedTags["exif"]?.["DateTimeOriginal"]?.computed;
+if (exifDateTimeComputed) {
+    if (Array.isArray(exifDateTimeComputed)) {
+        exifDateTimeComputed[0] === "2014:09:21 16:00:56";
+    } else {
+        exifDateTimeComputed === "2014:09:21 16:00:56";
+    }
+}
+// @ts-expect-error
+computedExpandedTags["xmp"]?.["DateTimeOriginal"]?.computed;
+
 expandedTags["exif"]?.["GPSLatitude"]?.value[0][0] === 1;
 // @ts-expect-error
 expandedTags["exif"]?.["GPSLatitude"]?.value[0][2] === 1;
@@ -72,6 +94,15 @@ expandedTags["gps"]?.["Latitude"] === 12.345
 expandedTags["gps"]?.["Longitude"] === 12.345;
 expandedTags["gps"]?.["Altitude"] === 12.345
 
+const computedGpsLatitude =
+    computedExpandedTags["exif"]?.["GPSLatitude"]?.computed;
+if (computedGpsLatitude) {
+    computedGpsLatitude[0] === 1;
+    computedGpsLatitude[0] === null;
+    // @ts-expect-error
+    computedGpsLatitude[0] === "1";
+}
+
 expandedTags["exif"]?.["Thumbnail"]?.type === "image/jpeg";
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.id === 4711;
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.value === 32946;
@@ -84,6 +115,16 @@ expandedTags["exif"]?.["SceneType"]?.value === 1;
 // @ts-expect-error
 expandedTags["exif"]?.["SceneType"]?.value === "1";
 expandedTags["xmp"]?.["SceneType"]?.value === "1";
+
+const computedXResolution = computedExpandedTags["exif"]?.["XResolution"];
+if (computedXResolution && "id" in computedXResolution) {
+    const xResolutionComputedNumber: number | null | undefined =
+        computedXResolution.computed;
+    xResolutionComputedNumber === 72;
+    xResolutionComputedNumber === null;
+    // @ts-expect-error
+    const xResolutionComputedString: string = computedXResolution.computed;
+}
 
 // @ts-expect-error
 expandedTags["exif"]?.["NonExistent"];

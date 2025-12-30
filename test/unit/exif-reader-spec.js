@@ -399,6 +399,22 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should pass on computed option to Exif tags parsing', function () {
+        const myTags = {MyExifTag: 42};
+        rewireImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE});
+        ExifReaderRewireAPI.__Rewire__('Tags', {
+            read(dataView, offset, includeUnknown, computed) {
+                expect(offset).to.equal(OFFSET_TEST_VALUE);
+                expect(includeUnknown).to.equal(false);
+                expect(computed).to.equal(true);
+
+                return {tags: myTags, byteOrder: BIG_ENDIAN};
+            },
+        });
+
+        expect(ExifReader.loadView({}, {computed: true})).to.deep.equal(myTags);
+    });
+
     it('should be able to find IPTC segment inside Exif APP segment (used in TIFF files)', () => {
         const myExifTags = {'IPTC-NAA': {value: ['<IPTC block array>']}};
         const myIptcTags = {MyIptcTag: 42};

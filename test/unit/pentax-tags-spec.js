@@ -212,13 +212,13 @@ describe('pentax-tags', () => {
 });
 
 function rewirePentaxReadIfd(tags, littleEndian = false) {
-    PentaxTagsRewireAPI.__Rewire__('readIfd', (_dataView, ifdType, originOffset, offset, byteOrder, includeUnknown, relativeToIfd) => {
+    PentaxTagsRewireAPI.__Rewire__('readIfd', (_dataView, ifdType, originOffset, offset, byteOrder, includeUnknown, computed) => {
         expect(ifdType).to.equal(IFD_TYPE_PENTAX);
         expect(originOffset).to.equal(TIFF_HEADER_OFFSET + OFFSET);
         expect(offset).to.equal(TIFF_HEADER_OFFSET + OFFSET + PentaxTags.PENTAX_IFD_OFFSET);
         expect(byteOrder).to.equal(littleEndian ? ByteOrder.LITTLE_ENDIAN : ByteOrder.BIG_ENDIAN);
         expect(includeUnknown).to.equal(false);
-        expect(relativeToIfd).to.equal(true);
+        expect(computed).to.equal(false);
 
         return tags;
     });

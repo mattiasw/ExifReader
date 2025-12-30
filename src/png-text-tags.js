@@ -24,7 +24,7 @@ const COMPRESSION_SECTION_ITXT_EXTRA_BYTE = 1;
 const COMPRESSION_FLAG_COMPRESSED = 1;
 const EXIF_OFFSET = 6;
 
-function read(dataView, pngTextChunks, async, includeUnknown) {
+function read(dataView, pngTextChunks, async, includeUnknown, computed = false) {
     const tags = {};
     const tagsPromises = [];
     for (let i = 0; i < pngTextChunks.length; i++) {
@@ -35,7 +35,12 @@ function read(dataView, pngTextChunks, async, includeUnknown) {
                 try {
                     if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
                         return {
-                            __exif: Tags.read(decodeRawData(value), EXIF_OFFSET, includeUnknown).tags
+                            __exif: Tags.read(
+                                decodeRawData(value),
+                                EXIF_OFFSET,
+                                includeUnknown,
+                                computed
+                            ).tags
                         };
                     } else if (Constants.USE_IPTC && isIptcGroupTag(name, value)) {
                         return {
@@ -151,6 +156,7 @@ function getEncodingFromType(type) {
 
 function constructTag(valueChars, type, langChars, keywordChars) {
     const value = getValue(valueChars);
+
     return {
         name: getName(type, langChars, keywordChars),
         value,

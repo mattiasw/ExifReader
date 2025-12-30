@@ -315,6 +315,40 @@ const tags = ExifReader.load(fileBuffer, {includeUnknown: true});
 If you discover an unknown tag that should be handled by ExifReader, please
 reach out by filing an issue.
 
+#### Computed tag values (opt-in)
+
+ExifReader exposes three different values per Exif tag:
+
+- **`value`**: A stable, raw-ish value that mirrors how the tag is stored in the
+  file.
+- **`description`**: A human-friendly value meant for display.
+- **`computed`**: An opt-in, type-aware value. This will often be the same as
+  `value` except for RATIONAL/SRATIONAL and ASCII tags.
+
+Enable the `computed` value by passing `computed: true` in the options:
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {computed: true});
+
+const make = tags['Make'].computed; // e.g. "Apple"
+const xResolution = tags['XResolution'].computed; // e.g. 72
+```
+
+`computed` is only added for tags parsed from TIFF IFD structures (Exif/GPS/etc,
+including maker notes, MPF, and the Thumbnail IFD). It is not currently added to
+XMP/IPTC/ICC tags or PNG text tags.
+
+The `computed` conversion rules are based on the TIFF tag type:
+
+- **ASCII**: If `value` contains a single string, `computed` is that string.
+  Otherwise `computed` is a string array.
+- **RATIONAL / SRATIONAL**: `computed` is a number (or an array of numbers).
+  Division by zero yields `null`.
+- **All other types**: `computed` equals `value`.
+
+Note that `computed` may evolve in minor versions as the feature matures. If you
+need a value with the strongest stability guarantees, prefer `value`.
+
 ### GPS
 
 If `expanded: true` is specified in the options, there will be a `gps` group.
@@ -589,6 +623,9 @@ Changelog
 
 A selection of notable changes.
 
+-   **December 2025**:
+    -   Add the `computed` tag property that are a middle way between the raw
+        `value` and the human-friendly `description`.
 -   **October 2024**:
     -   Add support for some proprietary tags from Canon cameras.
 -   **December 2023**:
