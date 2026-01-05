@@ -209,11 +209,13 @@ export function loadView(
     {
         expanded = false,
         async = false,
+        computed = false,
         includeUnknown = false,
         domParser = undefined,
     } = {
         expanded: false,
         async: false,
+        computed: false,
         includeUnknown: false,
         domParser: undefined,
     }
@@ -260,7 +262,12 @@ export function loadView(
 
     if (Constants.USE_EXIF && hasExifData(tiffHeaderOffset)) {
         foundMetaData = true;
-        const {tags: readTags, byteOrder} = Tags.read(dataView, tiffHeaderOffset, includeUnknown);
+        const {tags: readTags, byteOrder} = Tags.read(
+            dataView,
+            tiffHeaderOffset,
+            includeUnknown,
+            computed
+        );
         if (readTags.Thumbnail) {
             tags.Thumbnail = readTags.Thumbnail;
             delete readTags.Thumbnail;
@@ -320,14 +327,27 @@ export function loadView(
 
         if (Constants.USE_MAKER_NOTES && readTags['MakerNote']) {
             if (hasCanonData(readTags)) {
-                const readCanonTags = CanonTags.read(dataView, tiffHeaderOffset, readTags['MakerNote'].__offset, byteOrder, includeUnknown);
+                const readCanonTags = CanonTags.read(
+                    dataView,
+                    tiffHeaderOffset,
+                    readTags['MakerNote'].__offset,
+                    byteOrder,
+                    includeUnknown,
+                    computed
+                );
                 if (expanded) {
                     tags.makerNotes = readCanonTags;
                 } else {
                     tags = objectAssign({}, tags, readCanonTags);
                 }
             } else if (hasPentaxType1Data(readTags)) {
-                const readPentaxTags = PentaxTags.read(dataView, tiffHeaderOffset, readTags['MakerNote'].__offset, includeUnknown);
+                const readPentaxTags = PentaxTags.read(
+                    dataView,
+                    tiffHeaderOffset,
+                    readTags['MakerNote'].__offset,
+                    includeUnknown,
+                    computed
+                );
                 if (expanded) {
                     tags.makerNotes = readPentaxTags;
                 } else {
@@ -374,7 +394,7 @@ export function loadView(
 
     if (Constants.USE_MPF && hasMpfData(mpfDataOffset)) {
         foundMetaData = true;
-        const readMpfTags = MpfTags.read(dataView, mpfDataOffset, includeUnknown);
+        const readMpfTags = MpfTags.read(dataView, mpfDataOffset, includeUnknown, computed);
         if (expanded) {
             tags.mpf = readMpfTags;
         } else {
@@ -395,7 +415,7 @@ export function loadView(
 
     if (Constants.USE_PNG && hasPngTextData(pngTextChunks)) {
         foundMetaData = true;
-        const {readTags, readTagsPromise} = PngTextTags.read(dataView, pngTextChunks, async, includeUnknown);
+        const {readTags, readTagsPromise} = PngTextTags.read(dataView, pngTextChunks, async, includeUnknown, computed);
         addPngTextTags(readTags);
         if (readTagsPromise) {
             tagsPromises.push(readTagsPromise.then((tagList) => tagList.forEach(addPngTextTags)));
