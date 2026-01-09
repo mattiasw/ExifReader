@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
+import {getConsoleWarnSpy, getDataView} from './test-utils';
 import {__RewireAPI__ as ImageHeaderRewireAPI} from '../../src/image-header';
 import {__RewireAPI__ as ImageHeaderPngRewireAPI} from '../../src/image-header-png';
 import ImageHeader from '../../src/image-header';
@@ -176,6 +176,27 @@ describe('image-header', () => {
             const dataView = getDataView(`\xff\xd8${APP1_MARKER}\x00\x08Exif\x00\x00\xff\xe0\x00\x07JFIF\x00`);
             const {tiffHeaderOffset} = ImageHeader.parseAppMarkers(dataView);
             expect(tiffHeaderOffset).to.equal(12);
+        });
+
+        it('should prefer Exif segment with IFD entries when multiple Exif segments exist', () => {
+            const validTiffHeaderLittleEndian = '\x49\x49\x2a\x00\x08\x00\x00\x00';
+            const valid0thIfdWithOneEntry = '\x01\x00'
+                + '\x0f\x01\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00'
+                + '\x00\x00\x00\x00';
+            const validExifSegment = `${APP1_MARKER}\x00\x22Exif\x00\x00${validTiffHeaderLittleEndian}${valid0thIfdWithOneEntry}`;
+
+            const invalid0thIfdWithZeroEntries = '\x00\x00' + '\x00\x00\x00\x00';
+            const invalidExifSegment = `${APP1_MARKER}\x00\x16Exif\x00\x00${validTiffHeaderLittleEndian}${invalid0thIfdWithZeroEntries}`;
+
+            const dataView = getDataView(`\xff\xd8${validExifSegment}${invalidExifSegment}`);
+            const warnSpy = getConsoleWarnSpy();
+            try {
+                const {tiffHeaderOffset} = ImageHeader.parseAppMarkers(dataView);
+                expect(tiffHeaderOffset).to.equal(12);
+                expect(warnSpy.hasWarned).to.be.true;
+            } finally {
+                warnSpy.reset();
+            }
         });
 
         it('should handle fill bytes', () => {

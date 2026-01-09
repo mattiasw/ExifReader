@@ -4,6 +4,7 @@
 
 import ByteOrder from './byte-order.js';
 import Constants from './constants.js';
+import {TIFF_ID, TIFF_ID_OFFSET} from './tiff-constants.js';
 
 export default {
     isTiffFile,
@@ -17,9 +18,6 @@ function isTiffFile(dataView) {
 }
 
 function hasTiffMarker(dataView) {
-    const TIFF_ID = 0x2a;
-    const TIFF_ID_OFFSET = 2;
-
     const littleEndian = dataView.getUint16(0) === ByteOrder.LITTLE_ENDIAN;
     return dataView.getUint16(TIFF_ID_OFFSET, littleEndian) === TIFF_ID;
 }
