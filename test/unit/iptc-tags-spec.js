@@ -214,7 +214,7 @@ describe('iptc-tags', function () {
 
     it('should stop parsing tags when a tag is faulty', () => {
         const dataView = getDataView('8BIM\x04\x04\x00\x00\x00\x00\x00\x0e' + '\x1c\x47\x11\x00\x02BC' + '\x00\x47\x12\x00\x02DE' + '\x1c\x47\x11\x00\x02FG');
-        const tags = IptcTags.read(dataView, 0, {}, undefined, true);
+        const tags = IptcTags.read(dataView, 0, true);
         expect(Object.keys(tags).length).to.equal(1);
     });
 
