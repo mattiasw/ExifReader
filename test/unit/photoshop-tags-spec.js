@@ -68,7 +68,7 @@ describe('photoshop-tags', () => {
     it('should include unknown tags if specified', () => {
         PhotoshopTags.__set__('TagNames', {});
         const bytes = getPhotoshopBytes({id: 0x4711, resource: '\x42\x43'});
-        expect(read(bytes, 'unused', true)).to.deep.equal({'undefined-18193': {id: 0x4711, value: '\x42\x43'}});
+        expect(read(bytes, true)).to.deep.equal({'undefined-18193': {id: 0x4711, value: '\x42\x43'}});
     });
 
     function getPhotoshopBytes({id, name = '', resource = ''}) {

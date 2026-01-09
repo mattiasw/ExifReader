@@ -6,6 +6,22 @@ load("", { length: 1024 });
 load("", { expanded: false, includeUnknown: true, length: 1024 });
 load("", { async: true });
 load("", { async: true, computed: true });
+load("", { excludeTags: { exif: ["DateTimeOriginal", 0x9003] } });
+load("", { excludeTags: { png: ["Color Type"] } });
+load("", { includeTags: { exif: true } });
+load("", { includeTags: { png: true } });
+load("", { includeTags: { thumbnail: true } });
+load("", { includeTags: { exif: true }, excludeTags: { png: true } });
+// @ts-expect-error
+load("", { excludeTags: ["DateTimeOriginal"] });
+// @ts-expect-error
+load("", { includeTags: { pngText: true } });
+// @ts-expect-error
+load("", { includeTags: { pngFile: true } });
+// @ts-expect-error
+load("", { excludeTags: { png: [0x9003] } });
+// @ts-expect-error
+load("", { excludeTags: { xmp: [0x9003] } });
 const syncTags0: Tags = load(new ArrayBuffer(0));
 const asyncTags0: Promise<Tags> = load(new ArrayBuffer(0), { async: true });
 // @ts-expect-error

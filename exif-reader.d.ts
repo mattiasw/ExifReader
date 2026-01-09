@@ -309,10 +309,38 @@ interface XmlDomParser {
     parseFromString(xml: string, mimeType: string): unknown;
 }
 
+type TagSelectorWithId = string | number;
+type TagSelectorNameOnly = string;
+
+type TagFilterGroupWithId = true | TagSelectorWithId[];
+type TagFilterGroupNameOnly = true | TagSelectorNameOnly[];
+
+export type IncludeTagsOptions = {
+    exif?: TagFilterGroupWithId,
+    iptc?: TagFilterGroupWithId,
+    xmp?: TagFilterGroupNameOnly,
+    icc?: TagFilterGroupNameOnly,
+    photoshop?: TagFilterGroupWithId,
+    makerNotes?: TagFilterGroupWithId,
+    mpf?: TagFilterGroupWithId,
+    file?: TagFilterGroupNameOnly,
+    jfif?: TagFilterGroupNameOnly,
+    png?: TagFilterGroupNameOnly,
+    riff?: TagFilterGroupNameOnly,
+    gif?: TagFilterGroupNameOnly,
+    gps?: TagFilterGroupNameOnly,
+    composite?: TagFilterGroupNameOnly,
+    thumbnail?: TagFilterGroupNameOnly,
+};
+
+export type ExcludeTagsOptions = IncludeTagsOptions;
+
 type CommonOptions = {
     includeUnknown?: boolean,
     computed?: boolean,
-    domParser?: XmlDomParser
+    domParser?: XmlDomParser,
+    includeTags?: IncludeTagsOptions,
+    excludeTags?: ExcludeTagsOptions,
 };
 
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;

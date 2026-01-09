@@ -315,6 +315,91 @@ const tags = ExifReader.load(fileBuffer, {includeUnknown: true});
 If you discover an unknown tag that should be handled by ExifReader, please
 reach out by filing an issue.
 
+#### Filtering tags (includeTags / excludeTags)
+
+You can filter which tags are returned by using `includeTags` and/or
+`excludeTags`.
+
+- If `includeTags` is provided, it uses an **include-pattern**: only the groups
+  you specify will be included in the output.
+- `excludeTags` can be used alone to remove tags/groups while keeping everything
+  else.
+- If a group is specified in both `includeTags` and `excludeTags`, `excludeTags`
+  for that group will be ignored.
+- An empty selector array (e.g. `includeTags: { xmp: [] }`) is treated as
+  excluding that group. The group will not be returned and ExifReader will skip
+  parsing it.
+
+**Examples**
+
+Exclude a few tags in the Exif group:
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {
+    excludeTags: {
+        exif: ['MakerNote', 0x9286],
+    }
+});
+```
+
+Only return XMP tags (and exclude everything else):
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {
+    includeTags: {
+        xmp: true,
+    }
+});
+```
+
+**Filtering groups**
+
+The group keys follow the same concept as the output when `expanded: true` is
+used. (The `thumbnail` group controls the top-level `Thumbnail` value.)
+
+For PNG, filtering is done with the `png` group only. (The `pngFile` and
+`pngText` groups exist in `expanded` output today, but `png` is the filtering key
+and those groups will be deprecated later.)
+
+| Group key     | Description                                      | Supports IDs |
+| ------------- | ------------------------------------------------ | ------------ |
+| `exif`        | Exif tags (including GPS IFD, interoperability). | yes          |
+| `iptc`        | IPTC tags.                                       | yes          |
+| `xmp`         | XMP tags.                                        | no           |
+| `icc`         | ICC profile tags.                                | no           |
+| `photoshop`   | Photoshop resource tags.                         | yes          |
+| `makerNotes`  | MakerNote tags (e.g. Canon/Pentax).              | yes          |
+| `mpf`         | MPF tags.                                        | yes          |
+| `file`        | JPEG file details and `FileType`.                | no           |
+| `jfif`        | JFIF tags.                                       | no           |
+| `png`         | PNG header, chunk, and text tags.                | no           |
+| `riff`        | WebP (RIFF) tags.                                | no           |
+| `gif`         | GIF tags.                                        | no           |
+| `gps`         | Computed GPS group (only when `expanded: true`). | no           |
+| `composite`   | Composite tags (e.g. FieldOfView).               | no           |
+| `thumbnail`   | Top-level `Thumbnail` output.                    | no           |
+
+**Important: dependency tags**
+
+Some tags act as pointers or containers to other metadata. Excluding them can
+cause other tags or entire groups to disappear. Some important examples:
+
+- `Exif IFD Pointer`, `GPS Info IFD Pointer`, `Interoperability IFD Pointer`
+- `IPTC-NAA` (TIFF embedded IPTC), `ApplicationNotes` (TIFF embedded XMP),
+  `ICC_Profile` (TIFF embedded ICC)
+- `MakerNote` and `Make` (maker note parsing)
+- `ImageSourceData` and `PhotoshopSettings` (Photoshop parsing)
+- `JPEGInterchangeFormat` and `JPEGInterchangeFormatLength` (thumbnails)
+
+**NOTE:** When using `includeTags`, you **do not** have to list these dependency
+tags. ExifReader will automatically include the required pointer/container tags
+needed to find and parse the groups you requested. This section mainly matters
+when using `excludeTags`.
+
+Note that XMP and ICC tags are parsed from full metadata blocks, so ExifReader
+cannot skip parsing individual XMP/ICC tags based on selectors. The returned
+output is still filtered.
+
 #### Computed tag values (opt-in)
 
 ExifReader exposes three different values per Exif tag:
@@ -623,6 +708,9 @@ Changelog
 
 A selection of notable changes.
 
+-   **January 2026**:
+    -   Add `includeTags` / `excludeTags` options for filtering returned tags by
+        group and tag name/ID.
 -   **December 2025**:
     -   Add the `computed` tag property that are a middle way between the raw
         `value` and the human-friendly `description`.

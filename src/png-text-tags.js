@@ -10,6 +10,7 @@ import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
 import Tags from './tags.js';
 import IptcTags from './iptc-tags.js';
 import Constants from './constants.js';
+import {NOOP_TAG_FILTER} from './tag-filter.js';
 
 export default {
     read
@@ -24,9 +25,17 @@ const COMPRESSION_SECTION_ITXT_EXTRA_BYTE = 1;
 const COMPRESSION_FLAG_COMPRESSED = 1;
 const EXIF_OFFSET = 6;
 
-function read(dataView, pngTextChunks, async, includeUnknown, computed = false) {
+function read(
+    dataView,
+    pngTextChunks,
+    async,
+    includeUnknown,
+    computed = false,
+    tagFilter = NOOP_TAG_FILTER
+) {
     const tags = {};
     const tagsPromises = [];
+
     for (let i = 0; i < pngTextChunks.length; i++) {
         const {offset, length, type} = pngTextChunks[i];
         const nameAndValue = getNameAndValue(dataView, offset, length, type, async);
@@ -34,19 +43,34 @@ function read(dataView, pngTextChunks, async, includeUnknown, computed = false) 
             tagsPromises.push(nameAndValue.then(({name, value, description}) => {
                 try {
                     if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
+                        if (!tagFilter.shouldParseGroup('exif')) {
+                            return {};
+                        }
                         return {
                             __exif: Tags.read(
                                 decodeRawData(value),
                                 EXIF_OFFSET,
                                 includeUnknown,
-                                computed
+                                computed,
+                                tagFilter
                             ).tags
                         };
                     } else if (Constants.USE_IPTC && isIptcGroupTag(name, value)) {
+                        if (!tagFilter.shouldParseGroup('iptc')) {
+                            return {};
+                        }
                         return {
-                            __iptc: IptcTags.read(decodeRawData(value), 0, includeUnknown)
+                            __iptc: IptcTags.read(
+                                decodeRawData(value),
+                                0,
+                                includeUnknown,
+                                tagFilter
+                            )
                         };
                     } else if (name && !isExifGroupTag(name, value) && !isIptcGroupTag(name, value)) {
+                        if (!tagFilter.shouldParseGroup('png')) {
+                            return {};
+                        }
                         return {
                             [name]: {
                                 value,
@@ -61,7 +85,7 @@ function read(dataView, pngTextChunks, async, includeUnknown, computed = false) 
             }));
         } else {
             const {name, value, description} = nameAndValue;
-            if (name) {
+            if (name && tagFilter.shouldParseGroup('png')) {
                 tags[name] = {
                     value,
                     description
