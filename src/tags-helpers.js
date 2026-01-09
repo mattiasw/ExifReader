@@ -5,6 +5,7 @@
 import Constants from './constants.js';
 import Types from './types.js';
 import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './tag-names.js';
+import {IFD_ENTRY_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
 
 const getTagValueAt = {
     1: Types.getByteAt,
@@ -19,12 +20,17 @@ const getTagValueAt = {
 };
 
 export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
-    return tiffHeaderOffset + Types.getLongAt(dataView, tiffHeaderOffset + 4, byteOrder);
+    return tiffHeaderOffset
+        + Types.getLongAt(
+            dataView,
+            tiffHeaderOffset + TIFF_IFD_OFFSET_OFFSET,
+            byteOrder
+        );
 }
 
 export function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown, computed = false) {
     const FIELD_COUNT_SIZE = Types.getTypeSize('SHORT');
-    const FIELD_SIZE = 12;
+    const FIELD_SIZE = IFD_ENTRY_LENGTH;
 
     const tags = {};
     const numberOfFields = getNumberOfFields(dataView, offset, byteOrder);
