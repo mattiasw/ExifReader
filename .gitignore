@@ -11,5 +11,6 @@ exifreader-*.tgz
 test/build/tmp
 test/fixtures/images/custom_*
 test/fixtures/outputs/custom_*
+test/fixtures/tag-filtering-outputs/custom_*
 gh-pages
 local-assets
