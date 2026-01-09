@@ -4,6 +4,17 @@
 
 import {getStringFromDataView} from './utils.js';
 import Constants from './constants.js';
+import ByteOrder from './byte-order.js';
+import {
+    IFD_ENTRY_COUNT_LENGTH,
+    IFD_ENTRY_LENGTH,
+    NEXT_IFD_POINTER_LENGTH,
+    TIFF_BYTE_ORDER_OFFSET,
+    TIFF_HEADER_LENGTH,
+    TIFF_ID,
+    TIFF_ID_OFFSET,
+    TIFF_IFD_OFFSET_OFFSET,
+} from './tiff-constants.js';
 
 export default {
     isJpegFile,
@@ -68,6 +79,11 @@ function findJpegOffsets(dataView) {
     let xmpChunks;
     let iccChunks;
     let mpfDataOffset;
+    let exifSegmentCount = 0;
+    let bestExifSegmentScore;
+    let bestExifSegmentTiffHeaderOffset;
+    let bestExifSegmentAppMarkerPosition;
+    let bestExifSegmentFieldLength;
 
     while (appMarkerPosition + APP_ID_OFFSET + 5 <= dataView.byteLength) {
         if (Constants.USE_FILE && isSOF0Marker(dataView, appMarkerPosition)) {
@@ -81,7 +97,50 @@ function findJpegOffsets(dataView) {
             jfifDataOffset = appMarkerPosition + JFIF_DATA_OFFSET;
         } else if (Constants.USE_EXIF && isApp1ExifMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
-            tiffHeaderOffset = appMarkerPosition + TIFF_HEADER_OFFSET;
+            exifSegmentCount++;
+
+            const currentTiffHeaderOffset = appMarkerPosition + TIFF_HEADER_OFFSET;
+
+            if (exifSegmentCount === 1) {
+                bestExifSegmentTiffHeaderOffset = currentTiffHeaderOffset;
+                bestExifSegmentAppMarkerPosition = appMarkerPosition;
+                bestExifSegmentFieldLength = fieldLength;
+            } else if (exifSegmentCount === 2) {
+                bestExifSegmentScore = getExifMarkerScore(
+                    dataView,
+                    bestExifSegmentAppMarkerPosition,
+                    bestExifSegmentFieldLength,
+                    bestExifSegmentTiffHeaderOffset
+                );
+                const currentExifSegmentScore = getExifMarkerScore(
+                    dataView,
+                    appMarkerPosition,
+                    fieldLength,
+                    currentTiffHeaderOffset
+                );
+
+                if (currentExifSegmentScore > bestExifSegmentScore) {
+                    bestExifSegmentScore = currentExifSegmentScore;
+                    bestExifSegmentTiffHeaderOffset = currentTiffHeaderOffset;
+                    bestExifSegmentAppMarkerPosition = appMarkerPosition;
+                    bestExifSegmentFieldLength = fieldLength;
+                }
+            } else {
+                const currentExifSegmentScore = getExifMarkerScore(
+                    dataView,
+                    appMarkerPosition,
+                    fieldLength,
+                    currentTiffHeaderOffset
+                );
+                if (currentExifSegmentScore > bestExifSegmentScore) {
+                    bestExifSegmentScore = currentExifSegmentScore;
+                    bestExifSegmentTiffHeaderOffset = currentTiffHeaderOffset;
+                    bestExifSegmentAppMarkerPosition = appMarkerPosition;
+                    bestExifSegmentFieldLength = fieldLength;
+                }
+            }
+
+            tiffHeaderOffset = bestExifSegmentTiffHeaderOffset;
         } else if (Constants.USE_XMP && isApp1XmpMarker(dataView, appMarkerPosition)) {
             if (!xmpChunks) {
                 xmpChunks = [];
@@ -120,6 +179,10 @@ function findJpegOffsets(dataView) {
             break;
         }
         appMarkerPosition += APP_MARKER_SIZE + fieldLength;
+    }
+
+    if (exifSegmentCount > 1) {
+        warnAboutMultipleExifSegments(exifSegmentCount);
     }
 
     return {
@@ -228,4 +291,75 @@ function isAppMarker(dataView, appMarkerPosition) {
 
 function isFillByte(dataView, appMarkerPosition) {
     return dataView.getUint16(appMarkerPosition) === FILL_BYTE;
+}
+
+function getExifMarkerScore(dataView, appMarkerPosition, fieldLength, tiffHeaderOffset) {
+    const segmentEnd = appMarkerPosition + APP_MARKER_SIZE + fieldLength;
+    const details = getExifTiffHeaderDetails(dataView, tiffHeaderOffset, segmentEnd);
+    if (!details) {
+        return 0;
+    }
+
+    const ifdEntriesScore = Number.isInteger(details.ifdEntries) ? details.ifdEntries : 0;
+
+    return (details.isValid ? 1000000000 : 0)
+        + (ifdEntriesScore * 1000000)
+        + fieldLength;
+}
+
+function getExifTiffHeaderDetails(dataView, tiffHeaderOffset, segmentEnd) {
+    try {
+        if (tiffHeaderOffset + TIFF_HEADER_LENGTH > segmentEnd) {
+            return undefined;
+        }
+
+        const byteOrderRaw = dataView.getUint16(
+            tiffHeaderOffset + TIFF_BYTE_ORDER_OFFSET
+        );
+        const isLittleEndian = byteOrderRaw === ByteOrder.LITTLE_ENDIAN;
+        if (!isLittleEndian && (byteOrderRaw !== ByteOrder.BIG_ENDIAN)) {
+            return undefined;
+        }
+
+        const tiffId = dataView.getUint16(
+            tiffHeaderOffset + TIFF_ID_OFFSET,
+            isLittleEndian
+        );
+        if (tiffId !== TIFF_ID) {
+            return undefined;
+        }
+
+        const ifdOffset = dataView.getUint32(
+            tiffHeaderOffset + TIFF_IFD_OFFSET_OFFSET,
+            isLittleEndian
+        );
+        const ifdEntryCountOffset = tiffHeaderOffset + ifdOffset;
+        if (ifdEntryCountOffset + IFD_ENTRY_COUNT_LENGTH > segmentEnd) {
+            return undefined;
+        }
+
+        const ifdEntries = dataView.getUint16(ifdEntryCountOffset, isLittleEndian);
+        const ifdTotalLength = IFD_ENTRY_COUNT_LENGTH
+            + (ifdEntries * IFD_ENTRY_LENGTH)
+            + NEXT_IFD_POINTER_LENGTH;
+        const hasFullIfd = (ifdEntryCountOffset + ifdTotalLength) <= segmentEnd;
+        const isValid = hasFullIfd && (ifdEntries > 0);
+
+        return {ifdEntries, isValid};
+    } catch (error) {
+        return undefined;
+    }
+}
+
+function warnAboutMultipleExifSegments(exifSegmentCount) {
+    /* eslint-disable no-console */
+    if (typeof console === 'undefined' || typeof console.warn !== 'function') {
+        return;
+    }
+
+    console.warn(
+        `ExifReader: Found ${exifSegmentCount} Exif segments (APP1). `
+        + 'Will pick the best candidate segment.'
+    );
+    /* eslint-enable no-console */
 }
