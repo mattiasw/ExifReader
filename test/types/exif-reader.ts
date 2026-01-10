@@ -43,15 +43,30 @@ const computedExpandedTags = await load("", { expanded: true, computed: true });
 
 /////////
 // File
-expandedTags["file"]?.["FileType"] === "TIFF";
-expandedTags["file"]?.["FileType"] === "JPEG";
-expandedTags["file"]?.["FileType"] === "PNG";
-expandedTags["file"]?.["FileType"] === "HEIC";
-expandedTags["file"]?.["FileType"] === "AVIF";
-expandedTags["file"]?.["FileType"] === "WebP";
-expandedTags["file"]?.["FileType"] === "GIF";
+expandedTags["file"]?.["FileType"]?.value === "tiff";
+expandedTags["file"]?.["FileType"]?.value === "jpeg";
+expandedTags["file"]?.["FileType"]?.value === "png";
+expandedTags["file"]?.["FileType"]?.value === "heic";
+expandedTags["file"]?.["FileType"]?.value === "avif";
+expandedTags["file"]?.["FileType"]?.value === "webp";
+expandedTags["file"]?.["FileType"]?.value === "gif";
+expandedTags["file"]?.["FileType"]?.value === "xml";
+
+expandedTags["file"]?.["FileType"]?.description === "TIFF";
+expandedTags["file"]?.["FileType"]?.description === "JPEG";
+expandedTags["file"]?.["FileType"]?.description === "PNG";
+expandedTags["file"]?.["FileType"]?.description === "HEIC";
+expandedTags["file"]?.["FileType"]?.description === "AVIF";
+expandedTags["file"]?.["FileType"]?.description === "WebP";
+expandedTags["file"]?.["FileType"]?.description === "GIF";
+expandedTags["file"]?.["FileType"]?.description === "XML";
+
+tags["FileType"]?.value === "jpeg";
+tags["FileType"]?.description === "JPEG";
 // @ts-expect-error
-expandedTags["file"]?.["FileType"] === "PCX";
+expandedTags["file"]?.["FileType"]?.value === "pcx";
+// @ts-expect-error
+expandedTags["file"]?.["FileType"]?.description === "PCX";
 
 /////////
 // Exif
