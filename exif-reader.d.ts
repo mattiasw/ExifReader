@@ -3,8 +3,33 @@
 
 export as namespace ExifReader;
 
+type FileTypeValue =
+    | 'tiff'
+    | 'jpeg'
+    | 'png'
+    | 'heic'
+    | 'avif'
+    | 'webp'
+    | 'gif'
+    | 'xml';
+
+type FileTypeDescription =
+    | 'TIFF'
+    | 'JPEG'
+    | 'PNG'
+    | 'HEIC'
+    | 'AVIF'
+    | 'WebP'
+    | 'GIF'
+    | 'XML';
+
+interface FileTypeTag {
+    value: FileTypeValue,
+    description: FileTypeDescription
+}
+
 interface FileTags {
-    'FileType'?: 'TIFF' | 'JPEG' | 'PNG' | 'HEIC' | 'AVIF' | 'WebP' | 'GIF',
+    'FileType'?: FileTypeTag,
     'Bits Per Sample'?: NumberFileTag,
     'Image Height'?: NumberFileTag,
     'Image Width'?: NumberFileTag,
@@ -610,7 +635,7 @@ interface IccTags {
     [name: string]: ValueTag;
 }
 
-export type Tags = XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & PentaxTags & CompositeTags & {
+export type Tags = FileTags & XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & PentaxTags & CompositeTags & {
     'Thumbnail'?: ThumbnailTags;
     'Images'?: MPFImageTags[],
 } & {
