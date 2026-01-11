@@ -256,6 +256,35 @@ describe('tag filtering options', function () {
         expect(tags.FileType).to.equal('jpeg');
     });
 
+    it('includeTags: { composite: true, file: [FileType] } should still parse file deps for composite', function () {
+        rewireImageHeader({
+            fileType: {value: 'jpeg', description: 'JPEG'},
+            fileDataOffset: 1,
+        });
+        rewireFileTagsRead({
+            'Image Width': {value: 4000},
+            'Image Height': {value: 3000},
+            FileType: {value: 'ignored'},
+        });
+        rewireCompositeGet({
+            FieldOfView: {value: 1},
+        });
+
+        const tags = ExifReader.loadView({}, {
+            expanded: true,
+            includeTags: {
+                composite: true,
+                file: ['FileType'],
+            },
+        });
+
+        expect(tags.composite).to.not.equal(undefined);
+        expect(tags.file).to.not.equal(undefined);
+        expect(tags.file.FileType.value).to.equal('jpeg');
+        expect(tags.file['Image Width']).to.equal(undefined);
+        expect(tags.file['Image Height']).to.equal(undefined);
+    });
+
     it('excludeTags.file: [FileType] should remove FileType', function () {
         rewireImageHeader({
             fileType: 'jpeg',
@@ -488,8 +517,24 @@ function rewireIccTagsReadToThrow() {
     });
 }
 
+function rewireFileTagsRead(tagsValue) {
+    ExifReaderRewireAPI.__Rewire__('FileTags', {
+        read() {
+            return tagsValue;
+        },
+    });
+}
+
 function rewireThumbnailGet(getFunction) {
     ExifReaderRewireAPI.__Rewire__('Thumbnail', {
         get: getFunction,
+    });
+}
+
+function rewireCompositeGet(tagsValue) {
+    ExifReaderRewireAPI.__Rewire__('Composite', {
+        get() {
+            return tagsValue;
+        },
     });
 }
