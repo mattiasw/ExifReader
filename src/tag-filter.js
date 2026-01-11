@@ -238,7 +238,7 @@ function getExtraParseIncludeNames({
         }
     }
 
-    if (groupKey === 'file' && !hasIncludeEntry && shouldParseFile) {
+    if (groupKey === 'file' && shouldParseFile) {
         return fileIncludeDependencies;
     }
 
