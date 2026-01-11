@@ -1,7 +1,7 @@
 /**
  * ExifReader
  * http://github.com/mattiasw/exifreader
- * Copyright (C) 2011-2023  Mattias Wallander <mattias@wallander.eu>
+ * Copyright (C) 2011-2026  Mattias Wallander <mattias@wallander.eu>
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -31,6 +31,8 @@ import Vp8xTags from './vp8x-tags.js';
 import GifFileTags from './gif-file-tags.js';
 import Thumbnail from './thumbnail.js';
 import Composite from './composite.js';
+import {createTagFilter} from './tag-filter.js';
+import {buildTagsFromMergeSteps, isThenable} from './loadview-pipeline.js';
 import exifErrors from './errors.js';
 
 export default {
@@ -44,10 +46,20 @@ export const errors = exifErrors;
 export function load(data, options = {}) {
     if (isFilePathOrURL(data)) {
         options.async = true;
+
+        if (typeof Promise === 'undefined') {
+            throw new Error('Promise is required when async mode is enabled.');
+        }
+
         return loadFile(data, options).then((fileContents) => loadFromData(fileContents, options));
     }
     if (isBrowserFileObject(data)) {
         options.async = true;
+
+        if (typeof Promise === 'undefined') {
+            throw new Error('Promise is required when async mode is enabled.');
+        }
+
         return loadFileObject(data, options).then((fileContents) => loadFromData(fileContents, options));
     }
     return loadFromData(data, options);
@@ -212,17 +224,26 @@ export function loadView(
         computed = false,
         includeUnknown = false,
         domParser = undefined,
+        includeTags = undefined,
+        excludeTags = undefined,
     } = {
         expanded: false,
         async: false,
         computed: false,
         includeUnknown: false,
         domParser: undefined,
+        includeTags: undefined,
+        excludeTags: undefined,
     }
 ) {
-    let foundMetaData = false;
-    let tags = {};
-    const tagsPromises = [];
+    const tagFilter = createTagFilter({includeTags, excludeTags});
+    const parsedGroups = Object.create(null);
+    const mergeSteps = [];
+    const deferredResults = Object.create(null);
+    const deferredPromises = [];
+    let pngTextIsAsync = false;
+    let thumbnailIfdTags = undefined;
+    let embeddedXmpStepForFlat = undefined;
 
     const {
         fileType,
@@ -240,290 +261,706 @@ export function loadView(
         gifHeaderOffset
     } = ImageHeader.parseAppMarkers(dataView, async);
 
-    if (Constants.USE_JPEG && Constants.USE_FILE && hasFileData(fileDataOffset)) {
-        foundMetaData = true;
+    const fileHasMetaData = hasPotentialMetaData({
+        fileType,
+        fileDataOffset,
+        jfifDataOffset,
+        tiffHeaderOffset,
+        iptcDataOffset,
+        xmpChunks,
+        iccChunks,
+        mpfDataOffset,
+        pngHeaderOffset,
+        pngTextChunks,
+        pngChunkOffsets,
+        vp8xChunkOffset,
+        gifHeaderOffset,
+    });
+
+    if (
+        Constants.USE_JPEG
+        && Constants.USE_FILE
+        && hasFileData(fileDataOffset)
+        && tagFilter.shouldParseGroup('file')
+        && shouldReadFileTagsForFileTypeOnlyOptimization(includeTags)
+    ) {
         const readTags = FileTags.read(dataView, fileDataOffset);
-        if (expanded) {
-            tags.file = readTags;
-        } else {
-            tags = objectAssign({}, tags, readTags);
+        const parsedFileTags = filterTagsForParse('file', readTags, tagFilter);
+        parsedGroups.file = parsedFileTags;
+
+        if (tagFilter.shouldReturnGroup('file')) {
+            mergeSteps.push({
+                type: 'mergeGroupAssign',
+                groupKey: 'file',
+                parsedTags: parsedFileTags,
+            });
         }
     }
 
-    if (Constants.USE_JPEG && Constants.USE_JFIF && hasJfifData(jfifDataOffset)) {
-        foundMetaData = true;
+    if (
+        Constants.USE_JPEG
+        && Constants.USE_JFIF
+        && hasJfifData(jfifDataOffset)
+        && tagFilter.shouldParseGroup('jfif')
+    ) {
         const readTags = JfifTags.read(dataView, jfifDataOffset);
-        if (expanded) {
-            tags.jfif = readTags;
-        } else {
-            tags = objectAssign({}, tags, readTags);
+        const parsedJfifTags = filterTagsForParse('jfif', readTags, tagFilter);
+        parsedGroups.jfif = parsedJfifTags;
+
+        if (tagFilter.shouldReturnGroup('jfif')) {
+            mergeSteps.push({
+                type: 'mergeGroupAssign',
+                groupKey: 'jfif',
+                parsedTags: parsedJfifTags,
+            });
         }
     }
 
-    if (Constants.USE_EXIF && hasExifData(tiffHeaderOffset)) {
-        foundMetaData = true;
+    if (
+        Constants.USE_EXIF
+        && hasExifData(tiffHeaderOffset)
+        && tagFilter.shouldParseGroup('exif')
+    ) {
         const {tags: readTags, byteOrder} = Tags.read(
             dataView,
             tiffHeaderOffset,
             includeUnknown,
-            computed
+            computed,
+            tagFilter
         );
         if (readTags.Thumbnail) {
-            tags.Thumbnail = readTags.Thumbnail;
+            thumbnailIfdTags = readTags.Thumbnail;
             delete readTags.Thumbnail;
         }
 
-        if (expanded) {
-            tags.exif = readTags;
-            addGpsGroup(tags);
-        } else {
-            tags = objectAssign({}, tags, readTags);
-        }
+        const parsedExifTags = filterTagsForParse('exif', readTags, tagFilter);
+        parsedGroups.exif = parsedExifTags;
 
-        if (Constants.USE_TIFF && Constants.USE_IPTC && readTags['IPTC-NAA'] && !hasIptcData(iptcDataOffset)) {
-            const readIptcTags = IptcTags.read(readTags['IPTC-NAA'].value, 0, includeUnknown);
-            if (expanded) {
-                tags.iptc = readIptcTags;
-            } else {
-                tags = objectAssign({}, tags, readIptcTags);
+        if (
+            Constants.USE_TIFF
+            && Constants.USE_IPTC
+            && parsedExifTags['IPTC-NAA']
+            && !hasIptcData(iptcDataOffset)
+            && tagFilter.shouldParseGroup('iptc')
+        ) {
+            const readIptcTags = IptcTags.read(
+                parsedExifTags['IPTC-NAA'].value,
+                0,
+                includeUnknown,
+                tagFilter
+            );
+            const parsedIptcTags =
+                filterTagsForParse('iptc', readIptcTags, tagFilter);
+            parsedGroups.iptc = parsedIptcTags;
+
+            if (tagFilter.shouldReturnGroup('iptc')) {
+                mergeSteps.push({
+                    type: 'mergeGroupAssign',
+                    groupKey: 'iptc',
+                    parsedTags: parsedIptcTags,
+                });
             }
         }
 
-        if (Constants.USE_TIFF && Constants.USE_XMP && readTags['ApplicationNotes'] && !hasXmpData(xmpChunks)) {
-            const readXmpTags = XmpTags.read(getStringValueFromArray(readTags['ApplicationNotes'].value), undefined, domParser);
-            if (expanded) {
-                tags.xmp = readXmpTags;
-            } else {
-                delete readXmpTags._raw;
-                tags = objectAssign({}, tags, readXmpTags);
+        if (
+            Constants.USE_TIFF
+            && Constants.USE_XMP
+            && parsedExifTags['ApplicationNotes']
+            && !hasXmpData(xmpChunks)
+            && tagFilter.shouldParseGroup('xmp')
+        ) {
+            const readXmpTags = XmpTags.read(
+                getStringValueFromArray(parsedExifTags['ApplicationNotes'].value),
+                undefined,
+                domParser
+            );
+            const parsedXmpTags = filterTagsForParse('xmp', readXmpTags, tagFilter);
+            parsedGroups.xmp = parsedXmpTags;
+
+            if (tagFilter.shouldReturnGroup('xmp')) {
+                const step = {
+                    type: 'mergeXmpGroupAssign',
+                    parsedTags: parsedXmpTags,
+                };
+
+                if (expanded) {
+                    mergeSteps.push(step);
+                } else {
+                    embeddedXmpStepForFlat = step;
+                }
             }
         }
 
-        if (Constants.USE_PHOTOSHOP && readTags['ImageSourceData'] && readTags['PhotoshopSettings']) {
-            const readPhotoshopTags = PhotoshopTags.read(readTags['PhotoshopSettings'].value, includeUnknown);
-            if (expanded) {
-                tags.photoshop = readPhotoshopTags;
-            } else {
-                tags = objectAssign({}, tags, readPhotoshopTags);
+        if (
+            Constants.USE_PHOTOSHOP
+            && parsedExifTags['ImageSourceData']
+            && parsedExifTags['PhotoshopSettings']
+            && tagFilter.shouldParseGroup('photoshop')
+        ) {
+            const readPhotoshopTags = PhotoshopTags.read(
+                parsedExifTags['PhotoshopSettings'].value,
+                includeUnknown,
+                tagFilter
+            );
+            const parsedPhotoshopTags =
+                filterTagsForParse('photoshop', readPhotoshopTags, tagFilter);
+            parsedGroups.photoshop = parsedPhotoshopTags;
+
+            if (tagFilter.shouldReturnGroup('photoshop')) {
+                mergeSteps.push({
+                    type: 'mergeGroupAssign',
+                    groupKey: 'photoshop',
+                    parsedTags: parsedPhotoshopTags,
+                });
             }
         }
 
-        if (Constants.USE_TIFF && Constants.USE_ICC && readTags['ICC_Profile'] && !hasIccData(iccChunks)) {
+        if (
+            Constants.USE_TIFF
+            && Constants.USE_ICC
+            && parsedExifTags['ICC_Profile']
+            && !hasIccData(iccChunks)
+            && tagFilter.shouldParseGroup('icc')
+        ) {
             const readIccTags = IccTags.read(
-                readTags['ICC_Profile'].value,
+                parsedExifTags['ICC_Profile'].value,
                 [{
                     offset: 0,
-                    length: readTags['ICC_Profile'].value.length,
+                    length: parsedExifTags['ICC_Profile'].value.length,
                     chunkNumber: 1,
                     chunksTotal: 1
                 }]
             );
-            if (expanded) {
-                tags.icc = readIccTags;
-            } else {
-                tags = objectAssign({}, tags, readIccTags);
+            const parsedIccTags = filterTagsForParse('icc', readIccTags, tagFilter);
+            parsedGroups.icc = parsedIccTags;
+
+            if (tagFilter.shouldReturnGroup('icc')) {
+                mergeSteps.push({
+                    type: 'mergeGroupAssign',
+                    groupKey: 'icc',
+                    parsedTags: parsedIccTags,
+                });
             }
         }
 
-        if (Constants.USE_MAKER_NOTES && readTags['MakerNote']) {
-            if (hasCanonData(readTags)) {
+        if (
+            Constants.USE_MAKER_NOTES
+            && parsedExifTags['MakerNote']
+            && tagFilter.shouldParseGroup('makerNotes')
+        ) {
+            if (hasCanonData(parsedExifTags)) {
                 const readCanonTags = CanonTags.read(
                     dataView,
                     tiffHeaderOffset,
-                    readTags['MakerNote'].__offset,
+                    parsedExifTags['MakerNote'].__offset,
                     byteOrder,
                     includeUnknown,
-                    computed
+                    computed,
+                    tagFilter
                 );
-                if (expanded) {
-                    tags.makerNotes = readCanonTags;
-                } else {
-                    tags = objectAssign({}, tags, readCanonTags);
+                parsedGroups.makerNotes = readCanonTags;
+                if (tagFilter.shouldReturnGroup('makerNotes')) {
+                    mergeSteps.push({
+                        type: 'mergeGroupAssign',
+                        groupKey: 'makerNotes',
+                        parsedTags: readCanonTags,
+                    });
                 }
-            } else if (hasPentaxType1Data(readTags)) {
+            } else if (hasPentaxType1Data(parsedExifTags)) {
                 const readPentaxTags = PentaxTags.read(
                     dataView,
                     tiffHeaderOffset,
-                    readTags['MakerNote'].__offset,
+                    parsedExifTags['MakerNote'].__offset,
                     includeUnknown,
-                    computed
+                    computed,
+                    tagFilter
                 );
-                if (expanded) {
-                    tags.makerNotes = readPentaxTags;
-                } else {
-                    tags = objectAssign({}, tags, readPentaxTags);
+                parsedGroups.makerNotes = readPentaxTags;
+                if (tagFilter.shouldReturnGroup('makerNotes')) {
+                    mergeSteps.push({
+                        type: 'mergeGroupAssign',
+                        groupKey: 'makerNotes',
+                        parsedTags: readPentaxTags,
+                    });
                 }
             }
         }
 
-        if (readTags['MakerNote']) {
-            delete readTags['MakerNote'].__offset;
+        if (parsedExifTags['MakerNote']) {
+            delete parsedExifTags['MakerNote'].__offset;
+        }
+
+        if (tagFilter.shouldReturnGroup('exif')) {
+            mergeSteps.push({
+                type: 'mergeGroupAssign',
+                groupKey: 'exif',
+                parsedTags: parsedExifTags,
+            });
+        }
+
+        if (!expanded && embeddedXmpStepForFlat) {
+            mergeSteps.push(embeddedXmpStepForFlat);
+            embeddedXmpStepForFlat = undefined;
         }
     }
 
-    if (Constants.USE_JPEG && Constants.USE_IPTC && hasIptcData(iptcDataOffset)) {
-        foundMetaData = true;
-        const readTags = IptcTags.read(dataView, iptcDataOffset, includeUnknown);
-        if (expanded) {
-            tags.iptc = readTags;
-        } else {
-            tags = objectAssign({}, tags, readTags);
+    if (
+        Constants.USE_JPEG
+        && Constants.USE_IPTC
+        && hasIptcData(iptcDataOffset)
+        && tagFilter.shouldParseGroup('iptc')
+    ) {
+        const readTags = IptcTags.read(dataView, iptcDataOffset, includeUnknown, tagFilter);
+        const parsedIptcTags = filterTagsForParse('iptc', readTags, tagFilter);
+        parsedGroups.iptc = parsedIptcTags;
+
+        if (tagFilter.shouldReturnGroup('iptc')) {
+            mergeSteps.push({
+                type: 'mergeGroupAssign',
+                groupKey: 'iptc',
+                parsedTags: parsedIptcTags,
+            });
         }
     }
 
-    if (Constants.USE_XMP && hasXmpData(xmpChunks)) {
-        foundMetaData = true;
+    if (
+        Constants.USE_XMP
+        && hasXmpData(xmpChunks)
+        && tagFilter.shouldParseGroup('xmp')
+    ) {
         const readTags = XmpTags.read(dataView, xmpChunks, domParser);
-        if (expanded) {
-            tags.xmp = readTags;
-        } else {
-            delete readTags._raw;
-            tags = objectAssign({}, tags, readTags);
+        const parsedXmpTags = filterTagsForParse('xmp', readTags, tagFilter);
+        parsedGroups.xmp = parsedXmpTags;
+
+        if (tagFilter.shouldReturnGroup('xmp')) {
+            mergeSteps.push({
+                type: 'mergeXmpGroupAssign',
+                parsedTags: parsedXmpTags,
+            });
         }
     }
 
-    if ((Constants.USE_JPEG || Constants.USE_WEBP) && Constants.USE_ICC && hasIccData(iccChunks)) {
-        foundMetaData = true;
+    if (
+        (Constants.USE_JPEG || Constants.USE_WEBP)
+        && Constants.USE_ICC
+        && hasIccData(iccChunks)
+        && tagFilter.shouldParseGroup('icc')
+    ) {
         const readTags = IccTags.read(dataView, iccChunks, async);
-        if (readTags instanceof Promise) {
-            tagsPromises.push(readTags.then(addIccTags));
-        } else {
-            addIccTags(readTags);
-        }
-    }
-
-    if (Constants.USE_MPF && hasMpfData(mpfDataOffset)) {
-        foundMetaData = true;
-        const readMpfTags = MpfTags.read(dataView, mpfDataOffset, includeUnknown, computed);
-        if (expanded) {
-            tags.mpf = readMpfTags;
-        } else {
-            tags = objectAssign({}, tags, readMpfTags);
-        }
-    }
-
-    if (Constants.USE_PNG && Constants.USE_PNG_FILE && hasPngFileData(pngHeaderOffset)) {
-        foundMetaData = true;
-        const readTags = PngFileTags.read(dataView, pngHeaderOffset);
-        if (expanded) {
-            tags.png = !tags.png ? readTags : objectAssign({}, tags.png, readTags);
-            tags.pngFile = readTags;
-        } else {
-            tags = objectAssign({}, tags, readTags);
-        }
-    }
-
-    if (Constants.USE_PNG && hasPngTextData(pngTextChunks)) {
-        foundMetaData = true;
-        const {readTags, readTagsPromise} = PngTextTags.read(dataView, pngTextChunks, async, includeUnknown, computed);
-        addPngTextTags(readTags);
-        if (readTagsPromise) {
-            tagsPromises.push(readTagsPromise.then((tagList) => tagList.forEach(addPngTextTags)));
-        }
-    }
-
-    if (Constants.USE_PNG && hasPngData(pngChunkOffsets)) {
-        foundMetaData = true;
-        const readTags = PngTags.read(dataView, pngChunkOffsets);
-        if (expanded) {
-            tags.png = !tags.png ? readTags : objectAssign({}, tags.png, readTags);
-        } else {
-            tags = objectAssign({}, tags, readTags);
-        }
-    }
-
-    if (Constants.USE_WEBP && hasVp8xData(vp8xChunkOffset)) {
-        foundMetaData = true;
-        const readTags = Vp8xTags.read(dataView, vp8xChunkOffset);
-        if (expanded) {
-            tags.riff = !tags.riff ? readTags : objectAssign({}, tags.riff, readTags);
-        } else {
-            tags = objectAssign({}, tags, readTags);
-        }
-    }
-
-    if (Constants.USE_GIF && hasGifFileData(gifHeaderOffset)) {
-        foundMetaData = true;
-        const readTags = GifFileTags.read(dataView, gifHeaderOffset);
-        if (expanded) {
-            tags.gif = !tags.gif ? readTags : objectAssign({}, tags.gif, readTags);
-        } else {
-            tags = objectAssign({}, tags, readTags);
-        }
-    }
-
-    const composite = Composite.get(tags, expanded);
-    if (composite) {
-        if (expanded) {
-            tags.composite = composite;
-        } else {
-            tags = objectAssign({}, tags, composite);
-        }
-    }
-
-    const thumbnail = (Constants.USE_JPEG || Constants.USE_WEBP)
-        && Constants.USE_EXIF
-        && Constants.USE_THUMBNAIL
-        && Thumbnail.get(dataView, tags.Thumbnail, tiffHeaderOffset);
-    if (thumbnail) {
-        foundMetaData = true;
-        tags.Thumbnail = thumbnail;
-    } else {
-        delete tags.Thumbnail;
-    }
-
-    if (fileType) {
-        if (expanded) {
-            if (!tags.file) {
-                tags.file = {};
+        if (isThenable(readTags)) {
+            if (!async) {
+                throw new Error('Promise is required when async mode is enabled.');
             }
-            tags.file.FileType = fileType;
+
+            deferredPromises.push(readTags.then((resolvedTags) => {
+                deferredResults.iccApp = resolvedTags;
+            }));
+            mergeSteps.push({
+                type: 'mergeIccDeferred',
+                deferredKey: 'iccApp',
+            });
         } else {
-            tags.FileType = fileType;
+            const parsedIccTags = filterTagsForParse('icc', readTags, tagFilter);
+            parsedGroups.icc = parsedIccTags;
+            if (tagFilter.shouldReturnGroup('icc')) {
+                mergeSteps.push({
+                    type: 'mergeGroupAssign',
+                    groupKey: 'icc',
+                    parsedTags: parsedIccTags,
+                });
+            }
         }
-        foundMetaData = true;
     }
 
-    if (!foundMetaData) {
+    if (
+        Constants.USE_MPF
+        && hasMpfData(mpfDataOffset)
+        && tagFilter.shouldParseGroup('mpf')
+    ) {
+        const readMpfTags = MpfTags.read(
+            dataView,
+            mpfDataOffset,
+            includeUnknown,
+            computed,
+            tagFilter
+        );
+        const parsedMpfTags = filterTagsForParse('mpf', readMpfTags, tagFilter);
+        parsedGroups.mpf = parsedMpfTags;
+
+        if (tagFilter.shouldReturnGroup('mpf')) {
+            mergeSteps.push({
+                type: 'mergeGroupAssign',
+                groupKey: 'mpf',
+                parsedTags: parsedMpfTags,
+            });
+        }
+    }
+
+    if (
+        Constants.USE_PNG
+        && Constants.USE_PNG_FILE
+        && hasPngFileData(pngHeaderOffset)
+        && tagFilter.shouldParseGroup('png')
+    ) {
+        const readTags = PngFileTags.read(dataView, pngHeaderOffset);
+        const parsedPngFileTags = filterTagsForParse('png', readTags, tagFilter);
+        parsedGroups.pngFile = parsedPngFileTags;
+
+        if (tagFilter.shouldReturnGroup('png')) {
+            mergeSteps.push({
+                type: 'mergePngFile',
+                parsedTags: parsedPngFileTags,
+            });
+        }
+    }
+
+    if (
+        Constants.USE_PNG
+        && hasPngTextData(pngTextChunks)
+        && (
+            tagFilter.shouldParseGroup('png')
+            || tagFilter.shouldParseGroup('exif')
+            || tagFilter.shouldParseGroup('iptc')
+        )
+    ) {
+        const {readTags, readTagsPromise} = PngTextTags.read(
+            dataView,
+            pngTextChunks,
+            async,
+            includeUnknown,
+            computed,
+            tagFilter
+        );
+        pngTextIsAsync = !!readTagsPromise;
+
+        mergeSteps.push({
+            type: 'processPngTextReadTags',
+            readTags,
+        });
+
+        if (readTagsPromise) {
+            deferredPromises.push(readTagsPromise.then((tagList) => {
+                deferredResults.pngTextTagList = tagList;
+            }));
+            mergeSteps.push({
+                type: 'processPngTextReadTagsDeferredList',
+                deferredKey: 'pngTextTagList',
+            });
+        }
+    }
+
+    if (
+        Constants.USE_PNG
+        && hasPngData(pngChunkOffsets)
+        && tagFilter.shouldParseGroup('png')
+    ) {
+        const readTags = PngTags.read(dataView, pngChunkOffsets);
+        const parsedPngChunkTags = filterTagsForParse('png', readTags, tagFilter);
+        parsedGroups.pngChunk = parsedPngChunkTags;
+
+        if (tagFilter.shouldReturnGroup('png')) {
+            mergeSteps.push({
+                type: 'mergePngChunk',
+                parsedTags: parsedPngChunkTags,
+            });
+        }
+    }
+
+    if (
+        Constants.USE_WEBP
+        && hasVp8xData(vp8xChunkOffset)
+        && tagFilter.shouldParseGroup('riff')
+    ) {
+        const readTags = Vp8xTags.read(dataView, vp8xChunkOffset);
+        const parsedRiffTags = filterTagsForParse('riff', readTags, tagFilter);
+        parsedGroups.riff = parsedRiffTags;
+
+        if (tagFilter.shouldReturnGroup('riff')) {
+            mergeSteps.push({
+                type: 'mergeGroupMerge',
+                groupKey: 'riff',
+                parsedTags: parsedRiffTags,
+            });
+        }
+    }
+
+    if (
+        Constants.USE_GIF
+        && hasGifFileData(gifHeaderOffset)
+        && tagFilter.shouldParseGroup('gif')
+    ) {
+        const readTags = GifFileTags.read(dataView, gifHeaderOffset);
+        const parsedGifTags = filterTagsForParse('gif', readTags, tagFilter);
+        parsedGroups.gif = parsedGifTags;
+
+        if (tagFilter.shouldReturnGroup('gif')) {
+            mergeSteps.push({
+                type: 'mergeGroupMerge',
+                groupKey: 'gif',
+                parsedTags: parsedGifTags,
+            });
+        }
+    }
+
+    mergeSteps.push({type: 'gps'});
+    mergeSteps.push({type: 'composite'});
+    mergeSteps.push({type: 'thumbnail'});
+    mergeSteps.push({type: 'fileType'});
+
+    if (!fileHasMetaData) {
         throw new exifErrors.MetadataMissingError();
     }
 
+    const pipelineDependencies = {
+        objectAssign,
+        hasPngTextData,
+        filterTagsForParse,
+        filterTagsForReturn,
+        getGpsGroupFromExifTags,
+        Constants,
+        Composite,
+        Thumbnail,
+    };
+
     if (async) {
-        return Promise.all(tagsPromises).then(() => tags);
-    }
-    return tags;
+        if (typeof Promise === 'undefined') {
+            throw new Error('Promise is required when async mode is enabled.');
+        }
 
-    function addIccTags(readTags) {
-        if (expanded) {
-            tags.icc = readTags;
-        } else {
-            tags = objectAssign({}, tags, readTags);
+        return Promise.all(deferredPromises).then(() => {
+            const tags = buildTagsFromMergeSteps({
+                mergeSteps,
+                deferredResults,
+                parsedGroups,
+                expanded,
+                tagFilter,
+                dataView,
+                tiffHeaderOffset,
+                fileType,
+                pngTextChunks,
+                pngTextIsAsync,
+                thumbnailIfdTags,
+                deps: pipelineDependencies,
+            });
+
+            return tags;
+        });
+    }
+
+    return buildTagsFromMergeSteps({
+        mergeSteps,
+        deferredResults,
+        parsedGroups,
+        expanded,
+        tagFilter,
+        dataView,
+        tiffHeaderOffset,
+        fileType,
+        pngTextChunks,
+        pngTextIsAsync,
+        thumbnailIfdTags,
+        deps: pipelineDependencies,
+    });
+
+    function shouldReadFileTagsForFileTypeOnlyOptimization(includeTagsOptions) {
+        if (!includeTagsOptions) {
+            return true;
+        }
+
+        if (includeTagsOptions.composite === true) {
+            return true;
+        }
+
+        if (
+            Array.isArray(includeTagsOptions.composite)
+            && includeTagsOptions.composite.length > 0
+        ) {
+            return true;
+        }
+
+        if (!includeTagsOptions.file || includeTagsOptions.file === true) {
+            return true;
+        }
+
+        if (!Array.isArray(includeTagsOptions.file)) {
+            return true;
+        }
+
+        const isFileTypeOnly =
+            includeTagsOptions.file.length === 1
+            && includeTagsOptions.file[0] === 'FileType';
+
+        return !isFileTypeOnly;
+    }
+}
+
+function filterTagsForParse(groupKey, readTags, tagFilter) {
+    if (!tagFilter.isActive) {
+        return readTags;
+    }
+
+    return filterTags(groupKey, readTags, tagFilter.shouldParseTag);
+}
+
+function filterTagsForReturn(groupKey, readTags, tagFilter) {
+    if (!tagFilter.isActive) {
+        return readTags;
+    }
+
+    return filterTags(groupKey, readTags, tagFilter.shouldReturnTag);
+}
+
+function filterTags(groupKey, readTags, matchesTag) {
+    if (!readTags) {
+        return readTags;
+    }
+
+    const filteredTags = {};
+
+    for (const tagName in readTags) {
+        const tagValue = readTags[tagName];
+        const tagId = getTagId(tagValue);
+
+        if (matchesTag(groupKey, tagName, tagId)) {
+            filteredTags[tagName] = tagValue;
         }
     }
 
-    function addPngTextTags(readTags) {
-        if (expanded) {
-            for (const group of ['exif', 'iptc']) {
-                const groupKey = `__${group}`;
-                if (readTags[groupKey]) {
-                    tags[group] = !tags[group] ? readTags[groupKey] : objectAssign({}, tags.exif, readTags[groupKey]);
-                    delete readTags[groupKey];
-                }
+    return filteredTags;
+
+    function getTagId(tagValue) {
+        if (!tagValue) {
+            return undefined;
+        }
+
+        if (Array.isArray(tagValue)) {
+            if (tagValue.length === 0) {
+                return undefined;
             }
-            tags.png = !tags.png ? readTags : objectAssign({}, tags.png, readTags);
-            tags.pngText = !tags.pngText ? readTags : objectAssign({}, tags.png, readTags);
-        } else {
-            tags = objectAssign(
-                {},
-                tags,
-                readTags.__exif ? readTags.__exif : {},
-                readTags.__iptc ? readTags.__iptc : {},
-                readTags
-            );
-            delete tags.__exif;
-            delete tags.__iptc;
+
+            return tagValue[0].id;
+        }
+
+        return tagValue.id;
+    }
+}
+
+function hasPotentialMetaData({
+    fileType,
+    fileDataOffset,
+    jfifDataOffset,
+    tiffHeaderOffset,
+    iptcDataOffset,
+    xmpChunks,
+    iccChunks,
+    mpfDataOffset,
+    pngHeaderOffset,
+    pngTextChunks,
+    pngChunkOffsets,
+    vp8xChunkOffset,
+    gifHeaderOffset,
+}) {
+    return !!fileType
+        || (
+            Constants.USE_JPEG
+            && Constants.USE_FILE
+            && hasFileData(fileDataOffset)
+        )
+        || (
+            Constants.USE_JPEG
+            && Constants.USE_JFIF
+            && hasJfifData(jfifDataOffset)
+        )
+        || (
+            Constants.USE_EXIF
+            && hasExifData(tiffHeaderOffset)
+        )
+        || (
+            Constants.USE_JPEG
+            && Constants.USE_IPTC
+            && hasIptcData(iptcDataOffset)
+        )
+        || (
+            Constants.USE_XMP
+            && hasXmpData(xmpChunks)
+        )
+        || (
+            (Constants.USE_JPEG || Constants.USE_WEBP)
+            && Constants.USE_ICC
+            && hasIccData(iccChunks)
+        )
+        || (
+            Constants.USE_MPF
+            && hasMpfData(mpfDataOffset)
+        )
+        || (
+            Constants.USE_PNG
+            && Constants.USE_PNG_FILE
+            && hasPngFileData(pngHeaderOffset)
+        )
+        || (
+            Constants.USE_PNG
+            && hasPngTextData(pngTextChunks)
+        )
+        || (
+            Constants.USE_PNG
+            && hasPngData(pngChunkOffsets)
+        )
+        || (
+            Constants.USE_WEBP
+            && hasVp8xData(vp8xChunkOffset)
+        )
+        || (
+            Constants.USE_GIF
+            && hasGifFileData(gifHeaderOffset)
+        );
+}
+
+function getGpsGroupFromExifTags(exifTags) {
+    let gps = undefined;
+
+    if (exifTags.GPSLatitude && exifTags.GPSLatitudeRef) {
+        gps = gps || {};
+        try {
+            gps.Latitude = getCalculatedGpsValue(exifTags.GPSLatitude.value);
+            if (exifTags.GPSLatitudeRef.value.join('') === 'S') {
+                gps.Latitude = -gps.Latitude;
+            }
+        } catch (error) {
+            // Ignore.
         }
     }
+
+    if (exifTags.GPSLongitude && exifTags.GPSLongitudeRef) {
+        gps = gps || {};
+        try {
+            gps.Longitude = getCalculatedGpsValue(exifTags.GPSLongitude.value);
+            if (exifTags.GPSLongitudeRef.value.join('') === 'W') {
+                gps.Longitude = -gps.Longitude;
+            }
+        } catch (error) {
+            // Ignore.
+        }
+    }
+
+    if (exifTags.GPSAltitude && exifTags.GPSAltitudeRef) {
+        gps = gps || {};
+        try {
+            gps.Altitude =
+                exifTags.GPSAltitude.value[0] / exifTags.GPSAltitude.value[1];
+            if (exifTags.GPSAltitudeRef.value === 1) {
+                gps.Altitude = -gps.Altitude;
+            }
+        } catch (error) {
+            // Ignore.
+        }
+    }
+
+    if (!gps) {
+        return undefined;
+    }
+
+    return gps;
 }
 
 function hasFileData(fileDataOffset) {
@@ -536,46 +973,6 @@ function hasJfifData(jfifDataOffset) {
 
 function hasExifData(tiffHeaderOffset) {
     return tiffHeaderOffset !== undefined;
-}
-
-function addGpsGroup(tags) {
-    if (tags.exif) {
-        if (tags.exif.GPSLatitude && tags.exif.GPSLatitudeRef) {
-            try {
-                tags.gps = tags.gps || {};
-                tags.gps.Latitude = getCalculatedGpsValue(tags.exif.GPSLatitude.value);
-                if (tags.exif.GPSLatitudeRef.value.join('') === 'S') {
-                    tags.gps.Latitude = -tags.gps.Latitude;
-                }
-            } catch (error) {
-                // Ignore.
-            }
-        }
-
-        if (tags.exif.GPSLongitude && tags.exif.GPSLongitudeRef) {
-            try {
-                tags.gps = tags.gps || {};
-                tags.gps.Longitude = getCalculatedGpsValue(tags.exif.GPSLongitude.value);
-                if (tags.exif.GPSLongitudeRef.value.join('') === 'W') {
-                    tags.gps.Longitude = -tags.gps.Longitude;
-                }
-            } catch (error) {
-                // Ignore.
-            }
-        }
-
-        if (tags.exif.GPSAltitude && tags.exif.GPSAltitudeRef) {
-            try {
-                tags.gps = tags.gps || {};
-                tags.gps.Altitude = tags.exif.GPSAltitude.value[0] / tags.exif.GPSAltitude.value[1];
-                if (tags.exif.GPSAltitudeRef.value === 1) {
-                    tags.gps.Altitude = -tags.gps.Altitude;
-                }
-            } catch (error) {
-                // Ignore.
-            }
-        }
-    }
 }
 
 function hasIptcData(iptcDataOffset) {
@@ -611,7 +1008,7 @@ function hasPngFileData(pngFileDataOffset) {
 }
 
 function hasPngTextData(pngTextChunks) {
-    return pngTextChunks !== undefined;
+    return Array.isArray(pngTextChunks) && pngTextChunks.length > 0;
 }
 
 function hasPngData(pngChunkOffsets) {

@@ -15,21 +15,31 @@ export default {
     read,
 };
 
-function read(dataView, tiffHeaderOffset, includeUnknown, computed = false) {
+function read(dataView, tiffHeaderOffset, includeUnknown, computed = false, tagFilter = undefined) {
     const byteOrder = ByteOrder.getByteOrder(dataView, tiffHeaderOffset);
-    let tags = read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed);
-    tags = readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed);
-    tags = readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed);
-    tags = readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed);
+    let tags = read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter);
+    tags = readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter);
+    tags = readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter);
+    tags = readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter);
 
     return {tags, byteOrder};
 }
 
-function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed) {
-    return readIfd(dataView, IFD_TYPE_0TH, tiffHeaderOffset, get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder), byteOrder, includeUnknown, computed);
+function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter) {
+    return readIfd(
+        dataView,
+        IFD_TYPE_0TH,
+        tiffHeaderOffset,
+        get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder),
+        byteOrder,
+        includeUnknown,
+        computed,
+        tagFilter,
+        'exif'
+    );
 }
 
-function readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed) {
+function readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter) {
     if (tags[EXIF_IFD_POINTER_KEY] !== undefined) {
         return objectAssign(
             tags,
@@ -40,7 +50,9 @@ function readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown
                 tiffHeaderOffset + tags[EXIF_IFD_POINTER_KEY].value,
                 byteOrder,
                 includeUnknown,
-                computed
+                computed,
+                tagFilter,
+                'exif'
             )
         );
     }
@@ -48,7 +60,7 @@ function readExifIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown
     return tags;
 }
 
-function readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed) {
+function readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter) {
     if (tags[GPS_INFO_IFD_POINTER_KEY] !== undefined) {
         return objectAssign(
             tags,
@@ -59,7 +71,9 @@ function readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown,
                 tiffHeaderOffset + tags[GPS_INFO_IFD_POINTER_KEY].value,
                 byteOrder,
                 includeUnknown,
-                computed
+                computed,
+                tagFilter,
+                'exif'
             )
         );
     }
@@ -67,7 +81,7 @@ function readGpsIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown,
     return tags;
 }
 
-function readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed) {
+function readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter) {
     if (tags[INTEROPERABILITY_IFD_POINTER_KEY] !== undefined) {
         return objectAssign(
             tags,
@@ -78,7 +92,9 @@ function readInteroperabilityIfd(tags, dataView, tiffHeaderOffset, byteOrder, in
                 tiffHeaderOffset + tags[INTEROPERABILITY_IFD_POINTER_KEY].value,
                 byteOrder,
                 includeUnknown,
-                computed
+                computed,
+                tagFilter,
+                'exif'
             )
         );
     }

@@ -31,7 +31,14 @@ export default {
     LIK3III
 };
 
-function read(dataView, tiffHeaderOffset, offset, includeUnknown, computed = false) {
+function read(
+    dataView,
+    tiffHeaderOffset,
+    offset,
+    includeUnknown,
+    computed = false,
+    tagFilter = undefined
+) {
     // Pentax does not use the standard TIFF header offset as base for tag
     // offsets but instead uses the start of the IFD, i.e. directly after the
     // two byte order bytes. originOffset below is this offset.
@@ -44,7 +51,9 @@ function read(dataView, tiffHeaderOffset, offset, includeUnknown, computed = fal
         originOffset + PENTAX_IFD_OFFSET,
         byteOrder,
         includeUnknown,
-        computed
+        computed,
+        tagFilter,
+        'makerNotes'
     );
 
     if (hasLevelInfoK3III(tags)) {

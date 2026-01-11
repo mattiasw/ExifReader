@@ -6,6 +6,7 @@ import Constants from './constants.js';
 import Types from './types.js';
 import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './tag-names.js';
 import {IFD_ENTRY_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
+import {NOOP_TAG_FILTER} from './tag-filter.js';
 
 const getTagValueAt = {
     1: Types.getByteAt,
@@ -28,7 +29,17 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
         );
 }
 
-export function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown, computed = false) {
+export function readIfd(
+    dataView,
+    ifdType,
+    offsetOrigin,
+    offset,
+    byteOrder,
+    includeUnknown,
+    computed = false,
+    tagFilter = NOOP_TAG_FILTER,
+    groupKey = 'exif'
+) {
     const FIELD_COUNT_SIZE = Types.getTypeSize('SHORT');
     const FIELD_SIZE = IFD_ENTRY_LENGTH;
 
@@ -41,7 +52,16 @@ export function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, incl
             break;
         }
 
-        const tag = readTag(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown);
+        const tag = readTag(
+            dataView,
+            ifdType,
+            offsetOrigin,
+            offset,
+            byteOrder,
+            includeUnknown,
+            tagFilter,
+            groupKey
+        );
         if (tag !== undefined) {
             tags[tag.name] = {
                 'id': tag.id,
@@ -62,15 +82,19 @@ export function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, incl
     if (Constants.USE_THUMBNAIL && (offset < dataView.byteLength - Types.getTypeSize('LONG'))) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
         if (nextIfdOffset !== 0 && ifdType === IFD_TYPE_0TH) {
-            tags['Thumbnail'] = readIfd(
-                dataView,
-                IFD_TYPE_1ST,
-                offsetOrigin,
-                offsetOrigin + nextIfdOffset,
-                byteOrder,
-                includeUnknown,
-                computed
-            );
+            if (tagFilter.shouldParseGroup('thumbnail')) {
+                tags['Thumbnail'] = readIfd(
+                    dataView,
+                    IFD_TYPE_1ST,
+                    offsetOrigin,
+                    offsetOrigin + nextIfdOffset,
+                    byteOrder,
+                    includeUnknown,
+                    computed,
+                    tagFilter,
+                    'thumbnail'
+                );
+            }
         }
     }
 
@@ -84,7 +108,16 @@ function getNumberOfFields(dataView, offset, byteOrder) {
     return 0;
 }
 
-function readTag(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown) {
+function readTag(
+    dataView,
+    ifdType,
+    offsetOrigin,
+    offset,
+    byteOrder,
+    includeUnknown = false,
+    tagFilter = NOOP_TAG_FILTER,
+    groupKey = 'exif'
+) {
     const TAG_CODE_IPTC_NAA = 0x83bb;
     const TAG_TYPE_OFFSET = Types.getTypeSize('SHORT');
     const TAG_COUNT_OFFSET = TAG_TYPE_OFFSET + Types.getTypeSize('SHORT');
@@ -97,6 +130,11 @@ function readTag(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnkn
     let tagValueOffset;
 
     if (Types.typeSizes[tagType] === undefined || (!includeUnknown && TagNames[ifdType][tagCode] === undefined)) {
+        return undefined;
+    }
+
+    const tagName = getTagName(ifdType, tagCode);
+    if (!tagFilter.shouldParseTag(groupKey, tagName, tagCode)) {
         return undefined;
     }
 
@@ -118,22 +156,18 @@ function readTag(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnkn
         tagValue = decodeAsciiValue(tagValue);
     }
 
-    let tagName = `undefined-${tagCode}`;
     let tagDescription = tagValue;
 
     if (TagNames[ifdType][tagCode] !== undefined) {
         if ((TagNames[ifdType][tagCode]['name'] !== undefined) && (TagNames[ifdType][tagCode]['description'] !== undefined)) {
-            tagName = TagNames[ifdType][tagCode]['name'];
             try {
                 tagDescription = TagNames[ifdType][tagCode]['description'](tagValue);
             } catch (error) {
                 tagDescription = getDescriptionFromTagValue(tagValue);
             }
         } else if ((tagType === Types.tagTypes['RATIONAL']) || (tagType === Types.tagTypes['SRATIONAL'])) {
-            tagName = TagNames[ifdType][tagCode];
             tagDescription = '' + (tagValue[0] / tagValue[1]);
         } else {
-            tagName = TagNames[ifdType][tagCode];
             tagDescription = getDescriptionFromTagValue(tagValue);
         }
     }
@@ -146,6 +180,19 @@ function readTag(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnkn
         tagType,
         __offset: tagValueOffset
     };
+}
+
+function getTagName(ifdType, tagCode) {
+    if (TagNames[ifdType][tagCode] !== undefined) {
+        if (typeof TagNames[ifdType][tagCode] === 'string') {
+            return TagNames[ifdType][tagCode];
+        }
+        if (TagNames[ifdType][tagCode].name) {
+            return TagNames[ifdType][tagCode].name;
+        }
+    }
+
+    return `undefined-${tagCode}`;
 }
 
 function tagValueFitsInOffsetSlot(tagType, tagCount) {

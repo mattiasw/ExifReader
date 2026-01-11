@@ -4,6 +4,7 @@
 
 import IptcTagNames from './iptc-tag-names.js';
 import TagDecoder from './tag-decoder.js';
+import {NOOP_TAG_FILTER} from './tag-filter.js';
 
 const BYTES_8BIM = 0x3842494d;
 const BYTES_8BIM_SIZE = 4;
@@ -19,13 +20,19 @@ export default {
     read
 };
 
-function read(dataView, dataOffset, includeUnknown) {
+function read(dataView, dataOffset, includeUnknown, tagFilter = NOOP_TAG_FILTER) {
     try {
         if (Array.isArray(dataView)) {
-            return parseTags(new DataView(Uint8Array.from(dataView).buffer), {size: dataView.length}, 0, includeUnknown);
+            return parseTags(
+                new DataView(Uint8Array.from(dataView).buffer),
+                {size: dataView.length},
+                0,
+                includeUnknown,
+                tagFilter
+            );
         }
         const {naaBlock, dataOffset: newDataOffset} = getNaaResourceBlock(dataView, dataOffset);
-        return parseTags(dataView, naaBlock, newDataOffset, includeUnknown);
+        return parseTags(dataView, naaBlock, newDataOffset, includeUnknown, tagFilter);
     } catch (error) {
         return {};
     }
@@ -69,14 +76,21 @@ function getBlockPadding(resourceBlock) {
     return 0;
 }
 
-function parseTags(dataView, naaBlock, dataOffset, includeUnknown) {
+function parseTags(dataView, naaBlock, dataOffset, includeUnknown, tagFilter) {
     const tags = {};
     let encoding = undefined;
 
     const endOfBlockOffset = dataOffset + naaBlock['size'];
 
     while ((dataOffset < endOfBlockOffset) && (dataOffset < dataView.byteLength)) {
-        const {tag, tagSize} = readTag(dataView, dataOffset, tags, encoding, includeUnknown);
+        const {tag, tagSize} = readTag(
+            dataView,
+            dataOffset,
+            tags,
+            encoding,
+            includeUnknown,
+            tagFilter
+        );
 
         if (tag === null) {
             break;
@@ -115,7 +129,14 @@ function parseTags(dataView, naaBlock, dataOffset, includeUnknown) {
     return tags;
 }
 
-function readTag(dataView, dataOffset, tags, encoding, includeUnknown) {
+function readTag(
+    dataView,
+    dataOffset,
+    tags = {},
+    encoding = undefined,
+    includeUnknown = false,
+    tagFilter = NOOP_TAG_FILTER
+) {
     const TAG_CODE_OFFSET = 1;
     const TAG_SIZE_OFFSET = 3;
 
@@ -127,6 +148,14 @@ function readTag(dataView, dataOffset, tags, encoding, includeUnknown) {
     const tagSize = dataView.getUint16(dataOffset + TAG_SIZE_OFFSET);
 
     if (!includeUnknown && !IptcTagNames['iptc'][tagCode]) {
+        return {tag: undefined, tagSize};
+    }
+
+    if (!tagFilter.shouldParseTag(
+        'iptc',
+        getIptcTagNameForFiltering(tagCode, includeUnknown),
+        tagCode
+    )) {
         return {tag: undefined, tagSize};
     }
 
@@ -146,6 +175,27 @@ function readTag(dataView, dataOffset, tags, encoding, includeUnknown) {
     }
 
     return {tag, tagSize};
+}
+
+function getIptcTagNameForFiltering(tagCode, includeUnknown) {
+    const tag = IptcTagNames['iptc'][tagCode];
+    if (!tag) {
+        if (includeUnknown) {
+            return `undefined-${tagCode}`;
+        }
+
+        return undefined;
+    }
+
+    if (typeof tag === 'string') {
+        return tag;
+    }
+
+    if (tag && typeof tag.name === 'string') {
+        return tag.name;
+    }
+
+    return undefined;
 }
 
 function leadByteIsMissing(dataView, dataOffset) {

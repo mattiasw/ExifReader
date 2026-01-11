@@ -14,7 +14,13 @@ export default {
 
 const ENTRY_SIZE = 16;
 
-function read(dataView, dataOffset, includeUnknown, computed = false) {
+function read(
+    dataView,
+    dataOffset,
+    includeUnknown,
+    computed = false,
+    tagFilter = undefined
+) {
     const byteOrder = ByteOrder.getByteOrder(dataView, dataOffset);
     const tags = readIfd(
         dataView,
@@ -23,7 +29,9 @@ function read(dataView, dataOffset, includeUnknown, computed = false) {
         get0thIfdOffset(dataView, dataOffset, byteOrder),
         byteOrder,
         includeUnknown,
-        computed
+        computed,
+        tagFilter,
+        'mpf'
     );
     return addMpfImages(dataView, dataOffset, tags, byteOrder);
 }

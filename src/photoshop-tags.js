@@ -7,6 +7,7 @@
 import {getDataView, getStringFromDataView, getPascalStringFromDataView} from './utils.js';
 import Types from './types.js';
 import TagNames from './photoshop-tag-names.js';
+import {NOOP_TAG_FILTER} from './tag-filter.js';
 
 export default {
     read
@@ -18,7 +19,7 @@ const RESOURCE_LENGTH_SIZE = 4;
 
 const SIGNATURE_SIZE = SIGNATURE.length;
 
-function read(bytes, includeUnknown) {
+function read(bytes, includeUnknown, tagFilter = NOOP_TAG_FILTER) {
     const dataView = getDataView(new Uint8Array(bytes).buffer);
     const tags = {};
     let offset = 0;
@@ -33,6 +34,12 @@ function read(bytes, includeUnknown) {
         const resourceSize = Types.getLongAt(dataView, offset);
         offset += RESOURCE_LENGTH_SIZE;
         if (signature === SIGNATURE) {
+            const resolvedTagName = getTagNameForFiltering(tagId, tagName, includeUnknown);
+            if (!tagFilter.shouldParseTag('photoshop', resolvedTagName, tagId)) {
+                offset += resourceSize + (resourceSize % 2);
+                continue;
+            }
+
             const valueDataView = getDataView(dataView.buffer, offset, resourceSize);
             const tag = {
                 id: tagId,
@@ -53,6 +60,22 @@ function read(bytes, includeUnknown) {
     }
 
     return tags;
+}
+
+function getTagNameForFiltering(tagId, tagName, includeUnknown) {
+    if (tagName) {
+        return tagName;
+    }
+
+    if (TagNames[tagId] && TagNames[tagId].name) {
+        return TagNames[tagId].name;
+    }
+
+    if (includeUnknown) {
+        return `undefined-${tagId}`;
+    }
+
+    return undefined;
 }
 
 function getTagName(dataView, offset) {
