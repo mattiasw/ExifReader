@@ -51,6 +51,21 @@ describe('png-text-tags', () => {
         });
     });
 
+    it('should read uncompressed iTXt tags with UTF-8 text', () => {
+        const text = 'My emoji value: 🏔️✨';
+        const dataView = getItextDataView('MyTagUtf8', 'en', 'MyTagUtf8', text);
+        const chunks = [
+            {type: TYPE_ITXT, offset: 0, length: dataView.byteLength}
+        ];
+
+        const {readTags} = PngTextTags.read(dataView, chunks);
+
+        expect(readTags['MyTagUtf8 (en)']).to.deep.equal({
+            value: text,
+            description: text
+        });
+    });
+
     // It can't handle the encode/decode process for iTXt in testing. It's
     // unclear why. The process should be the same as currently coded.
     // it('should read compressed iTXt tags', async () => {
@@ -126,6 +141,28 @@ describe('png-text-tags', () => {
             new CompressionStream('deflate')
         );
         return new DataView(await new Response(compressedStream).arrayBuffer());
+    }
+
+    function getItextDataView(keyword, lang, translatedKeyword, text) {
+        const encoder = new TextEncoder();
+        const parts = [
+            encoder.encode(keyword),
+            Uint8Array.from([0x00]), // null separator
+            Uint8Array.from([0x00, 0x00]), // compression flag + method (no compression)
+            encoder.encode(lang),
+            Uint8Array.from([0x00]),
+            encoder.encode(translatedKeyword),
+            Uint8Array.from([0x00]),
+            encoder.encode(text),
+        ];
+        const length = parts.reduce((total, part) => total + part.length, 0);
+        const bytes = new Uint8Array(length);
+        let offset = 0;
+        for (const part of parts) {
+            bytes.set(part, offset);
+            offset += part.length;
+        }
+        return new DataView(bytes.buffer);
     }
 
     function stringToHex(text) {
