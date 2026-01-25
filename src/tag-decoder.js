@@ -13,7 +13,7 @@ export default {
 
 function decode(encoding, tagValue) {
     if (typeof tagValue === 'string') {
-        return tagValue;
+        return decodeAsciiValue(tagValue);
     }
     const Decoder = TextDecoder.get();
     if ((typeof Decoder !== 'undefined') && (encoding !== undefined)) {
