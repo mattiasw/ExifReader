@@ -165,5 +165,15 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
     if (compressionMethod !== undefined) {
         return Promise.reject(`Unknown compression method ${compressionMethod}.`);
     }
+
+    // handle uncompressed iTXT with proper encoding awareness
+    if (returnType === 'string') {
+        try {
+            return new TextDecoder(encoding).decode(dataView);
+        } catch (error) {
+            const bytes = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+            return Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
+        }
+    }
     return dataView;
 }
