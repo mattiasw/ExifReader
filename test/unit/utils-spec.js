@@ -43,4 +43,14 @@ describe('utils', () => {
         expect(Utils.strRepeat('a', 1)).to.equal('a');
         expect(Utils.strRepeat('ab', 2)).to.equal('abab');
     });
+
+    it('should fallback to byte string when TextDecoder fails', () => {
+        const dataView = getDataView('MyText');
+        const result = Utils.decompress(
+            dataView,
+            undefined,
+            'invalid-encoding'
+        );
+        expect(result).to.equal('MyText');
+    });
 });

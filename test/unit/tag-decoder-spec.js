@@ -54,4 +54,17 @@ describe('tag-decoder', () => {
 
         expect(TagDecoder.decode('UTF-8', tagValue)).to.equal(TAG_VALUE_STRING);
     });
+
+    it('should decode UTF-8 when value is a string', () => {
+        TagDecoder.__set__('TextDecoder', {
+            get() {
+                return undefined;
+            }
+        });
+        const text = 'My emoji value: 🏔️✨';
+        const bytes = new TextEncoder().encode(text);
+        const rawString = Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
+
+        expect(TagDecoder.decode('UTF-8', rawString)).to.equal(text);
+    });
 });
