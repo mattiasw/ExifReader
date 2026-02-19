@@ -207,7 +207,15 @@ describe('image-header', () => {
         });
 
         it('should recognize IPTC data', () => {
-            const dataView = getDataView('\xff\xd8\xff\xed\x00\x10Photoshop 3.0\x00');
+            const dataView = getDataView('\xff\xd8\xff\xed\x00\x14Photoshop 3.0\x008BIM');
+            const {iptcDataOffset} = ImageHeader.parseAppMarkers(dataView);
+            expect(iptcDataOffset).to.equal(20);
+        });
+
+        it('should keep first valid IPTC APP13 offset when later APP13 segment is malformed', () => {
+            const firstIptcSegment = '\xff\xed\x00\x14Photoshop 3.0\x008BIM';
+            const malformedIptcSegment = '\xff\xed\x00\x14Photoshop 3.0\x00ABCD';
+            const dataView = getDataView(`\xff\xd8${firstIptcSegment}${malformedIptcSegment}`);
             const {iptcDataOffset} = ImageHeader.parseAppMarkers(dataView);
             expect(iptcDataOffset).to.equal(20);
         });
