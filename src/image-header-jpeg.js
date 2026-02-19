@@ -63,6 +63,7 @@ const APP1_EXIF_IDENTIFIER = 'Exif';
 const APP1_XMP_IDENTIFIER = 'http://ns.adobe.com/xap/1.0/\x00';
 const APP1_XMP_EXTENDED_IDENTIFIER = 'http://ns.adobe.com/xmp/extension/\x00';
 const APP13_IPTC_IDENTIFIER = 'Photoshop 3.0';
+const APP13_RESOURCE_BLOCK_IDENTIFIER = '8BIM';
 
 function isJpegFile(dataView) {
     return !!dataView && (dataView.byteLength >= MIN_JPEG_DATA_BUFFER_LENGTH) && (dataView.getUint16(0) === JPEG_ID);
@@ -271,10 +272,14 @@ function getExtendedXmpChunkDetails(appMarkerPosition, fieldLength) {
 
 function isApp13PhotoshopMarker(dataView, appMarkerPosition) {
     const markerIdLength = APP13_IPTC_IDENTIFIER.length;
+    const resourceIdentifierLength = APP13_RESOURCE_BLOCK_IDENTIFIER.length;
+    const resourceIdentifierOffset = appMarkerPosition + APP_ID_OFFSET
+        + markerIdLength + 1;
 
     return (dataView.getUint16(appMarkerPosition) === APP13_MARKER)
         && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP13_IPTC_IDENTIFIER)
-        && (dataView.getUint8(appMarkerPosition + APP_ID_OFFSET + markerIdLength) === 0x00);
+        && (dataView.getUint8(appMarkerPosition + APP_ID_OFFSET + markerIdLength) === 0x00)
+        && (getStringFromDataView(dataView, resourceIdentifierOffset, resourceIdentifierLength) === APP13_RESOURCE_BLOCK_IDENTIFIER);
 }
 
 function isAppMarker(dataView, appMarkerPosition) {
