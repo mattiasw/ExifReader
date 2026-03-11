@@ -6,8 +6,17 @@ import {expect} from 'chai';
 import TagNamesCanonIfd from '../../src/tag-names-canon-ifd';
 
 describe('tag-names-canon-ifd', () => {
+    it('should have tag CameraSettings', () => {
+        expect(TagNamesCanonIfd[0x0001].name).to.equal('CameraSettings');
+        expect(TagNamesCanonIfd[0x0001].description('<data>')).to.equal('<data>');
+    });
+
     it('should have tag ShotInfo', () => {
         expect(TagNamesCanonIfd[0x0004].name).to.equal('ShotInfo');
         expect(TagNamesCanonIfd[0x0004].description('<data>')).to.equal('<data>');
+    });
+
+    it('should have tag LensModel', () => {
+        expect(TagNamesCanonIfd[0x0095]).to.equal('LensModel');
     });
 });

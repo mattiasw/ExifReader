@@ -9,6 +9,7 @@ import {LITTLE_ENDIAN} from '../../src/byte-order';
 
 const TIFF_HEADER_OFFSET = 42;
 const OFFSET = 4711;
+const CAMERA_SETTINGS_LENS_TYPE = 22;
 
 describe('canon-tags', () => {
     afterEach(() => {
@@ -77,10 +78,74 @@ describe('canon-tags', () => {
         expect(tags['AutoRotate'].value).to.equal(42);
         expect(tags['AutoRotate'].description).to.equal('Unknown');
     });
+
+    it('should be able to handle when there is camera settings but no lens type in a Canon IFD', () => {
+        rewireCanonReadIfd({CameraSettings: getCameraSettingsData({})});
+
+        const tags = CanonTags.read('<mock dataview>', TIFF_HEADER_OFFSET, OFFSET, LITTLE_ENDIAN, false);
+
+        expect(tags).to.deep.equal({});
+        expect(tags['CameraSettings']).to.be.undefined;
+    });
+
+    it('should be able to read LensType from camera settings from a Canon IFD', () => {
+        rewireCanonReadIfd({
+            CameraSettings: getCameraSettingsData({
+                [CAMERA_SETTINGS_LENS_TYPE]: 61182
+            })
+        });
+
+        const tags = CanonTags.read('<mock dataview>', TIFF_HEADER_OFFSET, OFFSET, LITTLE_ENDIAN, false);
+
+        expect(tags['LensType'].value).to.equal(61182);
+        expect(tags['LensType'].description).to.equal('61182');
+        expect(tags['CameraSettings']).to.be.undefined;
+    });
+
+    it('should keep direct LensModel when camera settings are parsed', () => {
+        rewireCanonReadIfd({
+            LensModel: {value: ['RF24-105mm F4 L IS USM'], description: 'RF24-105mm F4 L IS USM'},
+            CameraSettings: getCameraSettingsData({
+                [CAMERA_SETTINGS_LENS_TYPE]: 61182
+            })
+        });
+
+        const tags = CanonTags.read('<mock dataview>', TIFF_HEADER_OFFSET, OFFSET, LITTLE_ENDIAN, false);
+
+        expect(tags['LensModel'].value).to.deep.equal(['RF24-105mm F4 L IS USM']);
+        expect(tags['LensModel'].description).to.equal('RF24-105mm F4 L IS USM');
+        expect(tags['LensType'].value).to.equal(61182);
+    });
+
+    it('should keep LensType shape in computed mode', () => {
+        rewireCanonReadIfd({
+            CameraSettings: getCameraSettingsData({
+                [CAMERA_SETTINGS_LENS_TYPE]: 61182
+            })
+        });
+
+        const tags = CanonTags.read('<mock dataview>', TIFF_HEADER_OFFSET, OFFSET, LITTLE_ENDIAN, false, true);
+
+        expect(tags['LensType'].value).to.equal(61182);
+        expect(tags['LensType'].description).to.equal('61182');
+    });
 });
 
 function getShotInfoData(config) {
     const data = Array(34).fill(undefined);
+    data[0] = data.length; // Size
+
+    for (const key in config) {
+        data[key] = config[key];
+    }
+
+    return {
+        value: data
+    };
+}
+
+function getCameraSettingsData(config) {
+    const data = Array(53).fill(undefined);
     data[0] = data.length; // Size
 
     for (const key in config) {

@@ -14,10 +14,12 @@ import {readIfd} from './tags-helpers.js';
 import {IFD_TYPE_CANON} from './tag-names.js';
 
 const SHOT_INFO_AUTO_ROTATE = 27; // First position is size.
+const CAMERA_SETTINGS_LENS_TYPE = 22; // First position is size.
 
 export default {
     read,
-    SHOT_INFO_AUTO_ROTATE
+    SHOT_INFO_AUTO_ROTATE,
+    CAMERA_SETTINGS_LENS_TYPE
 };
 
 function read(
@@ -45,6 +47,10 @@ function read(
         tags = objectAssign({}, tags, parseShotInfo(tags['ShotInfo'].value));
         delete tags['ShotInfo'];
     }
+    if (tags['CameraSettings']) {
+        tags = objectAssign({}, tags, parseCameraSettings(tags['CameraSettings'].value));
+        delete tags['CameraSettings'];
+    }
 
     return tags;
 }
@@ -56,6 +62,23 @@ function parseShotInfo(shotInfoData) {
         tags['AutoRotate'] = {
             value: shotInfoData[SHOT_INFO_AUTO_ROTATE],
             description: getAutoRotateDescription(shotInfoData[SHOT_INFO_AUTO_ROTATE])
+        };
+    }
+
+    return tags;
+}
+
+function parseCameraSettings(cameraSettingsData) {
+    const tags = {};
+    if (!Array.isArray(cameraSettingsData)) {
+        return tags;
+    }
+
+    const lensType = cameraSettingsData[CAMERA_SETTINGS_LENS_TYPE];
+    if (Number.isFinite(lensType)) {
+        tags['LensType'] = {
+            value: lensType,
+            description: `${lensType}`
         };
     }
 

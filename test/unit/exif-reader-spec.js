@@ -454,6 +454,30 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should keep Exif LensModel in flat mode when maker notes also has LensModel', () => {
+        const exifLensModel = {value: ['Exif Lens'], description: 'Exif Lens'};
+        const makerNotesLensModel = {
+            value: ['MakerNotes Lens'],
+            description: 'MakerNotes Lens'
+        };
+        const myExifTags = {
+            Make: {value: ['Canon']},
+            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE},
+            LensModel: exifLensModel
+        };
+        const myCanonTags = {
+            LensModel: makerNotesLensModel,
+            LensType: {value: 61182, description: '61182'}
+        };
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
+        rewireMakerNoteTagsRead(myCanonTags, 'CanonTags');
+
+        const tags = ExifReader.loadView();
+
+        expect(tags['LensModel']).to.deep.equal(exifLensModel);
+        expect(tags['LensType']).to.deep.equal(myCanonTags.LensType);
+    });
+
     it('should be able to find Pentax Type 1 MakerNote segment', () => {
         const myExifTags = {
             MakerNote: {

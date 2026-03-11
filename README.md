@@ -676,6 +676,10 @@ Known Limitations
 
 -   The descriptions for UserComment, GPSProcessingMethod and GPSAreaInformation
     are missing for other encodings than ASCII.
+-   For Canon maker notes, `makerNotes.LensType` is currently returned as a raw
+    numeric code (for example `48`). If you need a human-readable lens name, see
+    ExifTool's Canon LensType mapping list:
+    <https://exiftool.org/TagNames/Canon.html#LensType>.
 
 Contributing
 ------------
