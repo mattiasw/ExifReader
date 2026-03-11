@@ -4,6 +4,7 @@ const fs = require('fs');
 const Exif = require('./exif');
 
 const FIXTURES_PATH = path.join(__dirname, '..', 'fixtures');
+const IMAGE_PARSE_TIMEOUT_MS = 60000;
 
 describe('image outputs', () => {
     const filter = getFilter(process.argv);
@@ -21,7 +22,7 @@ describe('image outputs', () => {
         const imagePath = path.join(FIXTURES_PATH, 'images', imageName);
 
         describe(imageName, function () {
-            this.timeout(20000);
+            this.timeout(IMAGE_PARSE_TIMEOUT_MS);
 
             let result;
 

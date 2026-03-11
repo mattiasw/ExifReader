@@ -11,6 +11,7 @@ describe('tag filtering options', function () {
     afterEach(() => {
         ExifReaderRewireAPI.__ResetDependency__('ImageHeader');
         ExifReaderRewireAPI.__ResetDependency__('Tags');
+        ExifReaderRewireAPI.__ResetDependency__('CanonTags');
         ExifReaderRewireAPI.__ResetDependency__('PngTextTags');
         ExifReaderRewireAPI.__ResetDependency__('XmpTags');
         ExifReaderRewireAPI.__ResetDependency__('IccTags');
@@ -451,6 +452,35 @@ describe('tag filtering options', function () {
 
         expect(tags.icc).to.equal(undefined);
     });
+
+    it('includeTags.makerNotes should filter Canon maker-note tags', function () {
+        rewireImageHeader({
+            fileType: 'jpeg',
+            tiffHeaderOffset: 1,
+        });
+        rewireTagsRead({
+            Make: {id: 0x010f, value: ['Canon']},
+            MakerNote: {id: 0x927c, value: [1, 2, 3], __offset: 42},
+        });
+        rewireCanonTagsRead({
+            LensType: {id: 0x0001, value: 61182, description: '61182'},
+            LensModel: {
+                id: 0x0095,
+                value: ['RF24-105mm F4 L IS USM'],
+                description: 'RF24-105mm F4 L IS USM'
+            },
+        });
+
+        const tags = ExifReader.loadView({}, {
+            expanded: true,
+            includeTags: {
+                makerNotes: ['LensType'],
+            },
+        });
+
+        expect(tags.makerNotes.LensType).to.not.equal(undefined);
+        expect(tags.makerNotes.LensModel).to.equal(undefined);
+    });
 });
 
 function rewireImageHeader(appMarkersValue) {
@@ -513,6 +543,14 @@ function rewireIccTagsReadToThrow() {
     ExifReaderRewireAPI.__Rewire__('IccTags', {
         read() {
             throw new Error('IccTags.read was called.');
+        },
+    });
+}
+
+function rewireCanonTagsRead(tagsValue) {
+    ExifReaderRewireAPI.__Rewire__('CanonTags', {
+        read() {
+            return tagsValue;
         },
     });
 }
