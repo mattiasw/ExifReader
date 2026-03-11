@@ -3,8 +3,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 export default {
+    0x0001: {
+        'name': 'CameraSettings',
+        'description': (value) => value
+    },
     0x0004: {
         'name': 'ShotInfo',
         'description': (value) => value
     },
+    0x0095: 'LensModel',
 };
