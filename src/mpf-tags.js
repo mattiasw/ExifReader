@@ -22,11 +22,15 @@ function read(
     tagFilter = undefined
 ) {
     const byteOrder = ByteOrder.getByteOrder(dataView, dataOffset);
+    const ifdOffset = get0thIfdOffset(dataView, dataOffset, byteOrder);
+    if (ifdOffset === undefined) {
+        return {};
+    }
     const tags = readIfd(
         dataView,
         IFD_TYPE_MPF,
         dataOffset,
-        get0thIfdOffset(dataView, dataOffset, byteOrder),
+        ifdOffset,
         byteOrder,
         includeUnknown,
         computed,

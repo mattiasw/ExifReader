@@ -26,11 +26,15 @@ function read(dataView, tiffHeaderOffset, includeUnknown, computed = false, tagF
 }
 
 function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter) {
+    const ifdOffset = get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder);
+    if (ifdOffset === undefined) {
+        return {};
+    }
     return readIfd(
         dataView,
         IFD_TYPE_0TH,
         tiffHeaderOffset,
-        get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder),
+        ifdOffset,
         byteOrder,
         includeUnknown,
         computed,

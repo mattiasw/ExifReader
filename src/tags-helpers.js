@@ -21,12 +21,12 @@ const getTagValueAt = {
 };
 
 export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
+    const offset = tiffHeaderOffset + TIFF_IFD_OFFSET_OFFSET;
+    if (offset + Types.getTypeSize('LONG') > dataView.byteLength) {
+        return undefined;
+    }
     return tiffHeaderOffset
-        + Types.getLongAt(
-            dataView,
-            tiffHeaderOffset + TIFF_IFD_OFFSET_OFFSET,
-            byteOrder
-        );
+        + Types.getLongAt(dataView, offset, byteOrder);
 }
 
 export function readIfd(

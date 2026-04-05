@@ -14,3 +14,4 @@ test/fixtures/outputs/custom_*
 test/fixtures/tag-filtering-outputs/custom_*
 gh-pages
 local-assets
+.claude/settings.local.json
