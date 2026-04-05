@@ -10,7 +10,8 @@ updates:
     schedule:
       interval: "weekly"
     cooldown:
-      default-days: 2
+      default-days: 7
+    versioning-strategy: "increase"
     groups:
       dev-dependencies:
         dependency-type: "development"
