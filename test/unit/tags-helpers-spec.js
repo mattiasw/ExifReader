@@ -31,6 +31,13 @@ describe('tags-helpers', () => {
         expect(get0thIfdOffset(dataView, 0, byteOrder)).to.equal(8);
     });
 
+    it('should return undefined when TIFF data is truncated before IFD offset', () => {
+        // Only byte order bytes (MM), no TIFF ID or IFD offset - simulates truncated EXIF
+        const dataView = getDataView('\x4d\x4d');
+        const byteOrder = ByteOrder.getByteOrder(dataView, 0);
+        expect(get0thIfdOffset(dataView, 0, byteOrder)).to.be.undefined;
+    });
+
     it('should be able to get 0th IFD offset', () => {
         const dataView = getDataView('\x00\x00\x00\x00\x00\x2a\x47\x11\x48\x12');
         const tiffHeaderOffset = 2;
