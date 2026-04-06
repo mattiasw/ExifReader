@@ -9,6 +9,7 @@ type FileTypeValue =
     | 'png'
     | 'heic'
     | 'avif'
+    | 'jxl'
     | 'webp'
     | 'gif'
     | 'xml';
@@ -19,6 +20,7 @@ type FileTypeDescription =
     | 'PNG'
     | 'HEIC'
     | 'AVIF'
+    | 'JPEG-XL'
     | 'WebP'
     | 'GIF'
     | 'XML';

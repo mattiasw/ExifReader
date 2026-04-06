@@ -18,21 +18,21 @@ You can try it out on the
 
 **Support table**
 
-| File type | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | MakerNote          | Thumbnail | Image details |
-| ----------|---------|---------|---------|---------|---------|---------------|--------------------|-----------|---------------|
-| JPEG      | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
-| TIFF      | **yes** | **yes** | **yes** | **yes** | ???     | **some**&ast; | **some**&ast;&ast; | N/A       | N/A           |
-| PNG       | **yes** | **yes** | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | no        | **yes**       |
-| HEIC/HEIF | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
-| AVIF      | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
-| WebP      | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | **yes**       |
-| GIF       | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | N/A                | N/A       | **yes**       |
+| File type              | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | MakerNote          | Thumbnail | Image details |
+| -----------------------|---------|---------|---------|---------|---------|---------------|--------------------|-----------|---------------|
+| JPEG                   | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
+| JPEG-XL&ast;&ast;&ast; | **yes** | no      | **yes** | no      | ???     | no            | **some**&ast;&ast; | ???       | no            |
+| TIFF                   | **yes** | **yes** | **yes** | **yes** | ???     | **some**&ast; | **some**&ast;&ast; | N/A       | N/A           |
+| PNG                    | **yes** | **yes** | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | no        | **yes**       |
+| HEIC/HEIF              | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
+| AVIF                   | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
+| WebP                   | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | **yes**       |
+| GIF                    | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | N/A                | N/A       | **yes**       |
 
 - `MakerNote` = Manufacturers' proprietary MakerNote tags.
 - `Image details` = image width, height, etc. read from image header.
 - `N/A` = The feature is not applicable to this file type.
-- `???` = may be supported in any file type using Exif but it has only been tested
-    on JPEGs.
+- `???` = may be supported but has not been tested.
 - `*` = A draft implementation of Photoshop tags have been added with
     `ClippingPathName` and `PathInformation` currently supported. Photoshop tags
     are very different from other tags and need a lot of extra code so they have
@@ -40,6 +40,8 @@ You can try it out on the
     you think should really be supported.
 - `**` = Some of the Canon-specific and Pentax-specific tags have been added.
     File an issue if you think something more should be supported.
+- `***` = Metadata in JPEG-XL are often (but not always) encoded with Brotli
+    compression. This is currently not supported.
 
 If you're missing something that you think should be supported, file an issue
 with an attached example image and I'll see what I can do.
@@ -600,6 +602,7 @@ Possible modules to include or exclude:
 | `png`         | PNG images.                                            |
 | `heic`        | HEIC/HEIF images.                                      |
 | `webp`        | WebP images.                                           |
+| `jxl`         | JPEG-XL images.                                        |
 | `gif`         | GIF images.                                            |
 | `file`        | JPEG file details: image width, height etc.            |
 | `jfif`        | JFIF details in JPEG files: resolution, thumbnail etc. |
@@ -712,6 +715,8 @@ Changelog
 
 A selection of notable changes.
 
+-   **April 2026**:
+    -   Add support for JPEG-XL images.
 -   **January 2026**:
     -   Add `includeTags` / `excludeTags` options for filtering returned tags by
         group and tag name/ID.

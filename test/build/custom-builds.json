@@ -19,6 +19,7 @@
                 "png": true,
                 "heic": true,
                 "avif": true,
+                "jxl": true,
                 "webp": true,
                 "gif": true
             }
@@ -137,6 +138,25 @@
             "include": {
                 "avif": true,
                 "exif": ["DateTimeDigitized", "FlashpixVersion"]
+            }
+        }
+    },
+    {
+        "id": "full-jxl",
+        "config": {
+            "include": {
+                "jxl": true,
+                "exif": true,
+                "xmp": true
+            }
+        }
+    },
+    {
+        "id": "partial-jxl",
+        "config": {
+            "include": {
+                "jxl": true,
+                "exif": ["DateTime", "DateTimeDigitized", "ColorSpace"]
             }
         }
     },

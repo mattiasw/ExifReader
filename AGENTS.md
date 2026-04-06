@@ -1,6 +1,6 @@
 # ExifReader - Agent Guide
 
-JavaScript library that parses Exif/IPTC/XMP/ICC/MPF metadata from JPEG, TIFF, PNG, HEIC, AVIF, WebP, and GIF images. Published on npm as `exifreader`.
+JavaScript library that parses Exif/IPTC/XMP/ICC/MPF metadata from JPEG, TIFF, PNG, HEIC, AVIF, JPEG-XL, WebP, and GIF images. Published on npm as `exifreader`.
 
 ## Project Structure
 
@@ -14,6 +14,16 @@ JavaScript library that parses Exif/IPTC/XMP/ICC/MPF metadata from JPEG, TIFF, P
 - `exif-reader.d.ts` - TypeScript type definitions (root level)
 
 Tag definitions live in `src/tag-names-*.js` (keyed by hex tag ID). Each image format has its own `*-tags.js` parser. `src/constants.js` has feature flags for tree-shaking.
+
+## Custom Builds
+
+Users can configure custom builds (via `package.json` `"exifreader"` key) to include/exclude specific formats and tag groups, reducing bundle size. When adding a new image format or metadata group:
+
+1. Add a `USE_<NAME>` flag to `src/constants.js`
+2. Add the module name to the `modules` array in `webpack.config.js`
+3. Add the source filename to the string-replace regex in `webpack.config.js` (so `Constants.USE_*` gets replaced)
+4. Add test entries in `test/build/custom-builds.json`
+5. Document the module in the README custom build table
 
 ## Commands
 

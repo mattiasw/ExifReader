@@ -8,6 +8,7 @@ import Jpeg from './image-header-jpeg.js';
 import Png from './image-header-png.js';
 import Heic from './image-header-heic.js';
 import Avif from './image-header-avif.js';
+import Jxl from './image-header-jxl.js';
 import Webp from './image-header-webp.js';
 import Gif from './image-header-gif.js';
 import Xml from './xml.js';
@@ -36,6 +37,10 @@ function parseAppMarkers(dataView, async) {
 
     if (Constants.USE_AVIF && Avif.isAvifFile(dataView)) {
         return addFileType(Avif.findAvifOffsets(dataView), 'avif', 'AVIF');
+    }
+
+    if (Constants.USE_JXL && Jxl.isJxlFile(dataView)) {
+        return addFileType(Jxl.findJxlOffsets(dataView), 'jxl', 'JPEG-XL');
     }
 
     if (Constants.USE_WEBP && Webp.isWebpFile(dataView)) {
