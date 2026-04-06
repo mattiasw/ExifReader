@@ -148,9 +148,87 @@ describe('image-header-jxl', () => {
 
         expect(offsets.hasAppMarkers).to.be.false;
     });
+
+    describe('brob boxes', () => {
+        it('should detect brob box with Exif original type', () => {
+            const dataView = getDataView(getJxlData({brobExif: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.hasAppMarkers).to.be.true;
+            expect(offsets.brobExifChunk).to.not.be.undefined;
+            // signature(12) + ftyp(20) + box header(8) + original type(4) = 44
+            expect(offsets.brobExifChunk.dataOffset).to.equal(44);
+            expect(offsets.brobExifChunk.length).to.equal('BROTLI_EXIF_DATA'.length);
+        });
+
+        it('should detect brob box with xml original type', () => {
+            const dataView = getDataView(getJxlData({brobXmp: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.hasAppMarkers).to.be.true;
+            expect(offsets.brobXmpChunk).to.not.be.undefined;
+            // signature(12) + ftyp(20) + box header(8) + original type(4) = 44
+            expect(offsets.brobXmpChunk.dataOffset).to.equal(44);
+            expect(offsets.brobXmpChunk.length).to.equal('BROTLI_XMP_DATA'.length);
+        });
+
+        it('should detect both brob Exif and brob XMP', () => {
+            const dataView = getDataView(getJxlData({brobExif: true, brobXmp: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.hasAppMarkers).to.be.true;
+            expect(offsets.brobExifChunk).to.not.be.undefined;
+            expect(offsets.brobXmpChunk).to.not.be.undefined;
+        });
+
+        it('should ignore brob box with unknown original type', () => {
+            const dataView = getDataView(getJxlData({brobUnknown: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.hasAppMarkers).to.be.false;
+            expect(offsets.brobExifChunk).to.be.undefined;
+            expect(offsets.brobXmpChunk).to.be.undefined;
+        });
+
+        it('should prefer plain Exif box over brob Exif', () => {
+            const dataView = getDataView(getJxlData({exif: true, brobExif: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.hasAppMarkers).to.be.true;
+            expect(offsets.tiffHeaderOffset).to.not.be.undefined;
+            expect(offsets.brobExifChunk).to.be.undefined;
+        });
+
+        it('should prefer plain XMP box over brob XMP', () => {
+            const dataView = getDataView(getJxlData({xmp: true, brobXmp: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.hasAppMarkers).to.be.true;
+            expect(offsets.xmpChunks).to.not.be.undefined;
+            expect(offsets.brobXmpChunk).to.be.undefined;
+        });
+
+        it('should ignore brob Exif when USE_EXIF is false', () => {
+            ImageHeaderJxlRewireAPI.__Rewire__('Constants', {USE_EXIF: false, USE_XMP: true});
+
+            const dataView = getDataView(getJxlData({brobExif: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.brobExifChunk).to.be.undefined;
+        });
+
+        it('should ignore brob XMP when USE_XMP is false', () => {
+            ImageHeaderJxlRewireAPI.__Rewire__('Constants', {USE_EXIF: true, USE_XMP: false});
+
+            const dataView = getDataView(getJxlData({brobXmp: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.brobXmpChunk).to.be.undefined;
+        });
+    });
 });
 
-function getJxlData({exif, xmp, unknownBox} = {}) {
+function getJxlData({exif, xmp, unknownBox, brobExif, brobXmp, brobUnknown} = {}) {
     let data = JXL_SIGNATURE + FTYP_BOX;
 
     if (unknownBox) {
@@ -165,6 +243,21 @@ function getJxlData({exif, xmp, unknownBox} = {}) {
     if (xmp) {
         const xmpData = '<xmp>test</xmp>';
         data += getByteStringFromNumber(8 + xmpData.length, 4) + 'xml ' + xmpData;
+    }
+    if (brobExif) {
+        const compressedPayload = 'BROTLI_EXIF_DATA';
+        const content = 'Exif' + compressedPayload;
+        data += getByteStringFromNumber(8 + content.length, 4) + 'brob' + content;
+    }
+    if (brobXmp) {
+        const compressedPayload = 'BROTLI_XMP_DATA';
+        const content = 'xml ' + compressedPayload;
+        data += getByteStringFromNumber(8 + content.length, 4) + 'brob' + content;
+    }
+    if (brobUnknown) {
+        const compressedPayload = 'BROTLI_UNK';
+        const content = 'jxlc' + compressedPayload;
+        data += getByteStringFromNumber(8 + content.length, 4) + 'brob' + content;
     }
 
     return data;

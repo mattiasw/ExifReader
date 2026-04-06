@@ -54,6 +54,7 @@ Enforced by ESLint (`.eslintrc.json`). Key rules:
 - Arrow parens always: `(x) => x`
 - Space before anonymous function paren, not named: `function foo()` vs `function ()`
 - kebab-case filenames, camelCase variables/functions, PascalCase constructors/class-like exports
+- Place functions in the order they are used. That means the definition of a function is placed after the location from where it is called.
 
 ## Type Definitions
 
@@ -68,6 +69,8 @@ This is **not** a TypeScript project, but `exif-reader.d.ts` provides types for 
 Every source file has a corresponding `test/unit/*-spec.js`. New code needs tests. Coverage thresholds are enforced: 92% statements, 86% branches, 97% functions, 92% lines.
 
 Tests use `babel-plugin-rewire` to mock dependencies (e.g., `__Rewire__`/`__ResetDependency__`). Follow existing test patterns.
+
+Use `npm run test` to run the unit tests and make use of `describe.only` and `it.only` for focused testing.
 
 ## Adding Tags
 

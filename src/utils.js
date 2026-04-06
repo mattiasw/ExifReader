@@ -149,8 +149,29 @@ export function strRepeat(string, num) {
 
 export const COMPRESSION_METHOD_NONE = undefined;
 export const COMPRESSION_METHOD_DEFLATE = 0;
+export const COMPRESSION_METHOD_BROTLI = 'brotli';
 
-export function decompress(dataView, compressionMethod, encoding, returnType = 'string') {
+export function decompress(dataView, compressionMethod, encoding, returnType = 'string', decompressConfig) {
+    if (decompressConfig && compressionMethod !== COMPRESSION_METHOD_NONE) {
+        const decompressType = compressionMethod === COMPRESSION_METHOD_DEFLATE ? 'deflate' : 'brotli';
+        const customFn = decompressConfig[decompressType];
+        if (typeof customFn === 'function') {
+            const uint8 = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+            return Promise.resolve(customFn(uint8)).then((result) => {
+                if (returnType === 'dataview') {
+                    if (result instanceof DataView) {
+                        return result;
+                    }
+                    if (result instanceof ArrayBuffer) {
+                        return new DataView(result);
+                    }
+                    return new DataView(result.buffer, result.byteOffset, result.byteLength);
+                }
+                return new TextDecoder(encoding).decode(result);
+            });
+        }
+    }
+
     if (compressionMethod === COMPRESSION_METHOD_DEFLATE) {
         if (typeof DecompressionStream === 'function') {
             const decompressionStream = new DecompressionStream('deflate');
@@ -162,6 +183,24 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
                 .then((buffer) => new TextDecoder(encoding).decode(buffer));
         }
     }
+
+    if (compressionMethod === COMPRESSION_METHOD_BROTLI) {
+        if (typeof DecompressionStream === 'function') {
+            try {
+                const decompressionStream = new DecompressionStream('brotli');
+                const decompressedStream = new Blob([dataView]).stream().pipeThrough(decompressionStream);
+                if (returnType === 'dataview') {
+                    return new Response(decompressedStream).arrayBuffer().then((arrayBuffer) => new DataView(arrayBuffer));
+                }
+                return new Response(decompressedStream).arrayBuffer()
+                    .then((buffer) => new TextDecoder(encoding).decode(buffer));
+            } catch (_error) {
+                // brotli not supported by this DecompressionStream implementation
+            }
+        }
+        return Promise.reject('Brotli decompression is not supported in this environment. Pass in a brotli decompression function via the decompress option.');
+    }
+
     if (compressionMethod !== undefined) {
         return Promise.reject(`Unknown compression method ${compressionMethod}.`);
     }

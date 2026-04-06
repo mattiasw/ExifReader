@@ -370,12 +370,20 @@ export type IncludeTagsOptions = {
 
 export type ExcludeTagsOptions = IncludeTagsOptions;
 
+type DecompressFunction = (data: Uint8Array) => Promise<Uint8Array | ArrayBuffer> | Uint8Array | ArrayBuffer;
+
+type DecompressOptions = {
+    brotli?: DecompressFunction,
+    deflate?: DecompressFunction,
+};
+
 type CommonOptions = {
     includeUnknown?: boolean,
     computed?: boolean,
     domParser?: XmlDomParser,
     includeTags?: IncludeTagsOptions,
     excludeTags?: ExcludeTagsOptions,
+    decompress?: DecompressOptions,
 };
 
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;

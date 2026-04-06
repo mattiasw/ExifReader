@@ -21,7 +21,7 @@ You can try it out on the
 | File type              | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | MakerNote          | Thumbnail | Image details |
 | -----------------------|---------|---------|---------|---------|---------|---------------|--------------------|-----------|---------------|
 | JPEG                   | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
-| JPEG-XL&ast;&ast;&ast; | **yes** | no      | **yes** | no      | ???     | no            | **some**&ast;&ast; | ???       | no            |
+| JPEG-XL&ast;&ast;&ast; | **yes** | no      | **yes** | no      | no      | no            | **some**&ast;&ast; | ???       | no            |
 | TIFF                   | **yes** | **yes** | **yes** | **yes** | ???     | **some**&ast; | **some**&ast;&ast; | N/A       | N/A           |
 | PNG                    | **yes** | **yes** | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | no        | **yes**       |
 | HEIC/HEIF              | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
@@ -41,7 +41,9 @@ You can try it out on the
 - `**` = Some of the Canon-specific and Pentax-specific tags have been added.
     File an issue if you think something more should be supported.
 - `***` = Metadata in JPEG-XL are often (but not always) encoded with Brotli
-    compression. This is currently not supported.
+    compression. This is supported in some environments when using
+    `async: true`. See the [Asynchronous tags](#asynchronous-tags) and
+    [Custom decompression](#custom-decompression) sections for details.
 
 If you're missing something that you think should be supported, file an issue
 with an attached example image and I'll see what I can do.
@@ -197,9 +199,10 @@ directions on how to use the library.
 #### Asynchronous tags
 
 Some tags need to be parsed asynchronously. Currently this is the case for some
-PNG tags, more specifically compressed tags in zTXt, iTXt, and iCCP chunks. To
-enable this, either use the asynchronous API mentioned above or pass in `async:
-true` in the options parameter:
+PNG tags (compressed tags in zTXt, iTXt, and iCCP chunks) and JPEG-XL files with
+Brotli-compressed metadata (very common). To enable this, either use the
+asynchronous API mentioned above or pass in `async: true` in the options
+parameter:
 
 ```javascript
 const tags = await ExifReader.load(file);
@@ -207,11 +210,60 @@ const tags = await ExifReader.load(file);
 const tags = await ExifReader.load(fileBuffer, {async: true});
 ```
 
-For the compressed tags to work, the environment needs to support the
+For the compressed PNG tags to work, the environment needs to support the
 [Compression Streams API](https://developer.mozilla.org/en-US/docs/Web/API/Compression_Streams_API#browser_compatibility).
+Most modern browsers support deflate decompression through this API.
 
-The reason for having an option to enable this is to not break backwards
-compatibility. This will probably be the default in the next major version.
+For JPEG-XL Brotli decompression, Firefox, Safari, and Node.js have built-in
+support through the Compression Streams API. Chrome does not currently support
+Brotli in its Compression Streams API (April 2026). For environments without
+built-in Brotli support, you can provide a custom decompression function via the
+`decompress` option (see below).
+
+The reason for having an option to enable asynchronous parsing is to not break
+backwards compatibility. This will probably be the default in the next major
+version.
+
+#### Custom decompression
+
+You can provide custom decompression functions for Brotli and/or deflate via the
+`decompress` option. This is useful for JPEG-XL files with Brotli-compressed
+metadata in environments that don't have built-in Brotli support (e.g. Chrome),
+or to override the built-in deflate decompression for PNG files. The custom
+functions take a `Uint8Array` of compressed data and should return a
+`Uint8Array` or `ArrayBuffer` with the decompressed data (or a `Promise` that
+resolves to one).
+
+```javascript
+const tags = await ExifReader.load(file, {
+    async: true,
+    decompress: {
+        brotli: async (compressedData) => myBrotliDecompress(compressedData),
+    }
+});
+```
+
+If a custom function is provided for a compression type, it takes priority over
+the built-in Compression Streams API. If not provided, the library falls back to
+the Compression Streams API when available.
+
+A lightweight browser-compatible Brotli decompression library is
+[brotli-dec-wasm](https://www.npmjs.com/package/brotli-dec-wasm), though it is
+not widely used. A more popular alternative is
+[brotli-wasm](https://www.npmjs.com/package/brotli-wasm), but it&apos;s also
+larger:
+
+```javascript
+import brotliPromise from 'brotli-wasm';
+const brotli = await brotliPromise;
+
+const tags = await ExifReader.load(file, {
+    async: true,
+    decompress: {
+        brotli: async (data) => brotli.decompress(data),
+    }
+});
+```
 
 #### Grouping
 

@@ -115,6 +115,52 @@ export function applyMergeStep({
         return mergeAssignGroup(tags, 'icc', returnedIccTags, expanded, deps);
     }
 
+    if (step.type === 'mergeBrobExifDeferred') {
+        const resolvedReadTags = deferredResults[step.deferredKey];
+        if (!resolvedReadTags || Object.keys(resolvedReadTags).length === 0) {
+            return tags;
+        }
+        const parsedExifTags =
+            deps.filterTagsForParse('exif', resolvedReadTags, tagFilter);
+        parsedGroups.exif = !parsedGroups.exif ? parsedExifTags : deps.objectAssign({}, parsedGroups.exif, parsedExifTags);
+
+        if (!tagFilter.shouldReturnGroup('exif')) {
+            return tags;
+        }
+
+        const returnedTags =
+            deps.filterTagsForReturn('exif', parsedExifTags, tagFilter);
+
+        return mergeAssignGroup(tags, 'exif', returnedTags, expanded, deps);
+    }
+
+    if (step.type === 'mergeBrobXmpDeferred') {
+        const resolvedReadTags = deferredResults[step.deferredKey];
+        if (!resolvedReadTags || Object.keys(resolvedReadTags).length === 0) {
+            return tags;
+        }
+        const parsedXmpTags =
+            deps.filterTagsForParse('xmp', resolvedReadTags, tagFilter);
+        parsedGroups.xmp = parsedXmpTags;
+
+        if (!tagFilter.shouldReturnGroup('xmp')) {
+            return tags;
+        }
+
+        const returnedTags =
+            deps.filterTagsForReturn('xmp', parsedXmpTags, tagFilter);
+
+        if (expanded) {
+            tags.xmp = returnedTags;
+            return tags;
+        }
+
+        const returnedTagsForFlat = deps.objectAssign({}, returnedTags);
+        delete returnedTagsForFlat._raw;
+
+        return deps.objectAssign({}, tags, returnedTagsForFlat);
+    }
+
     if (step.type === 'mergePngFile') {
         const returnedPngFileTags =
             deps.filterTagsForReturn('png', step.parsedTags, tagFilter);

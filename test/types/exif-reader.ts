@@ -364,3 +364,35 @@ loadView(new DataView(new ArrayBuffer(0)), { domParser: xmldomParser });
 load(new ArrayBuffer(0), { domParser: 42 });
 // @ts-expect-error
 loadView(new DataView(new ArrayBuffer(0)), { domParser: 42 });
+
+//////////////////////
+// decompress option
+load(new ArrayBuffer(0), {
+    async: true,
+    decompress: {
+        brotli: async (data: Uint8Array) => new Uint8Array(data),
+    }
+});
+load(new ArrayBuffer(0), {
+    async: true,
+    decompress: {
+        deflate: async (data: Uint8Array) => new ArrayBuffer(data.length),
+    }
+});
+load(new ArrayBuffer(0), {
+    async: true,
+    decompress: {
+        brotli: (data: Uint8Array) => data,
+        deflate: (data: Uint8Array) => new ArrayBuffer(data.length),
+    }
+});
+loadView(new DataView(new ArrayBuffer(0)), {
+    async: true,
+    decompress: {
+        brotli: async (data: Uint8Array) => new Uint8Array(data),
+    }
+});
+// @ts-expect-error
+load(new ArrayBuffer(0), { decompress: { brotli: 42 } });
+// @ts-expect-error
+load(new ArrayBuffer(0), { decompress: { deflate: "not a function" } });
