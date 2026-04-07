@@ -20,7 +20,7 @@ type FileTypeDescription =
     | 'PNG'
     | 'HEIC'
     | 'AVIF'
-    | 'JPEG-XL'
+    | 'JPEG XL'
     | 'WebP'
     | 'GIF'
     | 'XML';

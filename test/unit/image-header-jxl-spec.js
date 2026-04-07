@@ -142,11 +142,12 @@ describe('image-header-jxl', () => {
         expect(ImageHeaderJxl.isJxlFile(getDataView('\xFF\x0Asome_data'))).to.be.true;
     });
 
-    it('should return no app markers for a JXL naked codestream', () => {
+    it('should detect codestream offset for a JXL naked codestream', () => {
         const dataView = getDataView('\xFF\x0Asome_codestream_data');
         const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
 
-        expect(offsets.hasAppMarkers).to.be.false;
+        expect(offsets.hasAppMarkers).to.be.true;
+        expect(offsets.jxlCodestreamOffset).to.equal(0);
     });
 
     describe('brob boxes', () => {
@@ -226,13 +227,60 @@ describe('image-header-jxl', () => {
             expect(offsets.brobXmpChunk).to.be.undefined;
         });
     });
+
+    describe('codestream offset', () => {
+        it('should detect jxlc box and return codestream offset', () => {
+            const dataView = getDataView(getJxlData({jxlc: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.jxlCodestreamOffset).to.not.be.undefined;
+            expect(offsets.hasAppMarkers).to.be.true;
+        });
+
+        it('should return offset 0 for bare codestream', () => {
+            const dataView = getDataView('\xFF\x0Asome_codestream_data');
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.jxlCodestreamOffset).to.equal(0);
+            expect(offsets.hasAppMarkers).to.be.true;
+        });
+
+        it('should detect first jxlp box and return codestream offset', () => {
+            const dataView = getDataView(getJxlData({jxlp: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.jxlCodestreamOffset).to.not.be.undefined;
+            expect(offsets.hasAppMarkers).to.be.true;
+        });
+
+        it('should detect codestream even without metadata boxes', () => {
+            ImageHeaderJxlRewireAPI.__Rewire__('Constants', {
+                USE_EXIF: false, USE_XMP: false
+            });
+
+            const dataView = getDataView(getJxlData({jxlc: true}));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.jxlCodestreamOffset).to.not.be.undefined;
+            expect(offsets.hasAppMarkers).to.be.true;
+        });
+    });
 });
 
-function getJxlData({exif, xmp, unknownBox, brobExif, brobXmp, brobUnknown} = {}) {
+function getJxlData({exif, xmp, unknownBox, brobExif, brobXmp, brobUnknown, jxlc, jxlp} = {}) {
     let data = JXL_SIGNATURE + FTYP_BOX;
 
     if (unknownBox) {
-        data += getByteStringFromNumber(16, 4) + 'jxlc' + 'XXXXXXXX';
+        data += getByteStringFromNumber(16, 4) + 'unkn' + 'XXXXXXXX';
+    }
+    if (jxlc) {
+        const codestreamData = '\xFF\x0A\x00\x00\x00\x00';
+        data += getByteStringFromNumber(8 + codestreamData.length, 4) + 'jxlc' + codestreamData;
+    }
+    if (jxlp) {
+        const sequenceNumber = '\x00\x00\x00\x00';
+        const codestreamData = '\xFF\x0A\x00\x00\x00\x00';
+        data += getByteStringFromNumber(8 + sequenceNumber.length + codestreamData.length, 4) + 'jxlp' + sequenceNumber + codestreamData;
     }
     if (exif) {
         const tiffOffsetPrefix = '\x00\x00\x00\x00';

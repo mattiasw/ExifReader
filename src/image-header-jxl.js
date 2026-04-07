@@ -22,6 +22,9 @@ const BOX_HEADER_MIN_SIZE = 8;
 const TYPE_EXIF = 0x45786966;
 const TYPE_XML = 0x786D6C20;
 const TYPE_BROB = 0x62726F62;
+const TYPE_JXLC = 0x6a786c63;
+const TYPE_JXLP = 0x6a786c70;
+const JXLP_SEQUENCE_NUMBER_SIZE = 4;
 const BROB_ORIGINAL_TYPE_SIZE = 4;
 
 function isJxlFile(dataView) {
@@ -61,6 +64,11 @@ function findJxlOffsets(dataView) {
     let xmpChunks;
     let brobExifChunk;
     let brobXmpChunk;
+    let jxlCodestreamOffset;
+
+    if (isJxlCodestream(dataView)) {
+        jxlCodestreamOffset = 0;
+    }
 
     while (offset + BOX_HEADER_MIN_SIZE <= dataView.byteLength) {
         const {length, contentOffset} = getBoxLength(dataView, offset);
@@ -83,6 +91,18 @@ function findJxlOffsets(dataView) {
                 dataOffset: contentOffset,
                 length: length - (contentOffset - offset)
             }];
+        }
+
+        if (boxType === TYPE_JXLC && jxlCodestreamOffset === undefined) {
+            jxlCodestreamOffset = contentOffset;
+        }
+
+        if (boxType === TYPE_JXLP && jxlCodestreamOffset === undefined
+            && contentOffset + JXLP_SEQUENCE_NUMBER_SIZE <= dataView.byteLength) {
+            const sequenceNumber = dataView.getUint32(contentOffset) & 0x7FFFFFFF;
+            if (sequenceNumber === 0) {
+                jxlCodestreamOffset = contentOffset + JXLP_SEQUENCE_NUMBER_SIZE;
+            }
         }
 
         if (boxType === TYPE_BROB && contentOffset + BROB_ORIGINAL_TYPE_SIZE <= dataView.byteLength) {
@@ -110,13 +130,15 @@ function findJxlOffsets(dataView) {
     const hasAppMarkers = tiffHeaderOffset !== undefined
         || xmpChunks !== undefined
         || brobExifChunk !== undefined
-        || brobXmpChunk !== undefined;
+        || brobXmpChunk !== undefined
+        || jxlCodestreamOffset !== undefined;
 
     return {
         hasAppMarkers,
         tiffHeaderOffset,
         xmpChunks,
         brobExifChunk,
-        brobXmpChunk
+        brobXmpChunk,
+        jxlCodestreamOffset
     };
 }

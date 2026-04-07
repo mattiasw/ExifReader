@@ -58,7 +58,7 @@ expandedTags["file"]?.["FileType"]?.description === "JPEG";
 expandedTags["file"]?.["FileType"]?.description === "PNG";
 expandedTags["file"]?.["FileType"]?.description === "HEIC";
 expandedTags["file"]?.["FileType"]?.description === "AVIF";
-expandedTags["file"]?.["FileType"]?.description === "JPEG-XL";
+expandedTags["file"]?.["FileType"]?.description === "JPEG XL";
 expandedTags["file"]?.["FileType"]?.description === "WebP";
 expandedTags["file"]?.["FileType"]?.description === "GIF";
 expandedTags["file"]?.["FileType"]?.description === "XML";

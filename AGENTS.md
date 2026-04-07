@@ -1,6 +1,6 @@
 # ExifReader - Agent Guide
 
-JavaScript library that parses Exif/IPTC/XMP/ICC/MPF metadata from JPEG, TIFF, PNG, HEIC, AVIF, JPEG-XL, WebP, and GIF images. Published on npm as `exifreader`.
+JavaScript library that parses Exif/IPTC/XMP/ICC/MPF metadata from JPEG, TIFF, PNG, HEIC, AVIF, JPEG XL, WebP, and GIF images. Published on npm as `exifreader`.
 
 ## Project Structure
 

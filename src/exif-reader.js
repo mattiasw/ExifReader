@@ -18,6 +18,7 @@ import ImageHeader from './image-header.js';
 import Tags from './tags.js';
 import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
+import JxlFileTags from './jxl-file-tags.js';
 import JfifTags from './jfif-tags.js';
 import IptcTags from './iptc-tags.js';
 import XmpTags from './xmp-tags.js';
@@ -263,7 +264,8 @@ export function loadView(
         vp8xChunkOffset,
         gifHeaderOffset,
         brobExifChunk,
-        brobXmpChunk
+        brobXmpChunk,
+        jxlCodestreamOffset
     } = ImageHeader.parseAppMarkers(dataView, async);
 
     const fileHasMetaData = hasPotentialMetaData({
@@ -280,6 +282,7 @@ export function loadView(
         pngChunkOffsets,
         vp8xChunkOffset,
         gifHeaderOffset,
+        jxlCodestreamOffset,
     });
 
     if (
@@ -779,6 +782,24 @@ export function loadView(
         }
     }
 
+    if (
+        Constants.USE_JXL
+        && hasJxlCodestreamData(jxlCodestreamOffset)
+        && tagFilter.shouldParseGroup('file')
+    ) {
+        const readTags = JxlFileTags.read(dataView, jxlCodestreamOffset);
+        const parsedJxlFileTags = filterTagsForParse('file', readTags, tagFilter);
+        parsedGroups.file = parsedJxlFileTags;
+
+        if (tagFilter.shouldReturnGroup('file')) {
+            mergeSteps.push({
+                type: 'mergeGroupAssign',
+                groupKey: 'file',
+                parsedTags: parsedJxlFileTags,
+            });
+        }
+    }
+
     mergeSteps.push({type: 'gps'});
     mergeSteps.push({type: 'composite'});
     mergeSteps.push({type: 'thumbnail'});
@@ -936,6 +957,7 @@ function hasPotentialMetaData({
     pngChunkOffsets,
     vp8xChunkOffset,
     gifHeaderOffset,
+    jxlCodestreamOffset,
 }) {
     return !!fileType
         || (
@@ -990,6 +1012,10 @@ function hasPotentialMetaData({
         || (
             Constants.USE_GIF
             && hasGifFileData(gifHeaderOffset)
+        )
+        || (
+            Constants.USE_JXL
+            && hasJxlCodestreamData(jxlCodestreamOffset)
         );
 }
 
@@ -1098,4 +1124,8 @@ function hasVp8xData(vp8xChunkOffset) {
 
 function hasGifFileData(gifHeaderOffset) {
     return gifHeaderOffset !== undefined;
+}
+
+function hasJxlCodestreamData(jxlCodestreamOffset) {
+    return jxlCodestreamOffset !== undefined;
 }

@@ -65,7 +65,7 @@
     "test:e2e:chrome": "cypress run",
     "test:e2e:firefox": "cypress run --browser firefox",
     "test:types": "tsc --noEmit --project test/types",
-    "test:all": "npm-run-all lint test:types coverage test:e2e test:integration test:build test:build:custom",
+    "test:all": "npm-run-all lint test:types coverage test:e2e:chrome test:integration test:build test:build:custom",
     "pre-commit": "npm-run-all lint test:types coverage test:build",
     "postinstall": "node bin/build.js --only-with-config",
     "prepare": "husky"

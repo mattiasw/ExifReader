@@ -40,7 +40,7 @@ function parseAppMarkers(dataView, async) {
     }
 
     if (Constants.USE_JXL && Jxl.isJxlFile(dataView)) {
-        return addFileType(Jxl.findJxlOffsets(dataView), 'jxl', 'JPEG-XL');
+        return addFileType(Jxl.findJxlOffsets(dataView), 'jxl', 'JPEG XL');
     }
 
     if (Constants.USE_WEBP && Webp.isWebpFile(dataView)) {

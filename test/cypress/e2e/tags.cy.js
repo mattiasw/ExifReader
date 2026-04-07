@@ -103,7 +103,7 @@ const images = [
         tags: {
             'ImageDescription': 'Exif description', // Exif
             'creator': 'XMP Creator', // XMP
-            'FileType': 'JPEG-XL', // File
+            'FileType': 'JPEG XL', // File
         }
     },
     {
@@ -113,7 +113,7 @@ const images = [
         tags: {
             'ImageDescription': 'Exif description', // Exif (brob-compressed)
             'creator': 'XMP Creator', // XMP (brob-compressed)
-            'FileType': 'JPEG-XL', // File
+            'FileType': 'JPEG XL', // File
         }
     },
     {

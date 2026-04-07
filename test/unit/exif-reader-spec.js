@@ -31,6 +31,7 @@ describe('exif-reader', function () {
         ExifReaderRewireAPI.__ResetDependency__('PngTextTags');
         ExifReaderRewireAPI.__ResetDependency__('Vp8xTags');
         ExifReaderRewireAPI.__ResetDependency__('GifFileTags');
+        ExifReaderRewireAPI.__ResetDependency__('JxlFileTags');
         ExifReaderRewireAPI.__ResetDependency__('Thumbnail');
         ExifReaderRewireAPI.__ResetDependency__('Composite');
     });
@@ -530,7 +531,7 @@ describe('exif-reader', function () {
         decompressedView.setUint32(0, OFFSET_TEST_VALUE - 4);
 
         rewireImageHeader({
-            fileType: {value: 'jxl', description: 'JPEG-XL'},
+            fileType: {value: 'jxl', description: 'JPEG XL'},
             brobExifChunk: {dataOffset: 0, length: 10}
         });
         rewireTagsRead('Tags', myTags);
@@ -550,7 +551,7 @@ describe('exif-reader', function () {
         const myTags = {MyBrobXmpTag: 45};
 
         rewireImageHeader({
-            fileType: {value: 'jxl', description: 'JPEG-XL'},
+            fileType: {value: 'jxl', description: 'JPEG XL'},
             brobXmpChunk: {dataOffset: 0, length: 10}
         });
         ExifReaderRewireAPI.__Rewire__('XmpTags', {
@@ -577,19 +578,19 @@ describe('exif-reader', function () {
 
     it('should skip brob data in sync mode', () => {
         rewireImageHeader({
-            fileType: {value: 'jxl', description: 'JPEG-XL'},
+            fileType: {value: 'jxl', description: 'JPEG XL'},
             brobExifChunk: {dataOffset: 0, length: 10}
         });
 
         const result = ExifReader.loadView(new DataView(new ArrayBuffer(10)));
 
-        expect(result.FileType).to.deep.equal({value: 'jxl', description: 'JPEG-XL'});
+        expect(result.FileType).to.deep.equal({value: 'jxl', description: 'JPEG XL'});
         expect(result.MyBrobExifTag).to.be.undefined;
     });
 
     it('should handle brob decompression failure gracefully', async () => {
         rewireImageHeader({
-            fileType: {value: 'jxl', description: 'JPEG-XL'},
+            fileType: {value: 'jxl', description: 'JPEG XL'},
             brobExifChunk: {dataOffset: 0, length: 10}
         });
 
@@ -601,7 +602,7 @@ describe('exif-reader', function () {
             }
         );
 
-        expect(result.FileType).to.deep.equal({value: 'jxl', description: 'JPEG-XL'});
+        expect(result.FileType).to.deep.equal({value: 'jxl', description: 'JPEG XL'});
     });
 
     it('should expand brob Exif into exif group', async () => {
@@ -612,7 +613,7 @@ describe('exif-reader', function () {
         decompressedView.setUint32(0, OFFSET_TEST_VALUE - 4);
 
         rewireImageHeader({
-            fileType: {value: 'jxl', description: 'JPEG-XL'},
+            fileType: {value: 'jxl', description: 'JPEG XL'},
             brobExifChunk: {dataOffset: 0, length: 10}
         });
         rewireTagsRead('Tags', myTags);
@@ -648,6 +649,21 @@ describe('exif-reader', function () {
 
         expect(result.PlainExifTag).to.equal(99);
         expect(result.BrobExifTag).to.be.undefined;
+    });
+
+    it('should be able to find JXL file tags', () => {
+        const myTags = {'Image Width': {value: 42, description: '42px'}};
+        rewireImageHeader({jxlCodestreamOffset: OFFSET_TEST_VALUE});
+        rewireTagsRead('JxlFileTags', myTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
+    it('should put JXL file tags in file group when expanded', () => {
+        const myTags = {'Image Width': {value: 42, description: '42px'}};
+        rewireImageHeader({jxlCodestreamOffset: OFFSET_TEST_VALUE});
+        rewireTagsRead('JxlFileTags', myTags);
+        const result = ExifReader.loadView(undefined, {expanded: true});
+        expect(result.file).to.deep.equal(myTags);
     });
 
     it('should be able to find MPF APP segment', () => {

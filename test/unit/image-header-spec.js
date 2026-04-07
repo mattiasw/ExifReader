@@ -613,7 +613,7 @@ describe('image-header', () => {
         });
 
         it('should handle JXL files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'jxl', description: 'JPEG-XL'}});
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'jxl', description: 'JPEG XL'}});
         });
 
         it('should ignore file when it\'s not a JXL image', () => {
