@@ -128,6 +128,30 @@ describe('png-text-tags', () => {
         expect(readTags).to.deep.equal({});
     });
 
+    it('should use custom deflate function when decompressConfig is provided', async () => {
+        const name = 'MyTag';
+        const value = 'Custom deflate result.';
+        const compressedBytes = new Uint8Array([1, 2, 3]);
+        const headerStr = `${name}\x00\x00`;
+        const header = getDataView(headerStr);
+        const dataView = concatDataViews(header, new DataView(compressedBytes.buffer));
+        const chunks = [
+            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
+        ];
+
+        const decompressConfig = {
+            deflate: () => Uint8Array.from(value, (c) => c.charCodeAt(0))
+        };
+
+        const {readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+        const tags = await readTagsPromise;
+
+        expect(tags[0][name]).to.deep.equal({
+            value,
+            description: value
+        });
+    });
+
     async function getCompressedTagData(type, name, value) {
         const COMPRESSION_FLAG = '\x01';
         const COMPRESSION_METHOD = '\x00';

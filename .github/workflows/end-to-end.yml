@@ -9,7 +9,11 @@ on:
 jobs:
   end-to-end:
     runs-on: ubuntu-22.04
-    name: Cypress run
+    name: Cypress (${{ matrix.browser }})
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, firefox]
     env:
       CI: 1
     steps:
@@ -19,15 +23,16 @@ jobs:
         uses: cypress-io/github-action@v6
         with:
           start: npm start
+          browser: ${{ matrix.browser }}
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: cypress-screenshots
+          name: cypress-screenshots-${{ matrix.browser }}
           path: test/cypress/screenshots
       - name: Upload videos
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: cypress-videos
+          name: cypress-videos-${{ matrix.browser }}
           path: test/cypress/videos

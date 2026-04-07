@@ -48,6 +48,7 @@ expandedTags["file"]?.["FileType"]?.value === "jpeg";
 expandedTags["file"]?.["FileType"]?.value === "png";
 expandedTags["file"]?.["FileType"]?.value === "heic";
 expandedTags["file"]?.["FileType"]?.value === "avif";
+expandedTags["file"]?.["FileType"]?.value === "jxl";
 expandedTags["file"]?.["FileType"]?.value === "webp";
 expandedTags["file"]?.["FileType"]?.value === "gif";
 expandedTags["file"]?.["FileType"]?.value === "xml";
@@ -57,6 +58,7 @@ expandedTags["file"]?.["FileType"]?.description === "JPEG";
 expandedTags["file"]?.["FileType"]?.description === "PNG";
 expandedTags["file"]?.["FileType"]?.description === "HEIC";
 expandedTags["file"]?.["FileType"]?.description === "AVIF";
+expandedTags["file"]?.["FileType"]?.description === "JPEG XL";
 expandedTags["file"]?.["FileType"]?.description === "WebP";
 expandedTags["file"]?.["FileType"]?.description === "GIF";
 expandedTags["file"]?.["FileType"]?.description === "XML";
@@ -362,3 +364,35 @@ loadView(new DataView(new ArrayBuffer(0)), { domParser: xmldomParser });
 load(new ArrayBuffer(0), { domParser: 42 });
 // @ts-expect-error
 loadView(new DataView(new ArrayBuffer(0)), { domParser: 42 });
+
+//////////////////////
+// decompress option
+load(new ArrayBuffer(0), {
+    async: true,
+    decompress: {
+        brotli: async (data: Uint8Array) => new Uint8Array(data),
+    }
+});
+load(new ArrayBuffer(0), {
+    async: true,
+    decompress: {
+        deflate: async (data: Uint8Array) => new ArrayBuffer(data.length),
+    }
+});
+load(new ArrayBuffer(0), {
+    async: true,
+    decompress: {
+        brotli: (data: Uint8Array) => data,
+        deflate: (data: Uint8Array) => new ArrayBuffer(data.length),
+    }
+});
+loadView(new DataView(new ArrayBuffer(0)), {
+    async: true,
+    decompress: {
+        brotli: async (data: Uint8Array) => new Uint8Array(data),
+    }
+});
+// @ts-expect-error
+load(new ArrayBuffer(0), { decompress: { brotli: 42 } });
+// @ts-expect-error
+load(new ArrayBuffer(0), { decompress: { deflate: "not a function" } });

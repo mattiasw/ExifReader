@@ -1,6 +1,6 @@
 # ExifReader - Agent Guide
 
-JavaScript library that parses Exif/IPTC/XMP/ICC/MPF metadata from JPEG, TIFF, PNG, HEIC, AVIF, WebP, and GIF images. Published on npm as `exifreader`.
+JavaScript library that parses Exif/IPTC/XMP/ICC/MPF metadata from JPEG, TIFF, PNG, HEIC, AVIF, JPEG XL, WebP, and GIF images. Published on npm as `exifreader`.
 
 ## Project Structure
 
@@ -14,6 +14,16 @@ JavaScript library that parses Exif/IPTC/XMP/ICC/MPF metadata from JPEG, TIFF, P
 - `exif-reader.d.ts` - TypeScript type definitions (root level)
 
 Tag definitions live in `src/tag-names-*.js` (keyed by hex tag ID). Each image format has its own `*-tags.js` parser. `src/constants.js` has feature flags for tree-shaking.
+
+## Custom Builds
+
+Users can configure custom builds (via `package.json` `"exifreader"` key) to include/exclude specific formats and tag groups, reducing bundle size. When adding a new image format or metadata group:
+
+1. Add a `USE_<NAME>` flag to `src/constants.js`
+2. Add the module name to the `modules` array in `webpack.config.js`
+3. Add the source filename to the string-replace regex in `webpack.config.js` (so `Constants.USE_*` gets replaced)
+4. Add test entries in `test/build/custom-builds.json`
+5. Document the module in the README custom build table
 
 ## Commands
 
@@ -44,6 +54,7 @@ Enforced by ESLint (`.eslintrc.json`). Key rules:
 - Arrow parens always: `(x) => x`
 - Space before anonymous function paren, not named: `function foo()` vs `function ()`
 - kebab-case filenames, camelCase variables/functions, PascalCase constructors/class-like exports
+- Place functions in the order they are used. That means the definition of a function is placed after the location from where it is called.
 
 ## Type Definitions
 
@@ -58,6 +69,8 @@ This is **not** a TypeScript project, but `exif-reader.d.ts` provides types for 
 Every source file has a corresponding `test/unit/*-spec.js`. New code needs tests. Coverage thresholds are enforced: 92% statements, 86% branches, 97% functions, 92% lines.
 
 Tests use `babel-plugin-rewire` to mock dependencies (e.g., `__Rewire__`/`__ResetDependency__`). Follow existing test patterns.
+
+Use `npm run test` to run the unit tests and make use of `describe.only` and `it.only` for focused testing.
 
 ## Adding Tags
 

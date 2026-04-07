@@ -2,6 +2,7 @@
 const {defineConfig} = require('cypress');
 
 module.exports = defineConfig({
+    allowCypressEnv: false,
     e2e: {
         baseUrl: 'https://localhost:8080',
         specPattern: 'test/cypress/e2e/**/*.cy.js',

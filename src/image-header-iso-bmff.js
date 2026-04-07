@@ -99,7 +99,7 @@ export function parseBox(dataView, offset) {
  * @param {number} offset
  * @returns {BoxLength}
  */
-function getBoxLength(dataView, offset) {
+export function getBoxLength(dataView, offset) {
     const BOX_LENGTH_SIZE = 4;
     const BOX_TYPE_SIZE = 4;
     const BOX_EXTENDED_SIZE = 8;
@@ -223,7 +223,7 @@ function findIlocItem(metaBox, itemId) {
     return metaBox.subBoxes.find((box) => box.type === 'iloc').items.find((item) => item.itemId === itemId);
 }
 
-function getTiffHeaderOffset(dataView, exifOffset) {
+export function getTiffHeaderOffset(dataView, exifOffset) {
     // ISO-BMFF formatted files store the Exif data as an "Exif block" where the
     // first 32 bits is the TIFF header offset.
     const TIFF_HEADER_OFFSET_SIZE = 4;

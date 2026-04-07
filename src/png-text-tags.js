@@ -31,14 +31,15 @@ function read(
     async,
     includeUnknown,
     computed = false,
-    tagFilter = NOOP_TAG_FILTER
+    tagFilter = NOOP_TAG_FILTER,
+    decompressConfig
 ) {
     const tags = {};
     const tagsPromises = [];
 
     for (let i = 0; i < pngTextChunks.length; i++) {
         const {offset, length, type} = pngTextChunks[i];
-        const nameAndValue = getNameAndValue(dataView, offset, length, type, async);
+        const nameAndValue = getNameAndValue(dataView, offset, length, type, async, decompressConfig);
         if (nameAndValue instanceof Promise) {
             tagsPromises.push(nameAndValue.then(({name, value, description}) => {
                 try {
@@ -100,7 +101,7 @@ function read(
     };
 }
 
-function getNameAndValue(dataView, offset, length, type, async) {
+function getNameAndValue(dataView, offset, length, type, async, decompressConfig) {
     const keywordChars = [];
     const langChars = [];
     const translatedKeywordChars = [];
@@ -135,7 +136,7 @@ function getNameAndValue(dataView, offset, length, type, async) {
     if (compressionMethod !== COMPRESSION_METHOD_NONE && !async) {
         return {};
     }
-    const decompressedValueChars = decompress(valueChars, compressionMethod, getEncodingFromType(type));
+    const decompressedValueChars = decompress(valueChars, compressionMethod, getEncodingFromType(type), 'string', decompressConfig);
     if (decompressedValueChars instanceof Promise) {
         return decompressedValueChars
             .then((_decompressedValueChars) => constructTag(_decompressedValueChars, type, langChars, keywordChars))

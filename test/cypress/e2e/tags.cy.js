@@ -98,6 +98,25 @@ const images = [
         }
     },
     {
+        name: 'test.jxl',
+        hasThumbnail: false,
+        tags: {
+            'ImageDescription': 'Exif description', // Exif
+            'creator': 'XMP Creator', // XMP
+            'FileType': 'JPEG XL', // File
+        }
+    },
+    {
+        name: 'test-brotli.jxl',
+        hasThumbnail: false,
+        needsBrotli: true,
+        tags: {
+            'ImageDescription': 'Exif description', // Exif (brob-compressed)
+            'creator': 'XMP Creator', // XMP (brob-compressed)
+            'FileType': 'JPEG XL', // File
+        }
+    },
+    {
         name: 'test-not-an-image.txt',
         hasThumbnail: false,
         tags: {},
@@ -194,6 +213,9 @@ for (const moduleType of moduleTypes) {
                 });
 
                 it('loads the tags', function () {
+                    if (image.needsBrotli && (Cypress.isBrowser('chrome') || Cypress.isBrowser('electron'))) {
+                        setupBrotliDecompress();
+                    }
                     if (image.url) {
                         cy.get('#url').invoke('val', image.url);
                     } else {
@@ -220,5 +242,39 @@ for (const moduleType of moduleTypes) {
                 });
             });
         }
+    });
+}
+
+function setupBrotliDecompress() {
+    const BROTLI_WASM_URL = 'https://cdn.jsdelivr.net/npm/brotli-wasm@3.0.1/index.web.js';
+    const BROTLI_WASM_INTEGRITY = 'sha256-Id/uH+KTUM0zFaMAtuCMsbprWlBfzvqu6TlILuIhF5Q=';
+
+    cy.window({timeout: 30000}).then((win) => {
+        return new Cypress.Promise((resolve) => {
+            const preload = win.document.createElement('link');
+            preload.rel = 'modulepreload';
+            preload.href = BROTLI_WASM_URL;
+            preload.integrity = BROTLI_WASM_INTEGRITY;
+            preload.crossOrigin = 'anonymous';
+            win.document.head.appendChild(preload);
+
+            const script = win.document.createElement('script');
+            script.type = 'module';
+            script.textContent = [
+                `import brotliPromise from '${BROTLI_WASM_URL}';`,
+                'const {decompress} = await brotliPromise;',
+                'window._brotliDecompress = decompress;',
+                'window.dispatchEvent(new Event("brotli-ready"));',
+            ].join('\n');
+            win.addEventListener('brotli-ready', () => {
+                win.exifReaderOptions = {
+                    decompress: {
+                        brotli: (data) => win._brotliDecompress(data)
+                    }
+                };
+                resolve();
+            }, {once: true});
+            win.document.head.appendChild(script);
+        });
     });
 }

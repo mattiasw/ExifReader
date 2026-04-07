@@ -8,15 +8,17 @@
  */
 /* global Buffer, __non_webpack_require__ */
 
-import {objectAssign, dataUriToBuffer} from './utils.js';
+import {objectAssign, dataUriToBuffer, decompress, COMPRESSION_METHOD_BROTLI} from './utils.js';
 import DataViewWrapper from './dataview.js';
 import Constants from './constants.js';
 import {getStringValueFromArray} from './utils.js';
 import {getCalculatedGpsValue} from './tag-names-utils.js';
+import {getTiffHeaderOffset} from './image-header-iso-bmff.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
 import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
+import JxlFileTags from './jxl-file-tags.js';
 import JfifTags from './jfif-tags.js';
 import IptcTags from './iptc-tags.js';
 import XmpTags from './xmp-tags.js';
@@ -226,6 +228,7 @@ export function loadView(
         domParser = undefined,
         includeTags = undefined,
         excludeTags = undefined,
+        decompress: decompressConfig = undefined,
     } = {
         expanded: false,
         async: false,
@@ -234,6 +237,7 @@ export function loadView(
         domParser: undefined,
         includeTags: undefined,
         excludeTags: undefined,
+        decompress: undefined,
     }
 ) {
     const tagFilter = createTagFilter({includeTags, excludeTags});
@@ -258,7 +262,10 @@ export function loadView(
         pngTextChunks,
         pngChunkOffsets,
         vp8xChunkOffset,
-        gifHeaderOffset
+        gifHeaderOffset,
+        brobExifChunk,
+        brobXmpChunk,
+        jxlCodestreamOffset
     } = ImageHeader.parseAppMarkers(dataView, async);
 
     const fileHasMetaData = hasPotentialMetaData({
@@ -275,6 +282,7 @@ export function loadView(
         pngChunkOffsets,
         vp8xChunkOffset,
         gifHeaderOffset,
+        jxlCodestreamOffset,
     });
 
     if (
@@ -541,12 +549,83 @@ export function loadView(
     }
 
     if (
+        Constants.USE_JXL
+        && Constants.USE_EXIF
+        && brobExifChunk
+        && !hasExifData(tiffHeaderOffset)
+        && tagFilter.shouldParseGroup('exif')
+        && async
+    ) {
+        const compressedExifData = new DataView(
+            dataView.buffer,
+            dataView.byteOffset + brobExifChunk.dataOffset,
+            brobExifChunk.length
+        );
+        deferredPromises.push(
+            decompress(compressedExifData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
+                .then((decompressedDataView) => {
+                    const brobTiffHeaderOffset = getTiffHeaderOffset(decompressedDataView, 0);
+                    const {tags: readTags} = Tags.read(
+                        decompressedDataView,
+                        brobTiffHeaderOffset,
+                        includeUnknown,
+                        computed,
+                        tagFilter
+                    );
+                    if (readTags.Thumbnail) {
+                        delete readTags.Thumbnail;
+                    }
+                    deferredResults.brobExif = readTags;
+                })
+                .catch(() => {
+                    deferredResults.brobExif = {};
+                })
+        );
+        mergeSteps.push({
+            type: 'mergeBrobExifDeferred',
+            deferredKey: 'brobExif',
+        });
+    }
+
+    if (
+        Constants.USE_JXL
+        && Constants.USE_XMP
+        && brobXmpChunk
+        && !hasXmpData(xmpChunks)
+        && tagFilter.shouldParseGroup('xmp')
+        && async
+    ) {
+        const compressedXmpData = new DataView(
+            dataView.buffer,
+            dataView.byteOffset + brobXmpChunk.dataOffset,
+            brobXmpChunk.length
+        );
+        deferredPromises.push(
+            decompress(compressedXmpData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
+                .then((decompressedDataView) => {
+                    deferredResults.brobXmp = XmpTags.read(
+                        decompressedDataView,
+                        [{dataOffset: 0, length: decompressedDataView.byteLength}],
+                        domParser
+                    );
+                })
+                .catch(() => {
+                    deferredResults.brobXmp = {};
+                })
+        );
+        mergeSteps.push({
+            type: 'mergeBrobXmpDeferred',
+            deferredKey: 'brobXmp',
+        });
+    }
+
+    if (
         (Constants.USE_JPEG || Constants.USE_WEBP)
         && Constants.USE_ICC
         && hasIccData(iccChunks)
         && tagFilter.shouldParseGroup('icc')
     ) {
-        const readTags = IccTags.read(dataView, iccChunks, async);
+        const readTags = IccTags.read(dataView, iccChunks, async, decompressConfig);
         if (isThenable(readTags)) {
             if (!async) {
                 throw new Error('Promise is required when async mode is enabled.');
@@ -629,7 +708,8 @@ export function loadView(
             async,
             includeUnknown,
             computed,
-            tagFilter
+            tagFilter,
+            decompressConfig
         );
         pngTextIsAsync = !!readTagsPromise;
 
@@ -698,6 +778,24 @@ export function loadView(
                 type: 'mergeGroupMerge',
                 groupKey: 'gif',
                 parsedTags: parsedGifTags,
+            });
+        }
+    }
+
+    if (
+        Constants.USE_JXL
+        && hasJxlCodestreamData(jxlCodestreamOffset)
+        && tagFilter.shouldParseGroup('file')
+    ) {
+        const readTags = JxlFileTags.read(dataView, jxlCodestreamOffset);
+        const parsedJxlFileTags = filterTagsForParse('file', readTags, tagFilter);
+        parsedGroups.file = parsedJxlFileTags;
+
+        if (tagFilter.shouldReturnGroup('file')) {
+            mergeSteps.push({
+                type: 'mergeGroupAssign',
+                groupKey: 'file',
+                parsedTags: parsedJxlFileTags,
             });
         }
     }
@@ -859,6 +957,7 @@ function hasPotentialMetaData({
     pngChunkOffsets,
     vp8xChunkOffset,
     gifHeaderOffset,
+    jxlCodestreamOffset,
 }) {
     return !!fileType
         || (
@@ -913,6 +1012,10 @@ function hasPotentialMetaData({
         || (
             Constants.USE_GIF
             && hasGifFileData(gifHeaderOffset)
+        )
+        || (
+            Constants.USE_JXL
+            && hasJxlCodestreamData(jxlCodestreamOffset)
         );
 }
 
@@ -1021,4 +1124,8 @@ function hasVp8xData(vp8xChunkOffset) {
 
 function hasGifFileData(gifHeaderOffset) {
     return gifHeaderOffset !== undefined;
+}
+
+function hasJxlCodestreamData(jxlCodestreamOffset) {
+    return jxlCodestreamOffset !== undefined;
 }

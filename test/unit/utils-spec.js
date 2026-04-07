@@ -53,4 +53,154 @@ describe('utils', () => {
         );
         expect(result).to.equal('MyText');
     });
+
+    describe('brotli decompression', () => {
+        it('should use custom brotli function and return DataView', async () => {
+            const inputData = new Uint8Array([1, 2, 3]);
+            const decompressedData = new Uint8Array([4, 5, 6, 7]);
+            const dataView = new DataView(inputData.buffer);
+            let receivedData;
+            const brotliFn = (data) => {
+                receivedData = data;
+                return Promise.resolve(decompressedData);
+            };
+
+            const result = await Utils.decompress(
+                dataView,
+                Utils.COMPRESSION_METHOD_BROTLI,
+                undefined,
+                'dataview',
+                {brotli: brotliFn}
+            );
+
+            expect(receivedData).to.deep.equal(inputData);
+            expect(result).to.be.instanceOf(DataView);
+            expect(new Uint8Array(result.buffer, result.byteOffset, result.byteLength))
+                .to.deep.equal(decompressedData);
+        });
+
+        it('should use custom brotli function and return string', async () => {
+            const textBytes = new TextEncoder().encode('Hello Brotli');
+            const dataView = new DataView(new ArrayBuffer(1));
+            const brotliFn = () => Promise.resolve(textBytes);
+
+            const result = await Utils.decompress(
+                dataView,
+                Utils.COMPRESSION_METHOD_BROTLI,
+                'utf-8',
+                'string',
+                {brotli: brotliFn}
+            );
+
+            expect(result).to.equal('Hello Brotli');
+        });
+
+        it('should accept ArrayBuffer from custom brotli function', async () => {
+            const decompressedData = new Uint8Array([10, 20, 30]);
+            const dataView = new DataView(new ArrayBuffer(1));
+            const brotliFn = () => Promise.resolve(decompressedData.buffer);
+
+            const result = await Utils.decompress(
+                dataView,
+                Utils.COMPRESSION_METHOD_BROTLI,
+                undefined,
+                'dataview',
+                {brotli: brotliFn}
+            );
+
+            expect(result).to.be.instanceOf(DataView);
+            expect(result.byteLength).to.equal(3);
+        });
+
+        it('should accept sync return from custom brotli function', async () => {
+            const decompressedData = new Uint8Array([10, 20]);
+            const dataView = new DataView(new ArrayBuffer(1));
+            const brotliFn = () => decompressedData;
+
+            const result = await Utils.decompress(
+                dataView,
+                Utils.COMPRESSION_METHOD_BROTLI,
+                undefined,
+                'dataview',
+                {brotli: brotliFn}
+            );
+
+            expect(result).to.be.instanceOf(DataView);
+            expect(result.byteLength).to.equal(2);
+        });
+
+        it('should reject when no brotli decompressor is available and DecompressionStream does not support brotli', async () => {
+            const origDecompressionStream = global.DecompressionStream; // eslint-disable-line no-undef
+            global.DecompressionStream = undefined; // eslint-disable-line no-undef
+            try {
+                const dataView = new DataView(new ArrayBuffer(1));
+                await Utils.decompress(
+                    dataView,
+                    Utils.COMPRESSION_METHOD_BROTLI,
+                    undefined,
+                    'dataview'
+                );
+                expect.fail('Should have rejected');
+            } catch (error) {
+                expect(error).to.include('not supported');
+            } finally {
+                global.DecompressionStream = origDecompressionStream; // eslint-disable-line no-undef
+            }
+        });
+
+        it('should try DecompressionStream for brotli when no custom function is provided', async () => {
+            const dataView = new DataView(new ArrayBuffer(1));
+
+            try {
+                await Utils.decompress(
+                    dataView,
+                    Utils.COMPRESSION_METHOD_BROTLI,
+                    undefined,
+                    'dataview'
+                );
+                expect.fail('Should have rejected on invalid data');
+            } catch (_error) {
+                // Reaches here because Node.js supports DecompressionStream('brotli')
+                // but the 1-byte garbage data is not valid brotli
+            }
+        });
+
+        it('should use custom deflate function when provided', async () => {
+            const decompressedText = new TextEncoder().encode('Deflated text');
+            const dataView = new DataView(new ArrayBuffer(1));
+            const deflateFn = () => Promise.resolve(decompressedText);
+
+            const result = await Utils.decompress(
+                dataView,
+                Utils.COMPRESSION_METHOD_DEFLATE,
+                'utf-8',
+                'string',
+                {deflate: deflateFn}
+            );
+
+            expect(result).to.equal('Deflated text');
+        });
+
+        it('should handle DataView with non-zero byteOffset for custom function', async () => {
+            const buffer = new ArrayBuffer(10);
+            const fullView = new Uint8Array(buffer);
+            fullView.set([0, 0, 0, 1, 2, 3, 0, 0, 0, 0]);
+            const dataView = new DataView(buffer, 3, 3);
+            let receivedData;
+            const brotliFn = (data) => {
+                receivedData = data;
+                return new Uint8Array([99]);
+            };
+
+            await Utils.decompress(
+                dataView,
+                Utils.COMPRESSION_METHOD_BROTLI,
+                undefined,
+                'dataview',
+                {brotli: brotliFn}
+            );
+
+            expect(Array.from(receivedData)).to.deep.equal([1, 2, 3]);
+        });
+    });
 });

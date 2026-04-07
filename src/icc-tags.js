@@ -22,20 +22,20 @@ const TAG_TABLE_SINGLE_TAG_DATA = 12;
 // total chunk count and chunk number.
 // Here we read all chunks into single continuous array of bytes.
 // Compressed ICC profile data only has support for a single chunk.
-function read(dataView, iccData, async) {
+function read(dataView, iccData, async, decompressConfig) {
     if (async && iccData[0].compressionMethod !== COMPRESSION_METHOD_NONE) {
-        return readCompressedIcc(dataView, iccData);
+        return readCompressedIcc(dataView, iccData, decompressConfig);
     }
 
     return readIcc(dataView, iccData);
 }
 
-function readCompressedIcc(dataView, iccData) {
+function readCompressedIcc(dataView, iccData, decompressConfig) {
     if (!compressionMethodIsSupported(iccData[0].compressionMethod)) {
         return {};
     }
     const compressedDataView = new DataView(dataView.buffer.slice(iccData[0].offset, iccData[0].offset + iccData[0].length));
-    return decompress(compressedDataView, iccData[0].compressionMethod, 'utf-8', 'dataview')
+    return decompress(compressedDataView, iccData[0].compressionMethod, 'utf-8', 'dataview', decompressConfig)
         .then(parseTags)
         .catch(() => ({}));
 }

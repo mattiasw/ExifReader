@@ -16,6 +16,7 @@ describe('image-header', () => {
         ImageHeaderRewireAPI.__ResetDependency__('Png');
         ImageHeaderRewireAPI.__ResetDependency__('Heic');
         ImageHeaderRewireAPI.__ResetDependency__('Avif');
+        ImageHeaderRewireAPI.__ResetDependency__('Jxl');
         ImageHeaderRewireAPI.__ResetDependency__('Webp');
         ImageHeaderRewireAPI.__ResetDependency__('Gif');
         ImageHeaderPngRewireAPI.__ResetDependency__('Constants');
@@ -596,6 +597,35 @@ describe('image-header', () => {
 
         it('should handle when AVIF files have been excluded in a custom build', () => {
             ImageHeaderRewireAPI.__Rewire__('Constants', {USE_AVIF: false});
+            expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
+        });
+    });
+
+    describe('JXL files', () => {
+        const dataView = {};
+        const offsets = {};
+
+        beforeEach(() => {
+            ImageHeaderRewireAPI.__Rewire__('Jxl', {
+                isJxlFile: (_dataView) => _dataView === dataView,
+                findJxlOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+            });
+        });
+
+        it('should handle JXL files', () => {
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'jxl', description: 'JPEG XL'}});
+        });
+
+        it('should ignore file when it\'s not a JXL image', () => {
+            ImageHeaderRewireAPI.__Rewire__('Jxl', {
+                isJxlFile: () => false
+            });
+
+            expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
+        });
+
+        it('should handle when JXL files have been excluded in a custom build', () => {
+            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_JXL: false});
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });
