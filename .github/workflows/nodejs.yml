@@ -27,18 +27,29 @@ jobs:
     - run: npm run lint
     - run: npm run test
     - run: npm run test:types
+    - run: npm run build
+  build-test:
+    # `npm run test:build` needs Node.js 24.7+ because of the Brotli compression used in JPEG XL files.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Use Node.js 24.x
+      uses: actions/setup-node@v6
+      with:
+        node-version: 24.x
+    - run: npm ci
     - run: npm run test:build
       env:
         CI: true
-    - run: npm run build
   package-ubuntu-full:
+    # `npm run test:build:custom` needs Node.js 24.7+ because of the Brotli compression used in JPEG XL files.
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js 18.x
-      uses: actions/setup-node@v3
+    - uses: actions/checkout@v6
+    - name: Use Node.js 24.x
+      uses: actions/setup-node@v6
       with:
-        node-version: 18.x
+        node-version: 24.x
     - run: npm ci
     - name: Test npm package and custom builds with minimal requirements
       run: |
