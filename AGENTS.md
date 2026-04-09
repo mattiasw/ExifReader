@@ -72,6 +72,10 @@ Tests use `babel-plugin-rewire` to mock dependencies (e.g., `__Rewire__`/`__Rese
 
 Use `npm run test` to run the unit tests and make use of `describe.only` and `it.only` for focused testing.
 
+## Changelog
+
+When making notable changes (new features, bug fixes, breaking changes, etc.), add an entry to the `Unreleased` section in `CHANGELOG.md`. Use the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with the appropriate change type: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`.
+
 ## Adding Tags
 
 1. Add hex-keyed entry in the appropriate `src/tag-names-*-ifd.js`
