@@ -26,8 +26,13 @@ describe('tag-names-utils', () => {
         expect(getEncodedString(characterArray)).to.equal('[Unicode encoded text]');
     });
 
-    it('should get correct message about text with undefined encoding', () => {
-        const characterArray = getCharacterArray('\x00\x00\x00\x00\x00\x00\x00\x00XYZ');
+    it('should decode text with undefined encoding as ASCII when it contains printable characters', () => {
+        const characterArray = getCharacterArray('\x00\x00\x00\x00\x00\x00\x00\x00Created with GIMP');
+        expect(getEncodedString(characterArray)).to.equal('Created with GIMP');
+    });
+
+    it('should return undefined encoding message when undefined encoding text has no printable content', () => {
+        const characterArray = getCharacterArray('\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00');
         expect(getEncodedString(characterArray)).to.equal('[Undefined encoding]');
     });
 });

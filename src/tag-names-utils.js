@@ -17,6 +17,10 @@ export function getEncodedString(value) {
         } else if (encoding === 'UNICODE\x00') {
             return '[Unicode encoded text]';
         } else if (encoding === '\x00\x00\x00\x00\x00\x00\x00\x00') {
+            const text = getStringValue(value.slice(8));
+            if (/[\x20-\x7e]/.test(text)) {
+                return text;
+            }
             return '[Undefined encoding]';
         }
     }
