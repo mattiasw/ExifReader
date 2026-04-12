@@ -13,15 +13,6 @@ updates:
       default-days: 7
     versioning-strategy: "increase"
     groups:
-      dev-dependencies:
-        dependency-type: "development"
-        update-types:
-          - "major"
-          - "minor"
-          - "patch"
-      dependencies:
-        dependency-type: "production"
-        update-types:
-          - "major"
-          - "minor"
-          - "patch"
+      all-dependencies:
+        patterns:
+          - "*"
