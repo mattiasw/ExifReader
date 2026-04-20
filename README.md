@@ -654,6 +654,7 @@ Possible modules to include or exclude:
 | `tiff`        | TIFF images.                                           |
 | `png`         | PNG images.                                            |
 | `heic`        | HEIC/HEIF images.                                      |
+| `avif`        | AVIF images.                                           |
 | `webp`        | WebP images.                                           |
 | `jxl`         | JPEG XL images.                                        |
 | `gif`         | GIF images.                                            |
@@ -664,7 +665,7 @@ Possible modules to include or exclude:
 | `iptc`        | IPTC tags.                                             |
 | `xmp`         | XMP tags.                                              |
 | `icc`         | ICC color profile tags.                                |
-| `mpf`         | Multi-picture Format tags.                             |
+| `mpf`         | Multi-picture Format tags. Needs `exif`                |
 | `photoshop`   | Photoshop tags.                                        |
 | `maker_notes` | Proprietary camera maker tags. Needs `exif`.           |
 | `thumbnail`   | Thumbnail image. Needs `exif`.                         |
