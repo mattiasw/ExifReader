@@ -150,14 +150,20 @@ export function strRepeat(string, num) {
 export const COMPRESSION_METHOD_NONE = undefined;
 export const COMPRESSION_METHOD_DEFLATE = 0;
 export const COMPRESSION_METHOD_BROTLI = 'brotli';
+export const DEFAULT_MAX_DECOMPRESSED_SIZE = 128 * 1024 * 1024;
 
 export function decompress(dataView, compressionMethod, encoding, returnType = 'string', decompressConfig) {
+    const maxDecompressedSize = getMaxDecompressedSize(decompressConfig);
+
     if (decompressConfig && compressionMethod !== COMPRESSION_METHOD_NONE) {
         const decompressType = compressionMethod === COMPRESSION_METHOD_DEFLATE ? 'deflate' : 'brotli';
         const customFn = decompressConfig[decompressType];
         if (typeof customFn === 'function') {
             const uint8 = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
             return Promise.resolve(customFn(uint8)).then((result) => {
+                if (getResultByteLength(result) > maxDecompressedSize) {
+                    return rejectExceedsMax(maxDecompressedSize);
+                }
                 if (returnType === 'dataview') {
                     if (result instanceof DataView) {
                         return result;
@@ -174,26 +180,16 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
 
     if (compressionMethod === COMPRESSION_METHOD_DEFLATE) {
         if (typeof DecompressionStream === 'function') {
-            const decompressionStream = new DecompressionStream('deflate');
-            const decompressedStream = new Blob([dataView]).stream().pipeThrough(decompressionStream);
-            if (returnType === 'dataview') {
-                return new Response(decompressedStream).arrayBuffer().then((arrayBuffer) => new DataView(arrayBuffer));
-            }
-            return new Response(decompressedStream).arrayBuffer()
-                .then((buffer) => new TextDecoder(encoding).decode(buffer));
+            return readBoundedDecompressedStream(dataView, 'deflate', maxDecompressedSize)
+                .then((arrayBuffer) => decodeBuffer(arrayBuffer, returnType, encoding));
         }
     }
 
     if (compressionMethod === COMPRESSION_METHOD_BROTLI) {
         if (typeof DecompressionStream === 'function') {
             try {
-                const decompressionStream = new DecompressionStream('brotli');
-                const decompressedStream = new Blob([dataView]).stream().pipeThrough(decompressionStream);
-                if (returnType === 'dataview') {
-                    return new Response(decompressedStream).arrayBuffer().then((arrayBuffer) => new DataView(arrayBuffer));
-                }
-                return new Response(decompressedStream).arrayBuffer()
-                    .then((buffer) => new TextDecoder(encoding).decode(buffer));
+                return readBoundedDecompressedStream(dataView, 'brotli', maxDecompressedSize)
+                    .then((arrayBuffer) => decodeBuffer(arrayBuffer, returnType, encoding));
             } catch (_error) {
                 // brotli not supported by this DecompressionStream implementation
             }
@@ -215,4 +211,67 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
         }
     }
     return dataView;
+}
+
+function getMaxDecompressedSize(decompressConfig) {
+    if (decompressConfig && typeof decompressConfig.maxDecompressedSize === 'number') {
+        return decompressConfig.maxDecompressedSize;
+    }
+    return DEFAULT_MAX_DECOMPRESSED_SIZE;
+}
+
+function readBoundedDecompressedStream(dataView, format, maxDecompressedSize) {
+    const decompressionStream = new DecompressionStream(format);
+    const decompressedStream = new Blob([dataView]).stream().pipeThrough(decompressionStream);
+    const reader = decompressedStream.getReader();
+    const chunks = [];
+    let total = 0;
+
+    return pump();
+
+    function pump() {
+        return reader.read().then(({done, value}) => {
+            if (done) {
+                return concatChunks(chunks, total);
+            }
+            total += value.byteLength;
+            if (total > maxDecompressedSize) {
+                return reader.cancel().then(() => rejectExceedsMax(maxDecompressedSize));
+            }
+            chunks.push(value);
+            return pump();
+        });
+    }
+}
+
+function concatChunks(chunks, total) {
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (let i = 0; i < chunks.length; i++) {
+        out.set(chunks[i], offset);
+        offset += chunks[i].byteLength;
+    }
+    return out.buffer;
+}
+
+function decodeBuffer(arrayBuffer, returnType, encoding) {
+    if (returnType === 'dataview') {
+        return new DataView(arrayBuffer);
+    }
+    return new TextDecoder(encoding).decode(arrayBuffer);
+}
+
+function getResultByteLength(result) {
+    if (result && typeof result.byteLength === 'number') {
+        return result.byteLength;
+    }
+    return 0;
+}
+
+function rejectExceedsMax(maxDecompressedSize) {
+    if (typeof console !== 'undefined' && typeof console.warn === 'function') { // eslint-disable-line no-console
+        // eslint-disable-next-line no-console
+        console.warn(`ExifReader: skipped a compressed metadata block that would exceed the maximum decompressed size of ${maxDecompressedSize} bytes.`);
+    }
+    return Promise.reject(`Decompressed metadata exceeded the maximum allowed size of ${maxDecompressedSize} bytes.`);
 }

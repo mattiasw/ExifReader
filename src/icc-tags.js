@@ -87,6 +87,8 @@ function hasTagsData(buffer, tagHeaderOffset) {
 }
 
 export function parseTags(dataView) {
+    const MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE = 12;
+    const MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET = 16;
     const buffer = dataView.buffer;
 
     const length = dataView.getUint32();
@@ -156,7 +158,16 @@ export function parseTags(dataView) {
         } else if (tagType === TAG_TYPE_MULTI_LOCALIZED_UNICODE_TYPE) {
             const numRecords = dataView.getUint32(tagOffset + 8);
             const recordSize = dataView.getUint32(tagOffset + 12);
-            let offset = tagOffset + 16;
+            if (recordSize < MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE) {
+                return tags;
+            }
+            const recordsSize = numRecords * recordSize;
+            const availableRecordsSize = dataView.byteLength - tagOffset
+                - MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET;
+            if (recordsSize > availableRecordsSize) {
+                return tags;
+            }
+            let offset = tagOffset + MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET;
             const val = [];
             for (let recordNum = 0; recordNum < numRecords; recordNum++) {
                 const languageCode = getStringFromDataView(dataView, offset + 0, 2);
