@@ -26,9 +26,9 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@babel/preset-env": "^7.29.3",
+    "@babel/preset-env": "^7.29.5",
     "@babel/register": "^7.29.3",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.6.2",
     "babel-loader": "^10.0.0",
     "babel-plugin-rewire": "^1.2.0",
     "chai": "^4.3.10",
