@@ -266,6 +266,27 @@ const tags = await ExifReader.load(file, {
 });
 ```
 
+#### Limiting decompressed metadata size
+
+To avoid excessive memory use from pathological compressed inputs, ExifReader
+caps the size of any single decompressed metadata block. The default limit is
+128 MiB, which is well above any realistic legitimate value. You can override
+it via the `maxDecompressedSize` field on the `decompress` option (in bytes):
+
+```javascript
+const tags = await ExifReader.load(file, {
+    async: true,
+    decompress: {
+        maxDecompressedSize: 16 * 1024 * 1024 // 16 MiB
+    }
+});
+```
+
+If a compressed block would expand beyond the limit, that block is skipped, a
+warning is logged via `console.warn`, and the rest of the tags are returned as
+usual. The limit applies to the built-in Compression Streams paths and to any
+result returned by a custom `brotli`/`deflate` function.
+
 #### Grouping
 
 By default, Exif, IPTC and XMP tags are grouped together. This means that if

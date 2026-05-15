@@ -396,3 +396,11 @@ loadView(new DataView(new ArrayBuffer(0)), {
 load(new ArrayBuffer(0), { decompress: { brotli: 42 } });
 // @ts-expect-error
 load(new ArrayBuffer(0), { decompress: { deflate: "not a function" } });
+load(new ArrayBuffer(0), {
+    async: true,
+    decompress: {
+        maxDecompressedSize: 16 * 1024 * 1024,
+    }
+});
+// @ts-expect-error
+load(new ArrayBuffer(0), { decompress: { maxDecompressedSize: "16MB" } });

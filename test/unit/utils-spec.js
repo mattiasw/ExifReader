@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
+import {getDataView, getConsoleWarnSpy} from './test-utils';
 import * as Utils from '../../src/utils';
 
 describe('utils', () => {
@@ -201,6 +201,89 @@ describe('utils', () => {
             );
 
             expect(Array.from(receivedData)).to.deep.equal([1, 2, 3]);
+        });
+    });
+
+    describe('decompression bounds', () => {
+        let warnSpy;
+
+        beforeEach(() => {
+            warnSpy = getConsoleWarnSpy();
+        });
+
+        afterEach(() => {
+            warnSpy.reset();
+        });
+
+        it('should not let a tiny deflate payload expand to an unbounded output', async () => {
+            // A buffer of zeros is highly compressible, so the deflate output is
+            // many orders of magnitude smaller than the original. The decompress
+            // path must not blindly materialize the full expansion in memory.
+            const decompressedSize = 1 * 1024 * 1024;
+            const input = new Uint8Array(decompressedSize);
+            const compressedStream = new Blob([input]).stream().pipeThrough(
+                new CompressionStream('deflate') // eslint-disable-line no-undef
+            );
+            const compressed = await new Response(compressedStream).arrayBuffer();
+
+            expect(compressed.byteLength).to.be.lessThan(decompressedSize / 100);
+
+            let result;
+            try {
+                result = await Utils.decompress(
+                    new DataView(compressed),
+                    Utils.COMPRESSION_METHOD_DEFLATE,
+                    'latin1',
+                    'dataview',
+                    {maxDecompressedSize: 64 * 1024}
+                );
+            } catch (_error) {
+                expect(warnSpy.hasWarned).to.equal(true);
+                return;
+            }
+            expect.fail(
+                `A ${compressed.byteLength}-byte deflate payload was allowed to expand to `
+                + `${result.byteLength} bytes; the decompressed output should be bounded.`
+            );
+        });
+
+        it('should reject custom decompressor result that exceeds the configured limit', async () => {
+            const dataView = new DataView(new ArrayBuffer(1));
+            const oversized = new Uint8Array(64);
+            const deflateFn = () => oversized;
+
+            try {
+                await Utils.decompress(
+                    dataView,
+                    Utils.COMPRESSION_METHOD_DEFLATE,
+                    undefined,
+                    'dataview',
+                    {deflate: deflateFn, maxDecompressedSize: 32}
+                );
+                expect.fail('Decompression should have been rejected for exceeding the configured limit.');
+            } catch (_error) {
+                expect(warnSpy.hasWarned).to.equal(true);
+            }
+        });
+
+        it('should allow decompressed output up to the configured limit', async () => {
+            const decompressedSize = 4 * 1024;
+            const input = new Uint8Array(decompressedSize);
+            const compressedStream = new Blob([input]).stream().pipeThrough(
+                new CompressionStream('deflate') // eslint-disable-line no-undef
+            );
+            const compressed = await new Response(compressedStream).arrayBuffer();
+
+            const result = await Utils.decompress(
+                new DataView(compressed),
+                Utils.COMPRESSION_METHOD_DEFLATE,
+                'latin1',
+                'dataview',
+                {maxDecompressedSize: decompressedSize}
+            );
+
+            expect(result.byteLength).to.equal(decompressedSize);
+            expect(warnSpy.hasWarned).to.equal(false);
         });
     });
 });
