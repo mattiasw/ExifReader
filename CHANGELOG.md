@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `decompress.maxDecompressedSize` option to bound the size of any single
+  decompressed metadata block (default 128 MiB). Blocks that would exceed the
+  limit are skipped with a `console.warn`; remaining tags are returned as usual.
+
 ### Fixed
 
 - Parse UserComment value when encoding is undefined but contains printable text.
