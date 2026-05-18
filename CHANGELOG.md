@@ -18,7 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Parse UserComment value when encoding is undefined but contains printable text.
-- Improved robustness when parsing ICC profiles with malformed `mluc` tags.
+
+### Security
+
+- Fix denial-of-service when parsing crafted ICC `mluc` tags
+  ([CVE-2026-8813](https://www.cve.org/CVERecord?id=CVE-2026-8813),
+  [GHSA-h64w-w9pr-82m4](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-h64w-w9pr-82m4)).
+  Reported by Yuki Matsuhashi (@yuki-matsuhashi).
+- Fix denial-of-service via unbounded decompression of compressed image metadata
+  ([CVE-2026-8814](https://www.cve.org/CVERecord?id=CVE-2026-8814),
+  [GHSA-rr89-w3h9-m66j](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-rr89-w3h9-m66j)).
+  Reported by Yuki Matsuhashi (@yuki-matsuhashi).
 
 ## [4.38.1] - 2026-04-09
 
