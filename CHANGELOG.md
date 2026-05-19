@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- IPTC text tags without a `Coded Character Set` declaration now fall back to
+  Windows-1252 when the bytes are not valid UTF-8. Captions written by
+  Photoshop/exiftool that include en dashes, em dashes, ellipsis or smart
+  quotes (bytes 0x80–0x9F) no longer come back as C1 control characters.
+  [#635](https://github.com/mattiasw/ExifReader/issues/635)
+
 ## [4.39.0] - 2026-05-15
 
 ### Added
