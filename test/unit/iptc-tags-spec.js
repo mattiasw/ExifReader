@@ -458,6 +458,28 @@ describe('iptc-tags', function () {
             );
         });
 
+        // Regression: GitHub issue #635. When the IPTC block has no Coded
+        // Character Set tag and the bytes contain Windows-1252 code points in
+        // the 0x80–0x9F range (en dash, em dash, ellipsis, smart quotes etc.),
+        // fall back to Windows-1252 instead of ISO-8859-1 so that captions
+        // written by Photoshop / exiftool-vendored render correctly.
+        it('should fall back to Windows-1252 for tags without a Coded Character Set when bytes are not valid UTF-8', () => {
+            // Caption/Abstract = "ÄÖÜÜÖÄ AOUUOA\n– — ? ° ' " " ' …\nCa. 35.45°–35.51° O, 33.09°–33.13° N.\n"
+            // encoded as Windows-1252 (the original bytes from issue #635).
+            const captionBytes = '\xc4\xd6\xdc\xdc\xd6\xc4\x20\x41\x4f\x55\x55\x4f\x41\x0a'
+                + '\x96\x20\x97\x20\x3f\x20\xb0\x20\x27\x20\x22\x20\x22\x20\x27\x20\x85\x0a'
+                + '\x43\x61\x2e\x20\x33\x35\x2e\x34\x35\xb0\x96\x33\x35\x2e\x35\x31\xb0\x20\x4f\x2c\x20\x33\x33\x2e\x30\x39\xb0\x96\x33\x33\x2e\x31\x33\xb0\x20\x4e\x2e\x0a';
+            const tagsData = '\x1c\x02\x78\x00\x46' + captionBytes
+                + '\x1c\x02\x00\x00\x02\x00\x04';
+            const dataView = getDataView('8BIM\x04\x04\x00\x00\x00\x00' + getTagsSize(tagsData) + tagsData);
+
+            const tags = IptcTags.read(dataView, 0);
+
+            expect(tags['Caption/Abstract'].description).to.equal(
+                'ÄÖÜÜÖÄ AOUUOA\n– — ? ° \' " " \' …\nCa. 35.45°–35.51° O, 33.09°–33.13° N.\n'
+            );
+        });
+
         function testReadingAndDecodingEncodedTag(tagsData, expectedEncoding, expectedDestination, expectedLangId, expectedHeadline, expectedCaption) {
             const dataView = getDataView('8BIM\x04\x04\x00\x00\x00\x00' + getTagsSize(tagsData) + tagsData);
 
