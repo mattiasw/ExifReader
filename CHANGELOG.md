@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `bin/profile.js`: profiler script that parses images in a folder and
+  reports per-format timing stats. Supports `--iterations`, `--warmup`,
+  `--type`, `--dir`, `--include-io`, and `--probe-bytes` (bisects the
+  minimum prefix length needed to extract metadata equivalent to the full
+  file, useful for I/O-optimization work).
+
 ## [4.39.1] - 2026-05-19
 
 ### Fixed
