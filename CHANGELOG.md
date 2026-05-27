@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `includeOffsets` option which, together with `expanded: true`, returns a
+  `metadataRange` object describing where metadata sits in the file:
+  `{start, end, complete, blocks: [{type, start, end}, ...]}`. Useful for
+  persisting only the metadata-bearing prefix of an image instead of the
+  whole file. Supports JPEG, PNG, WebP, HEIC, AVIF, JPEG XL (container),
+  GIF, and standalone XMP/XML; plain TIFF and bare JPEG XL codestreams are
+  not supported in this version because they lack a leading metadata
+  container.
+  [#121](https://github.com/mattiasw/ExifReader/issues/121)
 - `bin/profile.js`: profiler script that parses images in a folder and
   reports per-format timing stats. Supports `--iterations`, `--warmup`,
   `--type`, `--dir`, `--include-io`, and `--probe-bytes` (bisects the

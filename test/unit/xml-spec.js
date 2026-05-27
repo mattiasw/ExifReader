@@ -21,4 +21,49 @@ describe('xml', () => {
             ]
         });
     });
+
+    describe('metadataBlocks', () => {
+        it('should emit a single xmp block covering the entire buffer', () => {
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView('<?xpacket begin'), metadataBlocks);
+            expect(metadataBlocks[0]).to.deep.equal({type: 'xmp', start: 0, end: 15});
+        });
+
+        it('should not mark truncated when the buffer ends with an xpacket end marker', () => {
+            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"></x:xmpmeta><?xpacket end="r"?>';
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView(xml), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(false);
+        });
+
+        it('should not mark truncated when the buffer ends with </x:xmpmeta>', () => {
+            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"></x:xmpmeta>';
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView(xml), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(false);
+        });
+
+        it('should tolerate trailing whitespace before the xpacket end marker', () => {
+            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"></x:xmpmeta><?xpacket end="r"?>\n\n  \r\n';
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView(xml), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(false);
+        });
+
+        it('should mark truncated when neither closing marker is present (cut mid-packet)', () => {
+            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:Descr';
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView(xml), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(true);
+        });
+
+        it('should detect the end marker even past several KiB of XMP write padding', () => {
+            const head = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"></x:xmpmeta><?xpacket end="w"?>';
+            const padding = ' '.repeat(4096); // Adobe recommends 2-4 KiB padding
+            const xml = head + padding;
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView(xml), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(false);
+        });
+    });
 });

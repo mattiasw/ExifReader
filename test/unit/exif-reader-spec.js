@@ -1040,6 +1040,194 @@ describe('exif-reader', function () {
             expect(ExifReader.loadView()['Thumbnail']).to.be.undefined;
         });
     });
+
+    describe('metadataRange (includeOffsets)', () => {
+        it('should return metadataRange in expanded mode when includeOffsets is true', () => {
+            rewireImageHeader({
+                tiffHeaderOffset: OFFSET_TEST_VALUE,
+                metadataBlocks: [
+                    {type: 'exif', start: 2, end: 100},
+                    {type: 'xmp', start: 100, end: 200},
+                ],
+            });
+            rewireTagsRead('Tags', {MyExifTag: 42});
+
+            const tags = ExifReader.loadView(
+                {byteLength: 1024},
+                {expanded: true, includeOffsets: true}
+            );
+
+            expect(tags.metadataRange).to.deep.equal({
+                start: 2,
+                end: 200,
+                complete: true,
+                blocks: [
+                    {type: 'exif', start: 2, end: 100},
+                    {type: 'xmp', start: 100, end: 200},
+                ],
+            });
+        });
+
+        it('should pass the includeOffsets flag to parseAppMarkers', () => {
+            let receivedFlag;
+            ExifReaderRewireAPI.__Rewire__('ImageHeader', {
+                parseAppMarkers(_dataView, _async, includeMetadataBlocks) {
+                    receivedFlag = includeMetadataBlocks;
+                    return {tiffHeaderOffset: OFFSET_TEST_VALUE, metadataBlocks: []};
+                }
+            });
+            rewireTagsRead('Tags', {MyExifTag: 42});
+
+            ExifReader.loadView(
+                {byteLength: 1024},
+                {expanded: true, includeOffsets: true}
+            );
+
+            expect(receivedFlag).to.equal(true);
+        });
+
+        it('should not return metadataRange in flat mode even when includeOffsets is true', () => {
+            rewireImageHeader({
+                tiffHeaderOffset: OFFSET_TEST_VALUE,
+                metadataBlocks: [{type: 'exif', start: 2, end: 100}],
+            });
+            rewireTagsRead('Tags', {MyExifTag: 42});
+
+            const tags = ExifReader.loadView(
+                {byteLength: 1024},
+                {includeOffsets: true}
+            );
+
+            expect(tags.metadataRange).to.equal(undefined);
+        });
+
+        it('should NOT ask parseAppMarkers to build blocks when expanded is omitted (no wasted work)', () => {
+            let receivedFlag;
+            ExifReaderRewireAPI.__Rewire__('ImageHeader', {
+                parseAppMarkers(_dataView, _async, includeMetadataBlocks) {
+                    receivedFlag = includeMetadataBlocks;
+                    return {tiffHeaderOffset: OFFSET_TEST_VALUE};
+                }
+            });
+            rewireTagsRead('Tags', {MyExifTag: 42});
+
+            ExifReader.loadView(
+                {byteLength: 1024},
+                {includeOffsets: true} // expanded omitted
+            );
+
+            expect(receivedFlag).to.equal(false);
+        });
+
+        it('should not return metadataRange when includeOffsets is omitted', () => {
+            rewireImageHeader({
+                tiffHeaderOffset: OFFSET_TEST_VALUE,
+                metadataBlocks: [{type: 'exif', start: 2, end: 100}],
+            });
+            rewireTagsRead('Tags', {MyExifTag: 42});
+
+            const tags = ExifReader.loadView(
+                {byteLength: 1024},
+                {expanded: true}
+            );
+
+            expect(tags.metadataRange).to.equal(undefined);
+        });
+
+        it('should mark complete:false when metadata extends past the buffer', () => {
+            rewireImageHeader({
+                tiffHeaderOffset: OFFSET_TEST_VALUE,
+                metadataBlocks: [{type: 'exif', start: 2, end: 5000}],
+            });
+            rewireTagsRead('Tags', {MyExifTag: 42});
+
+            const tags = ExifReader.loadView(
+                {byteLength: 1024},
+                {expanded: true, includeOffsets: true}
+            );
+
+            expect(tags.metadataRange.complete).to.equal(false);
+            expect(tags.metadataRange.end).to.equal(5000);
+        });
+
+        it('should omit metadataRange when there are no blocks (e.g. plain TIFF)', () => {
+            rewireImageHeader({
+                tiffHeaderOffset: OFFSET_TEST_VALUE,
+                metadataBlocks: [],
+            });
+            rewireTagsRead('Tags', {MyExifTag: 42});
+
+            const tags = ExifReader.loadView(
+                {byteLength: 1024},
+                {expanded: true, includeOffsets: true}
+            );
+
+            expect(tags.metadataRange).to.equal(undefined);
+        });
+
+        it('should include MPF embedded images as mpfImage blocks', () => {
+            rewireImageHeader({
+                mpfDataOffset: OFFSET_TEST_VALUE,
+                metadataBlocks: [{type: 'mpf', start: 2, end: 100}],
+            });
+            rewireMpfTagsRead({
+                NumberOfImages: {value: 3},
+                Images: [
+                    {ImageOffset: {value: 0}, ImageSize: {value: 200}},
+                    {ImageOffset: {value: 5000}, ImageSize: {value: 1000}},
+                    {ImageOffset: {value: 8000}, ImageSize: {value: 500}},
+                ],
+            });
+
+            const tags = ExifReader.loadView(
+                {byteLength: 16384},
+                {expanded: true, includeOffsets: true}
+            );
+
+            const mpfImageBlocks = tags.metadataRange.blocks.filter(
+                (block) => block.type === 'mpfImage'
+            );
+            expect(mpfImageBlocks).to.deep.equal([
+                {type: 'mpfImage', start: 5000, end: 6000},
+                {type: 'mpfImage', start: 8000, end: 8500},
+            ]);
+            expect(tags.metadataRange.end).to.equal(8500);
+        });
+
+        it('should emit no mpfImage blocks when MPF parsing is excluded', () => {
+            rewireImageHeader({
+                mpfDataOffset: OFFSET_TEST_VALUE,
+                tiffHeaderOffset: OFFSET_TEST_VALUE,
+                metadataBlocks: [
+                    {type: 'exif', start: 2, end: 100},
+                    {type: 'mpf', start: 100, end: 200},
+                ],
+            });
+            // Tags.read is rewired to return tags only when offset matches; ensure exif read succeeds.
+            rewireTagsRead('Tags', {MyExifTag: 42});
+            // MpfTags must NOT be consulted; rewire to throw if it is.
+            ExifReaderRewireAPI.__Rewire__('MpfTags', {
+                read() {
+                    throw new Error('MpfTags.read should not be called when mpf group is excluded');
+                },
+            });
+
+            const tags = ExifReader.loadView(
+                {byteLength: 16384},
+                {
+                    expanded: true,
+                    includeOffsets: true,
+                    excludeTags: {mpf: true},
+                }
+            );
+
+            const mpfImageBlocks = tags.metadataRange.blocks.filter(
+                (block) => block.type === 'mpfImage'
+            );
+            expect(mpfImageBlocks).to.deep.equal([]);
+            expect(tags.metadataRange.end).to.equal(200);
+        });
+    });
 });
 
 function rewireForLoadView(appMarkersValue, tagsObject, tagsValue) {

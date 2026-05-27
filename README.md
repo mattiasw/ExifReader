@@ -378,6 +378,86 @@ make sure the remote server is either on the same origin (domain) as your script
 or that the server is passing correct CORS headers, specifically allowing the
 `Range` header.
 
+#### Locating metadata in the file (`includeOffsets`)
+
+Pass `includeOffsets: true` together with `expanded: true` to learn where in
+the file the metadata sits. Useful for persisting only the metadata-bearing
+prefix of an image rather than the whole file. The resulting slice is enough
+for re-extracting metadata with ExifReader, not for opening the slice as an
+image.
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {expanded: true, includeOffsets: true});
+
+tags.metadataRange.start    // lowest block start (informational, can be deep
+                            //   into the file for HEIC/AVIF; do NOT use as a
+                            //   slice boundary, always slice from 0)
+tags.metadataRange.end      // exclusive end. Store bytes 0..end to keep all metadata
+tags.metadataRange.complete // false when the input was truncated before all metadata
+tags.metadataRange.blocks   // [{type, start, end}, ...] sorted by start
+```
+
+Offsets are byte indices into the data you passed in. `metadataRange` is
+attached only when both `expanded: true` and `includeOffsets: true` are set,
+so default and flat-mode output are unchanged.
+
+Block `type` reuses the filtering-group vocabulary (`exif`, `iptc`, `xmp`,
+`icc`, `mpf`, `jfif`, `file`, `png`, `riff`, `gif`), plus `mpfImage` for the
+sub-images of an MPF Multi-Picture JPEG. The same type may appear more than
+once (multi-chunk ICC, extended XMP), one entry per physical container.
+
+Typical workflow:
+
+```javascript
+const headChunk = await fetchFirstNBytes(url, 256 * 1024);
+const tags = ExifReader.load(headChunk, {expanded: true, includeOffsets: true});
+
+if (!tags.metadataRange.complete) {
+    // 256 KiB was not enough, fetch more
+} else {
+    const minimalSlice = headChunk.slice(0, tags.metadataRange.end);
+    await uploadMetadata(minimalSlice);
+}
+```
+
+Notes and limitations:
+
+- Not supported for plain TIFF or bare JPEG XL codestreams (no leading
+  metadata container). `metadataRange` is omitted in both cases.
+- For JPEG XL containers, blocks cover the `Exif` and `xml ` boxes but not
+  the `jxlc`/`jxlp` codestream box (encoded image data, not metadata).
+- `complete: true` means ExifReader did not detect truncation. For JPEG and
+  PNG it observed `SOS` or `IEND`, for standalone XMP it observed an
+  `<?xpacket end=?>` or `</x:xmpmeta>` token. For other formats it is
+  best-effort, a buffer ending cleanly between metadata segments can still
+  report `complete: true`. Non-standard trailers (JPEG-XT, post-SOS markers)
+  are never detected. Note the converse: re-parsing a slice produced by
+  `buffer.slice(0, metadataRange.end)` may report `complete: false` for
+  JPEG/PNG even though every metadata segment is intact, because the
+  slice ends before `SOS`/`IEND`. The block list and `tags.exif` etc. are
+  still complete in that case.
+- Only the metadata segments ExifReader actively parses are present in
+  `blocks`. JPEG segments ExifReader does not currently extract tags from
+  (APP3-APP12, `COM` comments, JPEG-XT extensions) do not appear and are
+  not guaranteed to be preserved by a `0..end` slice. The slice is
+  enough to re-extract everything ExifReader itself reads, not to
+  preserve every byte a third-party tool might care about.
+- For HEIC/AVIF, `iloc` items often live in `mdat` near the end of the file,
+  so `metadataRange.end` may land deep into the file and trimming saves
+  little. Multi-extent items emit one block per extent, but the parser
+  currently reads only the first extent. The `icc` block here points at the
+  raw ICC profile bytes inside the `colr` box, not at the `colr` box header
+  (for JPEG/PNG/WebP an `icc` block covers the full container wrapper).
+- For MPF JPEGs, sub-images appear as `mpfImage` blocks and push `end`
+  toward the file size. If MPF parsing is suppressed by a tag filter (any
+  `excludeTags: {mpf: ...}` or `includeTags` that does not include `mpf`),
+  the `mpfImage` blocks are not emitted and `metadataRange.end` shrinks.
+  The parent `mpf` segment block always remains, since it is a real
+  metadata segment found during the header scan.
+- Offsets come from length fields in the file. Treat `metadataRange.end`
+  and `block.end` as untrusted input. Clamp to your buffer length before
+  slicing, allocating, or issuing remote range requests.
+
 #### Unknown tags
 
 Tags that are unknown, either because they have been excluded by making a custom

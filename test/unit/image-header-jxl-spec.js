@@ -228,6 +228,125 @@ describe('image-header-jxl', () => {
         });
     });
 
+    describe('metadataBlocks', () => {
+        it('should emit no blocks when no out-array is given', () => {
+            ImageHeaderJxl.findJxlOffsets(getDataView(getJxlData({exif: true, xmp: true})));
+            // no observable effect — sanity check: no error
+        });
+
+        it('should emit an exif block for an Exif box', () => {
+            const dataView = getDataView(getJxlData({exif: true}));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            // signature(12) + ftyp(20) = 32; exif box is 8 + 4 + 6 = 18 bytes => end 50
+            expect(metadataBlocks).to.deep.equal([
+                {type: 'exif', start: 32, end: 50},
+            ]);
+        });
+
+        it('should emit an xmp block for an xml box', () => {
+            const dataView = getDataView(getJxlData({xmp: true}));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            // signature(12) + ftyp(20) = 32; xml box is 8 + 15 = 23 bytes => end 55
+            expect(metadataBlocks).to.deep.equal([
+                {type: 'xmp', start: 32, end: 55},
+            ]);
+        });
+
+        it('should emit an exif block for a brob box with Exif original type', () => {
+            const dataView = getDataView(getJxlData({brobExif: true}));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            // brob box: 8 + 4 (original type) + 16 (compressed) = 28 bytes => end 60
+            expect(metadataBlocks).to.deep.equal([
+                {type: 'exif', start: 32, end: 60},
+            ]);
+        });
+
+        it('should emit an xmp block for a brob box with xml original type', () => {
+            const dataView = getDataView(getJxlData({brobXmp: true}));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            // brob box: 8 + 4 (original type) + 15 (compressed) = 27 bytes => end 59
+            expect(metadataBlocks).to.deep.equal([
+                {type: 'xmp', start: 32, end: 59},
+            ]);
+        });
+
+        it('should NOT emit a block for a jxlc codestream box (would inflate end past pixel data)', () => {
+            const dataView = getDataView(getJxlData({jxlc: true}));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            expect(metadataBlocks).to.deep.equal([]);
+        });
+
+        it('should NOT emit a block for a jxlp partial codestream box', () => {
+            const dataView = getDataView(getJxlData({jxlp: true}));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            expect(metadataBlocks).to.deep.equal([]);
+        });
+
+        it('should keep metadataRange.end small for a large jxlc box (the bandwidth-saving use case)', () => {
+            // Simulate a 1 MiB codestream after the ftyp box. There is no
+            // metadata, so metadataBlocks must be empty — not include a
+            // 1 MiB-long block. (Bare codestreams produce no block list either.)
+            const largeCodestream = '\x00'.repeat(1024 * 1024 - 8);
+            // jxlc box header (8) + 1 MiB - 8 bytes content = 1 MiB box total
+            const boxLen = getByteStringFromNumber(1024 * 1024, 4);
+            const data = JXL_SIGNATURE + FTYP_BOX + boxLen + 'jxlc' + largeCodestream;
+            const dataView = getDataView(data);
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            expect(metadataBlocks).to.deep.equal([]);
+        });
+
+        it('should leave metadataBlocks empty for a naked codestream', () => {
+            const dataView = getDataView('\xFF\x0Asome_codestream_data');
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            expect(metadataBlocks).to.deep.equal([]);
+        });
+
+        it('should emit blocks for both Exif and XMP boxes', () => {
+            const dataView = getDataView(getJxlData({exif: true, xmp: true}));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            expect(metadataBlocks).to.deep.equal([
+                {type: 'exif', start: 32, end: 50},
+                {type: 'xmp', start: 50, end: 73},
+            ]);
+        });
+
+        it('should not include a jxlc block even when accompanied by Exif/XMP', () => {
+            const dataView = getDataView(getJxlData({exif: true, xmp: true, jxlc: true}));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            const types = metadataBlocks.map((block) => block.type);
+            expect(types).to.deep.equal(['exif', 'xmp']);
+        });
+
+        it('should emit a brob(Exif) block even when a regular Exif box already appeared (regular-then-brob)', () => {
+            // exif box is added before brobExif by getJxlData. Both physical
+            // boxes carry Exif and a downstream caller persisting the prefix
+            // needs to keep both byte ranges.
+            const dataView = getDataView(getJxlData({exif: true, brobExif: true}));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            const exifBlocks = metadataBlocks.filter((block) => block.type === 'exif');
+            expect(exifBlocks).to.have.lengthOf(2);
+        });
+
+        it('should emit a brob(xml) block even when a regular xml box already appeared', () => {
+            const dataView = getDataView(getJxlData({xmp: true, brobXmp: true}));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            const xmpBlocks = metadataBlocks.filter((block) => block.type === 'xmp');
+            expect(xmpBlocks).to.have.lengthOf(2);
+        });
+    });
+
     describe('codestream offset', () => {
         it('should detect jxlc box and return codestream offset', () => {
             const dataView = getDataView(getJxlData({jxlc: true}));

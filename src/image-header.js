@@ -18,46 +18,66 @@ export default {
     parseAppMarkers
 };
 
-function parseAppMarkers(dataView, async) {
+/**
+ * Detects the image format and delegates to the matching finder.
+ *
+ * @param {DataView} dataView The data view to inspect.
+ * @param {boolean=} async Whether async parsing is enabled.
+ * @param {boolean=} includeMetadataBlocks When true, the finder collects a
+ *     block list describing where metadata sits in the file. The result
+ *     gains `metadataBlocks` and `metadataTruncated` fields.
+ * @returns {Object} Per-format offsets plus `fileType`.
+ * @throws {Error} When the data view is not a recognized image format.
+ */
+function parseAppMarkers(dataView, async, includeMetadataBlocks) {
+    const metadataBlocks = includeMetadataBlocks ? [] : undefined;
+
     if (Constants.USE_TIFF && Tiff.isTiffFile(dataView)) {
-        return addFileType(Tiff.findTiffOffsets(), 'tiff', 'TIFF');
+        return finalize(Tiff.findTiffOffsets(), 'tiff', 'TIFF', metadataBlocks);
     }
 
     if (Constants.USE_JPEG && Jpeg.isJpegFile(dataView)) {
-        return addFileType(Jpeg.findJpegOffsets(dataView), 'jpeg', 'JPEG');
+        return finalize(Jpeg.findJpegOffsets(dataView, metadataBlocks), 'jpeg', 'JPEG', metadataBlocks);
     }
 
     if (Constants.USE_PNG && Png.isPngFile(dataView)) {
-        return addFileType(Png.findPngOffsets(dataView, async), 'png', 'PNG');
+        return finalize(Png.findPngOffsets(dataView, async, metadataBlocks), 'png', 'PNG', metadataBlocks);
     }
 
     if (Constants.USE_HEIC && Heic.isHeicFile(dataView)) {
-        return addFileType(Heic.findHeicOffsets(dataView), 'heic', 'HEIC');
+        return finalize(Heic.findHeicOffsets(dataView, metadataBlocks), 'heic', 'HEIC', metadataBlocks);
     }
 
     if (Constants.USE_AVIF && Avif.isAvifFile(dataView)) {
-        return addFileType(Avif.findAvifOffsets(dataView), 'avif', 'AVIF');
+        return finalize(Avif.findAvifOffsets(dataView, metadataBlocks), 'avif', 'AVIF', metadataBlocks);
     }
 
     if (Constants.USE_JXL && Jxl.isJxlFile(dataView)) {
-        return addFileType(Jxl.findJxlOffsets(dataView), 'jxl', 'JPEG XL');
+        return finalize(Jxl.findJxlOffsets(dataView, metadataBlocks), 'jxl', 'JPEG XL', metadataBlocks);
     }
 
     if (Constants.USE_WEBP && Webp.isWebpFile(dataView)) {
-        return addFileType(Webp.findOffsets(dataView), 'webp', 'WebP');
+        return finalize(Webp.findOffsets(dataView, metadataBlocks), 'webp', 'WebP', metadataBlocks);
     }
 
     if (Constants.USE_GIF && Gif.isGifFile(dataView)) {
-        return addFileType(Gif.findOffsets(dataView), 'gif', 'GIF');
+        return finalize(Gif.findOffsets(dataView, metadataBlocks), 'gif', 'GIF', metadataBlocks);
     }
 
     if (Constants.USE_XMP && Xml.isXMLFile(dataView)) {
-        return addFileType(Xml.findOffsets(dataView), 'xml', 'XML');
+        return finalize(Xml.findOffsets(dataView, metadataBlocks), 'xml', 'XML', metadataBlocks);
     }
 
     throw new Error('Invalid image format');
 }
 
-function addFileType(offsets, fileType, fileTypeDescription) {
-    return objectAssign({}, offsets, {fileType: {value: fileType, description: fileTypeDescription}});
+function finalize(offsets, fileType, fileTypeDescription, metadataBlocks) {
+    const result = objectAssign({}, offsets, {fileType: {value: fileType, description: fileTypeDescription}});
+    if (metadataBlocks !== undefined) {
+        result.metadataBlocks = metadataBlocks;
+        // Surface the finder's .truncated array convention as a sibling
+        // field so consumers don't depend on properties on the array.
+        result.metadataTruncated = !!metadataBlocks.truncated;
+    }
+    return result;
 }

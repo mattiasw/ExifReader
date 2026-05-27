@@ -151,12 +151,16 @@ function hasEmptyHighBits(dataView, offset) {
  */
 
 /**
- * Finds the offsets of ISO-BMFF-structued data in the provided data view.
+ * Finds the offsets of ISO-BMFF-structured data in the provided data view.
  *
- * @param {DataView} dataView - The data view to find offsets in.
- * @returns {Offsets} An object containing the offsets of the TIFF header, XMP chunks, ICC chunks, and a boolean indicating if any of these exist.
+ * @param {DataView} dataView The data view to find offsets in.
+ * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
+ *     receives one block per iloc extent (Exif/XMP) and the ICC profile
+ *     bytes, when the iloc construction method is a file offset.
+ * @returns {Offsets} The TIFF header offset, XMP chunks, ICC chunks, and
+ *     whether any were found.
  */
-export function findOffsets(dataView) {
+export function findOffsets(dataView, metadataBlocks) {
     if (Constants.USE_EXIF || Constants.USE_XMP || Constants.USE_ICC) {
         const offsets = {};
         const metaBox = findMetaBox(dataView);
@@ -166,13 +170,13 @@ export function findOffsets(dataView) {
         }
 
         if (Constants.USE_EXIF) {
-            offsets.tiffHeaderOffset = findExifOffset(dataView, metaBox);
+            offsets.tiffHeaderOffset = findExifOffset(dataView, metaBox, metadataBlocks);
         }
         if (Constants.USE_XMP) {
-            offsets.xmpChunks = findXmpChunks(metaBox);
+            offsets.xmpChunks = findXmpChunks(metaBox, metadataBlocks);
         }
         if (Constants.USE_ICC) {
-            offsets.iccChunks = findIccChunks(metaBox);
+            offsets.iccChunks = findIccChunks(metaBox, metadataBlocks);
         }
         offsets.hasAppMarkers = (offsets.tiffHeaderOffset !== undefined) || (offsets.xmpChunks !== undefined) || (offsets.iccChunks !== undefined);
         return offsets;
@@ -204,15 +208,42 @@ function findMetaBox(dataView) {
     return undefined;
 }
 
-function findExifOffset(dataView, metaBox) {
+function findExifOffset(dataView, metaBox, metadataBlocks) {
     try {
         const exifItemId = findIinfExifItemId(metaBox).itemId;
         const ilocItem = findIlocItem(metaBox, exifItemId);
-        const exifOffset = ilocItem.baseOffset + ilocItem.extents[0].extentOffset;
+        const extent = ilocItem.extents[0];
+        const exifOffset = ilocItem.baseOffset + extent.extentOffset;
+        pushIlocExtentBlocks(metadataBlocks, ilocItem, 'exif');
         return getTiffHeaderOffset(dataView, exifOffset);
     } catch (error) {
         return undefined;
     }
+}
+
+function pushIlocExtentBlocks(metadataBlocks, ilocItem, blockType) {
+    if (!metadataBlocks || !isFileOffsetConstruction(ilocItem)) {
+        return;
+    }
+    // The block list enumerates every extent. findExifOffset and
+    // findXmpChunks only parse extents[0] today (pre-existing parser
+    // limitation). See bmff-iloc-construction-method-fix.md.
+    for (let i = 0; i < ilocItem.extents.length; i++) {
+        const extent = ilocItem.extents[i];
+        const start = ilocItem.baseOffset + extent.extentOffset;
+        metadataBlocks.push({
+            type: blockType,
+            start,
+            end: start + extent.extentLength,
+        });
+    }
+}
+
+function isFileOffsetConstruction(ilocItem) {
+    // constructionMethod 0 (or undefined in iloc v0) means file offsets.
+    // Methods 1 (idat) and 2 (item) reference data via other indirections,
+    // so we cannot safely surface them as metadata blocks.
+    return ilocItem.constructionMethod === undefined || ilocItem.constructionMethod === 0;
 }
 
 function findIinfExifItemId(metaBox) {
@@ -230,14 +261,16 @@ export function getTiffHeaderOffset(dataView, exifOffset) {
     return exifOffset + TIFF_HEADER_OFFSET_SIZE + dataView.getUint32(exifOffset);
 }
 
-function findXmpChunks(metaBox) {
+function findXmpChunks(metaBox, metadataBlocks) {
     try {
         const xmpItemId = findIinfXmpItemId(metaBox).itemId;
         const ilocItem = findIlocItem(metaBox, xmpItemId);
-        const ilocItemExtent = findIlocItem(metaBox, xmpItemId).extents[0];
+        const ilocItemExtent = ilocItem.extents[0];
+        const dataOffset = ilocItem.baseOffset + ilocItemExtent.extentOffset;
+        pushIlocExtentBlocks(metadataBlocks, ilocItem, 'xmp');
         return [
             {
-                dataOffset: ilocItem.baseOffset + ilocItemExtent.extentOffset,
+                dataOffset,
                 length: ilocItemExtent.extentLength,
             }
         ];
@@ -251,7 +284,7 @@ function findIinfXmpItemId(metaBox) {
         .itemInfos.find((itemInfo) => itemInfo.itemType === ITEM_INFO_TYPE_MIME && itemInfo.contentType === 'application/rdf+xml');
 }
 
-function findIccChunks(metaBox) {
+function findIccChunks(metaBox, metadataBlocks) {
     // This finds the first ICC chunk, but there could be one for each image
     // that is embedded in the file. If it turns out we need to match the ICC
     // chunk to a specific image, we need to check the "ipma" in addition to the
@@ -263,6 +296,13 @@ function findIccChunks(metaBox) {
             .properties.find((box) => box.type === 'colr')
             .icc;
         if (icc) {
+            if (metadataBlocks) {
+                metadataBlocks.push({
+                    type: 'icc',
+                    start: icc.offset,
+                    end: icc.offset + icc.length,
+                });
+            }
             return [icc];
         }
     } catch (error) {

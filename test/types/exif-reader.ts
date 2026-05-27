@@ -404,3 +404,32 @@ load(new ArrayBuffer(0), {
 });
 // @ts-expect-error
 load(new ArrayBuffer(0), { decompress: { maxDecompressedSize: "16MB" } });
+
+///////////////////////////////////
+// metadataRange / includeOffsets
+load(new ArrayBuffer(0), { expanded: true, includeOffsets: true });
+loadView(new DataView(new ArrayBuffer(0)), { expanded: true, includeOffsets: true });
+load(new ArrayBuffer(0), { expanded: true, includeOffsets: false });
+load(new ArrayBuffer(0), { expanded: true });
+
+// includeOffsets requires expanded: true. Without it, the option is rejected.
+// @ts-expect-error
+load(new ArrayBuffer(0), { includeOffsets: true });
+// @ts-expect-error
+load(new ArrayBuffer(0), { expanded: false, includeOffsets: true });
+// @ts-expect-error
+loadView(new DataView(new ArrayBuffer(0)), { includeOffsets: true });
+// @ts-expect-error
+load(new ArrayBuffer(0), { expanded: true, includeOffsets: "yes" });
+
+const expandedWithOffsets = await load("", { expanded: true, includeOffsets: true });
+if (expandedWithOffsets.metadataRange) {
+    expandedWithOffsets.metadataRange.start === 0;
+    expandedWithOffsets.metadataRange.end === 100;
+    expandedWithOffsets.metadataRange.complete === true;
+    expandedWithOffsets.metadataRange.blocks[0].type === "exif";
+    expandedWithOffsets.metadataRange.blocks[0].start === 2;
+    expandedWithOffsets.metadataRange.blocks[0].end === 100;
+    // @ts-expect-error  pcx is not a valid block type
+    expandedWithOffsets.metadataRange.blocks[0].type === "pcx";
+}
