@@ -400,6 +400,95 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should pass xmpDataView from BMFF multi-extent items to XmpTags.read instead of the source dataView', () => {
+        const myTags = {MyXmpTag: 99};
+        const SYNTHETIC = {synthetic: true};
+        rewireImageHeader({xmpChunks: [{dataOffset: 0, length: 4}], xmpDataView: SYNTHETIC});
+        let capturedDataView;
+        ExifReaderRewireAPI.__Rewire__('XmpTags', {
+            read(dataView) {
+                capturedDataView = dataView;
+                return myTags;
+            },
+        });
+
+        expect(ExifReader.loadView({})).to.deep.equal(myTags);
+        expect(capturedDataView).to.equal(SYNTHETIC);
+    });
+
+    it('should pass exifDataView from BMFF multi-extent items to CanonTags.read instead of the source dataView', () => {
+        const myExifTags = {
+            Make: {value: ['Canon']},
+            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+        };
+        const SYNTHETIC = {synthetic: true};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, 'Tags', myExifTags);
+        let capturedDataView;
+        ExifReaderRewireAPI.__Rewire__('CanonTags', {
+            read(dataView) {
+                capturedDataView = dataView;
+                return {AutoRotate: 42};
+            }
+        });
+
+        ExifReader.loadView();
+        expect(capturedDataView).to.equal(SYNTHETIC);
+    });
+
+    it('should pass exifDataView from BMFF multi-extent items to PentaxTags.read instead of the source dataView', () => {
+        const myExifTags = {
+            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE, value: getCharacterArray('PENTAX \x00\x00\x00')}
+        };
+        const SYNTHETIC = {synthetic: true};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, 'Tags', myExifTags);
+        let capturedDataView;
+        ExifReaderRewireAPI.__Rewire__('PentaxTags', {
+            read(dataView) {
+                capturedDataView = dataView;
+                return {LensType: {value: 1, description: '1'}};
+            }
+        });
+
+        ExifReader.loadView();
+        expect(capturedDataView).to.equal(SYNTHETIC);
+    });
+
+    it('should pass exifDataView from BMFF multi-extent items to Thumbnail.get instead of the source dataView', () => {
+        const SYNTHETIC = {synthetic: true};
+        const myThumbnail = {type: 'image/jpeg'};
+        const myTags = {MyExifTag: 43, Thumbnail: myThumbnail};
+        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, 'Tags', myTags);
+        let capturedDataView;
+        ExifReaderRewireAPI.__Rewire__('Thumbnail', {
+            get(dataView) {
+                capturedDataView = dataView;
+                return {image: '<image data>', ...myThumbnail};
+            }
+        });
+
+        ExifReader.loadView();
+        expect(capturedDataView).to.equal(SYNTHETIC);
+    });
+
+    it('should pass exifDataView from BMFF multi-extent items to Tags.read instead of the source dataView', () => {
+        const myTags = {MyExifTag: 42};
+        const SYNTHETIC = {synthetic: true};
+        rewireImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC});
+        let capturedDataView;
+        ExifReaderRewireAPI.__Rewire__('Tags', {
+            read(dataView, offset) {
+                capturedDataView = dataView;
+                if (offset === OFFSET_TEST_VALUE) {
+                    return {tags: myTags, byteOrder: BIG_ENDIAN};
+                }
+                return {tags: {}, byteOrder: BIG_ENDIAN};
+            },
+        });
+
+        expect(ExifReader.loadView({})).to.deep.equal(myTags);
+        expect(capturedDataView).to.equal(SYNTHETIC);
+    });
+
     it('should pass on computed option to Exif tags parsing', function () {
         const myTags = {MyExifTag: 42};
         rewireImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE});

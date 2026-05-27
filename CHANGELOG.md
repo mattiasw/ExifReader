@@ -24,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   minimum prefix length needed to extract metadata equivalent to the full
   file, useful for I/O-optimization work).
 
+### Fixed
+
+- HEIC/AVIF: correctly read Exif and XMP from `iloc` items that use
+  `constructionMethod` 1 (idat). Previously these were read from the wrong
+  file offset, producing garbage tags or none at all. Items using
+  `constructionMethod` 2 (item_offset) are still not supported but are
+  now skipped cleanly with a `console.warn` instead of returning garbage.
+- HEIC/AVIF: multi-extent Exif and XMP items are now parsed end-to-end.
+  Previously only the first extent was read, so any tags whose bytes
+  spilled into a second extent were lost.
+
 ## [4.39.1] - 2026-05-19
 
 ### Fixed
