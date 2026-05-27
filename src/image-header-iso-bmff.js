@@ -22,6 +22,7 @@ const TYPE_FTYP = 0x66747970;
 const TYPE_IPRP = 0x69707270;
 const TYPE_META = 0x6d657461;
 const TYPE_ILOC = 0x696c6f63;
+const TYPE_IDAT = 0x69646174;
 const TYPE_IINF = 0x69696e66;
 const TYPE_INFE = 0x696e6665;
 const TYPE_IPCO = 0x6970636f;
@@ -73,6 +74,9 @@ export function parseBox(dataView, offset) {
     }
     if (type === TYPE_ILOC) {
         return parseItemLocationBox(dataView, version, contentOffset + VERSION_SIZE, length);
+    }
+    if (type === TYPE_IDAT) {
+        return parseItemDataBox(contentOffset + VERSION_SIZE, length);
     }
     if (type === TYPE_IINF) {
         return parseItemInformationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
@@ -148,6 +152,11 @@ function hasEmptyHighBits(dataView, offset) {
  * @property {Array<Object>} xmpChunks
  * @property {Array<Object>} iccChunks
  * @property {boolean} hasAppMarkers
+ * @property {DataView=} exifDataView Synthetic buffer when an Exif item
+ *     spans multiple extents. tiffHeaderOffset then indexes into this view
+ *     rather than the source dataView.
+ * @property {DataView=} xmpDataView Synthetic buffer when an XMP item
+ *     spans multiple extents. xmpChunks then references this view.
  */
 
 /**
@@ -155,8 +164,9 @@ function hasEmptyHighBits(dataView, offset) {
  *
  * @param {DataView} dataView The data view to find offsets in.
  * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
- *     receives one block per iloc extent (Exif/XMP) and the ICC profile
- *     bytes, when the iloc construction method is a file offset.
+ *     receives one block per iloc extent (Exif/XMP) at the resolved file
+ *     offset (cm 0 direct, cm 1 via the idat box) plus the ICC profile
+ *     bytes. cm 2 (item_offset) items are skipped.
  * @returns {Offsets} The TIFF header offset, XMP chunks, ICC chunks, and
  *     whether any were found.
  */
@@ -170,10 +180,22 @@ export function findOffsets(dataView, metadataBlocks) {
         }
 
         if (Constants.USE_EXIF) {
-            offsets.tiffHeaderOffset = findExifOffset(dataView, metaBox, metadataBlocks);
+            const exif = findExifOffset(dataView, metaBox, metadataBlocks);
+            if (exif !== undefined) {
+                offsets.tiffHeaderOffset = exif.tiffHeaderOffset;
+                if (exif.dataView !== undefined) {
+                    offsets.exifDataView = exif.dataView;
+                }
+            }
         }
         if (Constants.USE_XMP) {
-            offsets.xmpChunks = findXmpChunks(metaBox, metadataBlocks);
+            const xmp = findXmpChunks(dataView, metaBox, metadataBlocks);
+            if (xmp !== undefined) {
+                offsets.xmpChunks = xmp.chunks;
+                if (xmp.dataView !== undefined) {
+                    offsets.xmpDataView = xmp.dataView;
+                }
+            }
         }
         if (Constants.USE_ICC) {
             offsets.iccChunks = findIccChunks(metaBox, metadataBlocks);
@@ -212,25 +234,39 @@ function findExifOffset(dataView, metaBox, metadataBlocks) {
     try {
         const exifItemId = findIinfExifItemId(metaBox).itemId;
         const ilocItem = findIlocItem(metaBox, exifItemId);
-        const extent = ilocItem.extents[0];
-        const exifOffset = ilocItem.baseOffset + extent.extentOffset;
-        pushIlocExtentBlocks(metadataBlocks, ilocItem, 'exif');
-        return getTiffHeaderOffset(dataView, exifOffset);
+        warnIfUnsupportedConstructionMethod(ilocItem);
+        const idatContentOffset = findIdatContentOffset(metaBox);
+        pushIlocExtentBlocks(metadataBlocks, ilocItem, 'exif', idatContentOffset);
+        if (ilocItem.extents.length > 1) {
+            const assembled = assembleExtents(dataView, ilocItem, idatContentOffset);
+            if (assembled === undefined) {
+                return undefined;
+            }
+            return {
+                tiffHeaderOffset: getTiffHeaderOffset(assembled, 0),
+                dataView: assembled,
+            };
+        }
+        const exifOffset = resolveExtentToFileOffset(ilocItem, ilocItem.extents[0], idatContentOffset);
+        if (exifOffset === undefined) {
+            return undefined;
+        }
+        return {tiffHeaderOffset: getTiffHeaderOffset(dataView, exifOffset)};
     } catch (error) {
         return undefined;
     }
 }
 
-function pushIlocExtentBlocks(metadataBlocks, ilocItem, blockType) {
-    if (!metadataBlocks || !isFileOffsetConstruction(ilocItem)) {
+function pushIlocExtentBlocks(metadataBlocks, ilocItem, blockType, idatContentOffset) {
+    if (!metadataBlocks) {
         return;
     }
-    // The block list enumerates every extent. findExifOffset and
-    // findXmpChunks only parse extents[0] today (pre-existing parser
-    // limitation). See bmff-iloc-construction-method-fix.md.
     for (let i = 0; i < ilocItem.extents.length; i++) {
         const extent = ilocItem.extents[i];
-        const start = ilocItem.baseOffset + extent.extentOffset;
+        const start = resolveExtentToFileOffset(ilocItem, extent, idatContentOffset);
+        if (start === undefined) {
+            continue;
+        }
         metadataBlocks.push({
             type: blockType,
             start,
@@ -239,11 +275,59 @@ function pushIlocExtentBlocks(metadataBlocks, ilocItem, blockType) {
     }
 }
 
-function isFileOffsetConstruction(ilocItem) {
-    // constructionMethod 0 (or undefined in iloc v0) means file offsets.
-    // Methods 1 (idat) and 2 (item) reference data via other indirections,
-    // so we cannot safely surface them as metadata blocks.
-    return ilocItem.constructionMethod === undefined || ilocItem.constructionMethod === 0;
+// Translates an iloc extent to a real file offset.
+// cm 0 / undefined: baseOffset + extentOffset is already a file offset.
+// cm 1 (idat): bytes live inside the meta box's idat sub-box.
+// cm 2 (item): not yet supported; returns undefined so the item is skipped.
+function resolveExtentToFileOffset(ilocItem, extent, idatContentOffset) {
+    const cm = ilocItem.constructionMethod;
+    if (cm === undefined || cm === 0) {
+        return ilocItem.baseOffset + extent.extentOffset;
+    }
+    if (cm === 1 && idatContentOffset !== undefined) {
+        return idatContentOffset + ilocItem.baseOffset + extent.extentOffset;
+    }
+    return undefined;
+}
+
+function findIdatContentOffset(metaBox) {
+    const idatBox = metaBox.subBoxes.find((box) => box.type === 'idat');
+    return idatBox ? idatBox.contentOffset : undefined;
+}
+
+function warnIfUnsupportedConstructionMethod(ilocItem) {
+    if (ilocItem.constructionMethod === 2) {
+        // eslint-disable-next-line no-console
+        console.warn('This file uses iloc constructionMethod 2 (item_offset) which is currently not supported by ExifReader. Contact the maintainer to get it fixed.');
+    }
+}
+
+// Copies the bytes of every iloc extent into a single contiguous buffer.
+// Used when an item spans more than one extent, the parsers downstream
+// require contiguous bytes. Returns undefined if any extent fails to
+// resolve or falls outside the source dataView.
+function assembleExtents(dataView, ilocItem, idatContentOffset) {
+    const resolved = [];
+    let totalLength = 0;
+    for (let i = 0; i < ilocItem.extents.length; i++) {
+        const extent = ilocItem.extents[i];
+        const start = resolveExtentToFileOffset(ilocItem, extent, idatContentOffset);
+        if (start === undefined || start + extent.extentLength > dataView.byteLength) {
+            return undefined;
+        }
+        resolved.push({start, length: extent.extentLength});
+        totalLength += extent.extentLength;
+    }
+    const buffer = new Uint8Array(totalLength);
+    let writeOffset = 0;
+    for (let i = 0; i < resolved.length; i++) {
+        const {start, length} = resolved[i];
+        for (let j = 0; j < length; j++) {
+            buffer[writeOffset + j] = dataView.getUint8(start + j);
+        }
+        writeOffset += length;
+    }
+    return new DataView(buffer.buffer);
 }
 
 function findIinfExifItemId(metaBox) {
@@ -261,19 +345,36 @@ export function getTiffHeaderOffset(dataView, exifOffset) {
     return exifOffset + TIFF_HEADER_OFFSET_SIZE + dataView.getUint32(exifOffset);
 }
 
-function findXmpChunks(metaBox, metadataBlocks) {
+function findXmpChunks(dataView, metaBox, metadataBlocks) {
     try {
         const xmpItemId = findIinfXmpItemId(metaBox).itemId;
         const ilocItem = findIlocItem(metaBox, xmpItemId);
-        const ilocItemExtent = ilocItem.extents[0];
-        const dataOffset = ilocItem.baseOffset + ilocItemExtent.extentOffset;
-        pushIlocExtentBlocks(metadataBlocks, ilocItem, 'xmp');
-        return [
-            {
-                dataOffset,
-                length: ilocItemExtent.extentLength,
+        warnIfUnsupportedConstructionMethod(ilocItem);
+        const idatContentOffset = findIdatContentOffset(metaBox);
+        pushIlocExtentBlocks(metadataBlocks, ilocItem, 'xmp', idatContentOffset);
+        if (ilocItem.extents.length > 1) {
+            const assembled = assembleExtents(dataView, ilocItem, idatContentOffset);
+            if (assembled === undefined) {
+                return undefined;
             }
-        ];
+            return {
+                chunks: [{dataOffset: 0, length: assembled.byteLength}],
+                dataView: assembled,
+            };
+        }
+        const ilocItemExtent = ilocItem.extents[0];
+        const dataOffset = resolveExtentToFileOffset(ilocItem, ilocItemExtent, idatContentOffset);
+        if (dataOffset === undefined) {
+            return undefined;
+        }
+        return {
+            chunks: [
+                {
+                    dataOffset,
+                    length: ilocItemExtent.extentLength,
+                }
+            ],
+        };
     } catch (error) {
         return undefined;
     }
@@ -372,6 +473,16 @@ function parseMetadataBox(dataView, startOffset, contentOffset, length) {
         type: 'meta',
         subBoxes: parseSubBoxes(dataView, contentOffset + FLAGS_SIZE, length - (contentOffset + FLAGS_SIZE - startOffset)),
         length
+    };
+}
+
+function parseItemDataBox(contentOffset, length) {
+    const FLAGS_SIZE = 3;
+
+    return {
+        type: 'idat',
+        contentOffset: contentOffset + FLAGS_SIZE,
+        length,
     };
 }
 

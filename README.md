@@ -442,12 +442,10 @@ Notes and limitations:
   not guaranteed to be preserved by a `0..end` slice. The slice is
   enough to re-extract everything ExifReader itself reads, not to
   preserve every byte a third-party tool might care about.
-- For HEIC/AVIF, `iloc` items often live in `mdat` near the end of the file,
-  so `metadataRange.end` may land deep into the file and trimming saves
-  little. Multi-extent items emit one block per extent, but the parser
-  currently reads only the first extent. The `icc` block here points at the
-  raw ICC profile bytes inside the `colr` box, not at the `colr` box header
-  (for JPEG/PNG/WebP an `icc` block covers the full container wrapper).
+- For HEIC/AVIF, metadata can sit near the end of the file, so
+  `metadataRange.end` often lands close to the file size and trimming
+  saves little. The `icc` block here covers just the ICC profile bytes;
+  for JPEG/PNG/WebP it covers the full container wrapper.
 - For MPF JPEGs, sub-images appear as `mpfImage` blocks and push `end`
   toward the file size. If MPF parsing is suppressed by a tag filter (any
   `excludeTags: {mpf: ...}` or `includeTags` that does not include `mpf`),

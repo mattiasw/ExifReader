@@ -74,11 +74,21 @@ This is **not** a TypeScript project, but `exif-reader.d.ts` provides types for 
 
 ## Tests
 
-Every source file has a corresponding `test/unit/*-spec.js`. New code needs tests. Coverage thresholds are enforced: 92% statements, 86% branches, 97% functions, 92% lines.
+Every source file has a corresponding `test/unit/*-spec.js`. New code needs tests. Coverage thresholds are enforced.
 
 Tests use `babel-plugin-rewire` to mock dependencies (e.g., `__Rewire__`/`__ResetDependency__`). Follow existing test patterns.
 
 Use `npm run test` to run the unit tests and make use of `describe.only` and `it.only` for focused testing.
+
+### TDD: red-green-refactor
+
+Write code test-first. For each new behavior:
+
+1. **Red** — write the smallest failing test that captures the next bit of behavior. Run it and watch it fail for the expected reason (missing function, wrong return, etc.).
+2. **Green** — write the smallest change in `src/` that makes the test pass. Resist adding anything the test doesn't demand.
+3. **Refactor** — with tests green, tidy names, extract helpers, remove duplication. Re-run the suite after each change.
+
+Cycle one behavior at a time, not one feature. A feature like "parse iloc constructionMethod 1" is many cycles (parse the idat box; resolve a single-extent cm-1 offset; handle a missing idat box; etc.), each one a red-green-refactor turn.
 
 ## Changelog
 

@@ -10,6 +10,7 @@ export function buildTagsFromMergeSteps({
     tagFilter,
     dataView,
     tiffHeaderOffset,
+    exifDataView,
     fileType,
     pngTextChunks,
     pngTextIsAsync,
@@ -27,6 +28,7 @@ export function buildTagsFromMergeSteps({
             tagFilter,
             dataView,
             tiffHeaderOffset,
+            exifDataView,
             fileType,
             thumbnailIfdTags,
             tags,
@@ -64,6 +66,7 @@ export function applyMergeStep({
     tagFilter,
     dataView,
     tiffHeaderOffset,
+    exifDataView,
     fileType,
     thumbnailIfdTags,
     tags,
@@ -304,7 +307,7 @@ export function applyMergeStep({
         const thumbnail = (deps.Constants.USE_JPEG || deps.Constants.USE_WEBP)
             && deps.Constants.USE_EXIF
             && deps.Constants.USE_THUMBNAIL
-            && deps.Thumbnail.get(dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
+            && deps.Thumbnail.get(exifDataView || dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
         if (thumbnail) {
             tags.Thumbnail = thumbnail;
         } else {

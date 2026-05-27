@@ -269,7 +269,9 @@ export function loadView(
         brobXmpChunk,
         jxlCodestreamOffset,
         metadataBlocks,
-        metadataTruncated
+        metadataTruncated,
+        exifDataView,
+        xmpDataView
     } = ImageHeader.parseAppMarkers(dataView, async, expanded && includeOffsets);
 
     const fileHasMetaData = hasPotentialMetaData({
@@ -334,7 +336,7 @@ export function loadView(
         && tagFilter.shouldParseGroup('exif')
     ) {
         const {tags: readTags, byteOrder} = Tags.read(
-            dataView,
+            exifDataView || dataView,
             tiffHeaderOffset,
             includeUnknown,
             computed,
@@ -462,7 +464,7 @@ export function loadView(
         ) {
             if (hasCanonData(parsedExifTags)) {
                 const readCanonTags = CanonTags.read(
-                    dataView,
+                    exifDataView || dataView,
                     tiffHeaderOffset,
                     parsedExifTags['MakerNote'].__offset,
                     byteOrder,
@@ -480,7 +482,7 @@ export function loadView(
                 }
             } else if (hasPentaxType1Data(parsedExifTags)) {
                 const readPentaxTags = PentaxTags.read(
-                    dataView,
+                    exifDataView || dataView,
                     tiffHeaderOffset,
                     parsedExifTags['MakerNote'].__offset,
                     includeUnknown,
@@ -540,7 +542,7 @@ export function loadView(
         && hasXmpData(xmpChunks)
         && tagFilter.shouldParseGroup('xmp')
     ) {
-        const readTags = XmpTags.read(dataView, xmpChunks, domParser);
+        const readTags = XmpTags.read(xmpDataView || dataView, xmpChunks, domParser);
         const parsedXmpTags = filterTagsForParse('xmp', readTags, tagFilter);
         parsedGroups.xmp = parsedXmpTags;
 
@@ -846,6 +848,7 @@ export function loadView(
                 tagFilter,
                 dataView,
                 tiffHeaderOffset,
+                exifDataView,
                 fileType,
                 pngTextChunks,
                 pngTextIsAsync,
@@ -865,6 +868,7 @@ export function loadView(
         tagFilter,
         dataView,
         tiffHeaderOffset,
+        exifDataView,
         fileType,
         pngTextChunks,
         pngTextIsAsync,
