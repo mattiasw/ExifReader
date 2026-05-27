@@ -56,6 +56,14 @@ Enforced by ESLint (`.eslintrc.json`). Key rules:
 - kebab-case filenames, camelCase variables/functions, PascalCase constructors/class-like exports
 - Place functions in the order they are used. That means the definition of a function is placed after the location from where it is called.
 
+## Comments
+
+Prefer self-explaining code (clear names, small functions) over comments. Add a comment only when the code cannot be made obvious on its own, for example a non-trivial spec reference, a workaround for a known quirk, or a subtle invariant.
+
+When a comment is warranted, keep it short and to the point. One or two lines is usually enough.
+
+JSDoc is welcome on exported functions where it documents the contract (parameters, return shape). Keep it concise and skip restating what the signature already says.
+
 ## Type Definitions
 
 This is **not** a TypeScript project, but `exif-reader.d.ts` provides types for consumers. When adding or changing public API surface (new tags, options, return types):

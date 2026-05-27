@@ -237,6 +237,33 @@ export interface ExpandedTags {
     photoshop?: PhotoshopTags;
     makerNotes?: CanonTags & PentaxTags;
     composite?: CompositeTags;
+    metadataRange?: MetadataRange;
+}
+
+export type MetadataBlockType =
+    | 'exif'
+    | 'iptc'
+    | 'xmp'
+    | 'icc'
+    | 'mpf'
+    | 'mpfImage'
+    | 'jfif'
+    | 'file'
+    | 'png'
+    | 'riff'
+    | 'gif';
+
+export interface MetadataBlock {
+    type: MetadataBlockType,
+    start: number,
+    end: number,
+}
+
+export interface MetadataRange {
+    start: number,
+    end: number,
+    complete: boolean,
+    blocks: MetadataBlock[],
 }
 
 interface GpsTags {
@@ -387,19 +414,22 @@ type CommonOptions = {
     decompress?: DecompressOptions,
 };
 
+type ExpandedOnly = {expanded: true, includeOffsets?: boolean};
+type FlatOnly = {expanded?: false, includeOffsets?: false};
+
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & {expanded: true, length?: number, async?: false}): ExpandedTags;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & {expanded?: false, length?: number, async?: false}): Tags;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & {expanded: true, length?: number, async: true}): Promise<ExpandedTags>;
-export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & {expanded?: false, length?: number, async: true}): Promise<Tags>;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & ExpandedOnly & {length?: number, async?: false}): ExpandedTags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & FlatOnly & {length?: number, async?: false}): Tags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & ExpandedOnly & {length?: number, async: true}): Promise<ExpandedTags>;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & FlatOnly & {length?: number, async: true}): Promise<Tags>;
 export function load(data: string | File): Promise<Tags>;
-export function load(data: string | File, options: CommonOptions & {expanded: true, length?: number, async?: boolean }): Promise<ExpandedTags>;
-export function load(data: string | File, options: CommonOptions & {expanded?: false, length?: number, async?: boolean }): Promise<Tags>;
+export function load(data: string | File, options: CommonOptions & ExpandedOnly & {length?: number, async?: boolean }): Promise<ExpandedTags>;
+export function load(data: string | File, options: CommonOptions & FlatOnly & {length?: number, async?: boolean }): Promise<Tags>;
 export function loadView(data: DataView): Tags;
-export function loadView(data: DataView, options: CommonOptions & {expanded: true, async?: false}): ExpandedTags;
-export function loadView(data: DataView, options: CommonOptions & {expanded?: false, async?: false}): Tags;
-export function loadView(data: DataView, options: CommonOptions & {expanded: true, async: true}): Promise<ExpandedTags>;
-export function loadView(data: DataView, options: CommonOptions & {expanded?: false, async: true}): Promise<Tags>;
+export function loadView(data: DataView, options: CommonOptions & ExpandedOnly & {async?: false}): ExpandedTags;
+export function loadView(data: DataView, options: CommonOptions & FlatOnly & {async?: false}): Tags;
+export function loadView(data: DataView, options: CommonOptions & ExpandedOnly & {async: true}): Promise<ExpandedTags>;
+export function loadView(data: DataView, options: CommonOptions & FlatOnly & {async: true}): Promise<Tags>;
 
 export namespace errors {
     export class MetadataMissingError extends Error {}

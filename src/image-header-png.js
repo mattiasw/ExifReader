@@ -27,31 +27,60 @@ export const TYPE_TIME = 'tIME';
 export const TYPE_EXIF = 'eXIf';
 export const TYPE_ICCP = 'iCCP';
 
+/**
+ * Checks if the provided data view represents a PNG file.
+ *
+ * @param {DataView} dataView The data view to check.
+ * @returns {boolean} True if the data view starts with the PNG signature.
+ */
 function isPngFile(dataView) {
     return !!dataView && getStringFromDataView(dataView, 0, PNG_ID.length) === PNG_ID;
 }
 
-function findPngOffsets(dataView, async) {
+/**
+ * Walks the PNG chunk list and reports the offsets ExifReader needs.
+ *
+ * @param {DataView} dataView The data view to find offsets in.
+ * @param {boolean} async Whether async parsing is enabled (gates zTXt/iCCP).
+ * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
+ *     receives one block per recognized chunk and gets `truncated` set to
+ *     true if the loop never saw an IEND chunk.
+ * @returns {Object} Per-section offsets plus `hasAppMarkers`.
+ */
+function findPngOffsets(dataView, async, metadataBlocks) {
     const PNG_CRC_SIZE = 4;
+    const TYPE_IEND = 'IEND';
 
     const offsets = {
         hasAppMarkers: false
     };
 
     let offset = PNG_ID.length;
+    let sawIEnd = false;
 
     while (offset + PNG_CHUNK_LENGTH_SIZE + PNG_CHUNK_TYPE_SIZE <= dataView.byteLength) {
+        let blockType;
+        const chunkDataLength = dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET);
+
+        // The IEND check is only needed for the truncation signal, so skip
+        // the per-chunk string read for default callers.
+        if (metadataBlocks
+            && getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === TYPE_IEND) {
+            sawIEnd = true;
+        }
         if (Constants.USE_PNG_FILE && isPngImageHeaderChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
             offsets.pngHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
+            blockType = 'file';
         } else if (Constants.USE_XMP && isPngXmpChunk(dataView, offset)) {
             const dataOffset = getPngXmpDataOffset(dataView, offset);
             if (dataOffset !== undefined) {
                 offsets.hasAppMarkers = true;
                 offsets.xmpChunks = [{
                     dataOffset,
-                    length: dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET) - (dataOffset - (offset + PNG_CHUNK_DATA_OFFSET))
+                    length: chunkDataLength - (dataOffset - (offset + PNG_CHUNK_DATA_OFFSET))
                 }];
+                blockType = 'xmp';
             }
         } else if (isPngTextChunk(dataView, offset, async)) {
             offsets.hasAppMarkers = true;
@@ -60,16 +89,17 @@ function findPngOffsets(dataView, async) {
                 offsets.pngTextChunks = [];
             }
             offsets.pngTextChunks.push({
-                length: dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET),
+                length: chunkDataLength,
                 type: chunkType,
                 offset: offset + PNG_CHUNK_DATA_OFFSET
             });
+            blockType = 'png';
         } else if (isPngExifChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
             offsets.tiffHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
+            blockType = 'exif';
         } else if (Constants.USE_ICC && async && isPngIccpChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
-            const chunkDataLength = dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET);
             const iccHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
             const {profileName, compressionMethod, compressedProfileOffset} = parseIccHeader(dataView, iccHeaderOffset);
             if (!offsets.iccChunks) {
@@ -83,18 +113,34 @@ function findPngOffsets(dataView, async) {
                 profileName,
                 compressionMethod
             });
+            blockType = 'icc';
         } else if (isPngChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
             if (!offsets.pngChunkOffsets) {
                 offsets.pngChunkOffsets = [];
             }
             offsets.pngChunkOffsets.push(offset + PNG_CHUNK_LENGTH_OFFSET);
+            blockType = 'png';
         }
 
-        offset += dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET)
+        const chunkTotalSize = chunkDataLength
             + PNG_CHUNK_LENGTH_SIZE
             + PNG_CHUNK_TYPE_SIZE
             + PNG_CRC_SIZE;
+
+        if (metadataBlocks && blockType) {
+            metadataBlocks.push({
+                type: blockType,
+                start: offset,
+                end: offset + chunkTotalSize,
+            });
+        }
+
+        offset += chunkTotalSize;
+    }
+
+    if (metadataBlocks) {
+        metadataBlocks.truncated = !sawIEnd;
     }
 
     return offsets;

@@ -34,9 +34,12 @@ function isAvifFile(dataView) {
 /**
  * Finds the offsets of an AVIF file in the provided data view.
  *
- * @param {DataView} dataView - The data view to find offsets in.
- * @returns {Object} An object containing the offsets of the TIFF header, XMP chunks, ICC chunks, and a boolean indicating if any of these exist.
+ * @param {DataView} dataView The data view to find offsets in.
+ * @param {Array<Object>=} metadataBlocks Optional out-array. Forwarded to
+ *     the shared ISO-BMFF findOffsets.
+ * @returns {Object} TIFF header offset, XMP chunks, ICC chunks, and whether
+ *     any were found.
  */
-function findAvifOffsets(dataView) {
-    return findOffsets(dataView);
+function findAvifOffsets(dataView, metadataBlocks) {
+    return findOffsets(dataView, metadataBlocks);
 }

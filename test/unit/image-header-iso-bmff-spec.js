@@ -335,6 +335,147 @@ describe('image-header-iso-bmff', () => {
                 }]
             });
         });
+
+        describe('metadataBlocks', () => {
+            it('should leave metadataBlocks empty when no meta box is found', () => {
+                const dataView = getDataView('');
+                const metadataBlocks = [];
+                findOffsets(dataView, metadataBlocks);
+                expect(metadataBlocks).to.deep.equal([]);
+            });
+
+            it('should emit exif, xmp and icc blocks from iloc extents', () => {
+                const entryCount = getByteStringFromNumber(2, 2);
+                const itemProtectionIndex = getByteStringFromNumber(0, 2);
+                const itemName = '\x00';
+
+                const exifItemId = getByteStringFromNumber(2, 2);
+                const exifItemType = getByteStringFromNumber(ITEM_INFO_TYPE_EXIF, 4);
+                const exifPrefix = 'Exif\x00\x00';
+                const tiffHeaderOffsetBytes = getByteStringFromNumber(exifPrefix.length, 4);
+                const exifDataPadding = '\x00\x00\x00\x00\x00\x00\x00\x00\x00';
+                const exifData = tiffHeaderOffsetBytes + exifPrefix + '<Exif data>';
+
+                const xmpItemId = getByteStringFromNumber(3, 2);
+                const xmpItemType = getByteStringFromNumber(ITEM_INFO_TYPE_MIME, 4);
+                const xmpContentType = 'application/rdf+xml\x00';
+
+                const colorType = 'prof';
+                const iccContent = '<ICC content>';
+                const iccLength = iccContent.length;
+
+                const baseOffsetValue = exifDataPadding.length;
+                const offsetSizeAndLengthSize = getByteStringFromNumber(0x44, 1);
+                const baseOffsetSizeAndReserved = getByteStringFromNumber(0x40, 1);
+                const itemCount = getByteStringFromNumber(2, 2);
+                const dataReferenceIndex = getByteStringFromNumber(4711, 2);
+                const baseOffset = getByteStringFromNumber(baseOffsetValue, 4);
+                const exifExtentLength = getByteStringFromNumber(128, 4);
+                const xmpExtentLength = getByteStringFromNumber(256, 4);
+                const extentCount = getByteStringFromNumber(1, 2);
+                const exifExtentOffset = getByteStringFromNumber(185, 4);
+                const xmpExtentOffset = getByteStringFromNumber(5014, 4);
+
+                const boxes = getFullBox(
+                    'meta',
+                    0,
+                    getFullBox(
+                        'iinf',
+                        0,
+                        entryCount
+                        + getFullBox(
+                            'infe',
+                            2,
+                            exifItemId + itemProtectionIndex + exifItemType + itemName,
+                        )
+                        + getFullBox(
+                            'infe',
+                            2,
+                            xmpItemId + itemProtectionIndex + xmpItemType + itemName + xmpContentType,
+                        )
+                    )
+                    + getBox(
+                        'iprp',
+                        getBox(
+                            'ipco',
+                            getBox(
+                                'colr',
+                                colorType + getByteStringFromNumber(iccLength + 4, 4) + iccContent
+                            )
+                        )
+                    )
+                    + getFullBox(
+                        'iloc',
+                        0,
+                        offsetSizeAndLengthSize + baseOffsetSizeAndReserved + itemCount
+                        + exifItemId + dataReferenceIndex + baseOffset + extentCount + exifExtentOffset + exifExtentLength
+                        + xmpItemId + dataReferenceIndex + baseOffset + extentCount + xmpExtentOffset + xmpExtentLength
+                    )
+                );
+
+                const dataView = getDataView(boxes + exifDataPadding + exifData);
+                const metadataBlocks = [];
+                findOffsets(dataView, metadataBlocks);
+
+                // Order matches the call order in findOffsets (exif, xmp, icc).
+                // The pipeline merge step sorts blocks by start before exposing them.
+                expect(metadataBlocks).to.deep.equal([
+                    {type: 'exif', start: baseOffsetValue + 185, end: baseOffsetValue + 185 + 128},
+                    {type: 'xmp', start: baseOffsetValue + 5014, end: baseOffsetValue + 5014 + 256},
+                    {type: 'icc', start: 116, end: 116 + 17},
+                ]);
+            });
+
+            it('should emit one block per extent for multi-extent iloc items', () => {
+                const entryCount = getByteStringFromNumber(1, 2);
+                const itemProtectionIndex = getByteStringFromNumber(0, 2);
+                const itemName = '\x00';
+                const exifItemId = getByteStringFromNumber(2, 2);
+                const exifItemType = getByteStringFromNumber(ITEM_INFO_TYPE_EXIF, 4);
+
+                const offsetSizeAndLengthSize = getByteStringFromNumber(0x44, 1);
+                const baseOffsetSizeAndReserved = getByteStringFromNumber(0x40, 1);
+                const itemCount = getByteStringFromNumber(1, 2);
+                const dataReferenceIndex = getByteStringFromNumber(0, 2);
+                const baseOffset = getByteStringFromNumber(1000, 4);
+                const extentCount = getByteStringFromNumber(2, 2);
+                const extent1Offset = getByteStringFromNumber(100, 4);
+                const extent1Length = getByteStringFromNumber(50, 4);
+                const extent2Offset = getByteStringFromNumber(500, 4);
+                const extent2Length = getByteStringFromNumber(80, 4);
+
+                const boxes = getFullBox(
+                    'meta',
+                    0,
+                    getFullBox(
+                        'iinf',
+                        0,
+                        entryCount + getFullBox(
+                            'infe',
+                            2,
+                            exifItemId + itemProtectionIndex + exifItemType + itemName,
+                        )
+                    )
+                    + getFullBox(
+                        'iloc',
+                        0,
+                        offsetSizeAndLengthSize + baseOffsetSizeAndReserved + itemCount
+                        + exifItemId + dataReferenceIndex + baseOffset + extentCount
+                        + extent1Offset + extent1Length
+                        + extent2Offset + extent2Length
+                    )
+                );
+
+                const dataView = getDataView(boxes + '\x00'.repeat(2000));
+                const metadataBlocks = [];
+                findOffsets(dataView, metadataBlocks);
+
+                expect(metadataBlocks).to.deep.equal([
+                    {type: 'exif', start: 1100, end: 1150},
+                    {type: 'exif', start: 1500, end: 1580},
+                ]);
+            });
+        });
     });
 });
 

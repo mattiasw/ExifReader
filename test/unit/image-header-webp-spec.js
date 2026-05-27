@@ -101,6 +101,30 @@ describe('image-header-webp', () => {
         expect(offsets.xmpChunks).to.be.undefined;
     });
 
+    describe('metadataBlocks', () => {
+        it('should not push anything when no out-array is given', () => {
+            ImageHeaderWebp.findOffsets(getWebpDataView());
+            // no observable effect — sanity check: no error
+        });
+
+        it('should emit exif, riff, xmp and icc blocks for a full file', () => {
+            const metadataBlocks = [];
+            ImageHeaderWebp.findOffsets(getWebpDataView(), metadataBlocks);
+            expect(metadataBlocks).to.deep.equal([
+                {type: 'exif', start: 24, end: 36},
+                {type: 'riff', start: 36, end: 54},
+                {type: 'xmp', start: 54, end: 66},
+                {type: 'icc', start: 66, end: 78},
+            ]);
+        });
+
+        it('should leave the array empty when there is no metadata', () => {
+            const metadataBlocks = [];
+            ImageHeaderWebp.findOffsets(getWebpDataView({missingMetaData: true}), metadataBlocks);
+            expect(metadataBlocks).to.deep.equal([]);
+        });
+    });
+
     function getWebpDataView({missingMetaData, oddSizedChunk, withExifIdentifier} = {}) {
         return getDataView(
             'RIFF\x10\x00\x00\x00WEBP'

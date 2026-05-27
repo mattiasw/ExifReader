@@ -314,6 +314,22 @@ export function applyMergeStep({
         return tags;
     }
 
+    if (step.type === 'metadataRange') {
+        if (!expanded) {
+            return tags;
+        }
+        const metadataRange = buildMetadataRange(
+            step.metadataBlocks,
+            step.metadataTruncated,
+            dataView,
+            parsedGroups
+        );
+        if (metadataRange) {
+            tags.metadataRange = metadataRange;
+        }
+        return tags;
+    }
+
     if (step.type === 'fileType') {
         if (
             fileType
@@ -460,4 +476,50 @@ export function addPngTextReadTagsToTagsAndGroups({
 
 export function isThenable(value) {
     return !!value && typeof value.then === 'function';
+}
+
+function buildMetadataRange(metadataBlocks, metadataTruncated, dataView, parsedGroups) {
+    const blocks = (metadataBlocks || []).slice();
+    const finderTruncated = !!metadataTruncated;
+
+    if (parsedGroups && parsedGroups.mpf && Array.isArray(parsedGroups.mpf.Images)) {
+        for (let i = 0; i < parsedGroups.mpf.Images.length; i++) {
+            const image = parsedGroups.mpf.Images[i];
+            if (!image || !image.ImageOffset || !image.ImageSize) {
+                continue;
+            }
+            const offset = image.ImageOffset.value;
+            const size = image.ImageSize.value;
+            // Skip the primary self-reference (offset 0), malformed entries,
+            // and zero-length entries.
+            if (typeof offset !== 'number' || offset <= 0
+                || typeof size !== 'number' || size <= 0) {
+                continue;
+            }
+            blocks.push({
+                type: 'mpfImage',
+                start: offset,
+                end: offset + size,
+            });
+        }
+    }
+
+    if (blocks.length === 0) {
+        return undefined;
+    }
+
+    blocks.sort((a, b) => a.start - b.start);
+
+    const start = blocks[0].start;
+    let end = blocks[0].end;
+    for (let i = 1; i < blocks.length; i++) {
+        if (blocks[i].end > end) {
+            end = blocks[i].end;
+        }
+    }
+
+    const byteLength = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
+    const complete = !finderTruncated && end <= byteLength;
+
+    return {start, end, complete, blocks};
 }

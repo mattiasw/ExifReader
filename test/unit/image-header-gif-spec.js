@@ -28,4 +28,19 @@ describe('image-header-gif', () => {
             gifHeaderOffset: 0
         });
     });
+
+    describe('metadataBlocks', () => {
+        it('should not modify out-array argument when undefined', () => {
+            const offsets = ImageHeaderGif.findOffsets('GIF87a<screen descriptor>');
+            expect(offsets).to.deep.equal({gifHeaderOffset: 0});
+        });
+
+        it('should emit a gif block covering the GIF header for the screen descriptor', () => {
+            const metadataBlocks = [];
+            ImageHeaderGif.findOffsets('GIF87a<screen descriptor>', metadataBlocks);
+            expect(metadataBlocks).to.deep.equal([
+                {type: 'gif', start: 0, end: 13},
+            ]);
+        });
+    });
 });
