@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--type`, `--dir`, `--include-io`, and `--probe-bytes` (bisects the
   minimum prefix length needed to extract metadata equivalent to the full
   file, useful for I/O-optimization work).
+- `length: 'auto'` option to `load()` adaptively fetches only the bytes
+  that contain metadata, using HTTP `Range` requests (or filesystem
+  reads / `File.slice` for local inputs). The minimal byte slice is
+  returned as `metadataRange.buffer`, the number of bytes read as
+  `metadataRange.fetched`, and the IO-call count as
+  `metadataRange.requests`. Requires `expanded: true` and `includeOffsets:
+  true`. Not supported for plain TIFF or bare JPEG XL codestreams.
+- `bin/profile.js --length-auto` and `bin/profile-diff.js` to measure the
+  bandwidth/time savings of `length: 'auto'` against a baseline run.
 
 ### Fixed
 

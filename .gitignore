@@ -15,4 +15,6 @@ test/fixtures/tag-filtering-outputs/custom_*
 gh-pages
 local-assets
 .claude/settings.local.json
+.claude/*.lock
 .profile-cache.json
+.profile-results/

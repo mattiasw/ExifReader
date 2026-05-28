@@ -433,3 +433,31 @@ if (expandedWithOffsets.metadataRange) {
     // @ts-expect-error  pcx is not a valid block type
     expandedWithOffsets.metadataRange.blocks[0].type === "pcx";
 }
+
+// length: 'auto' — narrows to Promise<ExpandedTags>, regardless of input shape.
+const autoFromUrl: Promise<ExpandedTags> = load("", {
+    length: "auto",
+    expanded: true,
+    includeOffsets: true,
+});
+const autoFromBuf: Promise<ExpandedTags> = load(new ArrayBuffer(0), {
+    length: "auto",
+    expanded: true,
+    includeOffsets: true,
+});
+
+const autoTags = await load("", { length: "auto", expanded: true, includeOffsets: true });
+if (autoTags.metadataRange) {
+    autoTags.metadataRange.buffer instanceof ArrayBuffer;
+    autoTags.metadataRange.fetched === 1024;
+    autoTags.metadataRange.requests === 1;
+}
+
+// @ts-expect-error  length: 'auto' requires expanded: true
+load(new ArrayBuffer(0), { length: "auto", includeOffsets: true });
+// @ts-expect-error  length: 'auto' requires includeOffsets: true
+load(new ArrayBuffer(0), { length: "auto", expanded: true });
+// @ts-expect-error  length: 'auto' requires both expanded and includeOffsets
+load(new ArrayBuffer(0), { length: "auto" });
+// @ts-expect-error  length: 'auto' on a URL still requires both
+load("", { length: "auto" });

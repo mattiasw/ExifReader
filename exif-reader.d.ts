@@ -264,6 +264,10 @@ export interface MetadataRange {
     end: number,
     complete: boolean,
     blocks: MetadataBlock[],
+    // Only present when length: 'auto' was used:
+    buffer?: ArrayBuffer | SharedArrayBuffer | Buffer,
+    fetched?: number,
+    requests?: number,
 }
 
 interface GpsTags {
@@ -417,12 +421,21 @@ type CommonOptions = {
 type ExpandedOnly = {expanded: true, includeOffsets?: boolean};
 type FlatOnly = {expanded?: false, includeOffsets?: false};
 
+type AutoLengthOptions = {
+    length: 'auto',
+    expanded: true,
+    includeOffsets: true,
+    async?: boolean,
+};
+
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer): Tags;
+export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & AutoLengthOptions): Promise<ExpandedTags>;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & ExpandedOnly & {length?: number, async?: false}): ExpandedTags;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & FlatOnly & {length?: number, async?: false}): Tags;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & ExpandedOnly & {length?: number, async: true}): Promise<ExpandedTags>;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & FlatOnly & {length?: number, async: true}): Promise<Tags>;
 export function load(data: string | File): Promise<Tags>;
+export function load(data: string | File, options: CommonOptions & AutoLengthOptions): Promise<ExpandedTags>;
 export function load(data: string | File, options: CommonOptions & ExpandedOnly & {length?: number, async?: boolean }): Promise<ExpandedTags>;
 export function load(data: string | File, options: CommonOptions & FlatOnly & {length?: number, async?: boolean }): Promise<Tags>;
 export function loadView(data: DataView): Tags;

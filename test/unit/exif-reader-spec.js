@@ -1317,6 +1317,508 @@ describe('exif-reader', function () {
             expect(tags.metadataRange.end).to.equal(200);
         });
     });
+
+    describe('length: "auto"', () => {
+        const AUTO_OPTIONS = {length: 'auto', expanded: true, includeOffsets: true};
+
+        function rewireForAutoTest({end} = {}) {
+            rewireImageHeader({
+                tiffHeaderOffset: OFFSET_TEST_VALUE,
+                metadataBlocks: end !== undefined ? [{type: 'exif', start: 2, end}] : [],
+            });
+            rewireTagsRead('Tags', {MyExifTag: 42});
+        }
+
+        function expectAutoToThrow(opts, pattern) {
+            expect(() => ExifReader.load(new ArrayBuffer(8), opts)).to.throw(pattern);
+        }
+
+        it('should throw synchronously when length:"auto" is passed without expanded:true', () => {
+            expectAutoToThrow({length: 'auto', includeOffsets: true}, /expanded/i);
+        });
+
+        it('should throw synchronously when length:"auto" is passed without includeOffsets:true', () => {
+            expectAutoToThrow({length: 'auto', expanded: true}, /includeOffsets/i);
+        });
+
+        it('should throw synchronously when length:"auto" is passed without either', () => {
+            expectAutoToThrow({length: 'auto'}, /expanded|includeOffsets/i);
+        });
+
+        it('should not mutate the caller-supplied options object', async () => {
+            rewireForAutoTest({end: 100});
+
+            const options = Object.assign({}, AUTO_OPTIONS);
+            const snapshot = JSON.stringify(options);
+            await ExifReader.load(new ArrayBuffer(1024), options);
+
+            expect(JSON.stringify(options)).to.equal(snapshot);
+            expect('async' in options).to.equal(false);
+        });
+
+        describe('in-memory inputs', () => {
+            it('should return a Promise and attach metadataRange.buffer for an ArrayBuffer input', async () => {
+                rewireForAutoTest({end: 100});
+
+                const result = ExifReader.load(new ArrayBuffer(1024), AUTO_OPTIONS);
+
+                expect(result).to.be.a('promise');
+                const tags = await result;
+
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.end).to.equal(100);
+                expect(tags.metadataRange.buffer).to.be.instanceOf(ArrayBuffer);
+                expect(tags.metadataRange.buffer.byteLength).to.equal(100);
+                expect(tags.metadataRange.fetched).to.equal(100);
+                expect(tags.metadataRange.requests).to.equal(0);
+            });
+
+            it('should attach a Node Buffer slice when the input is a Buffer', async () => {
+                rewireForAutoTest({end: 64});
+
+                const tags = await ExifReader.load(Buffer.alloc(1024), AUTO_OPTIONS);
+
+                expect(Buffer.isBuffer(tags.metadataRange.buffer)).to.equal(true);
+                expect(tags.metadataRange.buffer.length).to.equal(64);
+                expect(tags.metadataRange.requests).to.equal(0);
+            });
+
+            it('should reject when the input has no metadataRange (plain TIFF / bare JXL codestream)', () => {
+                rewireForAutoTest();
+
+                return ExifReader.load(new ArrayBuffer(1024), AUTO_OPTIONS)
+                    .then(() => {
+                        throw new Error('expected rejection');
+                    }, (error) => {
+                        expect(String(error.message || error)).to.match(/length: "auto"|metadata container/i);
+                    });
+            });
+        });
+
+        describe('URL via browser fetch', () => {
+            const URL = 'https://example.com/image.jpg';
+            let originalFetch;
+            let originalWindow;
+            let fetchCalls;
+            let originalWarn;
+            let warnings;
+
+            beforeEach(() => {
+                originalFetch = global.fetch;
+                originalWindow = global.window;
+                global.window = {};
+                fetchCalls = [];
+                originalWarn = console.warn; // eslint-disable-line no-console
+                warnings = [];
+                console.warn = (...args) => warnings.push(args.join(' ')); // eslint-disable-line no-console
+            });
+
+            afterEach(() => {
+                global.window = originalWindow;
+                global.fetch = originalFetch;
+                console.warn = originalWarn; // eslint-disable-line no-console
+            });
+
+            function installFetchMock(fullBufferOrBytes, {alwaysFullBody = false, status416 = false} = {}) {
+                const full = ensureArrayBuffer(fullBufferOrBytes);
+                global.fetch = (url, options) => {
+                    const range = options && options.headers && options.headers.range;
+                    fetchCalls.push({url, range});
+                    if (status416) {
+                        return Promise.resolve({
+                            status: 416,
+                            headers: makeHeaders(undefined, undefined),
+                            arrayBuffer() {
+                                return Promise.resolve(new ArrayBuffer(0));
+                            },
+                        });
+                    }
+                    if (alwaysFullBody || !range) {
+                        return Promise.resolve({
+                            status: 200,
+                            headers: makeHeaders(undefined, full.byteLength),
+                            arrayBuffer() {
+                                return Promise.resolve(full);
+                            },
+                        });
+                    }
+                    const m = /^bytes=(\d+)-(\d*)$/.exec(range);
+                    const start = m ? parseInt(m[1], 10) : 0;
+                    const end = m && m[2] ? parseInt(m[2], 10) + 1 : full.byteLength;
+                    const slice = full.slice(start, end);
+                    return Promise.resolve({
+                        status: 206,
+                        headers: makeHeaders(`bytes ${start}-${end - 1}/${full.byteLength}`, slice.byteLength),
+                        arrayBuffer() {
+                            return Promise.resolve(slice);
+                        },
+                    });
+                };
+            }
+
+            function ensureArrayBuffer(b) {
+                if (b instanceof ArrayBuffer) {
+                    return b;
+                }
+                if (typeof b === 'number') {
+                    return new ArrayBuffer(b);
+                }
+                return b;
+            }
+
+            function makeHeaders(contentRange, contentLength) {
+                return {
+                    get(name) {
+                        const lower = String(name).toLowerCase();
+                        if (lower === 'content-range') {
+                            return contentRange || null;
+                        }
+                        if (lower === 'content-length') {
+                            return contentLength !== undefined ? String(contentLength) : null;
+                        }
+                        return null;
+                    },
+                };
+            }
+
+            it('should converge in 1 fetch when metadata fits in the initial 128 KiB', async () => {
+                rewireForAutoTest({end: 4000});
+                installFetchMock(200000);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(fetchCalls).to.have.lengthOf(1);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.end).to.equal(4000);
+                expect(tags.metadataRange.requests).to.equal(1);
+                expect(tags.metadataRange.buffer).to.be.instanceOf(ArrayBuffer);
+                expect(tags.metadataRange.fetched).to.be.at.least(4000);
+            });
+
+            it('should converge in 2 fetches when metadata extends past the initial 128 KiB', async () => {
+                rewireForAutoTest({end: 200000});
+                installFetchMock(300000);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(fetchCalls).to.have.lengthOf(2);
+                expect(fetchCalls[0].range).to.equal('bytes=0-131071');
+                // Second fetch starts where the first ended (end-1 is inclusive).
+                expect(fetchCalls[1].range).to.match(/^bytes=131072-/);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(tags.metadataRange.complete).to.equal(true);
+            });
+
+            it('should converge in 1 fetch when the server returns 200 with the full body', async () => {
+                rewireForAutoTest({end: 200000});
+                installFetchMock(300000, {alwaysFullBody: true});
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(fetchCalls).to.have.lengthOf(1);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(1);
+            });
+
+            it('should not corrupt the buffer when the server returns 200 on a follow-up Range request', async () => {
+                // First fetch gets a partial body (206). The second claims
+                // to honor Range but the server ignores it and returns the
+                // full body (200). Without the fix this would concatenate
+                // the full body to the partial prefix and corrupt every
+                // offset past the first 128 KiB.
+                rewireForAutoTest({end: 200000});
+
+                const FULL_SIZE = 300000;
+                const fullBuffer = new ArrayBuffer(FULL_SIZE);
+                installCustomFetchMock([
+                    {status: 206, contentRange: `bytes 0-131071/${FULL_SIZE}`, body: () => fullBuffer.slice(0, 131072)},
+                    {status: 200, body: () => fullBuffer},
+                ]);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.fetched).to.equal(FULL_SIZE);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(tags.metadataRange.buffer.byteLength).to.equal(200000);
+            });
+
+            it('should fall back to a single full GET when the server returns 416', async () => {
+                rewireForAutoTest({end: 4000});
+
+                const FULL_SIZE = 100000;
+                const fullBuffer = new ArrayBuffer(FULL_SIZE);
+                installCustomFetchMock([
+                    {status: 416, body: () => new ArrayBuffer(0)},
+                    {status: 200, contentLength: FULL_SIZE, body: () => fullBuffer, expectNoRange: true},
+                ]);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(fetchCalls).to.have.lengthOf(2);
+                expect(fetchCalls[0].range).to.match(/^bytes=0-/); // initial probe
+                expect(fetchCalls[1].range).to.equal(undefined); // fallback: no Range
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+            });
+
+            it('should jump to EOF in one extra fetch when the parser finds no blocks in the initial prefix', async () => {
+                // Simulates an ISO-BMFF file whose `meta` box sits past
+                // the initial 128 KiB. The parser cannot produce blocks
+                // until the meta box is in the buffer, so the loop should
+                // jump straight to totalSize instead of doubling and
+                // hitting the iteration cap.
+                let parseCalls = 0;
+                rewireImageHeaderDynamic((dataView) => {
+                    parseCalls++;
+                    const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
+                    if (len < 250000) {
+                        return {fileType: 'heic'};
+                    }
+                    return {
+                        fileType: 'heic',
+                        tiffHeaderOffset: OFFSET_TEST_VALUE,
+                        metadataBlocks: [{type: 'exif', start: 200000, end: 230000}],
+                    };
+                });
+                rewireTagsRead('Tags', {MyExifTag: 42});
+                installFetchMock(300000);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(fetchCalls).to.have.lengthOf(2);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+                expect(parseCalls).to.equal(2);
+            });
+
+            it('should warn and fall back when the loop does not converge in 4 iterations', async () => {
+                // Each parse claims it needs 1000 more bytes than the
+                // current buffer holds, so the loop never converges and
+                // hits MAX_ITERATIONS.
+                rewireImageHeaderDynamic((dataView) => {
+                    const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
+                    return {
+                        tiffHeaderOffset: OFFSET_TEST_VALUE,
+                        metadataBlocks: [{type: 'exif', start: 2, end: len + 1000}],
+                    };
+                });
+                rewireTagsRead('Tags', {MyExifTag: 42});
+                installFetchMock(10 * 1024 * 1024);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(true);
+                expect(tags.metadataRange).to.exist;
+                expect(tags.metadataRange.requests).to.be.at.least(4);
+            });
+
+            function installCustomFetchMock(stages) {
+                let idx = 0;
+                global.fetch = (url, options) => {
+                    const range = options && options.headers && options.headers.range;
+                    fetchCalls.push({url, range});
+                    const stage = stages[idx++];
+                    return Promise.resolve({
+                        status: stage.status,
+                        headers: makeHeaders(stage.contentRange, stage.contentLength),
+                        arrayBuffer() {
+                            return Promise.resolve(stage.body());
+                        },
+                    });
+                };
+            }
+        });
+
+        describe('URL via Node http', () => {
+            const URL = 'https://example.com/image.jpg';
+            let originalRequire;
+            let originalFetch;
+            let originalWindow;
+            let getCalls;
+
+            beforeEach(() => {
+                originalRequire = global.__non_webpack_require__;
+                originalFetch = global.fetch;
+                originalWindow = global.window;
+                global.window = {};
+                delete global.fetch;
+                getCalls = [];
+            });
+
+            afterEach(() => {
+                global.window = originalWindow;
+                global.fetch = originalFetch;
+                global.__non_webpack_require__ = originalRequire;
+            });
+
+            function installHttpMock(fullBuffer) {
+                const full = Buffer.isBuffer(fullBuffer) ? fullBuffer : Buffer.alloc(fullBuffer);
+                global.__non_webpack_require__ = function (moduleName) {
+                    if (/^https?$/.test(moduleName)) {
+                        return {
+                            get(url, options, callback) {
+                                const range = options && options.headers && options.headers.range;
+                                getCalls.push({url, range});
+                                const m = range && /^bytes=(\d+)-(\d*)$/.exec(range);
+                                const start = m ? parseInt(m[1], 10) : 0;
+                                const end = m && m[2] ? parseInt(m[2], 10) + 1 : full.length;
+                                const slice = full.subarray(start, end);
+                                const response = {
+                                    statusCode: range ? 206 : 200,
+                                    statusMessage: 'OK',
+                                    headers: {
+                                        'content-range': range ? `bytes ${start}-${end - 1}/${full.length}` : undefined,
+                                        'content-length': String(slice.length),
+                                    },
+                                    on(eventName, cb) {
+                                        if (eventName === 'data') {
+                                            setTimeout(() => cb(slice), 0);
+                                        } else if (eventName === 'end') {
+                                            setTimeout(() => cb(), 0);
+                                        }
+                                    },
+                                    resume: () => undefined,
+                                };
+                                setTimeout(() => callback(response), 0);
+                                return {on: () => undefined};
+                            }
+                        };
+                    }
+                };
+            }
+
+            it('should converge in 2 fetches via Node http with Range header', async () => {
+                rewireForAutoTest({end: 200000});
+                installHttpMock(300000);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(getCalls).to.have.lengthOf(2);
+                expect(getCalls[0].range).to.equal('bytes=0-131071');
+                expect(getCalls[1].range).to.match(/^bytes=131072-/);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(Buffer.isBuffer(tags.metadataRange.buffer)).to.equal(true);
+            });
+        });
+
+        describe('local file path (Node fs)', () => {
+            const FILENAME = '/path/to/image.heic';
+            const FILE_DESCRIPTOR = 42;
+            const FULL_SIZE = 300000;
+            let fsCalls;
+            let originalRequire;
+
+            beforeEach(() => {
+                fsCalls = {open: 0, stat: 0, read: [], close: 0};
+                originalRequire = global.__non_webpack_require__;
+                global.__non_webpack_require__ = function (moduleName) {
+                    if (moduleName === 'fs') {
+                        return {
+                            open(_filename, callback) {
+                                fsCalls.open++;
+                                callback(undefined, FILE_DESCRIPTOR);
+                            },
+                            stat(_filename, callback) {
+                                fsCalls.stat++;
+                                callback(undefined, {size: FULL_SIZE});
+                            },
+                            read(fd, {buffer, length, position}, callback) {
+                                fsCalls.read.push({fd, length, position});
+                                buffer.fill(0x42);
+                                callback(undefined);
+                            },
+                            close(_fd, callback) {
+                                fsCalls.close++;
+                                callback(undefined);
+                            }
+                        };
+                    }
+                };
+            });
+
+            afterEach(() => {
+                global.__non_webpack_require__ = originalRequire;
+            });
+
+            it('should converge in 2 reads when metadata is past the initial 128 KiB', async () => {
+                rewireForAutoTest({end: 200000});
+
+                const tags = await ExifReader.load(FILENAME, AUTO_OPTIONS);
+
+                expect(fsCalls.read).to.have.lengthOf(2);
+                expect(fsCalls.read[0].position).to.equal(0);
+                expect(fsCalls.read[0].length).to.equal(131072);
+                expect(fsCalls.read[1].position).to.equal(131072);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(Buffer.isBuffer(tags.metadataRange.buffer)).to.equal(true);
+                expect(fsCalls.close).to.equal(2);
+            });
+
+            it('should stat once on the first read and skip stat on subsequent reads', async () => {
+                rewireForAutoTest({end: 200000});
+
+                await ExifReader.load(FILENAME, AUTO_OPTIONS);
+
+                expect(fsCalls.stat).to.equal(1);
+            });
+        });
+
+        describe('browser File object', () => {
+            const FULL_SIZE = 300000;
+            let originalWindow, originalFile, originalFileReader;
+            let fileSlices;
+
+            beforeEach(() => {
+                originalWindow = global.window;
+                originalFile = global.File;
+                originalFileReader = global.FileReader;
+                global.window = {};
+                global.File = function MockFile() {
+                    // Stub constructor for the mocked File global.
+                };
+                fileSlices = [];
+                global.FileReader = function () {
+                    this.readAsArrayBuffer = (input) => {
+                        setTimeout(() => {
+                            const size = input && typeof input.size === 'number' ? input.size : FULL_SIZE;
+                            this.onload({target: {result: new ArrayBuffer(size)}});
+                        }, 0);
+                    };
+                };
+            });
+
+            afterEach(() => {
+                global.window = originalWindow;
+                global.File = originalFile;
+                global.FileReader = originalFileReader;
+            });
+
+            it('should converge in 2 reads when metadata extends past the initial 128 KiB', async () => {
+                rewireForAutoTest({end: 200000});
+
+                const file = new global.File();
+                file.size = FULL_SIZE;
+                file.slice = (start, end) => {
+                    fileSlices.push({start, end});
+                    return {size: end - start};
+                };
+
+                const tags = await ExifReader.load(file, AUTO_OPTIONS);
+
+                expect(fileSlices.length).to.be.at.least(2);
+                expect(fileSlices[0]).to.deep.equal({start: 0, end: 131072});
+                expect(fileSlices[1].start).to.equal(131072);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.buffer).to.be.instanceOf(ArrayBuffer);
+            });
+        });
+    });
 });
 
 function rewireForLoadView(appMarkersValue, tagsObject, tagsValue) {
@@ -1330,6 +1832,10 @@ function rewireImageHeader(appMarkersValue) {
             return appMarkersValue;
         }
     });
+}
+
+function rewireImageHeaderDynamic(parseAppMarkersImpl) {
+    ExifReaderRewireAPI.__Rewire__('ImageHeader', {parseAppMarkers: parseAppMarkersImpl});
 }
 
 function rewireTagsRead(tagsObject, tagsValue) {
