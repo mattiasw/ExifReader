@@ -49,6 +49,11 @@ async function main() {
         return;
     }
 
+    if (options.lengthAuto && !options.includeIo) {
+        console.error('--length-auto requires --include-io (it is an IO-loop feature).');
+        process.exit(1);
+    }
+
     const ExifReader = loadExifReader();
     const libraryHash = computeLibraryHash();
 
@@ -94,6 +99,8 @@ function parseCliArgs() {
             top: {type: 'string', default: '10'},
             json: {type: 'boolean', default: false},
             'include-io': {type: 'boolean', default: false},
+            'length-auto': {type: 'boolean', default: false},
+            'exclude-mpf': {type: 'boolean', default: false},
             'probe-bytes': {type: 'boolean', default: false},
             'probe-equality': {type: 'string', default: 'keys'},
             help: {type: 'boolean', short: 'h', default: false}
@@ -120,6 +127,8 @@ function parseCliArgs() {
         top,
         json: values.json,
         includeIo: values['include-io'],
+        lengthAuto: values['length-auto'],
+        excludeMpf: values['exclude-mpf'],
         probeBytes: values['probe-bytes'],
         probeEquality: values['probe-equality'],
         help: values.help
@@ -173,6 +182,16 @@ Options:
                                     tiff → tiff/tif, heic → heic/heif)
   --top <n>               Show N slowest files (default: 10, 0 to hide)
   --include-io            Time fs read + parse instead of parse-only
+  --length-auto           Use length: 'auto' (adaptive minimal-fetch).
+                          Requires --include-io; reports bytes fetched
+                          and number of IO requests per file.
+  --exclude-mpf           Pass excludeTags: {mpf: true} to load(). Useful
+                          with --length-auto to skip MPF sub-image blocks
+                          that push the metadata range near EOF.
+
+All runs pass expanded:true + includeOffsets:true to load() so
+length:'auto' and non-auto runs are directly comparable. The overhead
+versus a default flat load() is in the ~5-10% range.
   --probe-bytes           Bisect minimum prefix length needed to parse
                           equal to the full file (use for I/O optimization)
   --probe-equality <m>    "keys" (default) or "strict"
@@ -249,7 +268,17 @@ function canonicalFormat(ext) {
 
 function printHeader(options, targetDir, fileCount, skipped) {
     const distPath = path.relative(EXIFREADER_ROOT_DIR, path.join(EXIFREADER_ROOT_DIR, 'dist', 'exif-reader.js'));
-    const mode = options.includeIo ? 'parse+IO' : 'parse-only';
+    let mode = options.includeIo ? 'parse+IO' : 'parse-only';
+    const extras = [];
+    if (options.lengthAuto) {
+        extras.push('length:auto');
+    }
+    if (options.excludeMpf) {
+        extras.push('no-mpf');
+    }
+    if (extras.length > 0) {
+        mode += ' (' + extras.join(', ') + ')';
+    }
     console.log(`ExifReader profiler - entry=${distPath} mode=${mode}`);
     console.log(`dir=${targetDir} iterations=${options.iterations} warmup=${options.warmup}` + (options.probeBytes ? ` probe=${options.probeEquality}` : ''));
     console.log(`Scanned ${fileCount + skipped} files, ${fileCount} matched, ${skipped} skipped`);
@@ -318,12 +347,24 @@ async function runBenchmark(ExifReader, files, options) {
 }
 
 async function parseFile(ExifReader, result, options) {
-    if (options.includeIo) {
-        const out = ExifReader.load(result.file.path);
-        return isThenable(out) ? await out : out;
+    const loadOpts = {expanded: true, includeOffsets: true};
+    if (options.lengthAuto) {
+        loadOpts.length = 'auto';
     }
-    const out = ExifReader.load(result.buffer);
-    return isThenable(out) ? await out : out;
+    if (options.excludeMpf) {
+        loadOpts.excludeTags = {mpf: true};
+    }
+
+    const target = options.includeIo ? result.file.path : result.buffer;
+    const out = ExifReader.load(target, loadOpts);
+    const tags = isThenable(out) ? await out : out;
+
+    if (options.lengthAuto && tags && tags.metadataRange) {
+        result.lastFetched = tags.metadataRange.fetched;
+        result.lastRequests = tags.metadataRange.requests;
+        result.lastEnd = tags.metadataRange.end;
+    }
+    return tags;
 }
 
 function isThenable(value) {
@@ -490,6 +531,9 @@ function aggregate(results) {
     let totalErrors = 0;
     let totalMinBytes = 0;
     let totalMinBytesFiles = 0;
+    let totalFetched = 0;
+    let totalFetchedFiles = 0;
+    let totalRequests = 0;
 
     for (const r of results) {
         const fmt = r.file.format;
@@ -501,7 +545,10 @@ function aggregate(results) {
                 medians: [],
                 errors: 0,
                 minBytesValues: [],
-                minBytesRatios: []
+                minBytesRatios: [],
+                fetchedValues: [],
+                fetchedRatios: [],
+                requestsValues: []
             });
         }
         const bucket = byFormat.get(fmt);
@@ -528,6 +575,17 @@ function aggregate(results) {
             totalMinBytes += r.minBytes;
             totalMinBytesFiles++;
         }
+
+        if (typeof r.lastFetched === 'number') {
+            bucket.fetchedValues.push(r.lastFetched);
+            bucket.fetchedRatios.push(r.lastFetched / r.sizeBytes);
+            totalFetched += r.lastFetched;
+            totalFetchedFiles++;
+        }
+        if (typeof r.lastRequests === 'number') {
+            bucket.requestsValues.push(r.lastRequests);
+            totalRequests += r.lastRequests;
+        }
     }
 
     const formatStats = [];
@@ -541,6 +599,11 @@ function aggregate(results) {
         const bytesP50 = percentile(bucket.minBytesValues, 0.5);
         const bytesP95 = percentile(bucket.minBytesValues, 0.95);
         const meanRatio = meanOf(bucket.minBytesRatios);
+        const fetchedP50 = percentile(bucket.fetchedValues, 0.5);
+        const fetchedP95 = percentile(bucket.fetchedValues, 0.95);
+        const fetchedRatio = meanOf(bucket.fetchedRatios);
+        const requestsMean = meanOf(bucket.requestsValues);
+        const requestsP95 = percentile(bucket.requestsValues, 0.95);
         formatStats.push({
             format: bucket.format,
             count: bucket.count,
@@ -553,7 +616,12 @@ function aggregate(results) {
             errors: bucket.errors,
             bytesP50,
             bytesP95,
-            meanRatio
+            meanRatio,
+            fetchedP50,
+            fetchedP95,
+            fetchedRatio,
+            requestsMean,
+            requestsP95
         });
     }
 
@@ -570,7 +638,12 @@ function aggregate(results) {
             throughputMiBps: totalTime > 0 ? (totalBytes / MIB) / (totalTime / 1000) : 0,
             minBytesTotal: totalMinBytesFiles > 0 ? totalMinBytes : null,
             minBytesFiles: totalMinBytesFiles,
-            minBytesRatio: totalMinBytesFiles > 0 && totalBytes > 0 ? totalMinBytes / totalBytes : null
+            minBytesRatio: totalMinBytesFiles > 0 && totalBytes > 0 ? totalMinBytes / totalBytes : null,
+            fetchedTotal: totalFetchedFiles > 0 ? totalFetched : null,
+            fetchedFiles: totalFetchedFiles,
+            fetchedRatio: totalFetchedFiles > 0 && totalBytes > 0 ? totalFetched / totalBytes : null,
+            requestsTotal: totalFetchedFiles > 0 ? totalRequests : null,
+            requestsMean: totalFetchedFiles > 0 ? totalRequests / totalFetchedFiles : null
         }
     };
 }
@@ -613,6 +686,14 @@ function printFormatTable(stats, options) {
             {key: 'needed', label: 'needed/total', align: 'right', format: (v) => v === null ? '-' : (v * 100).toFixed(1) + '%'}
         );
     }
+    if (options.lengthAuto) {
+        columns.push(
+            {key: 'fetchedP50', label: 'fetched-p50', align: 'right', format: formatBytesCompact},
+            {key: 'fetchedP95', label: 'fetched-p95', align: 'right', format: formatBytesCompact},
+            {key: 'fetchedPct', label: 'fetched/total', align: 'right', format: (v) => v === null ? '-' : (v * 100).toFixed(1) + '%'},
+            {key: 'reqsMean', label: 'reqs-mean', align: 'right', format: (v) => v === null ? '-' : v.toFixed(2)}
+        );
+    }
 
     const rows = stats.formats.map((f) => ({
         format: f.format,
@@ -625,7 +706,11 @@ function printFormatTable(stats, options) {
         errors: f.errors,
         bytesP50: f.bytesP50,
         bytesP95: f.bytesP95,
-        needed: f.meanRatio
+        needed: f.meanRatio,
+        fetchedP50: f.fetchedP50,
+        fetchedP95: f.fetchedP95,
+        fetchedPct: f.fetchedRatio,
+        reqsMean: f.requestsMean
     }));
 
     console.log('Per-format (sorted by total time):');
@@ -659,6 +744,9 @@ function printOverall(stats, options) {
     console.log(`Overall: ${successFiles} files parsed, ${formatBytes(o.totalBytes)} total, ${o.totalTime.toFixed(0)} ms total parse time, ${o.throughputMiBps.toFixed(1)} MiB/s`);
     if (options.probeBytes && o.minBytesFiles > 0) {
         console.log(`Probe:   ${o.minBytesFiles} files bisected, needed ${formatBytes(o.minBytesTotal)} of ${formatBytes(o.totalBytes)} (${(o.minBytesRatio * 100).toFixed(1)}% of total bytes)`);
+    }
+    if (options.lengthAuto && o.fetchedFiles > 0) {
+        console.log(`Auto:    ${o.fetchedFiles} files, fetched ${formatBytes(o.fetchedTotal)} of ${formatBytes(o.totalBytes)} (${(o.fetchedRatio * 100).toFixed(1)}% of total bytes), ${o.requestsMean.toFixed(2)} requests/file mean`);
     }
     if (o.totalErrors > 0) {
         console.log(`Errors:  ${o.totalErrors}`);
@@ -741,6 +829,8 @@ function buildJsonReport(results, options, targetDir) {
             iterations: options.iterations,
             warmup: options.warmup,
             includeIo: options.includeIo,
+            lengthAuto: options.lengthAuto,
+            excludeMpf: options.excludeMpf,
             probeBytes: options.probeBytes,
             probeEquality: options.probeBytes ? options.probeEquality : null,
             types: options.types ? Array.from(options.types) : null
@@ -754,6 +844,8 @@ function buildJsonReport(results, options, targetDir) {
             iterations: r.iterations,
             medianMs: typeof r.median === 'number' ? r.median : null,
             minBytes: typeof r.minBytes === 'number' ? r.minBytes : null,
+            fetched: typeof r.lastFetched === 'number' ? r.lastFetched : null,
+            requests: typeof r.lastRequests === 'number' ? r.lastRequests : null,
             error: r.error
         }))
     };

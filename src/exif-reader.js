@@ -6,9 +6,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-/* global Buffer, __non_webpack_require__ */
+/* global Buffer */
 
-import {objectAssign, dataUriToBuffer, decompress, COMPRESSION_METHOD_BROTLI} from './utils.js';
+import {objectAssign, decompress, COMPRESSION_METHOD_BROTLI} from './utils.js';
+import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
+import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import DataViewWrapper from './dataview.js';
 import Constants from './constants.js';
 import {getStringValueFromArray} from './utils.js';
@@ -46,151 +48,27 @@ export default {
 export const errors = exifErrors;
 
 export function load(data, options = {}) {
+    if (options.length === 'auto') {
+        validateAutoOptions(options);
+        return makeLoadAuto(loadFromData)(data, options);
+    }
     if (isFilePathOrURL(data)) {
-        options.async = true;
-
         if (typeof Promise === 'undefined') {
             throw new Error('Promise is required when async mode is enabled.');
         }
+        const asyncOptions = objectAssign({}, options, {async: true});
 
-        return loadFile(data, options).then((fileContents) => loadFromData(fileContents, options));
+        return loadFile(data, asyncOptions).then((fileContents) => loadFromData(fileContents, asyncOptions));
     }
     if (isBrowserFileObject(data)) {
-        options.async = true;
-
         if (typeof Promise === 'undefined') {
             throw new Error('Promise is required when async mode is enabled.');
         }
+        const asyncOptions = objectAssign({}, options, {async: true});
 
-        return loadFileObject(data, options).then((fileContents) => loadFromData(fileContents, options));
+        return loadFileObject(data, asyncOptions).then((fileContents) => loadFromData(fileContents, asyncOptions));
     }
     return loadFromData(data, options);
-}
-
-function isFilePathOrURL(data) {
-    return typeof data === 'string';
-}
-
-function loadFile(filename, options) {
-    if (/^\w+:\/\//.test(filename)) {
-        if (typeof fetch !== 'undefined') {
-            return fetchRemoteFile(filename, options);
-        }
-
-        return nodeGetRemoteFile(filename, options);
-    }
-
-    if (isDataUri(filename)) {
-        return Promise.resolve(dataUriToBuffer(filename));
-    }
-
-    return loadLocalFile(filename, options);
-}
-
-function fetchRemoteFile(url, {length} = {}) {
-    const options = {method: 'GET'};
-    if (Number.isInteger(length) && length >= 0) {
-        options.headers = {
-            range: `bytes=0-${length - 1}`,
-        };
-    }
-    return fetch(url, options).then((response) => response.arrayBuffer());
-}
-
-function nodeGetRemoteFile(url, {length} = {}) {
-    return new Promise((resolve, reject) => {
-        const options = {};
-        if (Number.isInteger(length) && length >= 0) {
-            options.headers = {
-                range: `bytes=0-${length - 1}`,
-            };
-        }
-
-        const get = requireNodeGet(url);
-        get(url, options, (response) => {
-            if ((response.statusCode >= 200) && (response.statusCode <= 299)) {
-                const data = [];
-                response.on('data', (chunk) => data.push(Buffer.from(chunk)));
-                response.on('error', (error) => reject(error));
-                response.on('end', () => resolve(Buffer.concat(data)));
-            } else {
-                reject(`Could not fetch file: ${response.statusCode} ${response.statusMessage}`);
-                response.resume();
-            }
-        }).on('error', (error) => reject(error));
-    });
-}
-
-function requireNodeGet(url) {
-    if (/^https:\/\//.test(url)) {
-        return __non_webpack_require__('https').get;
-    }
-    return __non_webpack_require__('http').get;
-}
-
-function isDataUri(filename) {
-    return /^data:[^;,]*(;base64)?,/.test(filename);
-}
-
-function loadLocalFile(filename, {length} = {}) {
-    return new Promise((resolve, reject) => {
-        const fs = requireNodeFs();
-        fs.open(filename, (error, fd) => {
-            if (error) {
-                reject(error);
-            } else {
-                fs.stat(filename, (error, stat) => {
-                    if (error) {
-                        reject(error);
-                    } else {
-                        const size = Math.min(stat.size, length !== undefined ? length : stat.size);
-                        const buffer = Buffer.alloc(size);
-                        const options = {
-                            buffer,
-                            length: size
-                        };
-                        fs.read(fd, options, (error) => {
-                            if (error) {
-                                reject(error);
-                            } else {
-                                fs.close(fd, (error) => {
-                                    if (error) {
-                                        console.warn(`Could not close file ${filename}:`, error); // eslint-disable-line no-console
-                                    }
-                                    resolve(buffer);
-                                });
-                            }
-                        });
-                    }
-                });
-            }
-        });
-    });
-}
-
-function requireNodeFs() {
-    try {
-        return __non_webpack_require__('fs');
-    } catch (error) {
-        return undefined;
-    }
-}
-
-function isBrowserFileObject(data) {
-    return (typeof File !== 'undefined') && (data instanceof File);
-}
-
-function loadFileObject(file, {length}) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (readerEvent) => resolve(readerEvent.target.result);
-        reader.onerror = () => reject(reader.error);
-        if (Number.isInteger(length) && length >= 0 && file.slice !== undefined) {
-            reader.readAsArrayBuffer(file.slice(0, length));
-        } else {
-            reader.readAsArrayBuffer(file);
-        }
-    });
 }
 
 function loadFromData(data, options) {

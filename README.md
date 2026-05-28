@@ -7,6 +7,10 @@ browser or from Node. Supports JPEG, JPEG XL, TIFF, PNG, HEIC, AVIF, WebP, and
 GIF files with Exif, IPTC, XMP, ICC, MPF, and more metadata (depending on file
 type).
 
+If you use the `length: 'auto'` option, ExifReader reads only the bytes
+that contain metadata, **well under 1 ms per file** for typical phone JPEGs
+and **over 95% less bandwidth**.
+
 ExifReader is highly and easily configurable and the resulting bundle can be as
 small as **~4 KiB** (gzipped) if you're only interested in a few tags (e.g. date
 and/or GPS values).
@@ -197,6 +201,319 @@ Where `fileBuffer` is one of
 See the [examples site](https://mattiasw.github.io/ExifReader/) for more
 directions on how to use the library.
 
+#### Grouping
+
+By default, Exif, IPTC and XMP tags are grouped together. This means that if
+e.g. `Orientation` exists in both Exif and XMP, the first value (Exif) will be
+overwritten by the second (XMP). If you need to separate between these values,
+pass in an options object with the property `expanded` set to `true`:
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {expanded: true});
+```
+
+#### Filtering tags (includeTags / excludeTags)
+
+You can filter which tags are returned by using `includeTags` and/or
+`excludeTags`.
+
+- If `includeTags` is provided, it uses an **include-pattern**: only the groups
+  you specify will be included in the output.
+- `excludeTags` can be used alone to remove tags/groups while keeping everything
+  else.
+- If a group is specified in both `includeTags` and `excludeTags`, `excludeTags`
+  for that group will be ignored.
+- An empty selector array (e.g. `includeTags: { xmp: [] }`) is treated as
+  excluding that group. The group will not be returned and ExifReader will skip
+  parsing it.
+
+**Examples**
+
+Exclude a few tags in the Exif group:
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {
+    excludeTags: {
+        exif: ['MakerNote', 0x9286],
+    }
+});
+```
+
+Only return XMP tags (and exclude everything else):
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {
+    includeTags: {
+        xmp: true,
+    }
+});
+```
+
+**Filtering groups**
+
+The group keys follow the same concept as the output when `expanded: true` is
+used. (The `thumbnail` group controls the top-level `Thumbnail` value.)
+
+For PNG, filtering is done with the `png` group only. (The `pngFile` and
+`pngText` groups exist in `expanded` output today, but `png` is the filtering
+key and those groups will be deprecated later.)
+
+| Group key     | Description                                      | Supports IDs |
+| ------------- | ------------------------------------------------ | ------------ |
+| `exif`        | Exif tags (including GPS IFD, interoperability). | yes          |
+| `iptc`        | IPTC tags.                                       | yes          |
+| `xmp`         | XMP tags.                                        | no           |
+| `icc`         | ICC profile tags.                                | no           |
+| `photoshop`   | Photoshop resource tags.                         | yes          |
+| `makerNotes`  | MakerNote tags (e.g. Canon/Pentax).              | yes          |
+| `mpf`         | MPF tags.                                        | yes          |
+| `file`        | JPEG file details and `FileType`.                | no           |
+| `jfif`        | JFIF tags.                                       | no           |
+| `png`         | PNG header, chunk, and text tags.                | no           |
+| `riff`        | WebP (RIFF) tags.                                | no           |
+| `gif`         | GIF tags.                                        | no           |
+| `gps`         | Computed GPS group (only when `expanded: true`). | no           |
+| `composite`   | Composite tags (e.g. FieldOfView).               | no           |
+| `thumbnail`   | Top-level `Thumbnail` output.                    | no           |
+
+**Important: dependency tags**
+
+Some tags act as pointers or containers to other metadata. Excluding them can
+cause other tags or entire groups to disappear. Some important examples:
+
+- `Exif IFD Pointer`, `GPS Info IFD Pointer`, `Interoperability IFD Pointer`
+- `IPTC-NAA` (TIFF embedded IPTC), `ApplicationNotes` (TIFF embedded XMP),
+  `ICC_Profile` (TIFF embedded ICC)
+- `MakerNote` and `Make` (maker note parsing)
+- `ImageSourceData` and `PhotoshopSettings` (Photoshop parsing)
+- `JPEGInterchangeFormat` and `JPEGInterchangeFormatLength` (thumbnails)
+
+**NOTE:** When using `includeTags`, you **do not** have to list these dependency
+tags. ExifReader will automatically include the required pointer/container tags
+needed to find and parse the groups you requested. This section mainly matters
+when using `excludeTags`.
+
+Note that XMP and ICC tags are parsed from full metadata blocks, so ExifReader
+cannot skip parsing individual XMP/ICC tags based on selectors. The returned
+output is still filtered.
+
+#### Unknown tags
+
+Tags that are unknown, either because they have been excluded by making a custom
+build or they are yet to be added into ExifReader, are by default not included
+in the output. If you need to see them there is an option that can be passed in:
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {includeUnknown: true});
+```
+
+If you discover an unknown tag that should be handled by ExifReader, please
+reach out by filing an issue.
+
+#### Computed tag values (opt-in)
+
+ExifReader exposes three different values per Exif tag:
+
+- **`value`**: A stable, raw-ish value that mirrors how the tag is stored in the
+  file.
+- **`description`**: A human-friendly value meant for display.
+- **`computed`**: An opt-in, type-aware value. This will often be the same as
+  `value` except for RATIONAL/SRATIONAL and ASCII tags.
+
+Enable the `computed` value by passing `computed: true` in the options:
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {computed: true});
+
+const make = tags['Make'].computed; // e.g. "Apple"
+const xResolution = tags['XResolution'].computed; // e.g. 72
+```
+
+`computed` is only added for tags parsed from TIFF IFD structures (Exif/GPS/etc,
+including maker notes, MPF, and the Thumbnail IFD). It is not currently added to
+XMP/IPTC/ICC tags or PNG text tags.
+
+The `computed` conversion rules are based on the TIFF tag type:
+
+- **ASCII**: If `value` contains a single string, `computed` is that string.
+  Otherwise `computed` is a string array.
+- **RATIONAL / SRATIONAL**: `computed` is a number (or an array of numbers).
+  Division by zero yields `null`.
+- **All other types**: `computed` equals `value`.
+
+Note that `computed` may evolve in minor versions as the feature matures. If you
+need a value with the strongest stability guarantees, prefer `value`.
+
+#### Read only part of file
+
+If you only want to read part of the image file you can use the `length` option:
+
+```javascript
+const tags = await ExifReader.load(filename, {length: 128 * 1024});
+```
+
+This will load only the first 128 KiB of the file. This could be useful if you
+know the metadata is located at the beginning of the file. Just be aware that
+it's common for the metadata to be spread out over a larger area so please try
+it out on your set of files to know if it's suitable for your situation.
+
+Note that this option only works when ExifReader handles the loading of the
+file. If e.g. an already loaded ArrayBuffer or Buffer is passed into ExifReader,
+the whole file will already have been loaded into memory and it's too late.
+More specifically the length option will work for 1. local files when running
+through Node.js, 2. remote files when passing a URL, and 3. browser File objects
+(e.g., from form file fields). For remote files accessed through a web browser,
+make sure the remote server is either on the same origin (domain) as your script
+or that the server is passing correct CORS headers, specifically allowing the
+`Range` header.
+
+#### Read only the metadata bytes (`length: 'auto'`)
+
+When you want to download or store just enough of an image to extract its
+metadata, without guessing a fixed `length`, pass `length: 'auto'`:
+
+```javascript
+const tags = await ExifReader.load(url, {
+    length: 'auto',
+    expanded: true,
+    includeOffsets: true,
+    excludeTags: {mpf: true},  // skip embedded preview; see note below
+});
+
+tags.metadataRange.end       // exact byte count needed for the metadata
+tags.metadataRange.buffer    // bytes [0, end), sliced from what we read.
+                             //   Same kind as the input (ArrayBuffer or
+                             //   Node Buffer). Save this to disk to keep
+                             //   only the metadata-bearing prefix.
+tags.metadataRange.fetched   // bytes actually read. May be greater than
+                             //   `end` because the loop reads in fixed-size
+                             //   chunks and so may read a little past `end`.
+tags.metadataRange.requests  // number of IO calls performed
+```
+
+ExifReader fetches an initial 128 KiB prefix and parses it. Only if the
+metadata extends further does it issue an HTTP `Range` request (or a
+follow-up filesystem read / `File.slice`) for exactly the additional bytes
+needed. Most files finish in a single request. HEIC/AVIF files where the
+Exif/XMP `iloc` entries point near the end of the file typically take two.
+
+`length: 'auto'` is supported for the four IO inputs:
+
+- URL via browser `fetch` (uses HTTP `Range`)
+- URL via Node `http(s)` (uses HTTP `Range`)
+- Local file path via Node `fs`
+- Browser `File` object via `File.slice`
+
+It is also accepted for in-memory inputs (`ArrayBuffer`, `Buffer`,
+`SharedArrayBuffer`, `DataView`) as a convenience. There is no IO loop to
+run in that case, but `metadataRange.buffer` is still attached as the
+trimmed slice of what you passed in.
+
+Requirements and caveats:
+
+- `expanded: true` and `includeOffsets: true` are required. Passing
+  `length: 'auto'` without them throws a clear error (at runtime, and also a
+  type error in TypeScript).
+- The return is always a `Promise` because the loop is asynchronous.
+- Not supported for plain TIFF or bare JPEG XL codestreams. They have no
+  leading metadata container, so the loop has no convergence signal and
+  will reject with an error.
+- If the loop fails to converge in 4 iterations (very rare, defensive
+  bound for unknown-size HTTP responses or files whose parsers can't
+  bootstrap from a small prefix), ExifReader reads the rest of the file
+  and emits a single `console.warn`. Correctness is preserved. The
+  bandwidth savings are forfeit.
+
+**Why `excludeTags: {mpf: true}` is in the example.** Most modern phone
+cameras (and many DSLRs) emit JPEGs with a Multi-Picture-Format sub-image
+preview embedded a few MB into the file. Without `excludeTags: {mpf:
+true}` ExifReader treats those sub-images as part of the metadata range,
+so `metadataRange.end` lands near EOF and `length: 'auto'` ends up
+reading most of the file anyway. On a corpus of about 1.5 GiB of phone
+photos this single option took `length: 'auto'` from a ~17% slowdown vs
+a regular full read to a **6× speedup with 98% of bytes saved**. The
+regular `tags.exif`, `tags.xmp`, `tags.icc`, `tags.gps` and the rest are
+unaffected. Drop the option only if you actually need the
+`tags.mpf.Images` array.
+
+#### Locating metadata in the file (`includeOffsets`)
+
+Pass `includeOffsets: true` together with `expanded: true` to learn where in
+the file the metadata sits. Useful for persisting only the metadata-bearing
+prefix of an image rather than the whole file. The resulting slice is enough
+for re-extracting metadata with ExifReader, not for opening the slice as an
+image.
+
+```javascript
+const tags = ExifReader.load(fileBuffer, {expanded: true, includeOffsets: true});
+
+tags.metadataRange.start    // lowest block start (informational, can be deep
+                            //   into the file for HEIC/AVIF; do NOT use as a
+                            //   slice boundary, always slice from 0)
+tags.metadataRange.end      // exclusive end. Store bytes 0..end to keep all metadata
+tags.metadataRange.complete // false when the input was truncated before all metadata
+tags.metadataRange.blocks   // [{type, start, end}, ...] sorted by start
+```
+
+Offsets are byte indices into the data you passed in. `metadataRange` is
+attached only when both `expanded: true` and `includeOffsets: true` are set,
+so default and flat-mode output are unchanged.
+
+Block `type` reuses the filtering-group vocabulary (`exif`, `iptc`, `xmp`,
+`icc`, `mpf`, `jfif`, `file`, `png`, `riff`, `gif`), plus `mpfImage` for the
+sub-images of an MPF Multi-Picture JPEG. The same type may appear more than
+once (multi-chunk ICC, extended XMP), one entry per physical container.
+
+Typical workflow:
+
+```javascript
+const headChunk = await fetchFirstNBytes(url, 256 * 1024);
+const tags = ExifReader.load(headChunk, {expanded: true, includeOffsets: true});
+
+if (!tags.metadataRange.complete) {
+    // 256 KiB was not enough, fetch more
+} else {
+    const minimalSlice = headChunk.slice(0, tags.metadataRange.end);
+    await uploadMetadata(minimalSlice);
+}
+```
+
+Notes and limitations:
+
+- Not supported for plain TIFF or bare JPEG XL codestreams (no leading
+  metadata container). `metadataRange` is omitted in both cases.
+- For JPEG XL containers, blocks cover the `Exif` and `xml ` boxes but not
+  the `jxlc`/`jxlp` codestream box (encoded image data, not metadata).
+- `complete: true` means ExifReader did not detect truncation. For JPEG and
+  PNG it observed `SOS` or `IEND`, for standalone XMP it observed an
+  `<?xpacket end=?>` or `</x:xmpmeta>` token. For other formats it is
+  best-effort, a buffer ending cleanly between metadata segments can still
+  report `complete: true`. Non-standard trailers (JPEG-XT, post-SOS markers)
+  are never detected. Note the converse: re-parsing a slice produced by
+  `buffer.slice(0, metadataRange.end)` may report `complete: false` for
+  JPEG/PNG even though every metadata segment is intact, because the
+  slice ends before `SOS`/`IEND`. The block list and `tags.exif` etc. are
+  still complete in that case.
+- Only the metadata segments ExifReader actively parses are present in
+  `blocks`. JPEG segments ExifReader does not currently extract tags from
+  (APP3-APP12, `COM` comments, JPEG-XT extensions) do not appear and are
+  not guaranteed to be preserved by a `0..end` slice. The slice is
+  enough to re-extract everything ExifReader itself reads, not to
+  preserve every byte a third-party tool might care about.
+- For HEIC/AVIF, metadata can sit near the end of the file, so
+  `metadataRange.end` often lands close to the file size and trimming
+  saves little. The `icc` block here covers just the ICC profile bytes;
+  for JPEG/PNG/WebP it covers the full container wrapper.
+- For MPF JPEGs, sub-images appear as `mpfImage` blocks and push `end`
+  toward the file size. If MPF parsing is suppressed by a tag filter (any
+  `excludeTags: {mpf: ...}` or `includeTags` that does not include `mpf`),
+  the `mpfImage` blocks are not emitted and `metadataRange.end` shrinks.
+  The parent `mpf` segment block always remains, since it is a real
+  metadata segment found during the header scan.
+- Offsets come from length fields in the file. Treat `metadataRange.end`
+  and `block.end` as untrusted input. Clamp to your buffer length before
+  slicing, allocating, or issuing remote range requests.
+
 #### Asynchronous tags
 
 Some tags need to be parsed asynchronously. Currently this is the case for some
@@ -287,17 +604,6 @@ warning is logged via `console.warn`, and the rest of the tags are returned as
 usual. The limit applies to the built-in Compression Streams paths and to any
 result returned by a custom `brotli`/`deflate` function.
 
-#### Grouping
-
-By default, Exif, IPTC and XMP tags are grouped together. This means that if
-e.g. `Orientation` exists in both Exif and XMP, the first value (Exif) will be
-overwritten by the second (XMP). If you need to separate between these values,
-pass in an options object with the property `expanded` set to `true`:
-
-```javascript
-const tags = ExifReader.load(fileBuffer, {expanded: true});
-```
-
 #### Parsing XMP tags when not in a DOM environment
 
 When using for example Node.js or a web worker, there is no native
@@ -354,239 +660,6 @@ const tags = ExifReader.load(fileBuffer, {expanded: true});
 If you're having trouble getting the GPS location, see [this comment and
 thread](https://github.com/mattiasw/ExifReader/issues/177#issuecomment-1172228225)
 and the [GPS section below](#gps) for more details.
-
-#### Read only part of file
-
-If you only want to read part of the image file you can use the `length` option:
-
-```javascript
-const tags = await ExifReader.load(filename, {length: 128 * 1024});
-```
-
-This will load only the first 128 KiB of the file. This could be useful if you
-know the metadata is located at the beginning of the file. Just be aware that
-it's common for the metadata to be spread out over a larger area so please try
-it out on your set of files to know if it's suitable for your situation.
-
-Note that this option only works when ExifReader handles the loading of the
-file. If e.g. an already loaded ArrayBuffer or Buffer is passed into ExifReader,
-the whole file will already have been loaded into memory and it's too late.
-More specifically the length option will work for 1. local files when running
-through Node.js, 2. remote files when passing a URL, and 3. browser File objects
-(e.g., from form file fields). For remote files accessed through a web browser,
-make sure the remote server is either on the same origin (domain) as your script
-or that the server is passing correct CORS headers, specifically allowing the
-`Range` header.
-
-#### Locating metadata in the file (`includeOffsets`)
-
-Pass `includeOffsets: true` together with `expanded: true` to learn where in
-the file the metadata sits. Useful for persisting only the metadata-bearing
-prefix of an image rather than the whole file. The resulting slice is enough
-for re-extracting metadata with ExifReader, not for opening the slice as an
-image.
-
-```javascript
-const tags = ExifReader.load(fileBuffer, {expanded: true, includeOffsets: true});
-
-tags.metadataRange.start    // lowest block start (informational, can be deep
-                            //   into the file for HEIC/AVIF; do NOT use as a
-                            //   slice boundary, always slice from 0)
-tags.metadataRange.end      // exclusive end. Store bytes 0..end to keep all metadata
-tags.metadataRange.complete // false when the input was truncated before all metadata
-tags.metadataRange.blocks   // [{type, start, end}, ...] sorted by start
-```
-
-Offsets are byte indices into the data you passed in. `metadataRange` is
-attached only when both `expanded: true` and `includeOffsets: true` are set,
-so default and flat-mode output are unchanged.
-
-Block `type` reuses the filtering-group vocabulary (`exif`, `iptc`, `xmp`,
-`icc`, `mpf`, `jfif`, `file`, `png`, `riff`, `gif`), plus `mpfImage` for the
-sub-images of an MPF Multi-Picture JPEG. The same type may appear more than
-once (multi-chunk ICC, extended XMP), one entry per physical container.
-
-Typical workflow:
-
-```javascript
-const headChunk = await fetchFirstNBytes(url, 256 * 1024);
-const tags = ExifReader.load(headChunk, {expanded: true, includeOffsets: true});
-
-if (!tags.metadataRange.complete) {
-    // 256 KiB was not enough, fetch more
-} else {
-    const minimalSlice = headChunk.slice(0, tags.metadataRange.end);
-    await uploadMetadata(minimalSlice);
-}
-```
-
-Notes and limitations:
-
-- Not supported for plain TIFF or bare JPEG XL codestreams (no leading
-  metadata container). `metadataRange` is omitted in both cases.
-- For JPEG XL containers, blocks cover the `Exif` and `xml ` boxes but not
-  the `jxlc`/`jxlp` codestream box (encoded image data, not metadata).
-- `complete: true` means ExifReader did not detect truncation. For JPEG and
-  PNG it observed `SOS` or `IEND`, for standalone XMP it observed an
-  `<?xpacket end=?>` or `</x:xmpmeta>` token. For other formats it is
-  best-effort, a buffer ending cleanly between metadata segments can still
-  report `complete: true`. Non-standard trailers (JPEG-XT, post-SOS markers)
-  are never detected. Note the converse: re-parsing a slice produced by
-  `buffer.slice(0, metadataRange.end)` may report `complete: false` for
-  JPEG/PNG even though every metadata segment is intact, because the
-  slice ends before `SOS`/`IEND`. The block list and `tags.exif` etc. are
-  still complete in that case.
-- Only the metadata segments ExifReader actively parses are present in
-  `blocks`. JPEG segments ExifReader does not currently extract tags from
-  (APP3-APP12, `COM` comments, JPEG-XT extensions) do not appear and are
-  not guaranteed to be preserved by a `0..end` slice. The slice is
-  enough to re-extract everything ExifReader itself reads, not to
-  preserve every byte a third-party tool might care about.
-- For HEIC/AVIF, metadata can sit near the end of the file, so
-  `metadataRange.end` often lands close to the file size and trimming
-  saves little. The `icc` block here covers just the ICC profile bytes;
-  for JPEG/PNG/WebP it covers the full container wrapper.
-- For MPF JPEGs, sub-images appear as `mpfImage` blocks and push `end`
-  toward the file size. If MPF parsing is suppressed by a tag filter (any
-  `excludeTags: {mpf: ...}` or `includeTags` that does not include `mpf`),
-  the `mpfImage` blocks are not emitted and `metadataRange.end` shrinks.
-  The parent `mpf` segment block always remains, since it is a real
-  metadata segment found during the header scan.
-- Offsets come from length fields in the file. Treat `metadataRange.end`
-  and `block.end` as untrusted input. Clamp to your buffer length before
-  slicing, allocating, or issuing remote range requests.
-
-#### Unknown tags
-
-Tags that are unknown, either because they have been excluded by making a custom
-build or they are yet to be added into ExifReader, are by default not included
-in the output. If you need to see them there is an option that can be passed in:
-
-```javascript
-const tags = ExifReader.load(fileBuffer, {includeUnknown: true});
-```
-
-If you discover an unknown tag that should be handled by ExifReader, please
-reach out by filing an issue.
-
-#### Filtering tags (includeTags / excludeTags)
-
-You can filter which tags are returned by using `includeTags` and/or
-`excludeTags`.
-
-- If `includeTags` is provided, it uses an **include-pattern**: only the groups
-  you specify will be included in the output.
-- `excludeTags` can be used alone to remove tags/groups while keeping everything
-  else.
-- If a group is specified in both `includeTags` and `excludeTags`, `excludeTags`
-  for that group will be ignored.
-- An empty selector array (e.g. `includeTags: { xmp: [] }`) is treated as
-  excluding that group. The group will not be returned and ExifReader will skip
-  parsing it.
-
-**Examples**
-
-Exclude a few tags in the Exif group:
-
-```javascript
-const tags = ExifReader.load(fileBuffer, {
-    excludeTags: {
-        exif: ['MakerNote', 0x9286],
-    }
-});
-```
-
-Only return XMP tags (and exclude everything else):
-
-```javascript
-const tags = ExifReader.load(fileBuffer, {
-    includeTags: {
-        xmp: true,
-    }
-});
-```
-
-**Filtering groups**
-
-The group keys follow the same concept as the output when `expanded: true` is
-used. (The `thumbnail` group controls the top-level `Thumbnail` value.)
-
-For PNG, filtering is done with the `png` group only. (The `pngFile` and
-`pngText` groups exist in `expanded` output today, but `png` is the filtering key
-and those groups will be deprecated later.)
-
-| Group key     | Description                                      | Supports IDs |
-| ------------- | ------------------------------------------------ | ------------ |
-| `exif`        | Exif tags (including GPS IFD, interoperability). | yes          |
-| `iptc`        | IPTC tags.                                       | yes          |
-| `xmp`         | XMP tags.                                        | no           |
-| `icc`         | ICC profile tags.                                | no           |
-| `photoshop`   | Photoshop resource tags.                         | yes          |
-| `makerNotes`  | MakerNote tags (e.g. Canon/Pentax).              | yes          |
-| `mpf`         | MPF tags.                                        | yes          |
-| `file`        | JPEG file details and `FileType`.                | no           |
-| `jfif`        | JFIF tags.                                       | no           |
-| `png`         | PNG header, chunk, and text tags.                | no           |
-| `riff`        | WebP (RIFF) tags.                                | no           |
-| `gif`         | GIF tags.                                        | no           |
-| `gps`         | Computed GPS group (only when `expanded: true`). | no           |
-| `composite`   | Composite tags (e.g. FieldOfView).               | no           |
-| `thumbnail`   | Top-level `Thumbnail` output.                    | no           |
-
-**Important: dependency tags**
-
-Some tags act as pointers or containers to other metadata. Excluding them can
-cause other tags or entire groups to disappear. Some important examples:
-
-- `Exif IFD Pointer`, `GPS Info IFD Pointer`, `Interoperability IFD Pointer`
-- `IPTC-NAA` (TIFF embedded IPTC), `ApplicationNotes` (TIFF embedded XMP),
-  `ICC_Profile` (TIFF embedded ICC)
-- `MakerNote` and `Make` (maker note parsing)
-- `ImageSourceData` and `PhotoshopSettings` (Photoshop parsing)
-- `JPEGInterchangeFormat` and `JPEGInterchangeFormatLength` (thumbnails)
-
-**NOTE:** When using `includeTags`, you **do not** have to list these dependency
-tags. ExifReader will automatically include the required pointer/container tags
-needed to find and parse the groups you requested. This section mainly matters
-when using `excludeTags`.
-
-Note that XMP and ICC tags are parsed from full metadata blocks, so ExifReader
-cannot skip parsing individual XMP/ICC tags based on selectors. The returned
-output is still filtered.
-
-#### Computed tag values (opt-in)
-
-ExifReader exposes three different values per Exif tag:
-
-- **`value`**: A stable, raw-ish value that mirrors how the tag is stored in the
-  file.
-- **`description`**: A human-friendly value meant for display.
-- **`computed`**: An opt-in, type-aware value. This will often be the same as
-  `value` except for RATIONAL/SRATIONAL and ASCII tags.
-
-Enable the `computed` value by passing `computed: true` in the options:
-
-```javascript
-const tags = ExifReader.load(fileBuffer, {computed: true});
-
-const make = tags['Make'].computed; // e.g. "Apple"
-const xResolution = tags['XResolution'].computed; // e.g. 72
-```
-
-`computed` is only added for tags parsed from TIFF IFD structures (Exif/GPS/etc,
-including maker notes, MPF, and the Thumbnail IFD). It is not currently added to
-XMP/IPTC/ICC tags or PNG text tags.
-
-The `computed` conversion rules are based on the TIFF tag type:
-
-- **ASCII**: If `value` contains a single string, `computed` is that string.
-  Otherwise `computed` is a string array.
-- **RATIONAL / SRATIONAL**: `computed` is a number (or an array of numbers).
-  Division by zero yields `null`.
-- **All other types**: `computed` equals `value`.
-
-Note that `computed` may evolve in minor versions as the feature matures. If you
-need a value with the strongest stability guarantees, prefer `value`.
 
 ### GPS
 
@@ -826,6 +899,13 @@ Tips
     possibly Exif too if they come in an irregular order) so please check if
     this optimization fits your use case. Use the `length` option to only read
     the beginning of the file. See above for more details on that.
+-   Excluding MPF (Multi-Picture Format) makes a big difference for phone
+    photos. Modern phone JPEGs embed a sub-image preview a few MB into the
+    file. If you do not need it, pass `excludeTags: {mpf: true}`. This is
+    especially impactful when combined with `length: 'auto'` (multi-x
+    speedup, see that section), but it also lets a numeric `length`
+    boundary land well before the sub-image. Regular Exif/XMP/ICC tags are
+    unaffected.
 
 Known Limitations
 -----------------

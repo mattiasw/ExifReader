@@ -56,6 +56,22 @@ Enforced by ESLint (`.eslintrc.json`). Key rules:
 - kebab-case filenames, camelCase variables/functions, PascalCase constructors/class-like exports
 - Place functions in the order they are used. That means the definition of a function is placed after the location from where it is called.
 
+## Older runtime support (src/ only)
+
+The browserslist target includes IE10 and other older runtimes. The
+build pipeline transpiles down to a low ECMAScript baseline, and a few
+modern constructs balloon the output. Avoid them in `src/`:
+
+- **No `async`/`await` keywords.** They transpile to a regenerator
+  runtime that adds significant bundle size. Use explicit promise
+  chains (`Promise.resolve(...).then(...)`) instead.
+- **No object spread (`{...obj, key: value}`) and no `Object.assign`.**
+  Use `objectAssign(target, ...sources)` from `src/utils.js` instead.
+  Example: `const next = objectAssign({}, options, {async: true});`.
+
+`test/`, `bin/`, and `webpack.config.js` run only in modern Node on
+maintainer machines, so they may use any modern syntax.
+
 ## Comments
 
 Prefer self-explaining code (clear names, small functions) over comments. Add a comment only when the code cannot be made obvious on its own, for example a non-trivial spec reference, a workaround for a known quirk, or a subtle invariant.
