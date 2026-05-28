@@ -27,6 +27,14 @@ const TYPE_JXLP = 0x6a786c70;
 const JXLP_SEQUENCE_NUMBER_SIZE = 4;
 const BROB_ORIGINAL_TYPE_SIZE = 4;
 
+/**
+ * Checks if the provided data view represents a JPEG XL file (container or
+ * bare codestream).
+ *
+ * @param {DataView} dataView The data view to check.
+ * @returns {boolean} True for either a JXL container signature or a bare
+ *     codestream signature.
+ */
 function isJxlFile(dataView) {
     try {
         return isJxlContainer(dataView) || isJxlCodestream(dataView);
@@ -58,7 +66,17 @@ function isJxlCodestream(dataView) {
         && dataView.getUint8(1) === JXL_CODESTREAM_SIGNATURE[1];
 }
 
-function findJxlOffsets(dataView) {
+/**
+ * Walks the JPEG XL box list and reports the offsets ExifReader needs.
+ *
+ * @param {DataView} dataView The data view to find offsets in.
+ * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
+ *     receives one block per recognized box (Exif, xml, brob with Exif or
+ *     xml original type). The codestream box (`jxlc`/`jxlp`) does not emit
+ *     a block because it wraps the encoded image, not metadata.
+ * @returns {Object} hasAppMarkers and the per-section offsets.
+ */
+function findJxlOffsets(dataView, metadataBlocks) {
     let offset = 0;
     let tiffHeaderOffset;
     let xmpChunks;
@@ -67,7 +85,16 @@ function findJxlOffsets(dataView) {
     let jxlCodestreamOffset;
 
     if (isJxlCodestream(dataView)) {
-        jxlCodestreamOffset = 0;
+        // A bare codestream has no box structure, so the box walk below
+        // would only ever misinterpret codestream bytes as box headers.
+        return {
+            hasAppMarkers: true,
+            tiffHeaderOffset: undefined,
+            xmpChunks: undefined,
+            brobExifChunk: undefined,
+            brobXmpChunk: undefined,
+            jxlCodestreamOffset: 0,
+        };
     }
 
     while (offset + BOX_HEADER_MIN_SIZE <= dataView.byteLength) {
@@ -77,6 +104,7 @@ function findJxlOffsets(dataView) {
         }
 
         const boxType = dataView.getUint32(offset + BOX_TYPE_OFFSET);
+        let blockType;
 
         if (Constants.USE_EXIF && boxType === TYPE_EXIF) {
             try {
@@ -84,6 +112,7 @@ function findJxlOffsets(dataView) {
             } catch (_error) {
                 // Truncated Exif data.
             }
+            blockType = 'exif';
         }
 
         if (Constants.USE_XMP && boxType === TYPE_XML) {
@@ -91,10 +120,13 @@ function findJxlOffsets(dataView) {
                 dataOffset: contentOffset,
                 length: length - (contentOffset - offset)
             }];
+            blockType = 'xmp';
         }
 
         if (boxType === TYPE_JXLC && jxlCodestreamOffset === undefined) {
             jxlCodestreamOffset = contentOffset;
+            // No block emitted: the codestream box wraps the encoded image,
+            // marking it would inflate metadataRange.end past pixel data.
         }
 
         if (boxType === TYPE_JXLP && jxlCodestreamOffset === undefined
@@ -102,6 +134,7 @@ function findJxlOffsets(dataView) {
             const sequenceNumber = dataView.getUint32(contentOffset) & 0x7FFFFFFF;
             if (sequenceNumber === 0) {
                 jxlCodestreamOffset = contentOffset + JXLP_SEQUENCE_NUMBER_SIZE;
+                // Same reason as TYPE_JXLC above.
             }
         }
 
@@ -110,18 +143,36 @@ function findJxlOffsets(dataView) {
             const compressedDataOffset = contentOffset + BROB_ORIGINAL_TYPE_SIZE;
             const compressedDataLength = length - (compressedDataOffset - offset);
 
-            if (Constants.USE_EXIF && originalType === TYPE_EXIF && tiffHeaderOffset === undefined && !brobExifChunk) {
-                brobExifChunk = {
-                    dataOffset: compressedDataOffset,
-                    length: compressedDataLength
-                };
+            // Decouple block emission from parsing-source selection. A
+            // brob(Exif) box must surface as an `exif` block even if a
+            // plain Exif box already won the parsing race. The brob*Chunk
+            // variables stay guarded to avoid double-parsing.
+            if (Constants.USE_EXIF && originalType === TYPE_EXIF) {
+                blockType = 'exif';
+                if (tiffHeaderOffset === undefined && !brobExifChunk) {
+                    brobExifChunk = {
+                        dataOffset: compressedDataOffset,
+                        length: compressedDataLength
+                    };
+                }
             }
-            if (Constants.USE_XMP && originalType === TYPE_XML && !xmpChunks && !brobXmpChunk) {
-                brobXmpChunk = {
-                    dataOffset: compressedDataOffset,
-                    length: compressedDataLength
-                };
+            if (Constants.USE_XMP && originalType === TYPE_XML) {
+                blockType = 'xmp';
+                if (!xmpChunks && !brobXmpChunk) {
+                    brobXmpChunk = {
+                        dataOffset: compressedDataOffset,
+                        length: compressedDataLength
+                    };
+                }
             }
+        }
+
+        if (metadataBlocks && blockType) {
+            metadataBlocks.push({
+                type: blockType,
+                start: offset,
+                end: offset + length,
+            });
         }
 
         offset += length;

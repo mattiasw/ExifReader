@@ -65,11 +65,27 @@ const APP1_XMP_EXTENDED_IDENTIFIER = 'http://ns.adobe.com/xmp/extension/\x00';
 const APP13_IPTC_IDENTIFIER = 'Photoshop 3.0';
 const APP13_RESOURCE_BLOCK_IDENTIFIER = '8BIM';
 
+/**
+ * Checks if the provided data view represents a JPEG file.
+ *
+ * @param {DataView} dataView The data view to check.
+ * @returns {boolean} True if the data view starts with the JPEG SOI marker.
+ */
 function isJpegFile(dataView) {
     return !!dataView && (dataView.byteLength >= MIN_JPEG_DATA_BUFFER_LENGTH) && (dataView.getUint16(0) === JPEG_ID);
 }
 
-function findJpegOffsets(dataView) {
+/**
+ * Walks the JPEG APP/SOF markers and reports the offsets ExifReader needs.
+ *
+ * @param {DataView} dataView The data view to find offsets in.
+ * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
+ *     receives one block per recognized segment (Exif/XMP/IPTC/ICC/MPF/JFIF
+ *     and SOF for file tags) and gets `truncated` set to true if the loop
+ *     never saw the SOS marker.
+ * @returns {Object} Per-segment offsets plus `hasAppMarkers`.
+ */
+function findJpegOffsets(dataView, metadataBlocks) {
     let appMarkerPosition = JPEG_ID_SIZE;
     let fieldLength;
     let sof0DataOffset;
@@ -85,17 +101,26 @@ function findJpegOffsets(dataView) {
     let bestExifSegmentTiffHeaderOffset;
     let bestExifSegmentAppMarkerPosition;
     let bestExifSegmentFieldLength;
+    let sawSos = false;
 
     while (appMarkerPosition + APP_ID_OFFSET + 5 <= dataView.byteLength) {
+        let blockType;
+        if (dataView.getUint16(appMarkerPosition) === SOS_MARKER) {
+            // Reaching SOS means the metadata region is closed.
+            sawSos = true;
+        }
         if (Constants.USE_FILE && isSOF0Marker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             sof0DataOffset = appMarkerPosition + APP_MARKER_SIZE;
+            blockType = 'file';
         } else if (Constants.USE_FILE && isSOF2Marker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             sof2DataOffset = appMarkerPosition + APP_MARKER_SIZE;
+            blockType = 'file';
         } else if (Constants.USE_JFIF && isApp0JfifMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             jfifDataOffset = appMarkerPosition + JFIF_DATA_OFFSET;
+            blockType = 'jfif';
         } else if (Constants.USE_EXIF && isApp1ExifMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             exifSegmentCount++;
@@ -142,21 +167,25 @@ function findJpegOffsets(dataView) {
             }
 
             tiffHeaderOffset = bestExifSegmentTiffHeaderOffset;
+            blockType = 'exif';
         } else if (Constants.USE_XMP && isApp1XmpMarker(dataView, appMarkerPosition)) {
             if (!xmpChunks) {
                 xmpChunks = [];
             }
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             xmpChunks.push(getXmpChunkDetails(appMarkerPosition, fieldLength));
+            blockType = 'xmp';
         } else if (Constants.USE_XMP && isApp1ExtendedXmpMarker(dataView, appMarkerPosition)) {
             if (!xmpChunks) {
                 xmpChunks = [];
             }
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             xmpChunks.push(getExtendedXmpChunkDetails(appMarkerPosition, fieldLength));
+            blockType = 'xmp';
         } else if (Constants.USE_IPTC && isApp13PhotoshopMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             iptcDataOffset = appMarkerPosition + IPTC_DATA_OFFSET;
+            blockType = 'iptc';
         } else if (Constants.USE_ICC && isApp2ICCMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             const iccDataOffset = appMarkerPosition + APP2_ICC_DATA_OFFSET;
@@ -168,9 +197,11 @@ function findJpegOffsets(dataView) {
                 iccChunks = [];
             }
             iccChunks.push({offset: iccDataOffset, length: iccDataLength, chunkNumber: iccChunkNumber, chunksTotal: iccChunksTotal});
+            blockType = 'icc';
         } else if (Constants.USE_MPF && isApp2MPFMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
             mpfDataOffset = appMarkerPosition + MPF_DATA_OFFSET;
+            blockType = 'mpf';
         } else if (isAppMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
         } else if (isFillByte(dataView, appMarkerPosition)) {
@@ -179,11 +210,32 @@ function findJpegOffsets(dataView) {
         } else {
             break;
         }
+        if (metadataBlocks && blockType) {
+            metadataBlocks.push({
+                type: blockType,
+                start: appMarkerPosition,
+                end: appMarkerPosition + APP_MARKER_SIZE + fieldLength,
+            });
+        }
         appMarkerPosition += APP_MARKER_SIZE + fieldLength;
     }
 
     if (exifSegmentCount > 1) {
         warnAboutMultipleExifSegments(exifSegmentCount);
+    }
+
+    if (metadataBlocks) {
+        // The while-condition requires +5 bytes to enter, so the SOS marker
+        // can sit right at the boundary where the loop exits without
+        // entering. Catch that here.
+        if (!sawSos
+            && appMarkerPosition + APP_MARKER_SIZE <= dataView.byteLength
+            && dataView.getUint16(appMarkerPosition) === SOS_MARKER) {
+            sawSos = true;
+        }
+        // The pipeline combines this with the per-block end <= byteLength
+        // check to compute the overall `complete` flag.
+        metadataBlocks.truncated = !sawSos;
     }
 
     return {

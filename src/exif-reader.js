@@ -225,19 +225,21 @@ export function loadView(
         async = false,
         computed = false,
         includeUnknown = false,
+        includeOffsets = false,
         domParser = undefined,
         includeTags = undefined,
         excludeTags = undefined,
-        decompress: decompressConfig = undefined,
+        decompress: decompressConfig = undefined
     } = {
         expanded: false,
         async: false,
         computed: false,
         includeUnknown: false,
+        includeOffsets: false,
         domParser: undefined,
         includeTags: undefined,
         excludeTags: undefined,
-        decompress: undefined,
+        decompress: undefined
     }
 ) {
     const tagFilter = createTagFilter({includeTags, excludeTags});
@@ -265,8 +267,12 @@ export function loadView(
         gifHeaderOffset,
         brobExifChunk,
         brobXmpChunk,
-        jxlCodestreamOffset
-    } = ImageHeader.parseAppMarkers(dataView, async);
+        jxlCodestreamOffset,
+        metadataBlocks,
+        metadataTruncated,
+        exifDataView,
+        xmpDataView
+    } = ImageHeader.parseAppMarkers(dataView, async, expanded && includeOffsets);
 
     const fileHasMetaData = hasPotentialMetaData({
         fileType,
@@ -330,7 +336,7 @@ export function loadView(
         && tagFilter.shouldParseGroup('exif')
     ) {
         const {tags: readTags, byteOrder} = Tags.read(
-            dataView,
+            exifDataView || dataView,
             tiffHeaderOffset,
             includeUnknown,
             computed,
@@ -458,7 +464,7 @@ export function loadView(
         ) {
             if (hasCanonData(parsedExifTags)) {
                 const readCanonTags = CanonTags.read(
-                    dataView,
+                    exifDataView || dataView,
                     tiffHeaderOffset,
                     parsedExifTags['MakerNote'].__offset,
                     byteOrder,
@@ -476,7 +482,7 @@ export function loadView(
                 }
             } else if (hasPentaxType1Data(parsedExifTags)) {
                 const readPentaxTags = PentaxTags.read(
-                    dataView,
+                    exifDataView || dataView,
                     tiffHeaderOffset,
                     parsedExifTags['MakerNote'].__offset,
                     includeUnknown,
@@ -536,7 +542,7 @@ export function loadView(
         && hasXmpData(xmpChunks)
         && tagFilter.shouldParseGroup('xmp')
     ) {
-        const readTags = XmpTags.read(dataView, xmpChunks, domParser);
+        const readTags = XmpTags.read(xmpDataView || dataView, xmpChunks, domParser);
         const parsedXmpTags = filterTagsForParse('xmp', readTags, tagFilter);
         parsedGroups.xmp = parsedXmpTags;
 
@@ -805,6 +811,14 @@ export function loadView(
     mergeSteps.push({type: 'thumbnail'});
     mergeSteps.push({type: 'fileType'});
 
+    if (expanded && includeOffsets) {
+        mergeSteps.push({
+            type: 'metadataRange',
+            metadataBlocks,
+            metadataTruncated: !!metadataTruncated,
+        });
+    }
+
     if (!fileHasMetaData) {
         throw new exifErrors.MetadataMissingError();
     }
@@ -834,6 +848,7 @@ export function loadView(
                 tagFilter,
                 dataView,
                 tiffHeaderOffset,
+                exifDataView,
                 fileType,
                 pngTextChunks,
                 pngTextIsAsync,
@@ -853,6 +868,7 @@ export function loadView(
         tagFilter,
         dataView,
         tiffHeaderOffset,
+        exifDataView,
         fileType,
         pngTextChunks,
         pngTextIsAsync,

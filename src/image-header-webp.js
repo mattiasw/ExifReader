@@ -10,6 +10,12 @@ export default {
     findOffsets
 };
 
+/**
+ * Checks if the provided data view represents a WebP file.
+ *
+ * @param {DataView} dataView The data view to check.
+ * @returns {boolean} True for a RIFF container with the WEBP marker.
+ */
 function isWebpFile(dataView) {
     const RIFF_ID_OFFSET = 0;
     const RIFF_ID = 'RIFF';
@@ -20,7 +26,16 @@ function isWebpFile(dataView) {
         && getStringFromDataView(dataView, WEBP_MARKER_OFFSET, WEBP_MARKER.length) === WEBP_MARKER;
 }
 
-function findOffsets(dataView) {
+/**
+ * Finds the offsets of metadata chunks in a WebP file.
+ *
+ * @param {DataView} dataView The data view to find offsets in.
+ * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
+ *     receives one block per recognized chunk (EXIF/XMP/ICCP/VP8X) with
+ *     `start` and `end` covering the full RIFF chunk header and content.
+ * @returns {Object} hasAppMarkers and the per-section offsets.
+ */
+function findOffsets(dataView, metadataBlocks) {
     const SUB_CHUNK_START_OFFSET = 12;
     const CHUNK_SIZE_OFFSET = 4;
     const EXIF_IDENTIFIER = 'Exif\x00\x00';
@@ -36,6 +51,7 @@ function findOffsets(dataView) {
     while (offset + CHUNK_HEADER_SIZE < dataView.byteLength) {
         const chunkId = getStringFromDataView(dataView, offset, 4);
         const chunkSize = dataView.getUint32(offset + CHUNK_SIZE_OFFSET, true);
+        let blockType;
 
         if (Constants.USE_EXIF && (chunkId === 'EXIF')) {
             hasAppMarkers = true;
@@ -44,12 +60,14 @@ function findOffsets(dataView) {
             } else {
                 tiffHeaderOffset = offset + CHUNK_HEADER_SIZE;
             }
+            blockType = 'exif';
         } else if (Constants.USE_XMP && (chunkId === 'XMP ')) {
             hasAppMarkers = true;
             xmpChunks = [{
                 dataOffset: offset + CHUNK_HEADER_SIZE,
                 length: chunkSize
             }];
+            blockType = 'xmp';
         } else if (Constants.USE_ICC && (chunkId === 'ICCP')) {
             hasAppMarkers = true;
             iccChunks = [{
@@ -58,12 +76,24 @@ function findOffsets(dataView) {
                 chunkNumber: 1,
                 chunksTotal: 1
             }];
+            blockType = 'icc';
         } else if (chunkId === 'VP8X') {
             hasAppMarkers = true;
             vp8xChunkOffset = offset + CHUNK_HEADER_SIZE;
+            blockType = 'riff';
         }
 
-        offset += CHUNK_HEADER_SIZE + (chunkSize % 2 === 0 ? chunkSize : chunkSize + 1);
+        const chunkTotalSize = CHUNK_HEADER_SIZE + (chunkSize % 2 === 0 ? chunkSize : chunkSize + 1);
+
+        if (metadataBlocks && blockType) {
+            metadataBlocks.push({
+                type: blockType,
+                start: offset,
+                end: offset + chunkTotalSize,
+            });
+        }
+
+        offset += chunkTotalSize;
     }
 
     return {
