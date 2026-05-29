@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.40.0] - 2026-05-29
+
 ### Added
 
 - `includeOffsets` option which, together with `expanded: true`, returns a
@@ -982,7 +984,9 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.39.0...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.40.0...HEAD
+[4.40.0]: https://github.com/mattiasw/ExifReader/compare/v4.39.1...v4.40.0
+[4.39.1]: https://github.com/mattiasw/ExifReader/compare/v4.39.0...v4.39.1
 [4.39.0]: https://github.com/mattiasw/ExifReader/compare/v4.38.1...v4.39.0
 [4.38.1]: https://github.com/mattiasw/ExifReader/compare/v4.38.0...v4.38.1
 [4.38.0]: https://github.com/mattiasw/ExifReader/compare/v4.37.1...v4.38.0
