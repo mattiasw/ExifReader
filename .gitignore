@@ -16,5 +16,6 @@ gh-pages
 local-assets
 .claude/settings.local.json
 .claude/*.lock
+.claude/skills/
 .profile-cache.json
 .profile-results/
