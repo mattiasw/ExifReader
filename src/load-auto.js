@@ -193,18 +193,13 @@ export function makeLoadAuto(loadFromData) {
             chunkPromise = state.readRange(state.fetched, state.totalSize, {totalSize: state.totalSize})
                 .then((chunk) => {
                     state.requests++;
-                    state.buffer = concatBuffers(state.buffer, chunk.buffer);
-                    state.fetched = bufferByteLength(state.buffer);
+                    mergeAdaptiveChunk(state, chunk);
                 });
         } else if (state.totalSize === undefined) {
             chunkPromise = state.readRange(state.fetched, Infinity, {totalSize: state.totalSize})
                 .then((chunk) => {
                     state.requests++;
-                    if (chunk.totalSize !== undefined) {
-                        state.totalSize = chunk.totalSize;
-                    }
-                    state.buffer = concatBuffers(state.buffer, chunk.buffer);
-                    state.fetched = bufferByteLength(state.buffer);
+                    mergeAdaptiveChunk(state, chunk);
                 });
         } else {
             chunkPromise = Promise.resolve();

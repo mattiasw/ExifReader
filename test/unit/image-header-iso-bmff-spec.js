@@ -241,13 +241,14 @@ describe('image-header-iso-bmff', () => {
 
         it('should parse box of type idat', () => {
             const idatContent = '<some content>';
-            const dataView = getDataView(getFullBox('idat', 0, idatContent));
+            const dataView = getDataView(getBox('idat', idatContent));
 
-            // FullBox header is 12 bytes (4 length + 4 type + 1 version + 3 flags).
+            // idat is a plain box: an 8-byte header (4 length + 4 type) with no
+            // version/flags, so the item data starts at offset 8.
             expect(parseBox(dataView, 0)).to.deep.equal({
                 type: 'idat',
-                contentOffset: 12,
-                length: 12 + idatContent.length,
+                contentOffset: 8,
+                length: 8 + idatContent.length,
             });
         });
 
@@ -371,7 +372,7 @@ describe('image-header-iso-bmff', () => {
                 const exifBlock = buildExifBlock('<TIFF>');
 
                 const iinfBox = buildIinfBox([{itemId: EXIF_ITEM_ID, itemType: ITEM_INFO_TYPE_EXIF}]);
-                const idatBox = getFullBox('idat', 0, exifBlock);
+                const idatBox = getBox('idat', exifBlock);
                 const ilocBox = buildIlocBox({
                     version: 1,
                     items: [{
@@ -383,7 +384,7 @@ describe('image-header-iso-bmff', () => {
                 });
                 const boxes = getFullBox('meta', 0, iinfBox + idatBox + ilocBox);
 
-                const idatContentOffset = FULL_BOX_HEADER_SIZE + iinfBox.length + FULL_BOX_HEADER_SIZE;
+                const idatContentOffset = FULL_BOX_HEADER_SIZE + iinfBox.length + PLAIN_BOX_HEADER_SIZE;
                 const expectedExifBlockOffset = idatContentOffset; // baseOffset + extentOffset = 0
                 const expectedTiffHeaderOffset = expectedExifBlockOffset + 4 + 'Exif\x00\x00'.length;
 
@@ -406,7 +407,7 @@ describe('image-header-iso-bmff', () => {
                     itemType: ITEM_INFO_TYPE_MIME,
                     contentType: 'application/rdf+xml',
                 }]);
-                const idatBox = getFullBox('idat', 0, xmpBytes);
+                const idatBox = getBox('idat', xmpBytes);
                 const ilocBox = buildIlocBox({
                     version: 1,
                     items: [{
@@ -418,7 +419,7 @@ describe('image-header-iso-bmff', () => {
                 });
                 const boxes = getFullBox('meta', 0, iinfBox + idatBox + ilocBox);
 
-                const idatContentOffset = FULL_BOX_HEADER_SIZE + iinfBox.length + FULL_BOX_HEADER_SIZE;
+                const idatContentOffset = FULL_BOX_HEADER_SIZE + iinfBox.length + PLAIN_BOX_HEADER_SIZE;
 
                 const dataView = getDataView(boxes);
                 const metadataBlocks = [];
@@ -568,7 +569,7 @@ describe('image-header-iso-bmff', () => {
                 const idatContent = '\x00'.repeat(gap) + extentAData + '\x00'.repeat(gap) + extentBData;
 
                 const iinfBox = buildIinfBox([{itemId: EXIF_ITEM_ID, itemType: ITEM_INFO_TYPE_EXIF}]);
-                const idatBox = getFullBox('idat', 0, idatContent);
+                const idatBox = getBox('idat', idatContent);
                 const ilocBox = buildIlocBox({
                     version: 1,
                     items: [{
@@ -583,7 +584,7 @@ describe('image-header-iso-bmff', () => {
                 });
                 const boxes = getFullBox('meta', 0, iinfBox + idatBox + ilocBox);
 
-                const idatContentOffset = FULL_BOX_HEADER_SIZE + iinfBox.length + FULL_BOX_HEADER_SIZE;
+                const idatContentOffset = FULL_BOX_HEADER_SIZE + iinfBox.length + PLAIN_BOX_HEADER_SIZE;
                 const extentAFileOffset = idatContentOffset + extentAOffsetWithinIdat;
                 const extentBFileOffset = idatContentOffset + extentBOffsetWithinIdat;
 
@@ -632,6 +633,28 @@ describe('image-header-iso-bmff', () => {
                     {type: 'exif', start: 1100, end: 1150},
                     {type: 'exif', start: 1000000, end: 1000080},
                 ]);
+            });
+
+            it('should skip assembly when the combined extent length exceeds the buffer', () => {
+                const EXIF_ITEM_ID = 2;
+                const extents = [];
+                for (let i = 0; i < 100; i++) {
+                    extents.push({extentOffset: 100, extentLength: 50});
+                }
+                const boxes = getFullBox(
+                    'meta',
+                    0,
+                    buildIinfBox([{itemId: EXIF_ITEM_ID, itemType: ITEM_INFO_TYPE_EXIF}])
+                    + buildIlocBox({version: 0, items: [{itemId: EXIF_ITEM_ID, baseOffset: 1000, extents}]})
+                );
+
+                const dataView = getDataView(boxes + '\x00'.repeat(2000));
+                let result;
+                expect(() => {
+                    result = findOffsets(dataView);
+                }).to.not.throw();
+                expect(result.exifDataView).to.be.undefined;
+                expect(result.tiffHeaderOffset).to.be.undefined;
             });
 
             it('should emit one block per extent for multi-extent iloc items', () => {
@@ -740,6 +763,9 @@ function getFullBox(type, version, content) {
 
 // Full-box header is 4 (length) + 4 (type) + 1 (version) + 3 (flags) = 12 bytes.
 const FULL_BOX_HEADER_SIZE = 12;
+
+// Plain-box header is 4 (length) + 4 (type) = 8 bytes (no version/flags).
+const PLAIN_BOX_HEADER_SIZE = 8;
 
 function buildInfeEntry({itemId, itemType, contentType}) {
     const ITEM_PROTECTION_INDEX = getByteStringFromNumber(0, 2);

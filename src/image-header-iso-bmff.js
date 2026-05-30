@@ -73,6 +73,11 @@ export function parseBox(dataView, offset) {
         if (type === TYPE_COLR) {
             return parseColorInformationBox(dataView, contentOffset, length);
         }
+        if (type === TYPE_IDAT) {
+            // idat is a plain box (no version/flags); its data starts directly
+            // after the box header.
+            return parseItemDataBox(contentOffset, length);
+        }
 
         // The following are full boxes, also containing version and flags.
         if (!hasBytes(dataView, contentOffset, VERSION_SIZE)) {
@@ -85,9 +90,6 @@ export function parseBox(dataView, offset) {
         }
         if (type === TYPE_ILOC) {
             return parseItemLocationBox(dataView, version, contentOffset + VERSION_SIZE, length);
-        }
-        if (type === TYPE_IDAT) {
-            return parseItemDataBox(contentOffset + VERSION_SIZE, length);
         }
         if (type === TYPE_IINF) {
             return parseItemInformationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
@@ -335,6 +337,11 @@ function assembleExtents(dataView, ilocItem, idatContentOffset) {
         }
         resolved.push({start, length: extent.extentLength});
         totalLength += extent.extentLength;
+        // A reassembled item can never legitimately be larger than the source
+        // file. Overlapping extents could otherwise amplify the allocation.
+        if (totalLength > dataView.byteLength) {
+            return undefined;
+        }
     }
     const buffer = new Uint8Array(totalLength);
     let writeOffset = 0;
@@ -495,11 +502,9 @@ function parseMetadataBox(dataView, startOffset, contentOffset, length) {
 }
 
 function parseItemDataBox(contentOffset, length) {
-    const FLAGS_SIZE = 3;
-
     return {
         type: 'idat',
-        contentOffset: contentOffset + FLAGS_SIZE,
+        contentOffset,
         length,
     };
 }

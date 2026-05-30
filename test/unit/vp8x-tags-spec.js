@@ -58,4 +58,11 @@ describe('vp8x-tags', () => {
             ImageHeight: {value: 0x020305, description: '131845px'},
         });
     });
+
+    it('should not throw on a truncated VP8X chunk', () => {
+        // The VP8X payload is a fixed 10 bytes; here only one byte is present.
+        const dataView = getDataView('\x10');
+        expect(() => Vp8xTags.read(dataView, 0)).to.not.throw();
+        expect(Vp8xTags.read(dataView, 0)).to.deep.equal({});
+    });
 });

@@ -41,6 +41,21 @@ describe('pentax-tags', () => {
         expect(tags).to.deep.equal(pentaxTags);
     });
 
+    it('should not throw when the byte order marker is out of bounds', () => {
+        // A malformed MakerNote offset can push the byte-order read past the
+        // end of the buffer. Reading it must not throw out of the parse.
+        const dataView = getDataView('PENTAX \x00');
+        expect(() => PentaxTags.read(dataView, 0, 4, false)).to.not.throw();
+        expect(PentaxTags.read(dataView, 0, 4, false)).to.deep.equal({});
+    });
+
+    it('should not throw when the byte order marker is invalid', () => {
+        // Enough bytes to read, but not a valid II/MM marker.
+        const dataView = getDataView('PENTAX \x00\xff\xff');
+        expect(() => PentaxTags.read(dataView, 0, 0, false)).to.not.throw();
+        expect(PentaxTags.read(dataView, 0, 0, false)).to.deep.equal({});
+    });
+
     describe('K3 III level info', function () {
         describe('CameraOrientation', function () {
             it('should read CameraOrientation=0', function () {

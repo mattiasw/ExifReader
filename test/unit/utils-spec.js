@@ -22,6 +22,22 @@ describe('utils', () => {
         expect(Utils.getUnicodeStringFromDataView(dataView, 0, dataView.byteLength)).to.equal('ஃͽЯTest');
     });
 
+    it('should not read past the end of the DataView for an odd-length unicode region', () => {
+        // Two full UTF-16BE code units ("Te") followed by a single trailing
+        // byte. Reading up to byteLength must not attempt a 2-byte read on the
+        // final odd byte (which would throw a RangeError).
+        const dataView = getDataView('\x00\x54\x00\x65\x00');
+        expect(() => Utils.getUnicodeStringFromDataView(dataView, 0, dataView.byteLength)).to.not.throw();
+        expect(Utils.getUnicodeStringFromDataView(dataView, 0, dataView.byteLength)).to.equal('Te');
+    });
+
+    it('should not read past the requested length for an odd unicode length', () => {
+        // The buffer is large enough, but the requested length ends on an odd
+        // byte; the reader must not consume the byte belonging to the next region.
+        const dataView = getDataView('\x00\x54\x00\x65\xFF\xFF');
+        expect(Utils.getUnicodeStringFromDataView(dataView, 0, 5)).to.equal('Te');
+    });
+
     it('should pad a string', () => {
         expect(Utils.padStart('1', 3, '0')).to.equal('001');
     });

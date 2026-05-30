@@ -12,6 +12,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - More robust parsing of malformed or truncated ISO-BMFF boxes in HEIC/AVIF
   files. Such input no longer causes parsing to throw; the detected file type
   and any readable metadata are returned instead.
+- Truncated or malformed metadata no longer throws an uncaught error out of
+  `load`/`loadView`. Fixed several crashes on crafted input: a short WebP
+  `VP8X` chunk, a truncated PNG `iCCP` chunk (async mode), a HEIC/AVIF Exif
+  item whose TIFF header offset points outside the file, a truncated JPEG
+  MPF segment, and a unicode string whose region ends on an odd byte
+  (reachable via ICC `multiLocalizedUnicode`).
+- HEIC/AVIF files that store Exif or XMP via iloc `construction_method 1`
+  (the `idat` box) are now read at the correct offset. The `idat` box was
+  parsed as a full box, shifting its content offset by 4 bytes.
+- Capped the buffer assembled for multi-extent HEIC/AVIF items to the source
+  file size, preventing a memory-amplification path from overlapping extents.
+- `length: 'auto'` over a URL no longer corrupts the buffer when a
+  Range-ignoring server returns a full `200` response during the fallback
+  read, and the Node (non-`fetch`) path now falls back correctly on a `416`
+  response instead of rejecting.
 
 ## [4.40.0] - 2026-05-29
 

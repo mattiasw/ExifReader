@@ -36,7 +36,9 @@ export function getNullTerminatedStringFromDataView(dataView, offset) {
 
 export function getUnicodeStringFromDataView(dataView, offset, length) {
     const chars = [];
-    for (let i = 0; i < length && offset + i < dataView.byteLength; i += 2) {
+    // Each iteration reads a 2-byte code unit, so both bytes must fit within
+    // the requested length and the buffer.
+    for (let i = 0; i + 2 <= length && offset + i + 2 <= dataView.byteLength; i += 2) {
         chars.push(dataView.getUint16(offset + i));
     }
     if (chars[chars.length - 1] === 0) {

@@ -163,6 +163,19 @@ describe('image-header-png', () => {
         });
     });
 
+    it('should not throw on a truncated iCCP chunk that ends at the profile name', () => {
+        // The chunk type and a profile name + null terminator are present, but
+        // the buffer ends before the compression-method byte. Reading it must
+        // not run past the end of the DataView.
+        const chunkType = 'iCCP';
+        const chunkDataHeader = 'ProfileName\x00';
+        const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkDataHeader.length + 1)}`;
+        const dataView = getDataView(PNG_IMAGE_START + chunkLength + chunkType + chunkDataHeader);
+
+        expect(() => ImageHeaderPng.findPngOffsets(dataView, true)).to.not.throw();
+        expect(ImageHeaderPng.findPngOffsets(dataView, true)).to.not.have.property('iccChunks');
+    });
+
     it('should find pHYs chunks', () => {
         const chunkData = '\x01\x02\x03\x04\x02\x03\x04\x05\x01';
         const chunkLength = `\x00\x00\x00${String.fromCharCode(chunkData.length)}`;

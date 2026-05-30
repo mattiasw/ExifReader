@@ -400,6 +400,23 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should skip Exif but keep other data when Tags.read throws on a malformed TIFF header', () => {
+        rewireImageHeader({fileType: {value: 'heic', description: 'HEIC'}, tiffHeaderOffset: OFFSET_TEST_VALUE});
+        ExifReaderRewireAPI.__Rewire__('Tags', {
+            read() {
+                throw new Error('Illegal byte order value. Faulty image.');
+            },
+        });
+
+        let tags;
+        expect(() => {
+            tags = ExifReader.loadView({}, {expanded: true});
+        }).to.not.throw();
+        // Exif is skipped (no tags), but the rest of the result is intact.
+        expect(tags.exif).to.deep.equal({});
+        expect(tags.file.FileType).to.deep.equal({value: 'heic', description: 'HEIC'});
+    });
+
     it('should pass xmpDataView from BMFF multi-extent items to XmpTags.read instead of the source dataView', () => {
         const myTags = {MyXmpTag: 99};
         const SYNTHETIC = {synthetic: true};
@@ -1613,6 +1630,35 @@ describe('exif-reader', function () {
                 expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(true);
                 expect(tags.metadataRange).to.exist;
                 expect(tags.metadataRange.requests).to.be.at.least(4);
+            });
+
+            it('should not double the buffer in the fallback when a Range-ignoring server returns 200 with no size', async () => {
+                // The parse never reports complete (its block always extends
+                // past the buffer), so the loop exhausts its iterations and
+                // falls back. The server ignores Range and returns the whole
+                // body each time with no Content-Length, so totalSize is never
+                // learned. The fallback must replace the buffer like the main
+                // loop, not concatenate it (which would double it).
+                const BODY_SIZE = 1000;
+                rewireImageHeaderDynamic((dataView) => {
+                    const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
+                    return {
+                        tiffHeaderOffset: OFFSET_TEST_VALUE,
+                        metadataBlocks: [{type: 'exif', start: 2, end: len + 1000}],
+                    };
+                });
+                rewireTagsRead('Tags', {MyExifTag: 42});
+                installCustomFetchMock([
+                    {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
+                    {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
+                    {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
+                    {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
+                    {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
+                ]);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(tags.metadataRange.fetched).to.equal(BODY_SIZE);
             });
 
             function installCustomFetchMock(stages) {

@@ -149,4 +149,20 @@ describe('mpf-tags', () => {
             }
         ]);
     });
+
+    it('should not throw when the data is too short for the byte order marker', () => {
+        // A truncated MPF segment can leave the data offset at (or past) the
+        // end of the buffer. Reading the byte order there must not throw.
+        const dataView = getDataView('\x00');
+        expect(() => MpfTags.read(dataView, 1)).to.not.throw();
+        expect(MpfTags.read(dataView, 1)).to.deep.equal({});
+    });
+
+    it('should not throw when the byte order marker is invalid', () => {
+        // Enough bytes to read, but not a valid II/MM marker (e.g. a truncated
+        // segment whose MPF identifier is followed by unrelated bytes).
+        const dataView = getDataView('\xff\xff\xff\xff');
+        expect(() => MpfTags.read(dataView, 0)).to.not.throw();
+        expect(MpfTags.read(dataView, 0)).to.deep.equal({});
+    });
 });

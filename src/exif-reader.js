@@ -15,6 +15,7 @@ import DataViewWrapper from './dataview.js';
 import Constants from './constants.js';
 import {getStringValueFromArray} from './utils.js';
 import {getCalculatedGpsValue} from './tag-names-utils.js';
+import ByteOrder from './byte-order.js';
 import {getTiffHeaderOffset} from './image-header-iso-bmff.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
@@ -213,7 +214,7 @@ export function loadView(
         && hasExifData(tiffHeaderOffset)
         && tagFilter.shouldParseGroup('exif')
     ) {
-        const {tags: readTags, byteOrder} = Tags.read(
+        const {tags: readTags, byteOrder} = readExifTagsSafely(
             exifDataView || dataView,
             tiffHeaderOffset,
             includeUnknown,
@@ -783,6 +784,18 @@ export function loadView(
             && includeTagsOptions.file[0] === 'FileType';
 
         return !isFileTypeOnly;
+    }
+}
+
+function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter) {
+    try {
+        return Tags.read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter);
+    } catch (error) {
+        // A malformed TIFF header (an out-of-bounds offset or an invalid byte
+        // order marker, e.g. from a HEIC/AVIF iloc that does not point at real
+        // Exif) must not abort the whole parse. Skip Exif instead, but keep the
+        // same {tags, byteOrder} shape so callers can destructure safely.
+        return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
     }
 }
 

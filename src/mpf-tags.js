@@ -21,23 +21,27 @@ function read(
     computed = false,
     tagFilter = undefined
 ) {
-    const byteOrder = ByteOrder.getByteOrder(dataView, dataOffset);
-    const ifdOffset = get0thIfdOffset(dataView, dataOffset, byteOrder);
-    if (ifdOffset === undefined) {
+    try {
+        const byteOrder = ByteOrder.getByteOrder(dataView, dataOffset);
+        const ifdOffset = get0thIfdOffset(dataView, dataOffset, byteOrder);
+        if (ifdOffset === undefined) {
+            return {};
+        }
+        const tags = readIfd(
+            dataView,
+            IFD_TYPE_MPF,
+            dataOffset,
+            ifdOffset,
+            byteOrder,
+            includeUnknown,
+            computed,
+            tagFilter,
+            'mpf'
+        );
+        return addMpfImages(dataView, dataOffset, tags, byteOrder);
+    } catch (error) {
         return {};
     }
-    const tags = readIfd(
-        dataView,
-        IFD_TYPE_MPF,
-        dataOffset,
-        ifdOffset,
-        byteOrder,
-        includeUnknown,
-        computed,
-        tagFilter,
-        'mpf'
-    );
-    return addMpfImages(dataView, dataOffset, tags, byteOrder);
 }
 
 function addMpfImages(dataView, dataOffset, tags, byteOrder) {

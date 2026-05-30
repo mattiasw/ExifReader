@@ -99,21 +99,23 @@ function findPngOffsets(dataView, async, metadataBlocks) {
             offsets.tiffHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
             blockType = 'exif';
         } else if (Constants.USE_ICC && async && isPngIccpChunk(dataView, offset)) {
-            offsets.hasAppMarkers = true;
             const iccHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
-            const {profileName, compressionMethod, compressedProfileOffset} = parseIccHeader(dataView, iccHeaderOffset);
-            if (!offsets.iccChunks) {
-                offsets.iccChunks = [];
+            const iccHeader = parseIccHeader(dataView, iccHeaderOffset);
+            if (iccHeader !== undefined) {
+                offsets.hasAppMarkers = true;
+                if (!offsets.iccChunks) {
+                    offsets.iccChunks = [];
+                }
+                offsets.iccChunks.push({
+                    offset: iccHeader.compressedProfileOffset,
+                    length: chunkDataLength - (iccHeader.compressedProfileOffset - iccHeaderOffset),
+                    chunkNumber: 1,
+                    chunksTotal: 1,
+                    profileName: iccHeader.profileName,
+                    compressionMethod: iccHeader.compressionMethod
+                });
+                blockType = 'icc';
             }
-            offsets.iccChunks.push({
-                offset: compressedProfileOffset,
-                length: chunkDataLength - (compressedProfileOffset - iccHeaderOffset),
-                chunkNumber: 1,
-                chunksTotal: 1,
-                profileName,
-                compressionMethod
-            });
-            blockType = 'icc';
         } else if (isPngChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
             if (!offsets.pngChunkOffsets) {
@@ -201,6 +203,9 @@ function parseIccHeader(dataView, offset) {
     const profileName = getNullTerminatedStringFromDataView(dataView, offset);
     offset += profileName.length + NULL_SEPARATOR_SIZE;
 
+    if (offset + COMPRESSION_METHOD_SIZE > dataView.byteLength) {
+        return undefined;
+    }
     const compressionMethod = dataView.getUint8(offset);
     offset += COMPRESSION_METHOD_SIZE;
 
