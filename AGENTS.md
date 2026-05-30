@@ -78,7 +78,7 @@ Prefer self-explaining code (clear names, small functions) over comments. Add a 
 
 When a comment is warranted, keep it short and to the point. One or two lines is usually enough.
 
-JSDoc is welcome on exported functions where it documents the contract (parameters, return shape). Keep it concise and skip restating what the signature already says.
+When an exported function warrants documentation, use JSDoc (not a plain comment) to describe its contract: parameters and return shape. Keep it concise and skip restating what the signature already says.
 
 ## Type Definitions
 

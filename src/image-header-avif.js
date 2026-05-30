@@ -25,7 +25,7 @@ function isAvifFile(dataView) {
 
     try {
         const headerBox = parseBox(dataView, 0);
-        return headerBox && headerBox.majorBrand === 'avif';
+        return headerBox !== undefined && headerBox.majorBrand === 'avif';
     } catch (error) {
         return false;
     }

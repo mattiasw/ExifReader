@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- More robust parsing of malformed or truncated ISO-BMFF boxes in HEIC/AVIF
+  files. Such input no longer causes parsing to throw; the detected file type
+  and any readable metadata are returned instead.
+
 ## [4.40.0] - 2026-05-29
 
 ### Added

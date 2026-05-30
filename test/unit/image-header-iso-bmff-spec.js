@@ -250,6 +250,16 @@ describe('image-header-iso-bmff', () => {
                 length: 12 + idatContent.length,
             });
         });
+
+        it('should parse a box that uses a 64-bit extended size', () => {
+            const EXTENDED_SIZE_FLAG = getByteStringFromNumber(1, 4);
+            const highBits = getByteStringFromNumber(0, 4);
+            const lowBits = getByteStringFromNumber(17, 4);
+            const content = '\x00';
+            const dataView = getDataView(EXTENDED_SIZE_FLAG + 'free' + highBits + lowBits + content);
+
+            expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 17});
+        });
     });
 
     describe('findOffsets', () => {
@@ -651,6 +661,64 @@ describe('image-header-iso-bmff', () => {
                     {type: 'exif', start: 1100, end: 1150},
                     {type: 'exif', start: 1500, end: 1580},
                 ]);
+            });
+        });
+    });
+
+    describe('malformed boxes', () => {
+        it('should return no app markers for an empty box after a HEIC ftyp box', () => {
+            const dataView = getDataView(getBox('ftyp', 'heic') + getBox('free', ''));
+            let result;
+            expect(() => {
+                result = findOffsets(dataView);
+            }).to.not.throw();
+            expect(result).to.deep.equal({hasAppMarkers: false});
+        });
+
+        it('should return no app markers for an unknown box after an AVIF ftyp box', () => {
+            const dataView = getDataView(getBox('ftyp', 'avif') + getBox('abcd', ''));
+            let result;
+            expect(() => {
+                result = findOffsets(dataView);
+            }).to.not.throw();
+            expect(result).to.deep.equal({hasAppMarkers: false});
+        });
+
+        it('should return no app markers for a truncated extended-size box', () => {
+            // boxLength === 1 signals a 64-bit extended size that is absent here.
+            const truncatedExtendedBox = getByteStringFromNumber(1, 4) + 'free';
+            const dataView = getDataView(getBox('ftyp', 'heic') + truncatedExtendedBox);
+            let result;
+            expect(() => {
+                result = findOffsets(dataView);
+            }).to.not.throw();
+            expect(result).to.deep.equal({hasAppMarkers: false});
+        });
+
+        it('should return no app markers when an iloc claims more items than the buffer holds', () => {
+            // iloc claims 50 items but supplies none, so parsing must stop cleanly.
+            const sizesByte = getByteStringFromNumber(0x44, 1);
+            const baseOffsetAndIndexByte = getByteStringFromNumber(0x40, 1);
+            const itemCountClaimingMany = getByteStringFromNumber(50, 2);
+            const truncatedIloc = getFullBox('iloc', 0, sizesByte + baseOffsetAndIndexByte + itemCountClaimingMany);
+            const dataView = getDataView(getFullBox('meta', 0, truncatedIloc));
+            let result;
+            expect(() => {
+                result = findOffsets(dataView);
+            }).to.not.throw();
+            expect(result.hasAppMarkers).to.be.false;
+        });
+
+        describe('parseBox header guards', () => {
+            it('should return undefined for a full box whose version byte is missing', () => {
+                // 8-byte box: the header is present but the version byte is not.
+                const dataView = getDataView(getBox('free', ''));
+                expect(parseBox(dataView, 0)).to.be.undefined;
+            });
+
+            it('should return undefined for a box whose extended size field is missing', () => {
+                const dataView = getDataView(getByteStringFromNumber(1, 4) + 'free');
+                expect(parseBox(dataView, 0)).to.be.undefined;
             });
         });
     });
