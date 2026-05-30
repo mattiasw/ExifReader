@@ -10,10 +10,15 @@ export default {
 
 const IMAGE_WIDTH_OFFSET = 4;
 const IMAGE_HEIGHT_OFFSET = 7;
+const VP8X_DATA_SIZE = 10;
 
 // https://developers.google.com/speed/webp/docs/riff_container#extended_file_format
 function read(dataView, chunkOffset) {
     const tags = {};
+
+    if (chunkOffset + VP8X_DATA_SIZE > dataView.byteLength) {
+        return tags;
+    }
 
     const flags = Types.getByteAt(dataView, chunkOffset);
 

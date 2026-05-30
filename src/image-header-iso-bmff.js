@@ -2,6 +2,7 @@ import Constants from './constants.js';
 import {getNullTerminatedStringFromDataView, getStringFromDataView} from './utils.js';
 // import {get64BitValue} from './image-header-iso-bmff-utils.js';
 import {parseItemLocationBox} from './image-header-iso-bmff-iloc.js';
+import {hasBytes} from './image-header-iso-bmff-utils.js';
 
 // HEIC and AVIF files are based on the ISO-BMFF format. This file format is
 // built up by boxes. There are boxes and full boxes. All box types have a
@@ -46,50 +47,64 @@ export function parseBox(dataView, offset) {
     const BOX_MIN_LENGTH = 8;
     const VERSION_SIZE = 1;
 
-    const {length, contentOffset} = getBoxLength(dataView, offset);
-    if (length < BOX_MIN_LENGTH) {
+    if (!hasBytes(dataView, offset, BOX_MIN_LENGTH)) {
         return undefined;
     }
 
-    const type = dataView.getUint32(offset + BOX_TYPE_OFFSET);
+    // A malformed box can make a deeper read overrun the buffer; treat it as
+    // unparseable (return undefined) rather than throw a RangeError to the caller.
+    try {
+        const {length, contentOffset} = getBoxLength(dataView, offset);
+        if (length < BOX_MIN_LENGTH) {
+            return undefined;
+        }
 
-    if (type === TYPE_FTYP) {
-        return parseFileTypeBox(dataView, contentOffset, length);
-    }
-    if (type === TYPE_IPRP) {
-        return parseItemPropertiesBox(dataView, offset, contentOffset, length);
-    }
-    if (type === TYPE_IPCO) {
-        return parseItemPropertyContainerBox(dataView, offset, contentOffset, length);
-    }
-    if (type === TYPE_COLR) {
-        return parseColorInformationBox(dataView, contentOffset, length);
-    }
+        const type = dataView.getUint32(offset + BOX_TYPE_OFFSET);
 
-    // The following are full boxes, also containing version and flags.
-    const version = dataView.getUint8(contentOffset);
+        if (type === TYPE_FTYP) {
+            return parseFileTypeBox(dataView, contentOffset, length);
+        }
+        if (type === TYPE_IPRP) {
+            return parseItemPropertiesBox(dataView, offset, contentOffset, length);
+        }
+        if (type === TYPE_IPCO) {
+            return parseItemPropertyContainerBox(dataView, offset, contentOffset, length);
+        }
+        if (type === TYPE_COLR) {
+            return parseColorInformationBox(dataView, contentOffset, length);
+        }
+        if (type === TYPE_IDAT) {
+            // idat is a plain box (no version/flags); its data starts directly
+            // after the box header.
+            return parseItemDataBox(contentOffset, length);
+        }
 
-    if (type === TYPE_META) {
-        return parseMetadataBox(dataView, offset, contentOffset + VERSION_SIZE, length);
-    }
-    if (type === TYPE_ILOC) {
-        return parseItemLocationBox(dataView, version, contentOffset + VERSION_SIZE, length);
-    }
-    if (type === TYPE_IDAT) {
-        return parseItemDataBox(contentOffset + VERSION_SIZE, length);
-    }
-    if (type === TYPE_IINF) {
-        return parseItemInformationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
-    }
-    if (type === TYPE_INFE) {
-        return parseItemInformationEntryBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
-    }
+        // The following are full boxes, also containing version and flags.
+        if (!hasBytes(dataView, contentOffset, VERSION_SIZE)) {
+            return undefined;
+        }
+        const version = dataView.getUint8(contentOffset);
 
-    return {
-        // type: getStringFromDataView(dataView, offset + BOX_TYPE_OFFSET, 4),
-        type: undefined,
-        length
-    };
+        if (type === TYPE_META) {
+            return parseMetadataBox(dataView, offset, contentOffset + VERSION_SIZE, length);
+        }
+        if (type === TYPE_ILOC) {
+            return parseItemLocationBox(dataView, version, contentOffset + VERSION_SIZE, length);
+        }
+        if (type === TYPE_IINF) {
+            return parseItemInformationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
+        }
+        if (type === TYPE_INFE) {
+            return parseItemInformationEntryBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
+        }
+
+        return {
+            type: undefined,
+            length
+        };
+    } catch (error) {
+        return undefined;
+    }
 }
 
 /**
@@ -108,6 +123,7 @@ export function getBoxLength(dataView, offset) {
     const BOX_TYPE_SIZE = 4;
     const BOX_EXTENDED_SIZE = 8;
     const BOX_EXTENDED_SIZE_LOW_OFFSET = 12;
+    const BOX_EXTENDED_FULL_SIZE = BOX_LENGTH_SIZE + BOX_TYPE_SIZE + BOX_EXTENDED_SIZE;
 
     const boxLength = dataView.getUint32(offset);
     if (extendsToEndOfFile(boxLength)) {
@@ -117,6 +133,10 @@ export function getBoxLength(dataView, offset) {
         };
     }
     if (hasExtendedSize(boxLength)) {
+        if (!hasBytes(dataView, offset, BOX_EXTENDED_FULL_SIZE)) {
+            // Extended size field absent; length 0 makes parseBox treat it as unparseable.
+            return {length: 0, contentOffset: offset + BOX_LENGTH_SIZE + BOX_TYPE_SIZE};
+        }
         if (hasEmptyHighBits(dataView, offset)) {
             // It's a bit tricky to handle 64 bit numbers in JavaScript. Let's
             // wait until there are real-world examples where it is necessary.
@@ -317,6 +337,11 @@ function assembleExtents(dataView, ilocItem, idatContentOffset) {
         }
         resolved.push({start, length: extent.extentLength});
         totalLength += extent.extentLength;
+        // A reassembled item can never legitimately be larger than the source
+        // file. Overlapping extents could otherwise amplify the allocation.
+        if (totalLength > dataView.byteLength) {
+            return undefined;
+        }
     }
     const buffer = new Uint8Array(totalLength);
     let writeOffset = 0;
@@ -477,11 +502,9 @@ function parseMetadataBox(dataView, startOffset, contentOffset, length) {
 }
 
 function parseItemDataBox(contentOffset, length) {
-    const FLAGS_SIZE = 3;
-
     return {
         type: 'idat',
-        contentOffset: contentOffset + FLAGS_SIZE,
+        contentOffset,
         length,
     };
 }
@@ -592,7 +615,6 @@ function parseItemInformationEntryBox(dataView, startOffset, version, contentOff
         }
         entry.itemProtectionIndex = dataView.getUint16(contentOffset);
         contentOffset += 2;
-        // entry.itemTypeAscii = getStringFromDataView(dataView, offset, 4); // For testing.
         entry.itemType = dataView.getUint32(contentOffset);
         contentOffset += 4;
         entry.itemName = getNullTerminatedStringFromDataView(dataView, contentOffset);

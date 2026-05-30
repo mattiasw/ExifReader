@@ -24,7 +24,7 @@ function isHeicFile(dataView) {
 
     try {
         const headerBox = parseBox(dataView, 0);
-        return headerBox && HEIC_MAJOR_BRANDS.indexOf(headerBox.majorBrand) !== -1;
+        return headerBox !== undefined && HEIC_MAJOR_BRANDS.indexOf(headerBox.majorBrand) !== -1;
     } catch (error) {
         return false;
     }

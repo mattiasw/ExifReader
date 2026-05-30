@@ -39,29 +39,33 @@ function read(
     computed = false,
     tagFilter = undefined
 ) {
-    // Pentax does not use the standard TIFF header offset as base for tag
-    // offsets but instead uses the start of the IFD, i.e. directly after the
-    // two byte order bytes. originOffset below is this offset.
-    const byteOrder = ByteOrder.getByteOrder(dataView, tiffHeaderOffset + offset + BYTE_ORDER_OFFSET);
-    const originOffset = tiffHeaderOffset + offset;
-    let tags = readIfd(
-        dataView,
-        IFD_TYPE_PENTAX,
-        originOffset,
-        originOffset + PENTAX_IFD_OFFSET,
-        byteOrder,
-        includeUnknown,
-        computed,
-        tagFilter,
-        'makerNotes'
-    );
+    try {
+        // Pentax does not use the standard TIFF header offset as base for tag
+        // offsets but instead uses the start of the IFD, i.e. directly after the
+        // two byte order bytes. originOffset below is this offset.
+        const byteOrder = ByteOrder.getByteOrder(dataView, tiffHeaderOffset + offset + BYTE_ORDER_OFFSET);
+        const originOffset = tiffHeaderOffset + offset;
+        let tags = readIfd(
+            dataView,
+            IFD_TYPE_PENTAX,
+            originOffset,
+            originOffset + PENTAX_IFD_OFFSET,
+            byteOrder,
+            includeUnknown,
+            computed,
+            tagFilter,
+            'makerNotes'
+        );
 
-    if (hasLevelInfoK3III(tags)) {
-        tags = objectAssign({}, tags, parseLevelInfoK3III(dataView, originOffset + tags['LevelInfo'].__offset, byteOrder));
-        delete tags['LevelInfo'];
+        if (hasLevelInfoK3III(tags)) {
+            tags = objectAssign({}, tags, parseLevelInfoK3III(dataView, originOffset + tags['LevelInfo'].__offset, byteOrder));
+            delete tags['LevelInfo'];
+        }
+
+        return tags;
+    } catch (error) {
+        return {};
     }
-
-    return tags;
 }
 
 function hasLevelInfoK3III(tags) {

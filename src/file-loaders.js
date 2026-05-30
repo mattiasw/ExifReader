@@ -146,6 +146,11 @@ export function nodeGetRange(url, {start = 0, end} = {}) {
                     totalSize,
                     status: response.statusCode,
                 }));
+            } else if (response.statusCode === HTTP_STATUS_RANGE_NOT_SATISFIABLE) {
+                // Resolve (rather than reject) so the adaptive `length: 'auto'`
+                // loop can fall back to a full read, mirroring the fetch path.
+                response.resume();
+                resolve({buffer: Buffer.alloc(0), totalSize: totalSizeFromNodeResponse(response), status: response.statusCode});
             } else {
                 reject(`Could not fetch file: ${response.statusCode} ${response.statusMessage}`);
                 response.resume();
