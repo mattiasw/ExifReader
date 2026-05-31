@@ -114,6 +114,48 @@ describe('exif-reader', function () {
                     done();
                 });
             });
+
+            it('should reject with the HTTP status when a remote fetch returns 404', async () => {
+                global.fetch = () => Promise.resolve({
+                    status: 404,
+                    statusText: 'Not Found',
+                    headers: {get: () => null},
+                    arrayBuffer() {
+                        return Promise.resolve(new ArrayBuffer(8));
+                    }
+                });
+
+                let error;
+                try {
+                    await ExifReader.load(URL);
+                } catch (e) {
+                    error = e;
+                }
+
+                expect(error).to.be.an('error');
+                expect(error.message).to.contain('404');
+            });
+
+            it('should reject with the HTTP status when a remote fetch returns 500', async () => {
+                global.fetch = () => Promise.resolve({
+                    status: 500,
+                    statusText: 'Internal Server Error',
+                    headers: {get: () => null},
+                    arrayBuffer() {
+                        return Promise.resolve(new ArrayBuffer(8));
+                    }
+                });
+
+                let error;
+                try {
+                    await ExifReader.load(URL);
+                } catch (e) {
+                    error = e;
+                }
+
+                expect(error).to.be.an('error');
+                expect(error.message).to.contain('500');
+            });
         });
 
         describe('loading from URL in a Node.js context', () => {

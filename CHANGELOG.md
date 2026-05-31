@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The browser `fetch` loader now rejects with `Could not fetch file: <status>`
+  on 4xx/5xx HTTP responses (except `416`, which the `length: 'auto'` loop
+  still consumes as a fall-back signal) instead of feeding the error body to
+  the parser and surfacing a misleading `Invalid image format` error. This
+  brings the browser path in line with the Node path. Both the browser and
+  Node loaders now reject with an `Error` object (the Node path previously
+  rejected with a plain string).
+
 ## [4.40.2] - 2026-05-30
 
 ### Changed

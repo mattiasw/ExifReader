@@ -35,7 +35,7 @@ Users can configure custom builds (via `package.json` `"exifreader"` key) to inc
 | Coverage | `npm run coverage` |
 | Build | `npm run build` |
 | Pre-commit suite | `npm run pre-commit` (lint + types + coverage + build test) |
-| All tests | `npm run test:all` |
+| All tests (E2Es need the local server running with `npm run start`) | `npm run test:all` |
 
 ## Before Committing
 

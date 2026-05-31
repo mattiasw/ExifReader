@@ -78,6 +78,8 @@ function legacyRange(options) {
  * @param {{start?: number, end?: number}} [range] `end` is exclusive. Omit (or pass `Infinity`) to read to EOF.
  * @returns {Promise<{buffer: ArrayBuffer, totalSize: number|undefined, status: number|undefined}>}
  *          `totalSize` is taken from the `Content-Range` or `Content-Length` response header when present.
+ *          Rejects with `Could not fetch file: <status>` on non-2xx responses, except 416 which the
+ *          `length: 'auto'` loop consumes as a fall-back signal. Mirrors `nodeGetRange`.
  */
 export function fetchRange(url, {start = 0, end} = {}) {
     const options = {method: 'GET'};
@@ -85,8 +87,12 @@ export function fetchRange(url, {start = 0, end} = {}) {
         options.headers = {range: buildRangeHeader(start, end)};
     }
     return fetch(url, options).then((response) => {
-        const totalSize = totalSizeFromFetchResponse(response);
         const status = response && typeof response.status === 'number' ? response.status : undefined;
+        if (status !== undefined && !isAcceptableFetchStatus(status)) {
+            const statusText = response.statusText || '';
+            return Promise.reject(new Error(`Could not fetch file: ${status} ${statusText}`.trim()));
+        }
+        const totalSize = totalSizeFromFetchResponse(response);
         return Promise.resolve(response.arrayBuffer()).then((buffer) => ({buffer, totalSize, status}));
     });
 }
@@ -117,6 +123,15 @@ function totalSizeFromFetchResponse(response) {
         }
     }
     return undefined;
+}
+
+function isAcceptableFetchStatus(status) {
+    if ((status >= HTTP_STATUS_OK) && (status <= HTTP_STATUS_SUCCESS_MAX)) {
+        return true;
+    }
+    // 416 is consumed by the `length: 'auto'` adaptive loop (it falls back
+    // to a full read), so it must not be surfaced as a fetch error.
+    return status === HTTP_STATUS_RANGE_NOT_SATISFIABLE;
 }
 
 /**
@@ -152,7 +167,7 @@ export function nodeGetRange(url, {start = 0, end} = {}) {
                 response.resume();
                 resolve({buffer: Buffer.alloc(0), totalSize: totalSizeFromNodeResponse(response), status: response.statusCode});
             } else {
-                reject(`Could not fetch file: ${response.statusCode} ${response.statusMessage}`);
+                reject(new Error(`Could not fetch file: ${response.statusCode} ${response.statusMessage}`));
                 response.resume();
             }
         }).on('error', (error) => reject(error));
