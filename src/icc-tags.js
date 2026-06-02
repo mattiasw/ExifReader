@@ -88,6 +88,7 @@ function hasTagsData(buffer, tagHeaderOffset) {
 
 export function parseTags(dataView) {
     const MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE = 12;
+    const MAX_MLUC_RECORDS = 1000;
     const MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET = 16;
     const buffer = dataView.buffer;
 
@@ -159,6 +160,9 @@ export function parseTags(dataView) {
             const numRecords = dataView.getUint32(tagOffset + 8);
             const recordSize = dataView.getUint32(tagOffset + 12);
             if (recordSize < MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE) {
+                return tags;
+            }
+            if (numRecords > MAX_MLUC_RECORDS) {
                 return tags;
             }
             const recordsSize = numRecords * recordSize;

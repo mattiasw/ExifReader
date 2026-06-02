@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Cap mluc record count to prevent DoS from crafted ICC profiles with huge
+  numRecords (GHSA-h64w-w9pr-82m4).
+
 ## [4.40.3] - 2026-05-31
 
 ### Fixed

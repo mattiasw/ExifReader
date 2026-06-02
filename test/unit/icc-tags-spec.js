@@ -91,4 +91,50 @@ describe('icc-tags', () => {
 
         expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
     });
+
+    it('should cap mluc records to prevent DoS from crafted numRecords', () => {
+        const SIZE = 200;
+        const data = new Uint8Array(SIZE);
+        const dataView = new DataView(data.buffer);
+        const writeString = (offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                data[offset + i] = string.charCodeAt(i);
+            }
+        };
+
+        dataView.setUint32(0, SIZE);
+        writeString(36, 'acsp');
+        dataView.setUint32(128, 1);
+
+        writeString(132, 'desc');
+        dataView.setUint32(136, 144);
+        dataView.setUint32(140, 36);
+
+        // mluc tag with huge numRecords (100000) that exceeds MAX_MLUC_RECORDS
+        writeString(144, 'mluc');
+        dataView.setUint32(148, 0);
+        dataView.setUint32(152, 100000);
+        dataView.setUint32(156, 12);
+
+        writeString(160, 'en');
+        writeString(162, 'US');
+        dataView.setUint32(164, 4);
+        dataView.setUint32(168, 28);
+        dataView.setUint16(172, 0x0048);
+        dataView.setUint16(174, 0x0069);
+
+        let recordReadCount = 0;
+        IccTagsRewireAPI.__Rewire__('getUnicodeStringFromDataView', () => {
+            recordReadCount += 1;
+            return '';
+        });
+
+        try {
+            parseTags(dataView);
+        } finally {
+            IccTagsRewireAPI.__ResetDependency__('getUnicodeStringFromDataView');
+        }
+
+        expect(recordReadCount).to.equal(0);
+    });
 });
