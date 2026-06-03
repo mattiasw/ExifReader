@@ -278,4 +278,66 @@ describe('icc-tags', () => {
         expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
         expect(tags['ICC Description']).to.equal(undefined);
     });
+
+    it('should return the parsed header tags when an mluc record count exceeds the cap', () => {
+        const NUM_RECORDS = 100000;
+        const RECORD_SIZE = 12;
+        // Make the buffer large enough to hold every record so the recordsSize
+        // guard passes and only the record count cap can reject the tag.
+        const SIZE = 160 + NUM_RECORDS * RECORD_SIZE + 100;
+        const data = new Uint8Array(SIZE);
+        const dataView = new DataView(data.buffer);
+        const writeString = (offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                data[offset + i] = string.charCodeAt(i);
+            }
+        };
+
+        dataView.setUint32(0, SIZE);
+        writeString(36, 'acsp');
+        dataView.setUint32(128, 1);
+
+        writeString(132, 'desc');
+        dataView.setUint32(136, 144);
+        dataView.setUint32(140, SIZE - 144);
+
+        writeString(144, 'mluc');
+        dataView.setUint32(152, NUM_RECORDS);
+        dataView.setUint32(156, RECORD_SIZE);
+
+        const tags = parseTags(dataView);
+
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+        expect(tags['ICC Description']).to.equal(undefined);
+    });
+
+    it('should still parse an mluc tag with exactly the cap number of records', () => {
+        // Exactly MAX_MLUC_RECORDS, so the tag must still be parsed.
+        const NUM_RECORDS = 1000;
+        const RECORD_SIZE = 12;
+        const SIZE = 160 + NUM_RECORDS * RECORD_SIZE + 100;
+        const data = new Uint8Array(SIZE);
+        const dataView = new DataView(data.buffer);
+        const writeString = (offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                data[offset + i] = string.charCodeAt(i);
+            }
+        };
+
+        dataView.setUint32(0, SIZE);
+        writeString(36, 'acsp');
+        dataView.setUint32(128, 1);
+
+        writeString(132, 'desc');
+        dataView.setUint32(136, 144);
+        dataView.setUint32(140, SIZE - 144);
+
+        writeString(144, 'mluc');
+        dataView.setUint32(152, NUM_RECORDS);
+        dataView.setUint32(156, RECORD_SIZE);
+
+        const tags = parseTags(dataView);
+
+        expect(tags['ICC Description']).to.not.equal(undefined);
+    });
 });
