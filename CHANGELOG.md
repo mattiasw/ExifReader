@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Prevent a denial-of-service (excessive memory use) from crafted ICC `mluc`
+  tags by bounding the decoded text to each tag's bounds and the total profile
+  size.
+
 ## [4.40.3] - 2026-05-31
 
 ### Fixed
