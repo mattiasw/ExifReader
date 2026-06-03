@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.40.5] - 2026-06-03
+
 ### Security
 
 - Cap `mluc` record count to prevent DoS from crafted ICC profiles with huge
@@ -1048,7 +1050,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.40.4...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.40.5...HEAD
+[4.40.5]: https://github.com/mattiasw/ExifReader/compare/v4.40.4...v4.40.5
 [4.40.4]: https://github.com/mattiasw/ExifReader/compare/v4.40.3...v4.40.4
 [4.40.3]: https://github.com/mattiasw/ExifReader/compare/v4.40.2...v4.40.3
 [4.40.2]: https://github.com/mattiasw/ExifReader/compare/v4.40.1...v4.40.2
