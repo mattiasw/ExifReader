@@ -12,6 +12,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cap mluc record count to prevent DoS from crafted ICC profiles with huge
   numRecords (GHSA-h64w-w9pr-82m4).
 
+## [4.40.4] - 2026-06-03
+
+### Fixed
+
+- Malformed ICC profiles whose declared length is too small to hold the tag
+  table, or that contain a tag offset pointing past the end of the profile,
+  now return the header tags parsed so far instead of nothing. Three internal
+  bounds checks compared against `ArrayBuffer.length` (which is always
+  `undefined`) rather than the data's byte length, so they never fired; such
+  a profile ran past its end, threw an out-of-bounds `DataView` read, and the
+  surrounding try/catch discarded all the tags.
+
+### Security
+
+- Prevent a denial-of-service (excessive memory use) from crafted ICC `mluc`
+  tags by bounding the decoded text to each tag's bounds and the total profile
+  size.
+
 ## [4.40.3] - 2026-05-31
 
 ### Fixed
@@ -1030,7 +1048,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.40.3...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.40.4...HEAD
+[4.40.4]: https://github.com/mattiasw/ExifReader/compare/v4.40.3...v4.40.4
 [4.40.3]: https://github.com/mattiasw/ExifReader/compare/v4.40.2...v4.40.3
 [4.40.2]: https://github.com/mattiasw/ExifReader/compare/v4.40.1...v4.40.2
 [4.40.1]: https://github.com/mattiasw/ExifReader/compare/v4.40.0...v4.40.1

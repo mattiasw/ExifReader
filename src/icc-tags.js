@@ -16,6 +16,8 @@ const TAG_TYPE_MULTI_LOCALIZED_UNICODE_TYPE = 'mluc';
 const TAG_TYPE_TEXT = 'text';
 const TAG_TYPE_SIGNATURE = 'sig ';
 const TAG_TABLE_SINGLE_TAG_DATA = 12;
+const MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE = 12;
+const MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET = 16;
 
 // ICC profile data can be longer than application segment max length of ~64k.
 // so it can be split into multiple APP2 segments. Each segment includes
@@ -78,18 +80,16 @@ function getBuffer(dataView) {
     return dataView.buffer;
 }
 
-function iccDoesNotHaveTagCount(buffer) {
-    return buffer.length < (ICC_TAG_COUNT_OFFSET + 4);
+function iccDoesNotHaveTagCount(dataView) {
+    return dataView.byteLength < (ICC_TAG_COUNT_OFFSET + 4);
 }
 
-function hasTagsData(buffer, tagHeaderOffset) {
-    return buffer.length < tagHeaderOffset + TAG_TABLE_SINGLE_TAG_DATA;
+function doesNotHaveTagData(dataView, tagHeaderOffset) {
+    return dataView.byteLength < tagHeaderOffset + TAG_TABLE_SINGLE_TAG_DATA;
 }
 
 export function parseTags(dataView) {
-    const MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE = 12;
     const MAX_MLUC_RECORDS = 1000;
-    const MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET = 16;
     const buffer = dataView.buffer;
 
     const length = dataView.getUint32();
@@ -125,23 +125,26 @@ export function parseTags(dataView) {
     }
 
     /* ICC data is incomplete but we have header parsed so lets return it */
-    if (iccDoesNotHaveTagCount(buffer)) {
+    if (iccDoesNotHaveTagCount(dataView)) {
         return tags;
     }
 
     const tagCount = dataView.getUint32(128);
     let tagHeaderOffset = 132;
+    // Budget for the total mluc text decoded across the whole profile. Caps
+    // the decoded text at O(profile size); real profiles use a small fraction.
+    let remainingMlucTextBytes = dataView.byteLength;
 
     for (let i = 0; i < tagCount; i++) {
-        if (hasTagsData(buffer, tagHeaderOffset)) {
-            // Tags are corrupted (offset too far), return what we parsed until now
+        if (doesNotHaveTagData(dataView, tagHeaderOffset)) {
+            // Not enough room left for the next tag table entry, return what we parsed until now
             return tags;
         }
         const tagSignature = getStringFromDataView(dataView, tagHeaderOffset, 4);
         const tagOffset = dataView.getUint32(tagHeaderOffset + 4);
         const tagSize = dataView.getUint32(tagHeaderOffset + 8);
 
-        if (tagOffset > buffer.length) {
+        if (tagOffset > dataView.byteLength) {
             // Tag data is invalid, lets return what we managed to parse
             return tags;
         }
@@ -171,6 +174,12 @@ export function parseTags(dataView) {
             if (recordsSize > availableRecordsSize) {
                 return tags;
             }
+            // Records may legitimately share or overlap their text within a
+            // tag, so clamp each read to the tag bounds and draw from a
+            // profile-wide text budget rather than assuming non-overlapping
+            // storage. This caps the total decoded text at O(profile size)
+            // without truncating real profiles.
+            const tagTextEnd = Math.min(tagSize, dataView.byteLength - tagOffset);
             let offset = tagOffset + MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET;
             const val = [];
             for (let recordNum = 0; recordNum < numRecords; recordNum++) {
@@ -179,7 +188,10 @@ export function parseTags(dataView) {
                 const textLength = dataView.getUint32(offset + 4);
                 const textOffset = dataView.getUint32(offset + 8);
 
-                const text = getUnicodeStringFromDataView(dataView, tagOffset + textOffset, textLength);
+                const availableInTag = Math.max(0, tagTextEnd - textOffset);
+                const boundedTextLength = Math.min(textLength, availableInTag, remainingMlucTextBytes);
+                remainingMlucTextBytes -= boundedTextLength;
+                const text = getUnicodeStringFromDataView(dataView, tagOffset + textOffset, boundedTextLength);
                 val.push({languageCode, countryCode, text});
                 offset += recordSize;
             }
