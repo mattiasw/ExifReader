@@ -209,4 +209,73 @@ describe('icc-tags', () => {
 
         expect(tags['ICC Description'].value).to.deep.equal({'en-US': 'Hi', 'sv-SE': 'Hi'});
     });
+
+    it('should return the parsed header tags when the profile is truncated before the tag count', () => {
+        const SIZE = 130; // >= 84 clears the "too short" guard, < 132 has no room for the tag count.
+        const data = new Uint8Array(SIZE);
+        const dataView = new DataView(data.buffer);
+        const writeString = (offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                data[offset + i] = string.charCodeAt(i);
+            }
+        };
+
+        dataView.setUint32(0, SIZE); // Profile length must match the byte length.
+        writeString(36, 'acsp'); // Profile signature.
+
+        const tags = parseTags(dataView);
+
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+    });
+
+    it('should return the parsed header tags when there is no room for the tag table entry', () => {
+        const SIZE = 140; // >= 132 so the tag count is readable, < 144 has no room for a 12-byte tag entry.
+        const data = new Uint8Array(SIZE);
+        const dataView = new DataView(data.buffer);
+        const writeString = (offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                data[offset + i] = string.charCodeAt(i);
+            }
+        };
+
+        dataView.setUint32(0, SIZE);
+        writeString(36, 'acsp');
+        dataView.setUint32(128, 1); // Tag count is 1, but the entry does not fit.
+
+        const tags = parseTags(dataView);
+
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+    });
+
+    it('should stop parsing when a tag offset points past the end of the profile', () => {
+        const SIZE = 200;
+        const data = new Uint8Array(SIZE);
+        const dataView = new DataView(data.buffer);
+        const writeString = (offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                data[offset + i] = string.charCodeAt(i);
+            }
+        };
+
+        dataView.setUint32(0, SIZE);
+        writeString(36, 'acsp');
+        dataView.setUint32(128, 2); // Two tags.
+
+        // Tag 0: its data offset points past the end of the buffer.
+        writeString(132, 'cprt');
+        dataView.setUint32(136, 1000); // tagOffset out of range.
+        dataView.setUint32(140, 8); // tagSize.
+
+        // Tag 1: a valid text tag that must not be reached once tag 0 is rejected.
+        writeString(144, 'desc');
+        dataView.setUint32(148, 160); // tagOffset (valid).
+        dataView.setUint32(152, 20); // tagSize.
+        writeString(160, 'text'); // Tag type.
+        writeString(168, 'Hello'); // Text payload.
+
+        const tags = parseTags(dataView);
+
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+        expect(tags['ICC Description']).to.equal(undefined);
+    });
 });
