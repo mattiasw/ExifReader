@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Malformed ICC profiles whose declared length is too small to hold the tag
+  table, or that contain a tag offset pointing past the end of the profile,
+  now return the header tags parsed so far instead of nothing. Three internal
+  bounds checks compared against `ArrayBuffer.length` (which is always
+  `undefined`) rather than the data's byte length, so they never fired; such
+  a profile ran past its end, threw an out-of-bounds `DataView` read, and the
+  surrounding try/catch discarded all the tags.
+
 ### Security
 
 - Prevent a denial-of-service (excessive memory use) from crafted ICC `mluc`
