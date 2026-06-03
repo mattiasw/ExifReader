@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Cap mluc record count to prevent DoS from crafted ICC profiles with huge
-  numRecords (GHSA-h64w-w9pr-82m4).
+- Cap `mluc` record count to prevent DoS from crafted ICC profiles with huge
+  numRecords.
 
 ## [4.40.4] - 2026-06-03
 

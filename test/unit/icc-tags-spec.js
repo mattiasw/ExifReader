@@ -279,8 +279,12 @@ describe('icc-tags', () => {
         expect(tags['ICC Description']).to.equal(undefined);
     });
 
-    it('should cap mluc records to prevent DoS from crafted numRecords', () => {
-        const SIZE = 200;
+    it('should return the parsed header tags when an mluc record count exceeds the cap', () => {
+        const NUM_RECORDS = 100000;
+        const RECORD_SIZE = 12;
+        // Make the buffer large enough to hold every record so the recordsSize
+        // guard passes and only the record count cap can reject the tag.
+        const SIZE = 160 + NUM_RECORDS * RECORD_SIZE + 100;
         const data = new Uint8Array(SIZE);
         const dataView = new DataView(data.buffer);
         const writeString = (offset, string) => {
@@ -295,33 +299,45 @@ describe('icc-tags', () => {
 
         writeString(132, 'desc');
         dataView.setUint32(136, 144);
-        dataView.setUint32(140, 36);
+        dataView.setUint32(140, SIZE - 144);
 
-        // mluc tag with huge numRecords (100000) that exceeds MAX_MLUC_RECORDS
         writeString(144, 'mluc');
-        dataView.setUint32(148, 0);
-        dataView.setUint32(152, 100000);
-        dataView.setUint32(156, 12);
+        dataView.setUint32(152, NUM_RECORDS);
+        dataView.setUint32(156, RECORD_SIZE);
 
-        writeString(160, 'en');
-        writeString(162, 'US');
-        dataView.setUint32(164, 4);
-        dataView.setUint32(168, 28);
-        dataView.setUint16(172, 0x0048);
-        dataView.setUint16(174, 0x0069);
+        const tags = parseTags(dataView);
 
-        let recordReadCount = 0;
-        IccTagsRewireAPI.__Rewire__('getUnicodeStringFromDataView', () => {
-            recordReadCount += 1;
-            return '';
-        });
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+        expect(tags['ICC Description']).to.equal(undefined);
+    });
 
-        try {
-            parseTags(dataView);
-        } finally {
-            IccTagsRewireAPI.__ResetDependency__('getUnicodeStringFromDataView');
-        }
+    it('should still parse an mluc tag with exactly the cap number of records', () => {
+        // Exactly MAX_MLUC_RECORDS, so the tag must still be parsed.
+        const NUM_RECORDS = 1000;
+        const RECORD_SIZE = 12;
+        const SIZE = 160 + NUM_RECORDS * RECORD_SIZE + 100;
+        const data = new Uint8Array(SIZE);
+        const dataView = new DataView(data.buffer);
+        const writeString = (offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                data[offset + i] = string.charCodeAt(i);
+            }
+        };
 
-        expect(recordReadCount).to.equal(0);
+        dataView.setUint32(0, SIZE);
+        writeString(36, 'acsp');
+        dataView.setUint32(128, 1);
+
+        writeString(132, 'desc');
+        dataView.setUint32(136, 144);
+        dataView.setUint32(140, SIZE - 144);
+
+        writeString(144, 'mluc');
+        dataView.setUint32(152, NUM_RECORDS);
+        dataView.setUint32(156, RECORD_SIZE);
+
+        const tags = parseTags(dataView);
+
+        expect(tags['ICC Description']).to.not.equal(undefined);
     });
 });
