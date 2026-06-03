@@ -80,12 +80,12 @@ function getBuffer(dataView) {
     return dataView.buffer;
 }
 
-function iccDoesNotHaveTagCount(buffer) {
-    return buffer.length < (ICC_TAG_COUNT_OFFSET + 4);
+function iccDoesNotHaveTagCount(dataView) {
+    return dataView.byteLength < (ICC_TAG_COUNT_OFFSET + 4);
 }
 
-function hasTagsData(buffer, tagHeaderOffset) {
-    return buffer.length < tagHeaderOffset + TAG_TABLE_SINGLE_TAG_DATA;
+function doesNotHaveTagData(dataView, tagHeaderOffset) {
+    return dataView.byteLength < tagHeaderOffset + TAG_TABLE_SINGLE_TAG_DATA;
 }
 
 export function parseTags(dataView) {
@@ -124,7 +124,7 @@ export function parseTags(dataView) {
     }
 
     /* ICC data is incomplete but we have header parsed so lets return it */
-    if (iccDoesNotHaveTagCount(buffer)) {
+    if (iccDoesNotHaveTagCount(dataView)) {
         return tags;
     }
 
@@ -135,15 +135,15 @@ export function parseTags(dataView) {
     let remainingMlucTextBytes = dataView.byteLength;
 
     for (let i = 0; i < tagCount; i++) {
-        if (hasTagsData(buffer, tagHeaderOffset)) {
-            // Tags are corrupted (offset too far), return what we parsed until now
+        if (doesNotHaveTagData(dataView, tagHeaderOffset)) {
+            // Not enough room left for the next tag table entry, return what we parsed until now
             return tags;
         }
         const tagSignature = getStringFromDataView(dataView, tagHeaderOffset, 4);
         const tagOffset = dataView.getUint32(tagHeaderOffset + 4);
         const tagSize = dataView.getUint32(tagHeaderOffset + 8);
 
-        if (tagOffset > buffer.length) {
+        if (tagOffset > dataView.byteLength) {
             // Tag data is invalid, lets return what we managed to parse
             return tags;
         }
