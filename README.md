@@ -12,8 +12,8 @@ that contain metadata, **well under 1 ms per file** for typical phone JPEGs
 and **over 95% less bandwidth**.
 
 ExifReader is highly and easily configurable and the resulting bundle can be as
-small as **~4 KiB** (gzipped) if you're only interested in a few tags (e.g. date
-and/or GPS values).
+small as **~9 KiB** (Brotli-compressed) if you're only interested in a few tags
+(e.g. date and/or GPS values).
 
 ExifReader supports module formats ESM, AMD, CommonJS, and globals and can
 therefore easily be used from Webpack, RequireJS, Browserify, Node etc.

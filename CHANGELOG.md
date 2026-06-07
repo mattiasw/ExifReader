@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replacement for the automatic postinstall rebuild and works the same way with
   npm, yarn, and pnpm.
 
+### Changed
+
+- Custom builds that exclude image formats or metadata groups are now smaller.
+  The metadata merge pipeline no longer carries the merge handlers for excluded
+  PNG, JPEG XL, ICC, and XMP data, so for example a JPEG plus Exif build drops
+  by around 0.8 KiB gzipped.
+
 ### Deprecated
 
 - The automatic custom build via the npm `postinstall` script is deprecated and

@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import Constants from './constants.js';
+
 export function buildTagsFromMergeSteps({
     mergeSteps,
     deferredResults,
@@ -37,7 +39,8 @@ export function buildTagsFromMergeSteps({
     }
 
     if (
-        expanded
+        Constants.USE_PNG
+        && expanded
         && pngTextIsAsync
         && tagFilter.shouldReturnGroup('png')
         && tags.png
@@ -46,7 +49,8 @@ export function buildTagsFromMergeSteps({
     }
 
     if (
-        expanded
+        Constants.USE_PNG
+        && expanded
         && tagFilter.shouldReturnGroup('png')
         && deps.hasPngTextData(pngTextChunks)
         && tags.png
@@ -86,7 +90,7 @@ export function applyMergeStep({
         return mergeMergeGroup(tags, step.groupKey, returnedTags, expanded, deps);
     }
 
-    if (step.type === 'mergeXmpGroupAssign') {
+    if (Constants.USE_XMP && step.type === 'mergeXmpGroupAssign') {
         const returnedTags =
             deps.filterTagsForReturn('xmp', step.parsedTags, tagFilter);
 
@@ -102,7 +106,7 @@ export function applyMergeStep({
         return deps.objectAssign({}, tags, returnedTagsForFlat);
     }
 
-    if (step.type === 'mergeIccDeferred') {
+    if (Constants.USE_ICC && step.type === 'mergeIccDeferred') {
         const resolvedReadTags = deferredResults[step.deferredKey];
         const parsedIccTags =
             deps.filterTagsForParse('icc', resolvedReadTags, tagFilter);
@@ -118,7 +122,7 @@ export function applyMergeStep({
         return mergeAssignGroup(tags, 'icc', returnedIccTags, expanded, deps);
     }
 
-    if (step.type === 'mergeBrobExifDeferred') {
+    if (Constants.USE_JXL && step.type === 'mergeBrobExifDeferred') {
         const resolvedReadTags = deferredResults[step.deferredKey];
         if (!resolvedReadTags || Object.keys(resolvedReadTags).length === 0) {
             return tags;
@@ -137,7 +141,7 @@ export function applyMergeStep({
         return mergeAssignGroup(tags, 'exif', returnedTags, expanded, deps);
     }
 
-    if (step.type === 'mergeBrobXmpDeferred') {
+    if (Constants.USE_JXL && step.type === 'mergeBrobXmpDeferred') {
         const resolvedReadTags = deferredResults[step.deferredKey];
         if (!resolvedReadTags || Object.keys(resolvedReadTags).length === 0) {
             return tags;
@@ -164,7 +168,7 @@ export function applyMergeStep({
         return deps.objectAssign({}, tags, returnedTagsForFlat);
     }
 
-    if (step.type === 'mergePngFile') {
+    if (Constants.USE_PNG && step.type === 'mergePngFile') {
         const returnedPngFileTags =
             deps.filterTagsForReturn('png', step.parsedTags, tagFilter);
 
@@ -186,7 +190,7 @@ export function applyMergeStep({
         return deps.objectAssign({}, tags, returnedPngFileTags);
     }
 
-    if (step.type === 'mergePngChunk') {
+    if (Constants.USE_PNG && step.type === 'mergePngChunk') {
         const returnedPngChunkTags =
             deps.filterTagsForReturn('png', step.parsedTags, tagFilter);
 
@@ -207,7 +211,7 @@ export function applyMergeStep({
         return deps.objectAssign({}, tags, returnedPngChunkTags);
     }
 
-    if (step.type === 'processPngTextReadTags') {
+    if (Constants.USE_PNG && step.type === 'processPngTextReadTags') {
         return addPngTextReadTagsToTagsAndGroups({
             readTags: step.readTags,
             parsedGroups,
@@ -218,7 +222,7 @@ export function applyMergeStep({
         });
     }
 
-    if (step.type === 'processPngTextReadTagsDeferredList') {
+    if (Constants.USE_PNG && step.type === 'processPngTextReadTagsDeferredList') {
         const tagList = deferredResults[step.deferredKey] || [];
 
         for (let i = 0; i < tagList.length; i++) {
@@ -304,9 +308,9 @@ export function applyMergeStep({
             parsedGroups.thumbnail = parsedThumbnailIfdTags;
         }
 
-        const thumbnail = (deps.Constants.USE_JPEG || deps.Constants.USE_WEBP)
-            && deps.Constants.USE_EXIF
-            && deps.Constants.USE_THUMBNAIL
+        const thumbnail = (Constants.USE_JPEG || Constants.USE_WEBP)
+            && Constants.USE_EXIF
+            && Constants.USE_THUMBNAIL
             && deps.Thumbnail.get(exifDataView || dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
         if (thumbnail) {
             tags.Thumbnail = thumbnail;

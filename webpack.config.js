@@ -84,7 +84,7 @@ module.exports = {
                 }
             },
             {
-                test: /[/\\](exif-reader|image-header-?(tiff|jpeg|png|heic|avif|jxl|iso-bmff|webp|gif)?|tags|tag-names|tags-helpers|png-text-tags)\.js$/,
+                test: /[/\\](exif-reader|image-header-?(tiff|jpeg|png|heic|avif|jxl|iso-bmff|webp|gif)?|tags|tag-names|tags-helpers|png-text-tags|loadview-pipeline)\.js$/,
                 loader: 'string-replace-loader',
                 options: {
                     multiple: getConstantReplacements(includedModules)
