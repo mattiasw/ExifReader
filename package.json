@@ -21,6 +21,9 @@
     "webpack.config.js"
   ],
   "types": "./exif-reader.d.ts",
+  "bin": {
+    "exifreader": "bin/cli.js"
+  },
   "optionalDependencies": {
     "@xmldom/xmldom": "^0.9.10"
   },

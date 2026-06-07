@@ -1,14 +1,9 @@
 {
+    "presets": [
+        "@babel/env"
+    ],
     "env": {
-        "development": {
-            "presets": [
-                "@babel/env"
-            ]
-        },
         "test": {
-            "presets": [
-                "@babel/env"
-            ],
             "plugins": [
                 "rewire"
             ]

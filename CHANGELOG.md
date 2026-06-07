@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `npx exifreader build` command to (re)build a custom bundle from the
+  `exifreader` configuration in your `package.json`. This is the supported
+  replacement for the automatic postinstall rebuild and works the same way with
+  npm, yarn, and pnpm.
+
+### Deprecated
+
+- The automatic custom build via the npm `postinstall` script is deprecated and
+  will be removed in v5. Use `npx exifreader build` instead.
+
+### Fixed
+
+- Custom builds now transpile to ES5 even when run with `NODE_ENV=production`.
+  `@babel/preset-env` is applied unconditionally in `babel.config.json` instead
+  of only under Babel's default env.
+- A failed custom build dependency install no longer leaves `node_modules`
+  stranded in a temporary directory.
+
 ## [4.40.5] - 2026-06-03
 
 ### Security
