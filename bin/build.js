@@ -4,6 +4,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const {execSync} = require('child_process');
 const dependentHasExifReaderConfig = require('./findDependentConfig');
 
@@ -39,24 +40,39 @@ function runBuild(options) {
         env.EXIFREADER_CUSTOM_BUILD = JSON.stringify(options.config);
     }
 
-    if (env.EXIFREADER_CUSTOM_BUILD || hasDependentConfig()) {
-        installCustomBuildDependencies();
-    }
+    let tmpDir;
+    try {
+        if (env.EXIFREADER_CUSTOM_BUILD || hasDependentConfig()) {
+            tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'exifreader-build-'));
+            installCustomBuildDependencies(tmpDir);
+            const buildModules = path.join(tmpDir, 'node_modules');
+            // Point webpack at the isolated toolchain. NODE_PATH (read at child
+            // startup) covers webpack.config.js's require('terser-webpack-plugin')
+            // and Babel's @babel/preset-env lookup. EXIFREADER_BUILD_MODULES feeds
+            // resolveLoader.modules for the webpack loaders.
+            env.EXIFREADER_BUILD_MODULES = buildModules;
+            env.NODE_PATH = env.NODE_PATH ? buildModules + path.delimiter + env.NODE_PATH : buildModules;
+        }
 
-    execSync(`npx -p ${getPackage('webpack-cli')} -p ${getPackage('webpack')} webpack`, {stdio: 'inherit', env});
+        execSync(`npx -p ${getPackage('webpack-cli')} -p ${getPackage('webpack')} webpack`, {stdio: 'inherit', env});
+    } finally {
+        if (tmpDir) {
+            try {
+                fs.rmSync(tmpDir, {recursive: true, force: true});
+            } catch (error) {
+                // Best-effort: a locked file (e.g. Windows AV/watcher) during
+                // cleanup must not mask the build result. os.tmpdir() is reaped
+                // by the OS anyway.
+            }
+        }
+    }
 }
 
 function hasDependentConfig() {
     return !!dependentHasExifReaderConfig();
 }
 
-function installCustomBuildDependencies() {
-    const tmpDir = path.join(EXIFREADER_ROOT_DIR, '__tmp');
-    if (fs.existsSync(tmpDir)) {
-        console.error(leftoverTmpMessage(tmpDir)); // eslint-disable-line no-console
-        process.exit(1);
-    }
-
+function installCustomBuildDependencies(tmpDir) {
     console.log('Installing ExifReader custom build dependencies...'); // eslint-disable-line no-console
     const packages = [
         '@babel/core',
@@ -68,52 +84,14 @@ function installCustomBuildDependencies() {
         'terser-webpack-plugin'
     ].map((_package) => getPackage(_package));
 
-    let failed = false;
-    try {
-        initTmpDir(tmpDir);
-        execSync(`npm install --production --loglevel=error --no-optional --no-package-lock --no-save ${packages.join(' ')}`, {stdio: 'inherit'});
-        console.log('Done.'); // eslint-disable-line no-console
-    } catch (error) {
-        console.error('Could not install requirements for a custom build:', error); // eslint-disable-line no-console
-        failed = true;
-    } finally {
-        // Always restore node_modules, even on failure. (process.exit() in the
-        // catch would skip this, stranding node_modules inside __tmp.)
-        cleanUpTmpDir(tmpDir);
-    }
-
-    if (failed) {
-        process.exit(1);
-    }
+    // npm init only creates a package.json to anchor the install to tmpDir, so
+    // silence its package.json dump (stderr is kept for real errors).
+    execSync('npm init -y', {cwd: tmpDir, stdio: ['ignore', 'ignore', 'inherit']});
+    execSync(`npm install --production --loglevel=error --no-optional --no-package-lock --no-save ${packages.join(' ')}`, {cwd: tmpDir, stdio: 'inherit'});
+    console.log('Done.'); // eslint-disable-line no-console
 }
 
 function getPackage(name) {
     const version = require(path.join(EXIFREADER_ROOT_DIR, 'package.json')).devDependencies[name].replace(/^\^/, '');
     return `${name}@${version}`;
-}
-
-function leftoverTmpMessage(tmpDir) {
-    return `Found a leftover build directory (${tmpDir}), which usually means a previous custom `
-        + 'build was interrupted. If no build is currently running, check whether '
-        + `${path.join(tmpDir, 'node_modules')} holds your node_modules (move it back to `
-        + `${path.join(EXIFREADER_ROOT_DIR, 'node_modules')} if so), then remove ${tmpDir} and retry.`;
-}
-
-function initTmpDir(tmpDir) {
-    const nodeModulesDir = path.join(EXIFREADER_ROOT_DIR, 'node_modules');
-    fs.mkdirSync(tmpDir, {recursive: true});
-    if (fs.existsSync(nodeModulesDir)) {
-        fs.renameSync(nodeModulesDir, path.join(tmpDir, 'node_modules'));
-    }
-    process.chdir(tmpDir);
-    execSync('npm init -y', {stdio: 'inherit'});
-}
-
-function cleanUpTmpDir(tmpDir) {
-    const nodeModulesDir = path.join(tmpDir, 'node_modules');
-    if (fs.existsSync(nodeModulesDir)) {
-        fs.renameSync(nodeModulesDir, path.join(EXIFREADER_ROOT_DIR, 'node_modules'));
-    }
-    process.chdir(EXIFREADER_ROOT_DIR);
-    fs.rmSync(tmpDir, {recursive: true, force: true});
 }
