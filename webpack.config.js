@@ -24,6 +24,9 @@ if (includedModules) {
 
 module.exports = {
     mode: process.env.NODE_ENV || 'production',
+    resolveLoader: {
+        modules: getResolveLoaderModules()
+    },
     optimization: {
         minimizer: [new TerserPlugin({
             terserOptions: {
@@ -228,4 +231,11 @@ function getConstantReplacements(modules) {
     }
 
     return replacements;
+}
+
+function getResolveLoaderModules() {
+    if (process.env.EXIFREADER_BUILD_MODULES) {
+        return [process.env.EXIFREADER_BUILD_MODULES, 'node_modules'];
+    }
+    return ['node_modules'];
 }

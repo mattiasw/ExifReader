@@ -24,8 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom builds now transpile to ES5 even when run with `NODE_ENV=production`.
   `@babel/preset-env` is applied unconditionally in `babel.config.json` instead
   of only under Babel's default env.
-- A failed custom build dependency install no longer leaves `node_modules`
-  stranded in a temporary directory.
+- Custom builds now install their build toolchain in a unique OS temporary
+  directory instead of temporarily moving `exifreader`'s own `node_modules` aside,
+  so an interrupted or concurrent build can no longer strand or corrupt the install.
 
 ## [4.40.5] - 2026-06-03
 
