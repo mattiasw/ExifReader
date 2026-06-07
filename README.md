@@ -786,32 +786,51 @@ tags (resulting bundle will be ~19 % of a gzipped full build):
 }
 ```
 
-Then, if you didn't install ExifReader yet, run `npm install exifreader`.
-Otherwise you have to rebuild the library:
+Then build the custom bundle. If you haven't installed ExifReader yet:
 
 ```bash
-npm rebuild exifreader
+npm install exifreader
+npx exifreader build
 ```
 
-With yarn 2+:
-
-From my experience, you need a `node_modules` folder for the rebuild command to
-work with yarn 2+. If you don't have it, run `yarn config set nodeLinker
-node-modules` and then run `yarn`. Then you can try to rebuild:
+If it is already installed, or you just changed the configuration, run:
 
 ```bash
-yarn rebuild exifreader
+npx exifreader build
 ```
 
-With yarn 1:
-```bash
-yarn add exifreader
+This reads the `exifreader` configuration from your `package.json`, rebuilds the
+library, and writes the result to `node_modules/exifreader/dist/exif-reader.js`.
+It works the same way with npm, yarn, and pnpm.
+
+**Re-run after every install.** A fresh `npm install`, `npm ci`, or upgrade
+restores the full bundle, so run `npx exifreader build` again afterwards. The
+most reliable approach is to wire it into your own build step, for example (in
+your own `package.json`):
+
+```json
+"scripts": {
+    "prebuild": "exifreader build"
+}
 ```
 
-After that the new bundle is here: `node_modules/exifreader/dist/exif-reader.js`
+**Deprecated: automatic rebuild on install.** Older versions rebuilt the library
+automatically through an npm `postinstall` script, so a plain install or `npm
+rebuild exifreader` (or `yarn rebuild exifreader` with yarn 2+, or `yarn add
+exifreader` with yarn 1) produced the custom bundle. This still works in v4 but
+is deprecated and will be removed in v5, because npm is phasing out automatic
+install scripts. Use `npx exifreader build` instead, which also avoids the yarn
+2+ `node_modules` and `nodeLinker` caveats.
 
 If you are using `vite`, you will need to [clear the dependency cache](https://vitejs.dev/guide/dep-pre-bundling.html#file-system-cache)
 after a rebuild.
+
+**Advanced and monorepos.** Instead of the `package.json` configuration you can
+pass the same `include`/`exclude` object as JSON in the `EXIFREADER_CUSTOM_BUILD`
+environment variable, which takes priority over `package.json`. In a monorepo,
+`npx exifreader build` reads the configuration from the package you run it in,
+but a hoisted `node_modules/exifreader` is shared by every workspace package, so
+there is only one custom bundle and the last build wins.
 
 If you're using the include pattern config, remember to include everything you
 want to use. If you want `xmp` and don't specify any file types, you will get

@@ -2,6 +2,7 @@
     {
         "id": "everything",
         "rebuild": true,
+        "cli": true,
         "config": {
             "include": {
                 "file": true,
@@ -67,6 +68,7 @@
     {
         "id": "partial-jpeg",
         "rebuild": true,
+        "cli": true,
         "config": {
             "include": {
                 "jpeg": true,
@@ -94,6 +96,7 @@
     },
     {
         "id": "small-png",
+        "cli": true,
         "config": {
             "include": {
                 "png": true,

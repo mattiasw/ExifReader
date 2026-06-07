@@ -2,7 +2,7 @@ const {expect} = require('chai');
 const path = require('path');
 const fs = require('fs');
 const {rimrafSync} = require('rimraf');
-const {execSync} = require('child_process');
+const {execSync, execFileSync} = require('child_process');
 const Exif = require('./exif');
 const configurations = require('./custom-builds.json');
 
@@ -27,7 +27,7 @@ describe('custom configuration image outputs', () => {
                 before(() => {
                     setUp();
                     updatePackageJson(configuration.config);
-                    execSync(`npm install --loglevel=error ${PACKAGE}`, {stdio: 'ignore'});
+                    execFileSync('npm', ['install', '--loglevel=error', PACKAGE], {stdio: 'ignore'});
                 });
 
                 after(() => {
@@ -45,9 +45,32 @@ describe('custom configuration image outputs', () => {
                 describe('rebuild', () => {
                     before(() => {
                         setUp();
-                        execSync(`npm install --loglevel=error ${PACKAGE}`, {stdio: 'ignore'});
+                        execFileSync('npm', ['install', '--loglevel=error', PACKAGE], {stdio: 'ignore'});
                         updatePackageJson(configuration.config);
                         execSync('npm rebuild exifreader', {stdio: 'ignore'});
+                    });
+
+                    after(() => {
+                        cleanUp();
+                    });
+
+                    fs.readdirSync(path.join(FIXTURES_PATH, 'images')).forEach((imageName) => {
+                        it(`matches stored image output for ${imageName}`, async () => {
+                            await testFile(imageName, configuration);
+                        });
+                    });
+                });
+            }
+
+            if (configuration.cli) {
+                describe('cli build', () => {
+                    before(() => {
+                        setUp();
+                        execFileSync('npm', ['install', '--ignore-scripts', '--loglevel=error', PACKAGE], {stdio: 'ignore'});
+                        updatePackageJson(configuration.config);
+                        const binDir = path.join(TEMP_PROJECT_DIR, 'node_modules', '.bin');
+                        expect(fs.existsSync(path.join(binDir, 'exifreader')) || fs.existsSync(path.join(binDir, 'exifreader.cmd'))).to.equal(true);
+                        execSync('node node_modules/exifreader/bin/cli.js build', {cwd: TEMP_PROJECT_DIR, stdio: 'ignore'});
                     });
 
                     after(() => {
