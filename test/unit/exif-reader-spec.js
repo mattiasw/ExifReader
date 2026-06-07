@@ -4,6 +4,7 @@
 
 import {expect} from 'chai';
 import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
+import {__RewireAPI__ as PipelineRewireAPI} from '../../src/loadview-pipeline';
 import {getCharacterArray, getBase64Image} from '../../src/utils';
 import * as ExifReader from '../../src/exif-reader';
 import exifErrors from '../../src/errors';
@@ -22,6 +23,7 @@ describe('exif-reader', function () {
         ExifReaderRewireAPI.__ResetDependency__('DataViewWrapper');
         ExifReaderRewireAPI.__ResetDependency__('loadView');
         ExifReaderRewireAPI.__ResetDependency__('Constants');
+        PipelineRewireAPI.__ResetDependency__('Constants');
         ExifReaderRewireAPI.__ResetDependency__('ImageHeader');
         ExifReaderRewireAPI.__ResetDependency__('FileTags');
         ExifReaderRewireAPI.__ResetDependency__('Tags');
@@ -2040,4 +2042,5 @@ function rewireThumbnail(thumbnailTags) {
 function rewireForCustomBuild(appMarkersValue, Constants) {
     rewireImageHeader(appMarkersValue);
     ExifReaderRewireAPI.__Rewire__('Constants', Constants);
+    PipelineRewireAPI.__Rewire__('Constants', Constants);
 }

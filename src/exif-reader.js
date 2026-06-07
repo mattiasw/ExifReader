@@ -708,7 +708,6 @@ export function loadView(
         filterTagsForParse,
         filterTagsForReturn,
         getGpsGroupFromExifTags,
-        Constants,
         Composite,
         Thumbnail,
     };
