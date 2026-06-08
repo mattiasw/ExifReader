@@ -84,9 +84,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- More robust parsing of malformed or truncated ISO-BMFF boxes in HEIC/AVIF
-  files. Such input no longer causes parsing to throw; the detected file type
-  and any readable metadata are returned instead.
 - Truncated or malformed metadata no longer throws an uncaught error out of
   `load`/`loadView`. Fixed several crashes on crafted input: a short WebP
   `VP8X` chunk, a truncated PNG `iCCP` chunk (async mode), a HEIC/AVIF Exif
@@ -102,6 +99,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Range-ignoring server returns a full `200` response during the fallback
   read, and the Node (non-`fetch`) path now falls back correctly on a `416`
   response instead of rejecting.
+
+### Security
+
+- Fix denial-of-service from an uncaught exception when parsing crafted
+  HEIC/AVIF files with malformed ISO-BMFF boxes
+  ([GHSA-g77h-45rf-hcx4](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-g77h-45rf-hcx4)).
+  Reported by @YHalo-wyh.
 
 ## [4.40.0] - 2026-05-29
 
