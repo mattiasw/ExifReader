@@ -3,27 +3,32 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
+import {swapProperties} from './test-utils.js';
 import {BIG_ENDIAN} from '../../src/byte-order.js';
-import * as ExifReader from '../../src/exif-reader';
-import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
+import * as ExifReader from '../../src/exif-reader.js';
+import ImageHeader from '../../src/image-header.js';
+import Tags from '../../src/tags.js';
+import CanonTags from '../../src/canon-tags.js';
+import PngTextTags from '../../src/png-text-tags.js';
+import XmpTags from '../../src/xmp-tags.js';
+import IccTags from '../../src/icc-tags.js';
+import FileTags from '../../src/file-tags.js';
+import Thumbnail from '../../src/thumbnail.js';
+import Composite from '../../src/composite.js';
+
+const restoreFunctions = [];
 
 describe('tag filtering options', function () {
     afterEach(() => {
-        ExifReaderRewireAPI.__ResetDependency__('ImageHeader');
-        ExifReaderRewireAPI.__ResetDependency__('Tags');
-        ExifReaderRewireAPI.__ResetDependency__('CanonTags');
-        ExifReaderRewireAPI.__ResetDependency__('PngTextTags');
-        ExifReaderRewireAPI.__ResetDependency__('XmpTags');
-        ExifReaderRewireAPI.__ResetDependency__('IccTags');
-        ExifReaderRewireAPI.__ResetDependency__('Thumbnail');
+        restoreAllFakes();
     });
 
     it('excludeTags.exif should exclude a tag by name', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
         });
 
@@ -37,11 +42,11 @@ describe('tag filtering options', function () {
     });
 
     it('excludeTags.exif should exclude a tag by id', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
         });
 
@@ -55,11 +60,11 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags should override excludeTags for the same group (excludeAll)', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
         });
 
@@ -76,11 +81,11 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags should override excludeTags for the same group (selectors)', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
         });
 
@@ -97,11 +102,11 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags should be an include-pattern and exclude groups not mentioned', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
         });
 
@@ -116,11 +121,11 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags should allow filtering output to empty without throwing', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
         });
 
@@ -134,11 +139,11 @@ describe('tag filtering options', function () {
     });
 
     it('excludeTags: { png: true } should not block embedded exif tags', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'png',
             pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
         });
-        rewirePngTextTagsRead({
+        fakePngTextTagsRead({
             __exif: {
                 UserComment: {id: 0x9286, value: 'Hello'},
             },
@@ -156,11 +161,11 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags: { png: true } should not include embedded exif when exif is not included', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'png',
             pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
         });
-        rewirePngTextTagsRead({
+        fakePngTextTagsRead({
             __exif: {
                 UserComment: {id: 0x9286, value: 'Hello'},
             },
@@ -178,11 +183,11 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.xmp should filter tags (xmpChunks path)', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             xmpChunks: [{dataOffset: 0, length: 1}],
         });
-        rewireXmpTagsRead({
+        fakeXmpTagsRead({
             DateTimeOriginal: {value: '2020:01:01 00:00:00'},
             Other: {value: 'ignored'},
             _raw: '<xml/>',
@@ -201,17 +206,17 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.xmp should filter tags (embedded ApplicationNotes path)', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             ApplicationNotes: {
                 id: 0x02bc,
                 value: [60, 120, 109, 112, 47, 62],
             },
         });
-        rewireXmpTagsRead({
+        fakeXmpTagsRead({
             DateTimeOriginal: {value: '2020:01:01 00:00:00'},
             Other: {value: 'ignored'},
             _raw: '<xml/>',
@@ -230,7 +235,7 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.file should control FileType output', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
         });
 
@@ -244,7 +249,7 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.file: [FileType] should return FileType', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
         });
 
@@ -258,16 +263,16 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags: { composite: true, file: [FileType] } should still parse file deps for composite', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: {value: 'jpeg', description: 'JPEG'},
             fileDataOffset: 1,
         });
-        rewireFileTagsRead({
+        fakeFileTagsRead({
             'Image Width': {value: 4000},
             'Image Height': {value: 3000},
             FileType: {value: 'ignored'},
         });
-        rewireCompositeGet({
+        fakeCompositeGet({
             FieldOfView: {value: 1},
         });
 
@@ -287,7 +292,7 @@ describe('tag filtering options', function () {
     });
 
     it('excludeTags.file: [FileType] should remove FileType', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
         });
 
@@ -301,17 +306,17 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.thumbnail should return the top-level Thumbnail', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             Thumbnail: {
                 JPEGInterchangeFormat: {id: 0x0201, value: 42},
                 JPEGInterchangeFormatLength: {id: 0x0202, value: 99},
             },
         });
-        rewireThumbnailGet((_, thumbnailIfdTags) => {
+        fakeThumbnailGet((_, thumbnailIfdTags) => {
             if (
                 thumbnailIfdTags
                 && thumbnailIfdTags.JPEGInterchangeFormat
@@ -333,17 +338,17 @@ describe('tag filtering options', function () {
     });
 
     it('excludeTags.thumbnail: [Thumbnail] should remove top-level Thumbnail', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             Thumbnail: {
                 JPEGInterchangeFormat: {id: 0x0201, value: 42},
                 JPEGInterchangeFormatLength: {id: 0x0202, value: 99},
             },
         });
-        rewireThumbnailGet(() => ({value: 'thumb'}));
+        fakeThumbnailGet(() => ({value: 'thumb'}));
 
         const tags = ExifReader.loadView({}, {
             excludeTags: {
@@ -355,14 +360,14 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.icc should filter embedded ICC tags', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             ICC_Profile: {id: 0x8773, value: [1, 2, 3]},
         });
-        rewireIccTagsRead({
+        fakeIccTagsRead({
             ProfileDescription: {value: 'keep'},
             Other: {value: 'drop'},
         });
@@ -379,11 +384,11 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.gps should filter computed gps group fields', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             GPSLatitude: {id: 0x0002, value: [[1, 1], [2, 1], [3, 1]]},
             GPSLatitudeRef: {id: 0x0001, value: ['N']},
             GPSLongitude: {id: 0x0004, value: [[1, 1], [2, 1], [3, 1]]},
@@ -402,11 +407,11 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.xmp: [] should skip XMP parsing', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             xmpChunks: [{dataOffset: 0, length: 1}],
         });
-        rewireXmpTagsReadToThrow();
+        fakeXmpTagsReadToThrow();
 
         const tags = ExifReader.loadView({}, {
             expanded: true,
@@ -419,11 +424,11 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.xmp: [] should not trigger Exif parsing as a dependency', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsReadToThrow();
+        fakeTagsReadToThrow();
 
         const tags = ExifReader.loadView({}, {
             includeTags: {
@@ -435,13 +440,13 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.icc: [] should skip ICC parsing', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
             iccChunks: [{dataOffset: 0, length: 1}],
         });
-        rewireTagsReadToThrow();
-        rewireIccTagsReadToThrow();
+        fakeTagsReadToThrow();
+        fakeIccTagsReadToThrow();
 
         const tags = ExifReader.loadView({}, {
             expanded: true,
@@ -454,15 +459,15 @@ describe('tag filtering options', function () {
     });
 
     it('includeTags.makerNotes should filter Canon maker-note tags', function () {
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: 'jpeg',
             tiffHeaderOffset: 1,
         });
-        rewireTagsRead({
+        fakeTagsRead({
             Make: {id: 0x010f, value: ['Canon']},
             MakerNote: {id: 0x927c, value: [1, 2, 3], __offset: 42},
         });
-        rewireCanonTagsRead({
+        fakeCanonTagsRead({
             LensType: {id: 0x0001, value: 61182, description: '61182'},
             LensModel: {
                 id: 0x0095,
@@ -483,96 +488,102 @@ describe('tag filtering options', function () {
     });
 });
 
-function rewireImageHeader(appMarkersValue) {
-    ExifReaderRewireAPI.__Rewire__('ImageHeader', {
+function fakeImageHeader(appMarkersValue) {
+    restoreFunctions.push(swapProperties(ImageHeader, {
         parseAppMarkers() {
             return appMarkersValue;
         },
-    });
+    }));
 }
 
-function rewireTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('Tags', {
+function fakeTagsRead(tagsValue) {
+    restoreFunctions.push(swapProperties(Tags, {
         read() {
             return {tags: tagsValue, byteOrder: BIG_ENDIAN};
         },
-    });
+    }));
 }
 
-function rewireTagsReadToThrow() {
-    ExifReaderRewireAPI.__Rewire__('Tags', {
+function fakeTagsReadToThrow() {
+    restoreFunctions.push(swapProperties(Tags, {
         read() {
             throw new Error('Tags.read was called.');
         },
-    });
+    }));
 }
 
-function rewirePngTextTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('PngTextTags', {
+function fakePngTextTagsRead(tagsValue) {
+    restoreFunctions.push(swapProperties(PngTextTags, {
         read() {
             return {readTags: tagsValue, readTagsPromise: undefined};
         },
-    });
+    }));
 }
 
-function rewireXmpTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('XmpTags', {
+function fakeXmpTagsRead(tagsValue) {
+    restoreFunctions.push(swapProperties(XmpTags, {
         read() {
             return tagsValue;
         },
-    });
+    }));
 }
 
-function rewireXmpTagsReadToThrow() {
-    ExifReaderRewireAPI.__Rewire__('XmpTags', {
+function fakeXmpTagsReadToThrow() {
+    restoreFunctions.push(swapProperties(XmpTags, {
         read() {
             throw new Error('XmpTags.read was called.');
         },
-    });
+    }));
 }
 
-function rewireIccTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('IccTags', {
+function fakeIccTagsRead(tagsValue) {
+    restoreFunctions.push(swapProperties(IccTags, {
         read() {
             return tagsValue;
         },
-    });
+    }));
 }
 
-function rewireIccTagsReadToThrow() {
-    ExifReaderRewireAPI.__Rewire__('IccTags', {
+function fakeIccTagsReadToThrow() {
+    restoreFunctions.push(swapProperties(IccTags, {
         read() {
             throw new Error('IccTags.read was called.');
         },
-    });
+    }));
 }
 
-function rewireCanonTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('CanonTags', {
+function fakeCanonTagsRead(tagsValue) {
+    restoreFunctions.push(swapProperties(CanonTags, {
         read() {
             return tagsValue;
         },
-    });
+    }));
 }
 
-function rewireFileTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('FileTags', {
+function fakeFileTagsRead(tagsValue) {
+    restoreFunctions.push(swapProperties(FileTags, {
         read() {
             return tagsValue;
         },
-    });
+    }));
 }
 
-function rewireThumbnailGet(getFunction) {
-    ExifReaderRewireAPI.__Rewire__('Thumbnail', {
+function fakeThumbnailGet(getFunction) {
+    restoreFunctions.push(swapProperties(Thumbnail, {
         get: getFunction,
-    });
+    }));
 }
 
-function rewireCompositeGet(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('Composite', {
+function fakeCompositeGet(tagsValue) {
+    restoreFunctions.push(swapProperties(Composite, {
         get() {
             return tagsValue;
         },
-    });
+    }));
+}
+
+function restoreAllFakes() {
+    while (restoreFunctions.length > 0) {
+        restoreFunctions.pop()();
+    }
 }

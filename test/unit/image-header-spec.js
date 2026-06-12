@@ -3,21 +3,25 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import {__RewireAPI__ as ImageHeaderRewireAPI} from '../../src/image-header';
-import ImageHeader from '../../src/image-header';
+import {getDataView, swapProperties} from './test-utils.js';
+import Constants from '../../src/constants.js';
+import Tiff from '../../src/image-header-tiff.js';
+import Jpeg from '../../src/image-header-jpeg.js';
+import Png from '../../src/image-header-png.js';
+import Heic from '../../src/image-header-heic.js';
+import Avif from '../../src/image-header-avif.js';
+import Jxl from '../../src/image-header-jxl.js';
+import Webp from '../../src/image-header-webp.js';
+import Gif from '../../src/image-header-gif.js';
+import ImageHeader from '../../src/image-header.js';
 
 describe('image-header', () => {
+    const restores = [];
+
     afterEach(() => {
-        ImageHeaderRewireAPI.__ResetDependency__('Constants');
-        ImageHeaderRewireAPI.__ResetDependency__('Tiff');
-        ImageHeaderRewireAPI.__ResetDependency__('Jpeg');
-        ImageHeaderRewireAPI.__ResetDependency__('Png');
-        ImageHeaderRewireAPI.__ResetDependency__('Heic');
-        ImageHeaderRewireAPI.__ResetDependency__('Avif');
-        ImageHeaderRewireAPI.__ResetDependency__('Jxl');
-        ImageHeaderRewireAPI.__ResetDependency__('Webp');
-        ImageHeaderRewireAPI.__ResetDependency__('Gif');
+        while (restores.length > 0) {
+            restores.pop()();
+        }
     });
 
     it('should fail for too short data buffer', () => {
@@ -39,10 +43,10 @@ describe('image-header', () => {
         const offsets = {tiffHeaderOffset: 0, hasAppMarkers: true};
 
         beforeEach(() => {
-            ImageHeaderRewireAPI.__Rewire__('Tiff', {
+            restores.push(swapProperties(Tiff, {
                 isTiffFile: (_dataView) => _dataView === dataView,
                 findTiffOffsets: () => offsets
-            });
+            }));
         });
 
         it('should handle TIFF files', () => {
@@ -50,15 +54,15 @@ describe('image-header', () => {
         });
 
         it('should ignore file when it\'s not a TIFF image', () => {
-            ImageHeaderRewireAPI.__Rewire__('Tiff', {
+            restores.push(swapProperties(Tiff, {
                 isTiffFile: () => false
-            });
+            }));
 
             expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
         });
 
         it('should handle when TIFF files have been excluded in a custom build', () => {
-            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_TIFF: false});
+            restores.push(swapProperties(Constants, {USE_TIFF: false}));
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
 
@@ -73,10 +77,10 @@ describe('image-header', () => {
         const offsets = {hasAppMarkers: true};
 
         beforeEach(() => {
-            ImageHeaderRewireAPI.__Rewire__('Jpeg', {
+            restores.push(swapProperties(Jpeg, {
                 isJpegFile: (_dataView) => _dataView === dataView,
                 findJpegOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
-            });
+            }));
         });
 
         it('should handle JPEG files', () => {
@@ -84,15 +88,15 @@ describe('image-header', () => {
         });
 
         it('should ignore file when it\'s not a JPEG image', () => {
-            ImageHeaderRewireAPI.__Rewire__('Jpeg', {
+            restores.push(swapProperties(Jpeg, {
                 isJpegFile: () => false
-            });
+            }));
 
             expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
         });
 
         it('should handle when JPEG files have been excluded in a custom build', () => {
-            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_JPEG: false});
+            restores.push(swapProperties(Constants, {USE_JPEG: false}));
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });
@@ -102,10 +106,10 @@ describe('image-header', () => {
         const offsets = {hasAppMarkers: true};
 
         beforeEach(() => {
-            ImageHeaderRewireAPI.__Rewire__('Png', {
+            restores.push(swapProperties(Png, {
                 isPngFile: (_dataView) => _dataView === dataView,
                 findPngOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
-            });
+            }));
         });
 
         it('should handle PNG files', () => {
@@ -113,15 +117,15 @@ describe('image-header', () => {
         });
 
         it('should ignore file when it\'s not a PNG image', () => {
-            ImageHeaderRewireAPI.__Rewire__('Png', {
+            restores.push(swapProperties(Png, {
                 isPngFile: () => false
-            });
+            }));
 
             expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
         });
 
         it('should handle when PNG files have been excluded in a custom build', () => {
-            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_PNG: false});
+            restores.push(swapProperties(Constants, {USE_PNG: false}));
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });
@@ -131,10 +135,10 @@ describe('image-header', () => {
         const offsets = {};
 
         beforeEach(() => {
-            ImageHeaderRewireAPI.__Rewire__('Heic', {
+            restores.push(swapProperties(Heic, {
                 isHeicFile: (_dataView) => _dataView === dataView,
                 findHeicOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
-            });
+            }));
         });
 
         it('should handle HEIC files', () => {
@@ -142,15 +146,15 @@ describe('image-header', () => {
         });
 
         it('should ignore file when it\'s not a HEIC image', () => {
-            ImageHeaderRewireAPI.__Rewire__('Heic', {
+            restores.push(swapProperties(Heic, {
                 isHeicFile: () => false
-            });
+            }));
 
             expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
         });
 
         it('should handle when HEIC files have been excluded in a custom build', () => {
-            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_HEIC: false});
+            restores.push(swapProperties(Constants, {USE_HEIC: false}));
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });
@@ -160,10 +164,10 @@ describe('image-header', () => {
         const offsets = {};
 
         beforeEach(() => {
-            ImageHeaderRewireAPI.__Rewire__('Avif', {
+            restores.push(swapProperties(Avif, {
                 isAvifFile: (_dataView) => _dataView === dataView,
                 findAvifOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
-            });
+            }));
         });
 
         it('should handle AVIF files', () => {
@@ -171,15 +175,15 @@ describe('image-header', () => {
         });
 
         it('should ignore file when it\'s not a AVIF image', () => {
-            ImageHeaderRewireAPI.__Rewire__('Avif', {
+            restores.push(swapProperties(Avif, {
                 isAvifFile: () => false
-            });
+            }));
 
             expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
         });
 
         it('should handle when AVIF files have been excluded in a custom build', () => {
-            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_AVIF: false});
+            restores.push(swapProperties(Constants, {USE_AVIF: false}));
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });
@@ -189,10 +193,10 @@ describe('image-header', () => {
         const offsets = {};
 
         beforeEach(() => {
-            ImageHeaderRewireAPI.__Rewire__('Jxl', {
+            restores.push(swapProperties(Jxl, {
                 isJxlFile: (_dataView) => _dataView === dataView,
                 findJxlOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
-            });
+            }));
         });
 
         it('should handle JXL files', () => {
@@ -200,15 +204,15 @@ describe('image-header', () => {
         });
 
         it('should ignore file when it\'s not a JXL image', () => {
-            ImageHeaderRewireAPI.__Rewire__('Jxl', {
+            restores.push(swapProperties(Jxl, {
                 isJxlFile: () => false
-            });
+            }));
 
             expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
         });
 
         it('should handle when JXL files have been excluded in a custom build', () => {
-            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_JXL: false});
+            restores.push(swapProperties(Constants, {USE_JXL: false}));
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });
@@ -218,10 +222,10 @@ describe('image-header', () => {
         const offsets = {};
 
         beforeEach(() => {
-            ImageHeaderRewireAPI.__Rewire__('Webp', {
+            restores.push(swapProperties(Webp, {
                 isWebpFile: (_dataView) => _dataView === dataView,
                 findOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
-            });
+            }));
         });
 
         it('should handle WebP files', () => {
@@ -229,15 +233,15 @@ describe('image-header', () => {
         });
 
         it('should ignore file when it\'s not a WebP image', () => {
-            ImageHeaderRewireAPI.__Rewire__('Webp', {
+            restores.push(swapProperties(Webp, {
                 isWebpFile: () => false
-            });
+            }));
 
             expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
         });
 
         it('should handle when WebP files have been excluded in a custom build', () => {
-            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_WEBP: false});
+            restores.push(swapProperties(Constants, {USE_WEBP: false}));
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });
@@ -247,10 +251,10 @@ describe('image-header', () => {
         const offsets = {};
 
         beforeEach(() => {
-            ImageHeaderRewireAPI.__Rewire__('Gif', {
+            restores.push(swapProperties(Gif, {
                 isGifFile: (_dataView) => _dataView === dataView,
                 findOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
-            });
+            }));
         });
 
         it('should handle GIF files', () => {
@@ -258,16 +262,16 @@ describe('image-header', () => {
         });
 
         it('should ignore file when it\'s not a GIF image', () => {
-            ImageHeaderRewireAPI.__Rewire__('Gif', {
+            restores.push(swapProperties(Gif, {
                 isGifFile: () => false,
                 findOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
-            });
+            }));
 
             expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
         });
 
         it('should handle when Gif files have been excluded in a custom build', () => {
-            ImageHeaderRewireAPI.__Rewire__('Constants', {USE_GIF: false});
+            restores.push(swapProperties(Constants, {USE_GIF: false}));
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });

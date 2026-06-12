@@ -3,15 +3,25 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getArrayBuffer} from './test-utils';
+import {getArrayBuffer, swapProperties} from './test-utils.js';
 import {getCharacterArray} from '../../src/utils';
 import TagDecoder from '../../src/tag-decoder';
+import TextDecoderModule from '../../src/text-decoder.js';
 
 const TAG_VALUE_STRING = 'abcÅÄÖáéí';
 
 describe('tag-decoder', () => {
+    let restoreTextDecoder;
+
+    afterEach(() => {
+        if (restoreTextDecoder) {
+            restoreTextDecoder();
+            restoreTextDecoder = undefined;
+        }
+    });
+
     it('should decode ASCII string', () => {
-        TagDecoder.__set__('TextDecoder', {
+        restoreTextDecoder = swapProperties(TextDecoderModule, {
             get() {
                 return undefined;
             }
@@ -22,7 +32,7 @@ describe('tag-decoder', () => {
     });
 
     it('should decode non-ASCII string', () => {
-        TagDecoder.__set__('TextDecoder', {
+        restoreTextDecoder = swapProperties(TextDecoderModule, {
             get() {
                 return function (encoding) {
                     this.decode = function (data) {
@@ -43,7 +53,7 @@ describe('tag-decoder', () => {
     });
 
     it('should still try to use value for non-ASCII string if decoding is not possible', () => {
-        TagDecoder.__set__('TextDecoder', {
+        restoreTextDecoder = swapProperties(TextDecoderModule, {
             get() {
                 return function () {
                     throw new Error();
@@ -56,7 +66,7 @@ describe('tag-decoder', () => {
     });
 
     it('should decode UTF-8 when value is a string', () => {
-        TagDecoder.__set__('TextDecoder', {
+        restoreTextDecoder = swapProperties(TextDecoderModule, {
             get() {
                 return undefined;
             }

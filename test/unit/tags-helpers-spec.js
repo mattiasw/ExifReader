@@ -2,21 +2,25 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+// The private helpers (readTag, getTagValue, splitNullSeparatedAsciiString)
+// are exercised through the exported readIfd by feeding it crafted IFD bytes
+// (field count + 12-byte fields + offset to next IFD). TagNames is injected
+// by swapping properties on the shared default-export object.
+
 import {expect} from 'chai';
-import {__RewireAPI__ as TagsHelpersRewireAPI} from '../../src/tags-helpers';
-import {getDataView} from './test-utils';
-import TagsHelpers from '../../src/tags-helpers';
-import {readIfd, get0thIfdOffset} from '../../src/tags-helpers';
-import Types from '../../src/types';
-import ByteOrder from '../../src/byte-order';
+import {getDataView, swapProperties} from './test-utils.js';
+import TagNames from '../../src/tag-names.js';
+import {readIfd, get0thIfdOffset} from '../../src/tags-helpers.js';
+import ByteOrder from '../../src/byte-order.js';
 
 describe('tags-helpers', () => {
-    const splitNullSeparatedAsciiString = TagsHelpers.__get__('splitNullSeparatedAsciiString');
-    const getTagValue = TagsHelpers.__get__('getTagValue');
-    const readTag = TagsHelpers.__get__('readTag');
+    let restoreTagNames;
 
     afterEach(() => {
-        TagsHelpersRewireAPI.__ResetDependency__('TagNames');
+        if (restoreTagNames) {
+            restoreTagNames();
+            restoreTagNames = undefined;
+        }
     });
 
     it('should correctly read offset of 0th IFD for little endian data', () => {
@@ -45,28 +49,46 @@ describe('tags-helpers', () => {
     });
 
     it('should split null separated ASCII strings', () => {
-        expect(splitNullSeparatedAsciiString('ab\x00cd\x00')).to.deep.equal(['ab', 'cd']);
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        // Field count + offsetted ASCII field + offset to next IFD + value "ab\0cd\0" at offset 0x12.
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + 'ab\x00cd\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyAsciiTag'].value).to.deep.equal(['ab', 'cd']);
     });
 
     it('should be able to get ASCII tag value of length 1', () => {
-        const dataView = getDataView('\x00');
-        expect(getTagValue(dataView, 0, Types.tagTypes.ASCII, 1, ByteOrder.LITTLE_ENDIAN)).to.deep.equal(['\x00']);
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        // A single-character ASCII value stays an array instead of being unwrapped.
+        const dataView = getDataView('\x01\x00' + '\x11\x47\x02\x00\x01\x00\x00\x00\x41\x00\x00\x00' + '\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.LITTLE_ENDIAN);
+        expect(tags['MyAsciiTag'].value).to.deep.equal(['A']);
     });
 
     it('should be able to get little endian tag value', () => {
-        const dataView = getDataView('\x42\x00\x00\x00');
-        expect(getTagValue(dataView, 0, Types.tagTypes.LONG, 1, ByteOrder.LITTLE_ENDIAN)).to.equal(0x42);
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyExifTag'}});
+        // Field count + LONG field + offset to next IFD, all little endian.
+        const dataView = getDataView('\x01\x00' + '\x11\x47\x04\x00\x01\x00\x00\x00\x42\x00\x00\x00' + '\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.LITTLE_ENDIAN);
+        expect(tags['MyExifTag'].value).to.equal(0x42);
     });
 
     it('should be able to get big endian tag value', () => {
-        const dataView = getDataView('\x00\x00\x00\x42');
-        expect(getTagValue(dataView, 0, Types.tagTypes.LONG, 1, ByteOrder.BIG_ENDIAN)).to.equal(0x42);
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyExifTag'}});
+        // Field count + LONG field + offset to next IFD.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x04\x00\x00\x00\x01\x00\x00\x00\x42' + '\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyExifTag'].value).to.equal(0x42);
     });
 
     it('should be able to read a one-field IFD', () => {
         // Field count + field + offset to next IFD.
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyExifTag'}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyExifTag'}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyExifTag'].id).to.equal(0x4711);
         expect(tags['MyExifTag'].description).to.equal(0x42);
@@ -76,7 +98,7 @@ describe('tags-helpers', () => {
     it('should be able to read a one-field IFD and pass on the offset for MakerNote', () => {
         // Field count + field + offset to next IFD.
         const dataView = getDataView('\x00\x01' + '\x92\x7c\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
-        TagsHelpers.__set__('TagNames', {'0th': {0x927c: 'MakerNote'}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x927c: 'MakerNote'}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MakerNote'].__offset).to.equal(0xa);
     });
@@ -84,7 +106,7 @@ describe('tags-helpers', () => {
     it('should be able to read a multi-field IFD', () => {
         // Field count + 1st field + 2nd field + offset to next IFD.
         const dataView = getDataView('\x00\x02' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x47\x12\x00\x01\x00\x00\x00\x01\x43\x00\x00\x00' + '\x00\x00\x00\x00');
-        TagsHelpers.__set__('TagNames', {
+        restoreTagNames = swapProperties(TagNames, {
             '0th': {
                 0x4711: 'MyExifTag0',
                 0x4712: 'MyExifTag1'
@@ -98,7 +120,7 @@ describe('tags-helpers', () => {
     it('should be able to read an undefined IFD', () => {
         // Field count + field + offset to next IFD.
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
-        TagsHelpers.__set__('TagNames', {'0th': {}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, true);
         expect(tags['undefined-18193'].id).to.equal(0x4711);
         expect(tags['undefined-18193'].description).to.equal(0x42);
@@ -108,56 +130,68 @@ describe('tags-helpers', () => {
     it('should ignore undefined IFDs', () => {
         // Field count + field + offset to next IFD.
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
-        TagsHelpers.__set__('TagNames', {'0th': {}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false);
         expect(tags).to.deep.equal({});
     });
 
     it('should be able to read short ASCII tag', () => {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
-        const dataView = getDataView('\x47\x11\x00\x02\x00\x00\x00\x04\x41\x42\x43\x00');
-        expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN).description).to.equal('ABC');
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        // Field count + in-slot ASCII field "ABC\0" + offset to next IFD.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x02\x00\x00\x00\x04\x41\x42\x43\x00' + '\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyAsciiTag'].description).to.equal('ABC');
     });
 
     it('should be able to read long ASCII tag', () => {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
-        const dataView = getDataView('\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x0c\x41\x42\x43\x44\x45\x00');
-        expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN).description).to.equal('ABCDE');
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        // Field count + offsetted ASCII field + offset to next IFD + value "ABCDE\0" at offset 0x12.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\x41\x42\x43\x44\x45\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyAsciiTag'].description).to.equal('ABCDE');
     });
 
     it('should be able to read encoded ASCII tag', () => {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
-        const dataView = getDataView('\x47\x11\x00\x02\x00\x00\x00\x04\x41\xc3\xba\x43\x00');
-        expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN).description).to.equal('AúC');
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        // Field count + in-slot ASCII field with UTF-8 encoded bytes + offset to next IFD.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x02\x00\x00\x00\x04\x41\xc3\xba\x43' + '\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyAsciiTag'].description).to.equal('AúC');
     });
 
     it('should be able to read RATIONAL tag', () => {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyRationalTag'}});
-        const dataView = getDataView('\x47\x11' + '\x00\x05' + '\x00\x00\x00\x01' + '\x00\x00\x00\x0c' + '\x00\x00\x00\x09\x00\x00\x00\x02');
-        expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN).description).to.equal('4.5');
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyRationalTag'}});
+        // Field count + offsetted RATIONAL field + offset to next IFD + value 9/2 at offset 0x12.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x05\x00\x00\x00\x01\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\x00\x00\x00\x09\x00\x00\x00\x02');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyRationalTag'].description).to.equal('4.5');
     });
 
     it('should be able to read SRATIONAL tag', () => {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MySrationalTag'}});
-        const dataView = getDataView('\x47\x11' + '\x00\x0a' + '\x00\x00\x00\x01' + '\x00\x00\x00\x0c' + '\xff\xff\xff\xf7\x00\x00\x00\x02');
-        expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN).description).to.equal('-4.5');
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MySrationalTag'}});
+        // Field count + offsetted SRATIONAL field + offset to next IFD + value -9/2 at offset 0x12.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x0a\x00\x00\x00\x01\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\xff\xff\xff\xf7\x00\x00\x00\x02');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MySrationalTag'].description).to.equal('-4.5');
     });
 
     it('should be able to handle tag with faulty type', () => {
-        const dataView = getDataView('\x47\x11\x00\x08\x00\x00\x00\x00');
-        expect(readTag(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN)).to.be.undefined;
+        // Type 0x08 has no known size so the tag is dropped even when unknown tags are included.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x08\x00\x00\x00\x01\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, true);
+        expect(tags).to.deep.equal({});
     });
 
     it('should be able to handle an IFD with a faulty type tag', () => {
         // Field count + field.
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x08\x00\x00\x00\x00');
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyExifTag'}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyExifTag'}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyExifTag']).to.be.undefined;
     });
 
     it('should be able to read offsetted tag', () => {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
         const dataView = getDataView(
             '\x00\x00\x00\x00' + '\x00\x00' // Padding to test offset.
             + '\x00\x01' // Number of fields.
@@ -175,7 +209,7 @@ describe('tags-helpers', () => {
     });
 
     it('should pass on the offset for the MakerNote tag', () => {
-        TagsHelpers.__set__('TagNames', {'0th': {0x927c: 'MakerNote'}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x927c: 'MakerNote'}});
         const dataView = getDataView(
             '\x00\x00\x00\x00' + '\x00\x00' // Padding to test offset.
             + '\x00\x01' // Number of fields.
@@ -194,7 +228,7 @@ describe('tags-helpers', () => {
     });
 
     it('should be able to handle tag with faulty offset (too large)', () => {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
         const dataView = getDataView(
             '\x00\x00\x00\x00' + '\x00\x00' // Padding to test offset.
             + '\x00\x01' // Number of fields.
@@ -233,7 +267,7 @@ describe('tags-helpers', () => {
             + '\x00\x01' // Field count
             + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' // Field
         );
-        TagsHelpers.__set__('TagNames', {
+        restoreTagNames = swapProperties(TagNames, {
             '0th': {
                 0x4711: {
                     name: 'MyExifTag',
@@ -254,7 +288,7 @@ describe('tags-helpers', () => {
     });
 
     it('should add a computed value for an ASCII tag when enabled', function () {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
         const dataView = getDataView(
             '\x00\x01' // Number of fields.
             + '\x47\x11\x00\x02\x00\x00\x00\x04\x41\x42\x43\x00' // Field: ASCII "ABC\0".
@@ -280,7 +314,7 @@ describe('tags-helpers', () => {
     });
 
     it('should add a computed value for a multi-value ASCII tag when enabled', function () {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyAsciiTag'}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
         const dataView = getDataView(
             '\x00\x01' // Number of fields.
             + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x12' // Field: ASCII offset.
@@ -307,7 +341,7 @@ describe('tags-helpers', () => {
     });
 
     it('should add a computed value for a RATIONAL tag when enabled', function () {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyRationalTag'}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyRationalTag'}});
         const dataView = getDataView(
             '\x00\x01' // Number of fields.
             + '\x47\x11\x00\x05\x00\x00\x00\x01\x00\x00\x00\x12' // Field: RATIONAL offset.
@@ -334,7 +368,7 @@ describe('tags-helpers', () => {
     });
 
     it('should add computed values for arrays of RATIONAL values when enabled', function () {
-        TagsHelpers.__set__('TagNames', {'0th': {0x4711: 'MyRationalTag'}});
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyRationalTag'}});
         const dataView = getDataView(
             '\x00\x01' // Number of fields.
             + '\x47\x11\x00\x05\x00\x00\x00\x02\x00\x00\x00\x12' // Field: RATIONAL offset.

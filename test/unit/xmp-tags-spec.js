@@ -5,8 +5,8 @@
 import {expect} from 'chai';
 import {DOMParser as XmldomDomParser, onErrorStopParsing} from '@xmldom/xmldom';
 import {DOMParser as LinkedomDomParser} from 'linkedom';
-import {getConsoleWarnSpy, getDataView} from './test-utils';
-import {__RewireAPI__ as XmpTagsRewireAPI} from '../../src/xmp-tags';
+import {getConsoleWarnSpy, getDataView, swapProperties} from './test-utils.js';
+import DomParserModule from '../../src/dom-parser.js';
 import XmpTags from '../../src/xmp-tags';
 
 const PACKET_WRAPPER_START = '<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>';
@@ -25,8 +25,10 @@ describe('xmp-tags', function () {
     });
 
     describe('without a DOM parser', () => {
+        let restoreDomParser;
+
         beforeEach(() => {
-            XmpTagsRewireAPI.__Rewire__('DOMParser', {
+            restoreDomParser = swapProperties(DomParserModule, {
                 get() {
                     return undefined;
                 }
@@ -34,7 +36,7 @@ describe('xmp-tags', function () {
         });
 
         afterEach(() => {
-            XmpTagsRewireAPI.__ResetDependency__('DOMParser');
+            restoreDomParser();
         });
 
         it('should give a warning if a DOM parser is not available', () => {

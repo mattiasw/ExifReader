@@ -3,8 +3,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import * as ExifReader from '../../src/exif-reader';
-import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
+import {swapProperties} from './test-utils.js';
+import * as ExifReader from '../../src/exif-reader.js';
+import Constants from '../../src/constants.js';
+import ImageHeader from '../../src/image-header.js';
+import IccTags from '../../src/icc-tags.js';
+
+const restoreFunctions = [];
 
 describe('promise safety', function () {
     beforeEach(function () {
@@ -13,17 +18,17 @@ describe('promise safety', function () {
 
     afterEach(function () {
         global.Promise = this.originalPromise;
-        resetAllDependencies();
+        restoreAllFakes();
     });
 
     it('should not require Promise in sync loadView', function () {
         global.Promise = undefined;
-        rewireConstantsForIcc();
-        rewireImageHeader({
+        fakeConstantsForIcc();
+        fakeImageHeader({
             fileType: {value: 'jpeg', description: 'JPEG'},
             iccChunks: [1],
         });
-        rewireIccTagsRead({MyIccTag: {value: 42}});
+        fakeIccTagsRead({MyIccTag: {value: 42}});
 
         expect(() => ExifReader.loadView({}, {async: false})).to.not.throw();
         expect(ExifReader.loadView({}, {async: false}).MyIccTag.value).to.equal(42);
@@ -31,7 +36,7 @@ describe('promise safety', function () {
 
     it('should throw a clear error when Promise is missing in async loadView', function () {
         global.Promise = undefined;
-        rewireImageHeader({
+        fakeImageHeader({
             fileType: {value: 'jpeg', description: 'JPEG'},
         });
 
@@ -49,16 +54,34 @@ describe('promise safety', function () {
     });
 });
 
-function rewireConstantsForIcc() {
-    ExifReaderRewireAPI.__Rewire__('Constants', {
+function fakeConstantsForIcc() {
+    // The rewire version replaced the whole Constants object, leaving every
+    // unlisted flag undefined. The flags set to false keep that meaning.
+    restoreFunctions.push(swapProperties(Constants, {
         USE_JPEG: true,
         USE_WEBP: true,
         USE_ICC: true,
-    });
+        USE_FILE: false,
+        USE_JFIF: false,
+        USE_PNG_FILE: false,
+        USE_EXIF: false,
+        USE_IPTC: false,
+        USE_XMP: false,
+        USE_MPF: false,
+        USE_PHOTOSHOP: false,
+        USE_THUMBNAIL: false,
+        USE_TIFF: false,
+        USE_PNG: false,
+        USE_HEIC: false,
+        USE_AVIF: false,
+        USE_JXL: false,
+        USE_GIF: false,
+        USE_MAKER_NOTES: false,
+    }));
 }
 
-function rewireImageHeader(overrides) {
-    ExifReaderRewireAPI.__Rewire__('ImageHeader', {
+function fakeImageHeader(overrides) {
+    restoreFunctions.push(swapProperties(ImageHeader, {
         parseAppMarkers() {
             return Object.assign(
                 {
@@ -79,19 +102,19 @@ function rewireImageHeader(overrides) {
                 overrides
             );
         },
-    });
+    }));
 }
 
-function rewireIccTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('IccTags', {
+function fakeIccTagsRead(tagsValue) {
+    restoreFunctions.push(swapProperties(IccTags, {
         read() {
             return tagsValue;
         },
-    });
+    }));
 }
 
-function resetAllDependencies() {
-    ExifReaderRewireAPI.__ResetDependency__('Constants');
-    ExifReaderRewireAPI.__ResetDependency__('ImageHeader');
-    ExifReaderRewireAPI.__ResetDependency__('IccTags');
+function restoreAllFakes() {
+    while (restoreFunctions.length > 0) {
+        restoreFunctions.pop()();
+    }
 }

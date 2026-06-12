@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import IccTags, {parseTags, __RewireAPI__ as IccTagsRewireAPI} from '../../src/icc-tags';
+import IccTags, {parseTags} from '../../src/icc-tags.js';
 
 describe('icc-tags', () => {
     it('should return empty set if something throws', () => {
@@ -43,19 +43,12 @@ describe('icc-tags', () => {
         dataView.setUint16(172, 0x0048);
         dataView.setUint16(174, 0x0069);
 
-        let recordReadCount = 0;
-        IccTagsRewireAPI.__Rewire__('getUnicodeStringFromDataView', () => {
-            recordReadCount += 1;
-            return '';
-        });
+        const tags = parseTags(dataView);
 
-        try {
-            parseTags(dataView);
-        } finally {
-            IccTagsRewireAPI.__ResetDependency__('getUnicodeStringFromDataView');
-        }
-
-        expect(recordReadCount).to.be.at.most(1);
+        // A record size of zero can never advance the read offset. The mluc
+        // tag is rejected and only the already parsed header tags remain.
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+        expect(tags['ICC Description']).to.equal(undefined);
     });
 
     it('should preserve parsed header tags when an mluc tag claims more records than fit in the buffer', () => {

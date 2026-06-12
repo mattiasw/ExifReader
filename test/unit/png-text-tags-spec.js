@@ -3,16 +3,21 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {__RewireAPI__ as PngTextTagsRewireAPI} from '../../src/png-text-tags';
-import {getDataView, concatDataViews} from './test-utils';
+import {getDataView, concatDataViews, swapProperties} from './test-utils.js';
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../src/image-header-png.js';
 import PngTextTags from '../../src/png-text-tags';
+import Tags from '../../src/tags.js';
+import IptcTags from '../../src/iptc-tags.js';
 import {getStringFromDataView} from '../../src/utils';
 
 describe('png-text-tags', () => {
+    let restoreTagReaders;
+
     afterEach(() => {
-        PngTextTagsRewireAPI.__ResetDependency__('Tags');
-        PngTextTagsRewireAPI.__ResetDependency__('IptcTags');
+        if (restoreTagReaders) {
+            restoreTagReaders();
+            restoreTagReaders = undefined;
+        }
     });
 
     it('should read image tags', () => {
@@ -85,7 +90,7 @@ describe('png-text-tags', () => {
     // });
 
     it('should read zTXt tags with Exif data', async () => {
-        PngTextTagsRewireAPI.__Rewire__('Tags', {
+        restoreTagReaders = swapProperties(Tags, {
             read: (data, offset) => ({tags: getStringFromDataView(data, offset, data.byteLength)})
         });
         const EXIF_DATA = 'Exif\0\0<Exif\ndata>';
@@ -101,7 +106,7 @@ describe('png-text-tags', () => {
     });
 
     it('should read zTXt tags with IPTC data', async () => {
-        PngTextTagsRewireAPI.__Rewire__('IptcTags', {
+        restoreTagReaders = swapProperties(IptcTags, {
             read: (data, offset) => getStringFromDataView(data, offset, data.byteLength)
         });
         const IPTC_DATA = '<IPTC data>';

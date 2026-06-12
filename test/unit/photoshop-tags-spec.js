@@ -3,39 +3,41 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {__RewireAPI__ as PhotoshopTagsRewireAPI} from '../../src/photoshop-tags';
-import {getByteStringFromNumber} from './test-utils';
-import PhotoshopTags from '../../src/photoshop-tags';
-import {getCharacterArray} from '../../src/utils';
+import {getByteStringFromNumber, swapProperties} from './test-utils.js';
+import PhotoshopTags from '../../src/photoshop-tags.js';
+import TagNames from '../../src/photoshop-tag-names.js';
+import {getCharacterArray} from '../../src/utils.js';
 
 describe('photoshop-tags', () => {
-    const read = PhotoshopTags.__get__('read');
+    const restores = [];
 
     afterEach(() => {
-        PhotoshopTagsRewireAPI.__ResetDependency__('TagNames');
+        while (restores.length > 0) {
+            restores.pop()();
+        }
     });
 
     it('should use hard-coded tag name for tags with null name', () => {
-        PhotoshopTags.__set__('TagNames', {0x4711: {name: 'DefaultTagName'}});
+        restores.push(swapProperties(TagNames, {0x4711: {name: 'DefaultTagName'}}));
         const bytes = getPhotoshopBytes({id: 0x4711});
-        expect(read(bytes).DefaultTagName).to.deep.include({id: 0x4711});
+        expect(PhotoshopTags.read(bytes).DefaultTagName).to.deep.include({id: 0x4711});
     });
 
     it('should use encoded tag name when it exists', () => {
-        PhotoshopTags.__set__('TagNames', {0x4711: {name: 'DefaultTagName'}});
+        restores.push(swapProperties(TagNames, {0x4711: {name: 'DefaultTagName'}}));
         const bytes = getPhotoshopBytes({id: 0x4711, name: 'TagName'});
-        expect(read(bytes).TagName).to.deep.include({id: 0x4711});
+        expect(PhotoshopTags.read(bytes).TagName).to.deep.include({id: 0x4711});
     });
 
     it('should handle padded encoded tag name', () => {
-        PhotoshopTags.__set__('TagNames', {0x4711: {name: 'DefaultTagName'}});
+        restores.push(swapProperties(TagNames, {0x4711: {name: 'DefaultTagName'}}));
         const bytes = getPhotoshopBytes({id: 0x4711, name: 'TagName1'});
-        expect(read(bytes).TagName1).to.deep.include({id: 0x4711});
+        expect(PhotoshopTags.read(bytes).TagName1).to.deep.include({id: 0x4711});
     });
 
     it('should be able to read tag content', () => {
-        PhotoshopTags.__set__(
-            'TagNames',
+        restores.push(swapProperties(
+            TagNames,
             {
                 0x4711: {
                     name: 'MyTag',
@@ -48,9 +50,9 @@ describe('photoshop-tags', () => {
                     }
                 }
             }
-        );
+        ));
         const bytes = getPhotoshopBytes({id: 0x4711, resource: '\x42\x43'});
-        expect(read(bytes)).to.deep.equal({
+        expect(PhotoshopTags.read(bytes)).to.deep.equal({
             MyTag: {
                 id: 0x4711,
                 value: '\x42\x43',
@@ -59,16 +61,16 @@ describe('photoshop-tags', () => {
         });
     });
 
+    // Tag id 0x4711 does not exist in the real TagNames dictionary so the
+    // unknown-tag tests below need no swapping.
     it('should ignore unknown tags', () => {
-        PhotoshopTags.__set__('TagNames', {});
         const bytes = getPhotoshopBytes({id: 0x4711, resource: '\x42\x43'});
-        expect(read(bytes)).to.deep.equal({});
+        expect(PhotoshopTags.read(bytes)).to.deep.equal({});
     });
 
     it('should include unknown tags if specified', () => {
-        PhotoshopTags.__set__('TagNames', {});
         const bytes = getPhotoshopBytes({id: 0x4711, resource: '\x42\x43'});
-        expect(read(bytes, true)).to.deep.equal({'undefined-18193': {id: 0x4711, value: '\x42\x43'}});
+        expect(PhotoshopTags.read(bytes, true)).to.deep.equal({'undefined-18193': {id: 0x4711, value: '\x42\x43'}});
     });
 
     function getPhotoshopBytes({id, name = '', resource = ''}) {
