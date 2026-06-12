@@ -5,7 +5,7 @@ JavaScript library that parses Exif/IPTC/XMP/ICC/MPF metadata from JPEG, TIFF, P
 ## Project Structure
 
 - `src/` - ES module source (entry: `exif-reader.js`)
-- `test/unit/` - Mocha+Chai unit tests (`*-spec.js`), uses `babel-plugin-rewire` for dependency injection
+- `test/unit/` - Mocha+Chai unit tests (`*-spec.js`), run as native ES modules
 - `test/types/` - TypeScript type tests for `exif-reader.d.ts`
 - `test/integration/` - Integration tests with fixture images
 - `test/build/` - Tests verifying the built output
@@ -90,9 +90,14 @@ This is **not** a TypeScript project, but `exif-reader.d.ts` provides types for 
 
 ## Tests
 
-Every source file has a corresponding `test/unit/*-spec.js`. New code needs tests. Coverage thresholds are enforced.
+Every source file has a corresponding `test/unit/*-spec.js`. New code needs tests. Coverage thresholds are enforced (via `c8`, configured in `package.json`).
 
-Tests use `babel-plugin-rewire` to mock dependencies (e.g., `__Rewire__`/`__ResetDependency__`). Follow existing test patterns.
+Unit tests run as native ES modules with no transpilation. Develop on Node 24.7+ to be able to run the full suite: the integration and build test suites parse JPEG XL fixtures that need its Brotli support, and they `require()` the ES module source which needs at least 22.12. Relative imports in test files must carry explicit `.js` extensions, and named imports from `src/` modules must actually exist (most `src/` modules only have a default export).
+
+There is no module-mocking library, and none should be introduced. To isolate a module from its dependencies:
+
+- Swap properties on a shared default-export object (`Constants`, `TagNames`, module API objects like `Tags` or `ImageHeader`, or `globalThis`) with `swapProperties` from `test-utils.js`, and call the returned restore function in `afterEach`.
+- Where the dependency is a named function import (immutable binding), do not mock it. Craft real binary input with `getDataView` so the real function runs, or test one level up through the module's public API.
 
 Use `npm run test` to run the unit tests and make use of `describe.only` and `it.only` for focused testing.
 
