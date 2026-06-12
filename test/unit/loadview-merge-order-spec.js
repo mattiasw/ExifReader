@@ -3,17 +3,34 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import * as ExifReader from '../../src/exif-reader';
-import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
+import {swapProperties} from './test-utils.js';
+import * as ExifReader from '../../src/exif-reader.js';
+import Constants from '../../src/constants.js';
+import ImageHeader from '../../src/image-header.js';
+import FileTags from '../../src/file-tags.js';
+import JfifTags from '../../src/jfif-tags.js';
+import Tags from '../../src/tags.js';
+import IptcTags from '../../src/iptc-tags.js';
+import XmpTags from '../../src/xmp-tags.js';
+import IccTags from '../../src/icc-tags.js';
+import MpfTags from '../../src/mpf-tags.js';
+import PngFileTags from '../../src/png-file-tags.js';
+import PngTextTags from '../../src/png-text-tags.js';
+import PngTags from '../../src/png-tags.js';
+import Vp8xTags from '../../src/vp8x-tags.js';
+import GifFileTags from '../../src/gif-file-tags.js';
+import Composite from '../../src/composite.js';
+
+const restoreFunctions = [];
 
 describe('loadView merge order', function () {
     afterEach(function () {
-        resetAllDependencies();
+        restoreAllFakes();
     });
 
     it('should overwrite duplicate flat tags by merge precedence', function () {
-        rewireConstantsForMergeOrderTests();
-        rewireImageHeader({
+        fakeConstantsForMergeOrderTests();
+        fakeImageHeader({
             fileType: {value: 'jpeg', description: 'JPEG'},
             fileDataOffset: 1,
             jfifDataOffset: 1,
@@ -29,25 +46,25 @@ describe('loadView merge order', function () {
             gifHeaderOffset: 1,
         });
 
-        rewireSimpleReader('FileTags', {
+        fakeSimpleReader(FileTags, {
             Collision: {value: 'file'},
             FileType: {value: 'fromFileTags'},
         });
-        rewireSimpleReader('JfifTags', {Collision: {value: 'jfif'}});
-        rewireExifTagsRead({Collision: {value: 'exif'}});
-        rewireSimpleReader('IptcTags', {Collision: {value: 'iptc'}});
-        rewireXmpTagsRead({
+        fakeSimpleReader(JfifTags, {Collision: {value: 'jfif'}});
+        fakeExifTagsRead({Collision: {value: 'exif'}});
+        fakeSimpleReader(IptcTags, {Collision: {value: 'iptc'}});
+        fakeSimpleReader(XmpTags, {
             Collision: {value: 'xmp'},
             _raw: '<xml/>',
         });
-        rewireIccTagsRead({Collision: {value: 'icc'}});
-        rewireSimpleReader('MpfTags', {Collision: {value: 'mpf'}});
-        rewireSimpleReader('PngFileTags', {Collision: {value: 'pngFile'}});
-        rewirePngTextTagsRead({Collision: {value: 'pngText'}});
-        rewireSimpleReader('PngTags', {Collision: {value: 'pngChunk'}});
-        rewireSimpleReader('Vp8xTags', {Collision: {value: 'riff'}});
-        rewireSimpleReader('GifFileTags', {Collision: {value: 'gif'}});
-        rewireCompositeGet({Collision: {value: 'composite'}});
+        fakeSimpleReader(IccTags, {Collision: {value: 'icc'}});
+        fakeSimpleReader(MpfTags, {Collision: {value: 'mpf'}});
+        fakeSimpleReader(PngFileTags, {Collision: {value: 'pngFile'}});
+        fakePngTextTagsRead({Collision: {value: 'pngText'}});
+        fakeSimpleReader(PngTags, {Collision: {value: 'pngChunk'}});
+        fakeSimpleReader(Vp8xTags, {Collision: {value: 'riff'}});
+        fakeSimpleReader(GifFileTags, {Collision: {value: 'gif'}});
+        fakeCompositeGet({Collision: {value: 'composite'}});
 
         const tags = ExifReader.loadView({}, {});
 
@@ -72,16 +89,16 @@ describe('loadView merge order', function () {
 });
 
 function loadAsyncWithDelays({iccDelayMs, pngTextDelayMs}) {
-    resetAllDependencies();
-    rewireConstantsForMergeOrderTests();
-    rewireImageHeader({
+    restoreAllFakes();
+    fakeConstantsForMergeOrderTests();
+    fakeImageHeader({
         fileType: {value: 'png', description: 'PNG'},
         iccChunks: [1],
         pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
     });
 
-    rewireIccTagsReadAsync({Collision: {value: 'icc'}}, iccDelayMs);
-    rewirePngTextTagsReadAsync(
+    fakeIccTagsReadAsync({Collision: {value: 'icc'}}, iccDelayMs);
+    fakePngTextTagsReadAsync(
         {Collision: {value: 'pngTextSync'}},
         [{Collision: {value: 'pngTextAsync'}}],
         pngTextDelayMs
@@ -90,8 +107,10 @@ function loadAsyncWithDelays({iccDelayMs, pngTextDelayMs}) {
     return ExifReader.loadView({}, {async: true});
 }
 
-function rewireConstantsForMergeOrderTests() {
-    ExifReaderRewireAPI.__Rewire__('Constants', {
+function fakeConstantsForMergeOrderTests() {
+    // The rewire version replaced the whole Constants object, leaving every
+    // unlisted flag undefined. The flags set to false keep that meaning.
+    restoreFunctions.push(swapProperties(Constants, {
         USE_JPEG: true,
         USE_FILE: true,
         USE_JFIF: true,
@@ -105,11 +124,17 @@ function rewireConstantsForMergeOrderTests() {
         USE_WEBP: true,
         USE_GIF: true,
         USE_THUMBNAIL: true,
-    });
+        USE_PHOTOSHOP: false,
+        USE_TIFF: false,
+        USE_HEIC: false,
+        USE_AVIF: false,
+        USE_JXL: false,
+        USE_MAKER_NOTES: false,
+    }));
 }
 
-function rewireImageHeader(overrides) {
-    ExifReaderRewireAPI.__Rewire__('ImageHeader', {
+function fakeImageHeader(overrides) {
+    restoreFunctions.push(swapProperties(ImageHeader, {
         parseAppMarkers() {
             return Object.assign(
                 {
@@ -130,59 +155,43 @@ function rewireImageHeader(overrides) {
                 overrides
             );
         },
-    });
+    }));
 }
 
-function rewireSimpleReader(dependencyName, tagsValue) {
-    ExifReaderRewireAPI.__Rewire__(dependencyName, {
+function fakeSimpleReader(module, tagsValue) {
+    restoreFunctions.push(swapProperties(module, {
         read() {
             return tagsValue;
         },
-    });
+    }));
 }
 
-function rewireExifTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('Tags', {
+function fakeExifTagsRead(tagsValue) {
+    restoreFunctions.push(swapProperties(Tags, {
         read() {
             return {tags: tagsValue, byteOrder: undefined};
         },
-    });
+    }));
 }
 
-function rewireXmpTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('XmpTags', {
-        read() {
-            return tagsValue;
-        },
-    });
-}
-
-function rewireIccTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('IccTags', {
-        read() {
-            return tagsValue;
-        },
-    });
-}
-
-function rewireIccTagsReadAsync(tagsValue, delayMs) {
-    ExifReaderRewireAPI.__Rewire__('IccTags', {
+function fakeIccTagsReadAsync(tagsValue, delayMs) {
+    restoreFunctions.push(swapProperties(IccTags, {
         read() {
             return createDelayedPromise(tagsValue, delayMs);
         },
-    });
+    }));
 }
 
-function rewirePngTextTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('PngTextTags', {
+function fakePngTextTagsRead(tagsValue) {
+    restoreFunctions.push(swapProperties(PngTextTags, {
         read() {
             return {readTags: tagsValue};
         },
-    });
+    }));
 }
 
-function rewirePngTextTagsReadAsync(readTags, asyncTagList, delayMs) {
-    ExifReaderRewireAPI.__Rewire__('PngTextTags', {
+function fakePngTextTagsReadAsync(readTags, asyncTagList, delayMs) {
+    restoreFunctions.push(swapProperties(PngTextTags, {
         read(dataView, pngTextChunks, async) {
             if (!async) {
                 return {readTags};
@@ -193,15 +202,15 @@ function rewirePngTextTagsReadAsync(readTags, asyncTagList, delayMs) {
                 readTagsPromise: createDelayedPromise(asyncTagList, delayMs),
             };
         },
-    });
+    }));
 }
 
-function rewireCompositeGet(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('Composite', {
+function fakeCompositeGet(tagsValue) {
+    restoreFunctions.push(swapProperties(Composite, {
         get() {
             return tagsValue;
         },
-    });
+    }));
 }
 
 function createDelayedPromise(value, delayMs) {
@@ -210,20 +219,8 @@ function createDelayedPromise(value, delayMs) {
     });
 }
 
-function resetAllDependencies() {
-    ExifReaderRewireAPI.__ResetDependency__('Constants');
-    ExifReaderRewireAPI.__ResetDependency__('ImageHeader');
-    ExifReaderRewireAPI.__ResetDependency__('FileTags');
-    ExifReaderRewireAPI.__ResetDependency__('JfifTags');
-    ExifReaderRewireAPI.__ResetDependency__('Tags');
-    ExifReaderRewireAPI.__ResetDependency__('IptcTags');
-    ExifReaderRewireAPI.__ResetDependency__('XmpTags');
-    ExifReaderRewireAPI.__ResetDependency__('IccTags');
-    ExifReaderRewireAPI.__ResetDependency__('MpfTags');
-    ExifReaderRewireAPI.__ResetDependency__('PngFileTags');
-    ExifReaderRewireAPI.__ResetDependency__('PngTextTags');
-    ExifReaderRewireAPI.__ResetDependency__('PngTags');
-    ExifReaderRewireAPI.__ResetDependency__('Vp8xTags');
-    ExifReaderRewireAPI.__ResetDependency__('GifFileTags');
-    ExifReaderRewireAPI.__ResetDependency__('Composite');
+function restoreAllFakes() {
+    while (restoreFunctions.length > 0) {
+        restoreFunctions.pop()();
+    }
 }

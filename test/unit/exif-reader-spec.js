@@ -3,12 +3,30 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {__RewireAPI__ as ExifReaderRewireAPI} from '../../src/exif-reader';
-import {__RewireAPI__ as PipelineRewireAPI} from '../../src/loadview-pipeline';
-import {getCharacterArray, getBase64Image} from '../../src/utils';
-import * as ExifReader from '../../src/exif-reader';
-import exifErrors from '../../src/errors';
-import {BIG_ENDIAN} from '../../src/byte-order';
+import {getCharacterArray, getBase64Image} from '../../src/utils.js';
+import * as ExifReader from '../../src/exif-reader.js';
+import exifErrors from '../../src/errors.js';
+import {BIG_ENDIAN} from '../../src/byte-order.js';
+import {getDataView, swapProperties} from './test-utils.js';
+import Constants from '../../src/constants.js';
+import ImageHeader from '../../src/image-header.js';
+import Tags from '../../src/tags.js';
+import MpfTags from '../../src/mpf-tags.js';
+import FileTags from '../../src/file-tags.js';
+import JxlFileTags from '../../src/jxl-file-tags.js';
+import JfifTags from '../../src/jfif-tags.js';
+import IptcTags from '../../src/iptc-tags.js';
+import XmpTags from '../../src/xmp-tags.js';
+import IccTags from '../../src/icc-tags.js';
+import CanonTags from '../../src/canon-tags.js';
+import PentaxTags from '../../src/pentax-tags.js';
+import PngFileTags from '../../src/png-file-tags.js';
+import PngTextTags from '../../src/png-text-tags.js';
+import PngTags from '../../src/png-tags.js';
+import Vp8xTags from '../../src/vp8x-tags.js';
+import GifFileTags from '../../src/gif-file-tags.js';
+import Thumbnail from '../../src/thumbnail.js';
+import Composite from '../../src/composite.js';
 
 const OFFSET_TEST_VALUE = 4711;
 const XMP_FIELD_LENGTH_TEST_VALUE = 47;
@@ -18,24 +36,13 @@ const OFFSET_TEST_VALUE_ICC2_2 = 47110;
 const OFFSET_TEST_VALUE_ICC2_3 = 67110;
 const OFFSET_TEST_VALUE_MAKER_NOTE = 4812;
 
+const restoreFunctions = [];
+
 describe('exif-reader', function () {
     afterEach(() => {
-        ExifReaderRewireAPI.__ResetDependency__('DataViewWrapper');
-        ExifReaderRewireAPI.__ResetDependency__('loadView');
-        ExifReaderRewireAPI.__ResetDependency__('Constants');
-        PipelineRewireAPI.__ResetDependency__('Constants');
-        ExifReaderRewireAPI.__ResetDependency__('ImageHeader');
-        ExifReaderRewireAPI.__ResetDependency__('FileTags');
-        ExifReaderRewireAPI.__ResetDependency__('Tags');
-        ExifReaderRewireAPI.__ResetDependency__('IptcTags');
-        ExifReaderRewireAPI.__ResetDependency__('XmpTags');
-        ExifReaderRewireAPI.__ResetDependency__('PngFileTags');
-        ExifReaderRewireAPI.__ResetDependency__('PngTextTags');
-        ExifReaderRewireAPI.__ResetDependency__('Vp8xTags');
-        ExifReaderRewireAPI.__ResetDependency__('GifFileTags');
-        ExifReaderRewireAPI.__ResetDependency__('JxlFileTags');
-        ExifReaderRewireAPI.__ResetDependency__('Thumbnail');
-        ExifReaderRewireAPI.__ResetDependency__('Composite');
+        while (restoreFunctions.length > 0) {
+            restoreFunctions.pop()();
+        }
     });
 
     it('should throw an error if the passed buffer is non-compliant', () => {
@@ -49,27 +56,17 @@ describe('exif-reader', function () {
         const DATA_URI_URL_ENC = `data:image/png,${encodeURIComponent(IMAGE)}`;
 
         beforeEach(() => {
-            ExifReaderRewireAPI.__Rewire__('isNodeBuffer', function () {
-                return false;
-            });
-            ExifReaderRewireAPI.__Rewire__('DataViewWrapper', function (buffer) {
-                if (buffer.slice(0, 5) === 'data:') {
-                    this.buffer = buffer.slice(buffer.indexOf(',') + 1, IMAGE.length).toString();
-                } else {
-                    this.buffer = buffer.slice(0, IMAGE.length).toString();
-                }
-                if (this.buffer !== IMAGE) {
-                    throw new Error('Buffer error, does not match image.');
+            // The real loadView runs. The prefix check verifies that the
+            // loader delivered the image bytes intact to the parser.
+            swap(ImageHeader, {
+                parseAppMarkers(dataView) {
+                    if (getAsciiPrefix(dataView, IMAGE.length) !== IMAGE) {
+                        throw new Error('DataView error, does not match image.');
+                    }
+                    return {fileDataOffset: OFFSET_TEST_VALUE};
                 }
             });
-            ExifReaderRewireAPI.__Rewire__('loadView', function (dataView) {
-                if ((dataView.buffer instanceof Buffer && dataView.buffer !== IMAGE)
-                    || (dataView instanceof DataView && new TextDecoder().decode(dataView) !== IMAGE)) {
-                    throw new Error('DataView error, does not match image.');
-                }
-                return TAGS;
-            });
-            rewireForLoadView({fileDataOffset: OFFSET_TEST_VALUE}, 'FileTags', TAGS);
+            swapTagsRead(FileTags, TAGS);
         });
 
         describe('loading from URL in a browser context', () => {
@@ -85,7 +82,7 @@ describe('exif-reader', function () {
                     }
                     return Promise.resolve({
                         arrayBuffer() {
-                            return IMAGE;
+                            return getDataView(IMAGE).buffer;
                         }
                     });
                 };
@@ -359,7 +356,7 @@ describe('exif-reader', function () {
                     callback() {
                         this.onload({
                             target: {
-                                result: IMAGE
+                                result: getDataView(IMAGE).buffer
                             }
                         });
                     }
@@ -399,21 +396,26 @@ describe('exif-reader', function () {
     });
 
     it('should fall back on DataView wrapper if a full DataView implementation is not available', () => {
-        let dataViewWrapperWasCalled = false;
-        ExifReaderRewireAPI.__Rewire__('DataViewWrapper', function () {
-            dataViewWrapperWasCalled = true;
+        const myTags = {MyTag: 42};
+        const bufferLikeData = getBufferLikeData('\x00\x00\x00\x00');
+        let capturedDataView;
+        swap(ImageHeader, {
+            parseAppMarkers(dataView) {
+                capturedDataView = dataView;
+                return {fileDataOffset: OFFSET_TEST_VALUE};
+            }
         });
-        ExifReaderRewireAPI.__Rewire__('loadView', function () {
-            // Do nothing in this test.
-        });
+        swapTagsRead(FileTags, myTags);
 
-        ExifReader.load();
-
-        expect(dataViewWrapperWasCalled).to.be.true;
+        expect(ExifReader.load(bufferLikeData)).to.deep.equal(myTags);
+        // Only the fallback wrapper can carry this input. A native DataView
+        // would have rejected it in its constructor.
+        expect(capturedDataView).to.not.be.an.instanceOf(DataView);
+        expect(capturedDataView.buffer).to.equal(bufferLikeData);
     });
 
     it('should fail when there is no Exif data', () => {
-        rewireImageHeader({
+        swapImageHeader({
             hasAppMarkers: false,
             fileDataOffset: undefined,
             jfifDataOffset: undefined,
@@ -428,25 +430,25 @@ describe('exif-reader', function () {
 
     it('should be able to find file data segment', () => {
         const myTags = {MyTag: 42};
-        rewireForLoadView({fileDataOffset: OFFSET_TEST_VALUE}, 'FileTags', myTags);
+        swapForLoadView({fileDataOffset: OFFSET_TEST_VALUE}, FileTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find JFIF data segment', () => {
         const myTags = {MyTag: 42};
-        rewireForLoadView({jfifDataOffset: OFFSET_TEST_VALUE}, 'JfifTags', myTags);
+        swapForLoadView({jfifDataOffset: OFFSET_TEST_VALUE}, JfifTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find Exif APP segment', () => {
         const myTags = {MyExifTag: 42};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should skip Exif but keep other data when Tags.read throws on a malformed TIFF header', () => {
-        rewireImageHeader({fileType: {value: 'heic', description: 'HEIC'}, tiffHeaderOffset: OFFSET_TEST_VALUE});
-        ExifReaderRewireAPI.__Rewire__('Tags', {
+        swapImageHeader({fileType: {value: 'heic', description: 'HEIC'}, tiffHeaderOffset: OFFSET_TEST_VALUE});
+        swap(Tags, {
             read() {
                 throw new Error('Illegal byte order value. Faulty image.');
             },
@@ -464,9 +466,9 @@ describe('exif-reader', function () {
     it('should pass xmpDataView from BMFF multi-extent items to XmpTags.read instead of the source dataView', () => {
         const myTags = {MyXmpTag: 99};
         const SYNTHETIC = {synthetic: true};
-        rewireImageHeader({xmpChunks: [{dataOffset: 0, length: 4}], xmpDataView: SYNTHETIC});
+        swapImageHeader({xmpChunks: [{dataOffset: 0, length: 4}], xmpDataView: SYNTHETIC});
         let capturedDataView;
-        ExifReaderRewireAPI.__Rewire__('XmpTags', {
+        swap(XmpTags, {
             read(dataView) {
                 capturedDataView = dataView;
                 return myTags;
@@ -483,9 +485,9 @@ describe('exif-reader', function () {
             MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
         };
         const SYNTHETIC = {synthetic: true};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, 'Tags', myExifTags);
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, Tags, myExifTags);
         let capturedDataView;
-        ExifReaderRewireAPI.__Rewire__('CanonTags', {
+        swap(CanonTags, {
             read(dataView) {
                 capturedDataView = dataView;
                 return {AutoRotate: 42};
@@ -501,9 +503,9 @@ describe('exif-reader', function () {
             MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE, value: getCharacterArray('PENTAX \x00\x00\x00')}
         };
         const SYNTHETIC = {synthetic: true};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, 'Tags', myExifTags);
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, Tags, myExifTags);
         let capturedDataView;
-        ExifReaderRewireAPI.__Rewire__('PentaxTags', {
+        swap(PentaxTags, {
             read(dataView) {
                 capturedDataView = dataView;
                 return {LensType: {value: 1, description: '1'}};
@@ -518,9 +520,9 @@ describe('exif-reader', function () {
         const SYNTHETIC = {synthetic: true};
         const myThumbnail = {type: 'image/jpeg'};
         const myTags = {MyExifTag: 43, Thumbnail: myThumbnail};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, 'Tags', myTags);
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, Tags, myTags);
         let capturedDataView;
-        ExifReaderRewireAPI.__Rewire__('Thumbnail', {
+        swap(Thumbnail, {
             get(dataView) {
                 capturedDataView = dataView;
                 return {image: '<image data>', ...myThumbnail};
@@ -534,9 +536,9 @@ describe('exif-reader', function () {
     it('should pass exifDataView from BMFF multi-extent items to Tags.read instead of the source dataView', () => {
         const myTags = {MyExifTag: 42};
         const SYNTHETIC = {synthetic: true};
-        rewireImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC});
+        swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC});
         let capturedDataView;
-        ExifReaderRewireAPI.__Rewire__('Tags', {
+        swap(Tags, {
             read(dataView, offset) {
                 capturedDataView = dataView;
                 if (offset === OFFSET_TEST_VALUE) {
@@ -552,8 +554,8 @@ describe('exif-reader', function () {
 
     it('should pass on computed option to Exif tags parsing', function () {
         const myTags = {MyExifTag: 42};
-        rewireImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE});
-        ExifReaderRewireAPI.__Rewire__('Tags', {
+        swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE});
+        swap(Tags, {
             read(dataView, offset, includeUnknown, computed) {
                 expect(offset).to.equal(OFFSET_TEST_VALUE);
                 expect(includeUnknown).to.equal(false);
@@ -570,8 +572,8 @@ describe('exif-reader', function () {
         const myExifTags = {'IPTC-NAA': {value: ['<IPTC block array>']}};
         const myIptcTags = {MyIptcTag: 42};
         const myTags = {...myExifTags, ...myIptcTags};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
-        rewireTagsRead('IptcTags', myIptcTags);
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapTagsRead(IptcTags, myIptcTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -579,8 +581,8 @@ describe('exif-reader', function () {
         const myExifTags = {ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')}};
         const myXmpTags = {MyXmpTag: 45};
         const myTags = {...myExifTags, ...myXmpTags};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
-        rewireXmpTagsRead(myXmpTags);
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapXmpTagsRead(myXmpTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -588,8 +590,8 @@ describe('exif-reader', function () {
         const myExifTags = {ICC_Profile: {value: [1, 2, 3]}};
         const myIccTags = {MyIccTag: 42};
         const myTags = {...myExifTags, ...myIccTags};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
-        rewireIccTagsRead(myIccTags);
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapIccTagsRead(myIccTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -600,8 +602,8 @@ describe('exif-reader', function () {
         };
         const myCanonTags = {AutoRotate: 42};
         const myTags = {...myExifTags, ...myCanonTags};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
-        rewireMakerNoteTagsRead(myCanonTags, 'CanonTags');
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapMakerNoteTagsRead(myCanonTags, CanonTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -620,8 +622,8 @@ describe('exif-reader', function () {
             LensModel: makerNotesLensModel,
             LensType: {value: 61182, description: '61182'}
         };
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
-        rewireMakerNoteTagsRead(myCanonTags, 'CanonTags');
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapMakerNoteTagsRead(myCanonTags, CanonTags);
 
         const tags = ExifReader.loadView();
 
@@ -638,38 +640,38 @@ describe('exif-reader', function () {
         };
         const myPentaxTags = {Artist: 'Arty'};
         const myTags = {...myExifTags, ...myPentaxTags};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myExifTags);
-        rewireMakerNoteTagsRead(myPentaxTags, 'PentaxTags');
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapMakerNoteTagsRead(myPentaxTags, PentaxTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find IPTC APP segment', () => {
         const myTags = {MyIptcTag: 42};
-        rewireForLoadView({iptcDataOffset: OFFSET_TEST_VALUE}, 'IptcTags', myTags);
+        swapForLoadView({iptcDataOffset: OFFSET_TEST_VALUE}, IptcTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find XMP APP segment', () => {
         const myTags = {MyXmpTag: 42};
 
-        rewireImageHeader({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]});
-        rewireXmpTagsRead(myTags);
+        swapImageHeader({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]});
+        swapXmpTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find ICC APP segment', () => {
         const myTags = {MyIccTag: 42};
 
-        rewireImageHeader({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]});
-        rewireIccTagsRead(myTags);
+        swapImageHeader({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]});
+        swapIccTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find compressed ICC segment', async () => {
         const myTags = {MyIccTag: 42};
 
-        rewireImageHeader({iccChunks: [OFFSET_TEST_VALUE_ICC2_3]});
-        rewireIccTagsRead(myTags, true);
+        swapImageHeader({iccChunks: [OFFSET_TEST_VALUE_ICC2_3]});
+        swapIccTagsRead(myTags, true);
         expect(await ExifReader.loadView(undefined, {async: true})).to.deep.equal(myTags);
     });
 
@@ -680,11 +682,11 @@ describe('exif-reader', function () {
         const decompressedView = new DataView(decompressedBuffer);
         decompressedView.setUint32(0, OFFSET_TEST_VALUE - 4);
 
-        rewireImageHeader({
+        swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
             brobExifChunk: {dataOffset: 0, length: 10}
         });
-        rewireTagsRead('Tags', myTags);
+        swapTagsRead(Tags, myTags);
 
         const result = await ExifReader.loadView(
             new DataView(new ArrayBuffer(10)),
@@ -700,11 +702,11 @@ describe('exif-reader', function () {
     it('should decompress and parse brob XMP data in JXL files', async () => {
         const myTags = {MyBrobXmpTag: 45};
 
-        rewireImageHeader({
+        swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
             brobXmpChunk: {dataOffset: 0, length: 10}
         });
-        ExifReaderRewireAPI.__Rewire__('XmpTags', {
+        swap(XmpTags, {
             read(dataView, xmpData) {
                 if (xmpData && xmpData[0] && xmpData[0].dataOffset === 0) {
                     return myTags;
@@ -727,7 +729,7 @@ describe('exif-reader', function () {
     });
 
     it('should skip brob data in sync mode', () => {
-        rewireImageHeader({
+        swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
             brobExifChunk: {dataOffset: 0, length: 10}
         });
@@ -739,7 +741,7 @@ describe('exif-reader', function () {
     });
 
     it('should handle brob decompression failure gracefully', async () => {
-        rewireImageHeader({
+        swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
             brobExifChunk: {dataOffset: 0, length: 10}
         });
@@ -762,11 +764,11 @@ describe('exif-reader', function () {
         const decompressedView = new DataView(decompressedBuffer);
         decompressedView.setUint32(0, OFFSET_TEST_VALUE - 4);
 
-        rewireImageHeader({
+        swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
             brobExifChunk: {dataOffset: 0, length: 10}
         });
-        rewireTagsRead('Tags', myTags);
+        swapTagsRead(Tags, myTags);
 
         const result = await ExifReader.loadView(
             new DataView(new ArrayBuffer(10)),
@@ -783,11 +785,11 @@ describe('exif-reader', function () {
     it('should prefer plain Exif over brob Exif in loadView', async () => {
         const plainTags = {PlainExifTag: 99};
 
-        rewireImageHeader({
+        swapImageHeader({
             tiffHeaderOffset: OFFSET_TEST_VALUE,
             brobExifChunk: {dataOffset: 0, length: 10}
         });
-        rewireTagsRead('Tags', plainTags);
+        swapTagsRead(Tags, plainTags);
 
         const result = await ExifReader.loadView(
             new DataView(new ArrayBuffer(10)),
@@ -803,62 +805,62 @@ describe('exif-reader', function () {
 
     it('should be able to find JXL file tags', () => {
         const myTags = {'Image Width': {value: 42, description: '42px'}};
-        rewireImageHeader({jxlCodestreamOffset: OFFSET_TEST_VALUE});
-        rewireTagsRead('JxlFileTags', myTags);
+        swapImageHeader({jxlCodestreamOffset: OFFSET_TEST_VALUE});
+        swapTagsRead(JxlFileTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should put JXL file tags in file group when expanded', () => {
         const myTags = {'Image Width': {value: 42, description: '42px'}};
-        rewireImageHeader({jxlCodestreamOffset: OFFSET_TEST_VALUE});
-        rewireTagsRead('JxlFileTags', myTags);
+        swapImageHeader({jxlCodestreamOffset: OFFSET_TEST_VALUE});
+        swapTagsRead(JxlFileTags, myTags);
         const result = ExifReader.loadView(undefined, {expanded: true});
         expect(result.file).to.deep.equal(myTags);
     });
 
     it('should be able to find MPF APP segment', () => {
         const myTags = {MyMpfTag: 42};
-        rewireImageHeader({mpfDataOffset: OFFSET_TEST_VALUE});
-        rewireMpfTagsRead(myTags);
+        swapImageHeader({mpfDataOffset: OFFSET_TEST_VALUE});
+        swapMpfTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find PNG file data segment', () => {
         const myTags = {MyTag: 42};
-        rewireForLoadView({pngHeaderOffset: OFFSET_TEST_VALUE}, 'PngFileTags', myTags);
+        swapForLoadView({pngHeaderOffset: OFFSET_TEST_VALUE}, PngFileTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find PNG text data segment', async () => {
         const myTags = {MyTag: 42};
         const myAsyncTags = {MyAsyncTag: 42};
-        rewireImageHeader({
+        swapImageHeader({
             pngTextChunks: [
                 {type: 'tEXt', length: PNG_FIELD_LENGTH_TEST_VALUE, offset: OFFSET_TEST_VALUE},
                 {type: 'zTXt', length: PNG_FIELD_LENGTH_TEST_VALUE, offset: OFFSET_TEST_VALUE}
             ]
         });
-        rewirePngTextTagsRead(myTags, myAsyncTags);
+        swapPngTextTagsRead(myTags, myAsyncTags);
         expect(await ExifReader.loadView(undefined, {async: true})).to.deep.equal({...myTags, ...myAsyncTags});
     });
 
     it('should be able to find PNG chunk data segment', () => {
         const myTags = {MyTag: 42};
-        rewireImageHeader({pngChunkOffsets: [OFFSET_TEST_VALUE]});
-        rewirePngTagsRead(myTags);
+        swapImageHeader({pngChunkOffsets: [OFFSET_TEST_VALUE]});
+        swapPngTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find RIFF chunk data segment', () => {
         const myTags = {MyTag: 42};
-        rewireImageHeader({vp8xChunkOffset: OFFSET_TEST_VALUE});
-        rewireVp8xTagsRead(myTags);
+        swapImageHeader({vp8xChunkOffset: OFFSET_TEST_VALUE});
+        swapVp8xTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find GIF file data segment', () => {
         const myTags = {MyTag: 42};
-        rewireForLoadView({gifHeaderOffset: OFFSET_TEST_VALUE}, 'GifFileTags', myTags);
+        swapForLoadView({gifHeaderOffset: OFFSET_TEST_VALUE}, GifFileTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -874,7 +876,7 @@ describe('exif-reader', function () {
             riff: {MyRiffTag: 49},
             Thumbnail: {type: 'image/jpeg'}
         };
-        rewireImageHeader({
+        swapImageHeader({
             fileDataOffset: OFFSET_TEST_VALUE,
             jfifDataOffset: OFFSET_TEST_VALUE,
             tiffHeaderOffset: OFFSET_TEST_VALUE,
@@ -887,14 +889,14 @@ describe('exif-reader', function () {
             mpfDataOffset: OFFSET_TEST_VALUE,
             vp8xChunkOffset: OFFSET_TEST_VALUE
         });
-        rewireTagsRead('FileTags', myTags.file);
-        rewireTagsRead('JfifTags', myTags.jfif);
-        rewireTagsRead('Tags', {...myTags.exif, Thumbnail: myTags.Thumbnail});
-        rewireMpfTagsRead(myTags.mpf);
-        rewireTagsRead('IptcTags', myTags.iptc);
-        rewireXmpTagsRead(myTags.xmp);
-        rewireIccTagsRead(myTags.icc);
-        rewireTagsRead('Vp8xTags', myTags.riff);
+        swapTagsRead(FileTags, myTags.file);
+        swapTagsRead(JfifTags, myTags.jfif);
+        swapTagsRead(Tags, {...myTags.exif, Thumbnail: myTags.Thumbnail});
+        swapMpfTagsRead(myTags.mpf);
+        swapTagsRead(IptcTags, myTags.iptc);
+        swapXmpTagsRead(myTags.xmp);
+        swapIccTagsRead(myTags.icc);
+        swapTagsRead(Vp8xTags, myTags.riff);
 
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
     });
@@ -910,18 +912,18 @@ describe('exif-reader', function () {
             xmp: {MyXmpTag: 43},
             icc: {MyIccTag: 44}
         };
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags.exif);
-        rewireTagsRead('IptcTags', myTags.iptc);
-        rewireXmpTagsRead(myTags.xmp);
-        rewireIccTagsRead(myTags.icc);
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags.exif);
+        swapTagsRead(IptcTags, myTags.iptc);
+        swapXmpTagsRead(myTags.xmp);
+        swapIccTagsRead(myTags.icc);
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
     });
 
     it('should retrieve a thumbnail', () => {
         const myThumbnail = {type: 'image/jpeg'};
         const myTags = {MyExifTag: 43, Thumbnail: myThumbnail};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
-        rewireThumbnail(myThumbnail);
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+        swapThumbnail(myThumbnail);
 
         expect(ExifReader.loadView({})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
     });
@@ -929,29 +931,29 @@ describe('exif-reader', function () {
     it('should retrieve a thumbnail when using expanded result', () => {
         const myThumbnail = {type: 'image/jpeg'};
         const myTags = {MyExifTag: 43, Thumbnail: myThumbnail};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
-        rewireThumbnail(myThumbnail);
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+        swapThumbnail(myThumbnail);
 
         expect(ExifReader.loadView({}, {expanded: true})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
     });
 
     it('should add file type', () => {
         const myTags = {MyTag: 42, FileType: 'will be overwritten'};
-        rewireForLoadView({fileType: {value: 'heic', description: 'HEIC'}, tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+        swapForLoadView({fileType: {value: 'heic', description: 'HEIC'}, tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
         expect(ExifReader.loadView({})).to.deep.equal({...myTags, FileType: {value: 'heic', description: 'HEIC'}});
     });
 
     it('should add file type when using expanded result', () => {
         const myTags = {exif: {MyTag: 42}, file: {FileType: 'will be overwritten'}};
-        rewireForLoadView({fileType: {value: 'webp', description: 'WebP'}, tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags.exif);
+        swapForLoadView({fileType: {value: 'webp', description: 'WebP'}, tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags.exif);
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({...myTags, file: {FileType: {value: 'webp', description: 'WebP'}}});
     });
 
     it('should calculate composite values', () => {
         const myTags = {MyExifTag: 42};
         const compositeTags = {MyCompositeTag: 4711};
-        rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
-        ExifReaderRewireAPI.__Rewire__('Composite', {
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+        swap(Composite, {
             get() {
                 return compositeTags;
             }
@@ -963,7 +965,7 @@ describe('exif-reader', function () {
     describe('gps group', () => {
         it('should not create a "gps" group if there are no GPS values', () => {
             const myTags = {MyExifTag: 43};
-            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({exif: myTags});
         });
@@ -973,7 +975,7 @@ describe('exif-reader', function () {
                 GPSLatitudeRef: {value: ['N']},
                 GPSLatitude: {value: [[34, 1], [3, 1], [3780, 100]]},
             };
-            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Latitude: 34.0605});
         });
@@ -983,7 +985,7 @@ describe('exif-reader', function () {
                 GPSLatitudeRef: {value: ['S']},
                 GPSLatitude: {value: [[34, 1], [3, 1], [3780, 100]]},
             };
-            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Latitude: -34.0605});
         });
@@ -993,7 +995,7 @@ describe('exif-reader', function () {
                 GPSLatitudeRef: {value: ['se']},
                 GPSLatitude: {value: [31, 1]},
             };
-            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({});
         });
@@ -1003,7 +1005,7 @@ describe('exif-reader', function () {
                 GPSLongitudeRef: {value: ['E']},
                 GPSLongitude: {value: [[44, 1], [45, 1], [3240, 100]]},
             };
-            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Longitude: 44.759});
         });
@@ -1013,7 +1015,7 @@ describe('exif-reader', function () {
                 GPSLongitudeRef: {value: ['W']},
                 GPSLongitude: {value: [[44, 1], [45, 1], [3240, 100]]},
             };
-            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Longitude: -44.759});
         });
@@ -1023,7 +1025,7 @@ describe('exif-reader', function () {
                 GPSLongitudeRef: {value: ['se']},
                 GPSLongitude: {value: [31, 1]},
             };
-            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({});
         });
@@ -1033,7 +1035,7 @@ describe('exif-reader', function () {
                 GPSAltitudeRef: {value: 0},
                 GPSAltitude: {value: [46, 2]},
             };
-            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Altitude: 23});
         });
@@ -1043,17 +1045,17 @@ describe('exif-reader', function () {
                 GPSAltitudeRef: {value: 1},
                 GPSAltitude: {value: [46, 2]},
             };
-            rewireForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, 'Tags', myTags);
+            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Altitude: -23});
         });
     });
 
     describe('custom builds', () => {
-        let Constants;
+        let useFlags;
 
         beforeEach(() => {
-            Constants = {
+            useFlags = {
                 USE_FILE: true,
                 USE_JFIF: true,
                 USE_PNG_FILE: true,
@@ -1062,95 +1064,99 @@ describe('exif-reader', function () {
                 USE_XMP: true,
                 USE_ICC: true,
                 USE_MPF: true,
+                USE_PHOTOSHOP: true,
                 USE_THUMBNAIL: true,
                 USE_TIFF: true,
                 USE_JPEG: true,
                 USE_PNG: true,
                 USE_HEIC: true,
+                USE_AVIF: true,
+                USE_JXL: true,
                 USE_WEBP: true,
-                USE_GIF: true
+                USE_GIF: true,
+                USE_MAKER_NOTES: true
             };
         });
 
         it('should handle when file tags have been excluded', () => {
-            Constants.USE_FILE = false;
-            rewireForCustomBuild({fileDataOffset: OFFSET_TEST_VALUE}, Constants);
+            useFlags.USE_FILE = false;
+            swapForCustomBuild({fileDataOffset: OFFSET_TEST_VALUE}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when JFIF tags have been excluded', () => {
-            Constants.USE_JFIF = false;
-            rewireForCustomBuild({jfifDataOffset: OFFSET_TEST_VALUE}, Constants);
+            useFlags.USE_JFIF = false;
+            swapForCustomBuild({jfifDataOffset: OFFSET_TEST_VALUE}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when PNG file tags have been excluded', () => {
-            Constants.USE_PNG_FILE = false;
-            rewireForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, Constants);
+            useFlags.USE_PNG_FILE = false;
+            swapForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when JPEG files have been excluded', () => {
-            Constants.USE_JPEG = false;
-            rewireForCustomBuild({
+            useFlags.USE_JPEG = false;
+            swapForCustomBuild({
                 fileDataOffset: OFFSET_TEST_VALUE,
                 jfifDataOffset: OFFSET_TEST_VALUE,
                 iptcDataOffset: OFFSET_TEST_VALUE
-            }, Constants);
+            }, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when Exif tags have been excluded', () => {
-            Constants.USE_EXIF = false;
-            rewireForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, Constants);
+            useFlags.USE_EXIF = false;
+            swapForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle thumbnail when Exif tags have been excluded', () => {
-            Constants.USE_EXIF = false;
-            ExifReaderRewireAPI.__Rewire__('Thumbnail', {get: () => true});
-            rewireForCustomBuild({}, Constants);
+            useFlags.USE_EXIF = false;
+            swap(Thumbnail, {get: () => true});
+            swapForCustomBuild({}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when IPTC tags have been excluded', () => {
-            Constants.USE_IPTC = false;
-            rewireForCustomBuild({iptcDataOffset: OFFSET_TEST_VALUE}, Constants);
+            useFlags.USE_IPTC = false;
+            swapForCustomBuild({iptcDataOffset: OFFSET_TEST_VALUE}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when XMP tags have been excluded', () => {
-            Constants.USE_XMP = false;
-            rewireForCustomBuild({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}, Constants);
+            useFlags.USE_XMP = false;
+            swapForCustomBuild({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when ICC tags have been excluded', () => {
-            Constants.USE_ICC = false;
-            rewireForCustomBuild({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}, Constants);
+            useFlags.USE_ICC = false;
+            swapForCustomBuild({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when MPF tags have been excluded', () => {
-            Constants.USE_MPF = false;
-            rewireForCustomBuild({mpfDataOffset: OFFSET_TEST_VALUE}, Constants);
+            useFlags.USE_MPF = false;
+            swapForCustomBuild({mpfDataOffset: OFFSET_TEST_VALUE}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when PNG files have been excluded', () => {
-            Constants.USE_PNG = false;
-            rewireForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, Constants);
+            useFlags.USE_PNG = false;
+            swapForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when GIF files have been excluded', () => {
-            Constants.USE_GIF = false;
-            rewireForCustomBuild({gifHeaderOffset: OFFSET_TEST_VALUE}, Constants);
+            useFlags.USE_GIF = false;
+            swapForCustomBuild({gifHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when JPEG files but not WebP files have been excluded', () => {
-            Constants.USE_JPEG = false;
+            useFlags.USE_JPEG = false;
             const myTags = {
                 exif: {MyExifTag: 43},
                 iptc: {MyIptcTag: 44},
@@ -1158,7 +1164,7 @@ describe('exif-reader', function () {
                 icc: {MyIccTag: 42},
                 Thumbnail: {type: 'image/jpeg'}
             };
-            rewireForCustomBuild({
+            swapForCustomBuild({
                 tiffHeaderOffset: OFFSET_TEST_VALUE,
                 iptcDataOffset: OFFSET_TEST_VALUE,
                 xmpChunks: [{
@@ -1166,11 +1172,11 @@ describe('exif-reader', function () {
                     length: XMP_FIELD_LENGTH_TEST_VALUE
                 }],
                 iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]
-            }, Constants);
-            rewireTagsRead('Tags', {...myTags.exif, Thumbnail: myTags.Thumbnail});
-            rewireTagsRead('IptcTags', myTags.iptc);
-            rewireXmpTagsRead(myTags.xmp);
-            rewireIccTagsRead(myTags.icc);
+            }, useFlags);
+            swapTagsRead(Tags, {...myTags.exif, Thumbnail: myTags.Thumbnail});
+            swapTagsRead(IptcTags, myTags.iptc);
+            swapXmpTagsRead(myTags.xmp);
+            swapIccTagsRead(myTags.icc);
 
             expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({
                 exif: myTags.exif,
@@ -1181,26 +1187,26 @@ describe('exif-reader', function () {
         });
 
         it('should handle when thumbnail has been excluded', () => {
-            Constants.USE_THUMBNAIL = false;
-            ExifReaderRewireAPI.__Rewire__('Thumbnail', {get: () => true});
-            rewireForCustomBuild({
+            useFlags.USE_THUMBNAIL = false;
+            swap(Thumbnail, {get: () => true});
+            swapForCustomBuild({
                 tiffHeaderOffset: OFFSET_TEST_VALUE,
-            }, Constants);
-            rewireTagsRead('Tags', {Thumbnail: {type: 'image/jpeg'}});
+            }, useFlags);
+            swapTagsRead(Tags, {Thumbnail: {type: 'image/jpeg'}});
             expect(ExifReader.loadView()['Thumbnail']).to.be.undefined;
         });
     });
 
     describe('metadataRange (includeOffsets)', () => {
         it('should return metadataRange in expanded mode when includeOffsets is true', () => {
-            rewireImageHeader({
+            swapImageHeader({
                 tiffHeaderOffset: OFFSET_TEST_VALUE,
                 metadataBlocks: [
                     {type: 'exif', start: 2, end: 100},
                     {type: 'xmp', start: 100, end: 200},
                 ],
             });
-            rewireTagsRead('Tags', {MyExifTag: 42});
+            swapTagsRead(Tags, {MyExifTag: 42});
 
             const tags = ExifReader.loadView(
                 {byteLength: 1024},
@@ -1220,13 +1226,13 @@ describe('exif-reader', function () {
 
         it('should pass the includeOffsets flag to parseAppMarkers', () => {
             let receivedFlag;
-            ExifReaderRewireAPI.__Rewire__('ImageHeader', {
+            swap(ImageHeader, {
                 parseAppMarkers(_dataView, _async, includeMetadataBlocks) {
                     receivedFlag = includeMetadataBlocks;
                     return {tiffHeaderOffset: OFFSET_TEST_VALUE, metadataBlocks: []};
                 }
             });
-            rewireTagsRead('Tags', {MyExifTag: 42});
+            swapTagsRead(Tags, {MyExifTag: 42});
 
             ExifReader.loadView(
                 {byteLength: 1024},
@@ -1237,11 +1243,11 @@ describe('exif-reader', function () {
         });
 
         it('should not return metadataRange in flat mode even when includeOffsets is true', () => {
-            rewireImageHeader({
+            swapImageHeader({
                 tiffHeaderOffset: OFFSET_TEST_VALUE,
                 metadataBlocks: [{type: 'exif', start: 2, end: 100}],
             });
-            rewireTagsRead('Tags', {MyExifTag: 42});
+            swapTagsRead(Tags, {MyExifTag: 42});
 
             const tags = ExifReader.loadView(
                 {byteLength: 1024},
@@ -1253,13 +1259,13 @@ describe('exif-reader', function () {
 
         it('should NOT ask parseAppMarkers to build blocks when expanded is omitted (no wasted work)', () => {
             let receivedFlag;
-            ExifReaderRewireAPI.__Rewire__('ImageHeader', {
+            swap(ImageHeader, {
                 parseAppMarkers(_dataView, _async, includeMetadataBlocks) {
                     receivedFlag = includeMetadataBlocks;
                     return {tiffHeaderOffset: OFFSET_TEST_VALUE};
                 }
             });
-            rewireTagsRead('Tags', {MyExifTag: 42});
+            swapTagsRead(Tags, {MyExifTag: 42});
 
             ExifReader.loadView(
                 {byteLength: 1024},
@@ -1270,11 +1276,11 @@ describe('exif-reader', function () {
         });
 
         it('should not return metadataRange when includeOffsets is omitted', () => {
-            rewireImageHeader({
+            swapImageHeader({
                 tiffHeaderOffset: OFFSET_TEST_VALUE,
                 metadataBlocks: [{type: 'exif', start: 2, end: 100}],
             });
-            rewireTagsRead('Tags', {MyExifTag: 42});
+            swapTagsRead(Tags, {MyExifTag: 42});
 
             const tags = ExifReader.loadView(
                 {byteLength: 1024},
@@ -1285,11 +1291,11 @@ describe('exif-reader', function () {
         });
 
         it('should mark complete:false when metadata extends past the buffer', () => {
-            rewireImageHeader({
+            swapImageHeader({
                 tiffHeaderOffset: OFFSET_TEST_VALUE,
                 metadataBlocks: [{type: 'exif', start: 2, end: 5000}],
             });
-            rewireTagsRead('Tags', {MyExifTag: 42});
+            swapTagsRead(Tags, {MyExifTag: 42});
 
             const tags = ExifReader.loadView(
                 {byteLength: 1024},
@@ -1301,11 +1307,11 @@ describe('exif-reader', function () {
         });
 
         it('should omit metadataRange when there are no blocks (e.g. plain TIFF)', () => {
-            rewireImageHeader({
+            swapImageHeader({
                 tiffHeaderOffset: OFFSET_TEST_VALUE,
                 metadataBlocks: [],
             });
-            rewireTagsRead('Tags', {MyExifTag: 42});
+            swapTagsRead(Tags, {MyExifTag: 42});
 
             const tags = ExifReader.loadView(
                 {byteLength: 1024},
@@ -1316,11 +1322,11 @@ describe('exif-reader', function () {
         });
 
         it('should include MPF embedded images as mpfImage blocks', () => {
-            rewireImageHeader({
+            swapImageHeader({
                 mpfDataOffset: OFFSET_TEST_VALUE,
                 metadataBlocks: [{type: 'mpf', start: 2, end: 100}],
             });
-            rewireMpfTagsRead({
+            swapMpfTagsRead({
                 NumberOfImages: {value: 3},
                 Images: [
                     {ImageOffset: {value: 0}, ImageSize: {value: 200}},
@@ -1345,7 +1351,7 @@ describe('exif-reader', function () {
         });
 
         it('should emit no mpfImage blocks when MPF parsing is excluded', () => {
-            rewireImageHeader({
+            swapImageHeader({
                 mpfDataOffset: OFFSET_TEST_VALUE,
                 tiffHeaderOffset: OFFSET_TEST_VALUE,
                 metadataBlocks: [
@@ -1353,10 +1359,10 @@ describe('exif-reader', function () {
                     {type: 'mpf', start: 100, end: 200},
                 ],
             });
-            // Tags.read is rewired to return tags only when offset matches; ensure exif read succeeds.
-            rewireTagsRead('Tags', {MyExifTag: 42});
-            // MpfTags must NOT be consulted; rewire to throw if it is.
-            ExifReaderRewireAPI.__Rewire__('MpfTags', {
+            // Tags.read is swapped to return tags only when the offset matches so the exif read succeeds.
+            swapTagsRead(Tags, {MyExifTag: 42});
+            // MpfTags must NOT be consulted. Swap it to throw if it is.
+            swap(MpfTags, {
                 read() {
                     throw new Error('MpfTags.read should not be called when mpf group is excluded');
                 },
@@ -1382,12 +1388,12 @@ describe('exif-reader', function () {
     describe('length: "auto"', () => {
         const AUTO_OPTIONS = {length: 'auto', expanded: true, includeOffsets: true};
 
-        function rewireForAutoTest({end} = {}) {
-            rewireImageHeader({
+        function swapForAutoTest({end} = {}) {
+            swapImageHeader({
                 tiffHeaderOffset: OFFSET_TEST_VALUE,
                 metadataBlocks: end !== undefined ? [{type: 'exif', start: 2, end}] : [],
             });
-            rewireTagsRead('Tags', {MyExifTag: 42});
+            swapTagsRead(Tags, {MyExifTag: 42});
         }
 
         function expectAutoToThrow(opts, pattern) {
@@ -1407,7 +1413,7 @@ describe('exif-reader', function () {
         });
 
         it('should not mutate the caller-supplied options object', async () => {
-            rewireForAutoTest({end: 100});
+            swapForAutoTest({end: 100});
 
             const options = Object.assign({}, AUTO_OPTIONS);
             const snapshot = JSON.stringify(options);
@@ -1419,7 +1425,7 @@ describe('exif-reader', function () {
 
         describe('in-memory inputs', () => {
             it('should return a Promise and attach metadataRange.buffer for an ArrayBuffer input', async () => {
-                rewireForAutoTest({end: 100});
+                swapForAutoTest({end: 100});
 
                 const result = ExifReader.load(new ArrayBuffer(1024), AUTO_OPTIONS);
 
@@ -1435,7 +1441,7 @@ describe('exif-reader', function () {
             });
 
             it('should attach a Node Buffer slice when the input is a Buffer', async () => {
-                rewireForAutoTest({end: 64});
+                swapForAutoTest({end: 64});
 
                 const tags = await ExifReader.load(Buffer.alloc(1024), AUTO_OPTIONS);
 
@@ -1445,7 +1451,7 @@ describe('exif-reader', function () {
             });
 
             it('should reject when the input has no metadataRange (plain TIFF / bare JXL codestream)', () => {
-                rewireForAutoTest();
+                swapForAutoTest();
 
                 return ExifReader.load(new ArrayBuffer(1024), AUTO_OPTIONS)
                     .then(() => {
@@ -1543,7 +1549,7 @@ describe('exif-reader', function () {
             }
 
             it('should converge in 1 fetch when metadata fits in the initial 128 KiB', async () => {
-                rewireForAutoTest({end: 4000});
+                swapForAutoTest({end: 4000});
                 installFetchMock(200000);
 
                 const tags = await ExifReader.load(URL, AUTO_OPTIONS);
@@ -1557,7 +1563,7 @@ describe('exif-reader', function () {
             });
 
             it('should converge in 2 fetches when metadata extends past the initial 128 KiB', async () => {
-                rewireForAutoTest({end: 200000});
+                swapForAutoTest({end: 200000});
                 installFetchMock(300000);
 
                 const tags = await ExifReader.load(URL, AUTO_OPTIONS);
@@ -1571,7 +1577,7 @@ describe('exif-reader', function () {
             });
 
             it('should converge in 1 fetch when the server returns 200 with the full body', async () => {
-                rewireForAutoTest({end: 200000});
+                swapForAutoTest({end: 200000});
                 installFetchMock(300000, {alwaysFullBody: true});
 
                 const tags = await ExifReader.load(URL, AUTO_OPTIONS);
@@ -1587,7 +1593,7 @@ describe('exif-reader', function () {
                 // full body (200). Without the fix this would concatenate
                 // the full body to the partial prefix and corrupt every
                 // offset past the first 128 KiB.
-                rewireForAutoTest({end: 200000});
+                swapForAutoTest({end: 200000});
 
                 const FULL_SIZE = 300000;
                 const fullBuffer = new ArrayBuffer(FULL_SIZE);
@@ -1605,7 +1611,7 @@ describe('exif-reader', function () {
             });
 
             it('should fall back to a single full GET when the server returns 416', async () => {
-                rewireForAutoTest({end: 4000});
+                swapForAutoTest({end: 4000});
 
                 const FULL_SIZE = 100000;
                 const fullBuffer = new ArrayBuffer(FULL_SIZE);
@@ -1631,7 +1637,7 @@ describe('exif-reader', function () {
                 // jump straight to totalSize instead of doubling and
                 // hitting the iteration cap.
                 let parseCalls = 0;
-                rewireImageHeaderDynamic((dataView) => {
+                swapImageHeaderDynamic((dataView) => {
                     parseCalls++;
                     const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
                     if (len < 250000) {
@@ -1643,7 +1649,7 @@ describe('exif-reader', function () {
                         metadataBlocks: [{type: 'exif', start: 200000, end: 230000}],
                     };
                 });
-                rewireTagsRead('Tags', {MyExifTag: 42});
+                swapTagsRead(Tags, {MyExifTag: 42});
                 installFetchMock(300000);
 
                 const tags = await ExifReader.load(URL, AUTO_OPTIONS);
@@ -1659,14 +1665,14 @@ describe('exif-reader', function () {
                 // Each parse claims it needs 1000 more bytes than the
                 // current buffer holds, so the loop never converges and
                 // hits MAX_ITERATIONS.
-                rewireImageHeaderDynamic((dataView) => {
+                swapImageHeaderDynamic((dataView) => {
                     const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
                     return {
                         tiffHeaderOffset: OFFSET_TEST_VALUE,
                         metadataBlocks: [{type: 'exif', start: 2, end: len + 1000}],
                     };
                 });
-                rewireTagsRead('Tags', {MyExifTag: 42});
+                swapTagsRead(Tags, {MyExifTag: 42});
                 installFetchMock(10 * 1024 * 1024);
 
                 const tags = await ExifReader.load(URL, AUTO_OPTIONS);
@@ -1684,14 +1690,14 @@ describe('exif-reader', function () {
                 // learned. The fallback must replace the buffer like the main
                 // loop, not concatenate it (which would double it).
                 const BODY_SIZE = 1000;
-                rewireImageHeaderDynamic((dataView) => {
+                swapImageHeaderDynamic((dataView) => {
                     const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
                     return {
                         tiffHeaderOffset: OFFSET_TEST_VALUE,
                         metadataBlocks: [{type: 'exif', start: 2, end: len + 1000}],
                     };
                 });
-                rewireTagsRead('Tags', {MyExifTag: 42});
+                swapTagsRead(Tags, {MyExifTag: 42});
                 installCustomFetchMock([
                     {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
                     {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
@@ -1781,7 +1787,7 @@ describe('exif-reader', function () {
             }
 
             it('should converge in 2 fetches via Node http with Range header', async () => {
-                rewireForAutoTest({end: 200000});
+                swapForAutoTest({end: 200000});
                 installHttpMock(300000);
 
                 const tags = await ExifReader.load(URL, AUTO_OPTIONS);
@@ -1835,7 +1841,7 @@ describe('exif-reader', function () {
             });
 
             it('should converge in 2 reads when metadata is past the initial 128 KiB', async () => {
-                rewireForAutoTest({end: 200000});
+                swapForAutoTest({end: 200000});
 
                 const tags = await ExifReader.load(FILENAME, AUTO_OPTIONS);
 
@@ -1850,7 +1856,7 @@ describe('exif-reader', function () {
             });
 
             it('should stat once on the first read and skip stat on subsequent reads', async () => {
-                rewireForAutoTest({end: 200000});
+                swapForAutoTest({end: 200000});
 
                 await ExifReader.load(FILENAME, AUTO_OPTIONS);
 
@@ -1889,7 +1895,7 @@ describe('exif-reader', function () {
             });
 
             it('should converge in 2 reads when metadata extends past the initial 128 KiB', async () => {
-                rewireForAutoTest({end: 200000});
+                swapForAutoTest({end: 200000});
 
                 const file = new global.File();
                 file.size = FULL_SIZE;
@@ -1911,33 +1917,33 @@ describe('exif-reader', function () {
     });
 });
 
-function rewireForLoadView(appMarkersValue, tagsObject, tagsValue) {
-    rewireImageHeader(appMarkersValue);
-    rewireTagsRead(tagsObject, tagsValue);
+function swapForLoadView(appMarkersValue, tagsModule, tagsValue) {
+    swapImageHeader(appMarkersValue);
+    swapTagsRead(tagsModule, tagsValue);
 }
 
-function rewireImageHeader(appMarkersValue) {
-    ExifReaderRewireAPI.__Rewire__('ImageHeader', {
+function swapImageHeader(appMarkersValue) {
+    swap(ImageHeader, {
         parseAppMarkers() {
             return appMarkersValue;
         }
     });
 }
 
-function rewireImageHeaderDynamic(parseAppMarkersImpl) {
-    ExifReaderRewireAPI.__Rewire__('ImageHeader', {parseAppMarkers: parseAppMarkersImpl});
+function swapImageHeaderDynamic(parseAppMarkersImpl) {
+    swap(ImageHeader, {parseAppMarkers: parseAppMarkersImpl});
 }
 
-function rewireTagsRead(tagsObject, tagsValue) {
-    ExifReaderRewireAPI.__Rewire__(tagsObject, {
+function swapTagsRead(tagsModule, tagsValue) {
+    swap(tagsModule, {
         read(dataView, offset) {
             if (Array.isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
-                if (tagsObject === 'Tags') {
+                if (tagsModule === Tags) {
                     return {tags: tagsValue, byteOrder: BIG_ENDIAN};
                 }
                 return tagsValue;
             }
-            if (tagsObject === 'Tags') {
+            if (tagsModule === Tags) {
                 return {tags: {}, byteOrder: BIG_ENDIAN};
             }
             return {};
@@ -1945,8 +1951,8 @@ function rewireTagsRead(tagsObject, tagsValue) {
     });
 }
 
-function rewireMpfTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('MpfTags', {
+function swapMpfTagsRead(tagsValue) {
+    swap(MpfTags, {
         read(dataView, offset) {
             if (Array.isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
                 return tagsValue;
@@ -1956,8 +1962,8 @@ function rewireMpfTagsRead(tagsValue) {
     });
 }
 
-function rewireXmpTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('XmpTags', {
+function swapXmpTagsRead(tagsValue) {
+    swap(XmpTags, {
         read(dataView, xmpData) {
             if (typeof dataView === 'string') {
                 return tagsValue;
@@ -1970,8 +1976,8 @@ function rewireXmpTagsRead(tagsValue) {
     });
 }
 
-function rewireIccTagsRead(tagsValue, async = false) {
-    ExifReaderRewireAPI.__Rewire__('IccTags', {
+function swapIccTagsRead(tagsValue, async = false) {
+    swap(IccTags, {
         read(dataView, iccData) {
             if (async && iccData.length === 1 && iccData[0] === OFFSET_TEST_VALUE_ICC2_3) {
                 return Promise.resolve(tagsValue);
@@ -1985,8 +1991,8 @@ function rewireIccTagsRead(tagsValue, async = false) {
     });
 }
 
-function rewireMakerNoteTagsRead(tagsValue, type) {
-    ExifReaderRewireAPI.__Rewire__(type, {
+function swapMakerNoteTagsRead(tagsValue, makerNoteModule) {
+    swap(makerNoteModule, {
         read(dataView, tiffHeaderOffset, makerNoteOffset) {
             if (tiffHeaderOffset === OFFSET_TEST_VALUE && makerNoteOffset === OFFSET_TEST_VALUE_MAKER_NOTE) {
                 return tagsValue;
@@ -1996,8 +2002,8 @@ function rewireMakerNoteTagsRead(tagsValue, type) {
     });
 }
 
-function rewirePngTextTagsRead(tagsValue, asyncTagsValue) {
-    ExifReaderRewireAPI.__Rewire__('PngTextTags', {
+function swapPngTextTagsRead(tagsValue, asyncTagsValue) {
+    swap(PngTextTags, {
         read(dataView, pngTextChunks, async) {
             if ((pngTextChunks[0].type === 'tEXt' && pngTextChunks[0].offset === OFFSET_TEST_VALUE) && (pngTextChunks[0].length === PNG_FIELD_LENGTH_TEST_VALUE)
                 && (pngTextChunks[1].type === 'zTXt' && pngTextChunks[1].offset === OFFSET_TEST_VALUE) && (pngTextChunks[1].length === PNG_FIELD_LENGTH_TEST_VALUE)) {
@@ -2008,8 +2014,8 @@ function rewirePngTextTagsRead(tagsValue, asyncTagsValue) {
     });
 }
 
-function rewirePngTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('PngTags', {
+function swapPngTagsRead(tagsValue) {
+    swap(PngTags, {
         read(dataView, pngChunkOffsets) {
             if (pngChunkOffsets[0] === OFFSET_TEST_VALUE) {
                 return tagsValue;
@@ -2019,8 +2025,8 @@ function rewirePngTagsRead(tagsValue) {
     });
 }
 
-function rewireVp8xTagsRead(tagsValue) {
-    ExifReaderRewireAPI.__Rewire__('Vp8xTags', {
+function swapVp8xTagsRead(tagsValue) {
+    swap(Vp8xTags, {
         read(dataView, vp8xChunkOffset) {
             if (vp8xChunkOffset === OFFSET_TEST_VALUE) {
                 return tagsValue;
@@ -2030,8 +2036,8 @@ function rewireVp8xTagsRead(tagsValue) {
     });
 }
 
-function rewireThumbnail(thumbnailTags) {
-    ExifReaderRewireAPI.__Rewire__('Thumbnail', {
+function swapThumbnail(thumbnailTags) {
+    swap(Thumbnail, {
         get(dataView, tags) {
             expect(tags).to.deep.equal(thumbnailTags);
             return {image: '<image data>', ...thumbnailTags};
@@ -2039,8 +2045,38 @@ function rewireThumbnail(thumbnailTags) {
     });
 }
 
-function rewireForCustomBuild(appMarkersValue, Constants) {
-    rewireImageHeader(appMarkersValue);
-    ExifReaderRewireAPI.__Rewire__('Constants', Constants);
-    PipelineRewireAPI.__Rewire__('Constants', Constants);
+function swapForCustomBuild(appMarkersValue, useFlags) {
+    swapImageHeader(appMarkersValue);
+    // Constants is a shared module object, so swapping properties on it
+    // reaches every importer, including loadview-pipeline.
+    swap(Constants, useFlags);
+}
+
+function swap(target, replacement) {
+    restoreFunctions.push(swapProperties(target, replacement));
+}
+
+function getAsciiPrefix(dataView, length) {
+    let prefix = '';
+    for (let i = 0; i < length && i < dataView.byteLength; i++) {
+        prefix += String.fromCharCode(dataView.getUint8(i));
+    }
+    return prefix;
+}
+
+function getBufferLikeData(data) {
+    // Exposes the Node Buffer read API without being a Buffer or an
+    // ArrayBuffer, so the native DataView constructor rejects it and the
+    // fallback wrapper is the only way to read it.
+    const buffer = Buffer.from(data, 'binary');
+    return {
+        length: buffer.length,
+        readUInt8: buffer.readUInt8.bind(buffer),
+        readUInt16LE: buffer.readUInt16LE.bind(buffer),
+        readUInt16BE: buffer.readUInt16BE.bind(buffer),
+        readUInt32LE: buffer.readUInt32LE.bind(buffer),
+        readUInt32BE: buffer.readUInt32BE.bind(buffer),
+        readInt32LE: buffer.readInt32LE.bind(buffer),
+        readInt32BE: buffer.readInt32BE.bind(buffer),
+    };
 }

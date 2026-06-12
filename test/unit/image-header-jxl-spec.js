@@ -3,16 +3,21 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getByteStringFromNumber, getDataView} from './test-utils';
-import {__RewireAPI__ as ImageHeaderJxlRewireAPI} from '../../src/image-header-jxl';
-import ImageHeaderJxl from '../../src/image-header-jxl';
+import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
+import Constants from '../../src/constants.js';
+import ImageHeaderJxl from '../../src/image-header-jxl.js';
 
 const JXL_SIGNATURE = '\x00\x00\x00\x0CJXL \x0D\x0A\x87\x0A';
 const FTYP_BOX = '\x00\x00\x00\x14ftypjxl \x00\x00\x00\x00jxl ';
 
 describe('image-header-jxl', () => {
+    let restoreConstants;
+
     afterEach(() => {
-        ImageHeaderJxlRewireAPI.__ResetDependency__('Constants');
+        if (restoreConstants) {
+            restoreConstants();
+            restoreConstants = undefined;
+        }
     });
 
     it('should handle empty input', () => {
@@ -87,7 +92,7 @@ describe('image-header-jxl', () => {
     });
 
     it('should ignore Exif data if it is excluded from custom build', () => {
-        ImageHeaderJxlRewireAPI.__Rewire__('Constants', {USE_EXIF: false, USE_XMP: true});
+        restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: true});
 
         const dataView = getDataView(getJxlData({exif: true}));
 
@@ -95,7 +100,7 @@ describe('image-header-jxl', () => {
     });
 
     it('should ignore XMP data if it is excluded from custom build', () => {
-        ImageHeaderJxlRewireAPI.__Rewire__('Constants', {USE_EXIF: true, USE_XMP: false});
+        restoreConstants = swapProperties(Constants, {USE_EXIF: true, USE_XMP: false});
 
         const dataView = getDataView(getJxlData({xmp: true}));
 
@@ -210,7 +215,7 @@ describe('image-header-jxl', () => {
         });
 
         it('should ignore brob Exif when USE_EXIF is false', () => {
-            ImageHeaderJxlRewireAPI.__Rewire__('Constants', {USE_EXIF: false, USE_XMP: true});
+            restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: true});
 
             const dataView = getDataView(getJxlData({brobExif: true}));
             const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
@@ -219,7 +224,7 @@ describe('image-header-jxl', () => {
         });
 
         it('should ignore brob XMP when USE_XMP is false', () => {
-            ImageHeaderJxlRewireAPI.__Rewire__('Constants', {USE_EXIF: true, USE_XMP: false});
+            restoreConstants = swapProperties(Constants, {USE_EXIF: true, USE_XMP: false});
 
             const dataView = getDataView(getJxlData({brobXmp: true}));
             const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
@@ -373,9 +378,7 @@ describe('image-header-jxl', () => {
         });
 
         it('should detect codestream even without metadata boxes', () => {
-            ImageHeaderJxlRewireAPI.__Rewire__('Constants', {
-                USE_EXIF: false, USE_XMP: false
-            });
+            restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false});
 
             const dataView = getDataView(getJxlData({jxlc: true}));
             const offsets = ImageHeaderJxl.findJxlOffsets(dataView);

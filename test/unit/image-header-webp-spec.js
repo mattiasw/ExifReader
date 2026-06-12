@@ -3,13 +3,18 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import {__RewireAPI__ as ImageHeaderWebpRewireAPI} from '../../src/image-header-webp';
-import ImageHeaderWebp from '../../src/image-header-webp';
+import {getDataView, swapProperties} from './test-utils.js';
+import Constants from '../../src/constants.js';
+import ImageHeaderWebp from '../../src/image-header-webp.js';
 
 describe('image-header-webp', () => {
+    let restoreConstants;
+
     afterEach(() => {
-        ImageHeaderWebpRewireAPI.__ResetDependency__('Constants');
+        if (restoreConstants) {
+            restoreConstants();
+            restoreConstants = undefined;
+        }
     });
 
     it('should recognize a WebP file', () => {
@@ -35,7 +40,7 @@ describe('image-header-webp', () => {
     });
 
     it('should ignore Exif data if it is excluded from custom build', () => {
-        ImageHeaderWebpRewireAPI.__Rewire__('Constants', {USE_EXIF: false});
+        restoreConstants = swapProperties(Constants, {USE_EXIF: false});
 
         expect(ImageHeaderWebp.findOffsets(getWebpDataView()).tiffHeaderOffset).to.be.undefined;
     });
@@ -58,7 +63,7 @@ describe('image-header-webp', () => {
     });
 
     it('should ignore XMP data if it is excluded from custom build', () => {
-        ImageHeaderWebpRewireAPI.__Rewire__('Constants', {USE_XMP: false});
+        restoreConstants = swapProperties(Constants, {USE_XMP: false});
 
         expect(ImageHeaderWebp.findOffsets(getWebpDataView()).xmpChunks).to.be.undefined;
     });
@@ -76,7 +81,7 @@ describe('image-header-webp', () => {
     });
 
     it('should ignore ICC data if it is excluded from custom build', () => {
-        ImageHeaderWebpRewireAPI.__Rewire__('Constants', {USE_ICC: false});
+        restoreConstants = swapProperties(Constants, {USE_ICC: false});
 
         expect(ImageHeaderWebp.findOffsets(getWebpDataView()).iccChunks).to.be.undefined;
     });

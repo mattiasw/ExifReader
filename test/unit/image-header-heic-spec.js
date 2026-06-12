@@ -3,16 +3,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import {__RewireAPI__ as ImageHeaderHeicRewireAPI} from '../../src/image-header-heic';
-import ImageHeaderHeic from '../../src/image-header-heic';
+import {getDataView, getByteStringFromNumber} from './test-utils.js';
+import ImageHeaderHeic from '../../src/image-header-heic.js';
 
 describe('image-header-heic', () => {
-    afterEach(() => {
-        ImageHeaderHeicRewireAPI.__ResetDependency__('parseBox');
-        ImageHeaderHeicRewireAPI.__ResetDependency__('findOffsets');
-    });
-
     it('should fail for too short data buffer', () => {
         const dataView = getDataView('\x00');
         expect(ImageHeaderHeic.isHeicFile(dataView)).to.be.false;
@@ -24,8 +18,7 @@ describe('image-header-heic', () => {
     });
 
     it('should pass for valid image format', () => {
-        ImageHeaderHeicRewireAPI.__Rewire__('parseBox', () => ({majorBrand: 'heic'}));
-        const dataView = getDataView('');
+        const dataView = getDataView(getBox('ftyp', 'heic'));
         expect(ImageHeaderHeic.isHeicFile(dataView)).to.be.true;
     });
 
@@ -34,12 +27,30 @@ describe('image-header-heic', () => {
 
         for (const brand of majorBrands) {
             it(`should find header offset in HEIC file with major brand ${brand}`, () => {
-                // Totally fake the dependency.
-                ImageHeaderHeicRewireAPI.__Rewire__('findOffsets', (_dataView) => ({[brand]: {hasAppMarkers: true}}[_dataView]));
-                const dataView = brand;
+                const dataView = getDataView(getBox('ftyp', brand) + getMetaBoxWithIccProfile());
                 const appMarkerValues = ImageHeaderHeic.findHeicOffsets(dataView);
                 expect(appMarkerValues.hasAppMarkers).to.be.true;
             });
         }
     });
 });
+
+function getBox(type, content) {
+    const LENGTH_SIZE = 4;
+    const size = LENGTH_SIZE + type.length + content.length;
+    return getByteStringFromNumber(size, 4) + type + content;
+}
+
+// An ICC chunk (meta > iprp > ipco > colr) is the smallest metadata source
+// that makes the real findOffsets report hasAppMarkers.
+function getMetaBoxWithIccProfile() {
+    const COLOR_TYPE = 'prof';
+    const ICC_CONTENT = '<ICC content>';
+    const colrContent = COLOR_TYPE + getByteStringFromNumber(ICC_CONTENT.length + 4, 4) + ICC_CONTENT;
+    return getFullBox('meta', 0, getBox('iprp', getBox('ipco', getBox('colr', colrContent))));
+}
+
+function getFullBox(type, version, content) {
+    const FLAGS = '\x00\x00\x00';
+    return getBox(type, String.fromCharCode(version) + FLAGS + content);
+}

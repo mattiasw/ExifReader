@@ -3,15 +3,20 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import {__RewireAPI__ as ImageHeaderPngRewireAPI} from '../../src/image-header-png';
-import ImageHeaderPng from '../../src/image-header-png';
+import {getDataView, swapProperties} from './test-utils.js';
+import Constants from '../../src/constants.js';
+import ImageHeaderPng from '../../src/image-header-png.js';
 
 const PNG_IMAGE_START = '\x89\x50\x4e\x47\x0d\x0a\x1a\x0a';
 
 describe('image-header-png', () => {
+    let restoreConstants;
+
     afterEach(() => {
-        ImageHeaderPngRewireAPI.__ResetDependency__('Constants');
+        if (restoreConstants) {
+            restoreConstants();
+            restoreConstants = undefined;
+        }
     });
 
     it('should recognize a PNG file', () => {
@@ -234,7 +239,7 @@ describe('image-header-png', () => {
     });
 
     it('should handle when PNG file tags have been excluded in a custom build', () => {
-        ImageHeaderPngRewireAPI.__Rewire__('Constants', {USE_PNG: true, USE_PNG_FILE: false});
+        restoreConstants = swapProperties(Constants, {USE_PNG: true, USE_PNG_FILE: false});
         const chunkLength = '\x00\x00\x00\x02';
         const chunkType = 'IHDR';
         const chunkData = '\x47\x11';

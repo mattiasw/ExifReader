@@ -7,7 +7,8 @@ export {
     getDataView,
     concatDataViews,
     getByteStringFromNumber,
-    getConsoleWarnSpy
+    getConsoleWarnSpy,
+    swapProperties
 };
 
 function getArrayBuffer(data) {
@@ -69,4 +70,34 @@ function getConsoleWarnSpy() {
 
     return warnSpy;
     /* eslint-enable no-console */
+}
+
+/**
+ * Temporarily overwrites properties on a shared (module-cached) object, e.g.
+ * Constants or TagNames. Every module that imported the object sees the
+ * swapped values because they share the same instance.
+ *
+ * @param {Object} target - The object to modify in place.
+ * @param {Object} replacement - The properties to set on the target.
+ * @returns {Function} A restore function that undoes the swap.
+ */
+function swapProperties(target, replacement) {
+    const saved = new Map();
+    const added = [];
+    for (const key of Object.keys(replacement)) {
+        if (Object.prototype.hasOwnProperty.call(target, key)) {
+            saved.set(key, target[key]);
+        } else {
+            added.push(key);
+        }
+        target[key] = replacement[key];
+    }
+    return function restore() {
+        for (const [key, value] of saved) {
+            target[key] = value;
+        }
+        for (const key of added) {
+            delete target[key];
+        }
+    };
 }
