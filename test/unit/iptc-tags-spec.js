@@ -34,9 +34,10 @@ describe('iptc-tags', function () {
     });
 
     it('should fail for IPTC with faulty resource block', () => {
-        // The public read method turns the internal parse error into an empty
-        // result.
-        const dataView = getDataView('XXXX\x04\x04\x00\x00\x00\x00\x00\x42');
+        // Everything after the faulty signature is a valid NAA block holding
+        // a parseable tag. Only the signature check stands between this input
+        // and a non-empty result, so the test fails if that check is removed.
+        const dataView = getDataView('XXXX\x04\x04\x00\x00\x00\x00\x00\x07' + '\x1c\x47\x11\x00\x02BC');
         expect(IptcTags.read(dataView, 0, true)).to.deep.equal({});
     });
 
@@ -71,7 +72,10 @@ describe('iptc-tags', function () {
     });
 
     it('should fail for IPTC header with no NAA resource block', () => {
-        const dataView = getDataView('8BIM\x04\x05\x00\x00\x00\x00\x00\x42');
+        // The non-NAA block (type 0x0405) holds a parseable tag. Only the NAA
+        // type check stands between this input and a non-empty result, so the
+        // test fails if that check stops filtering block types.
+        const dataView = getDataView('8BIM\x04\x05\x00\x00\x00\x00\x00\x07' + '\x1c\x47\x11\x00\x02BC');
         expect(IptcTags.read(dataView, 0, true)).to.deep.equal({});
     });
 
