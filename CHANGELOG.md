@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The `src` directory is now correctly declared as ES modules through a nested
+  `package.json` type marker that ships with the npm package. Node-native ESM
+  deep imports such as `import 'exifreader/src/exif-reader.js'` work now
+  instead of crashing, and `require()` of the same files works on Node 22.12
+  and later. The default entry points are unchanged.
+
 ## [4.41.0] - 2026-06-08
 
 ### Added

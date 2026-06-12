@@ -62,7 +62,7 @@
     "test": "mocha --recursive \"test/unit/\"",
     "test:integration": "mocha \"test/integration/**/*-spec.js\"",
     "test:integration:update": "node test/integration/update.js",
-    "test:build": "mocha test/build/test.js",
+    "test:build": "mocha test/build/test.js test/build/packaging.js",
     "test:build:custom": "mocha --bail test/build/test-custom.js",
     "test:build:update": "node test/build/update.js",
     "test:e2e:chrome": "cypress run",
