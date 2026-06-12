@@ -23,10 +23,9 @@
     "docs",
     "test",
     ".babelrc",
-    ".eslintignore",
-    ".eslintrc.json",
     ".gitignore",
     ".npmignore",
+    "eslint.config.mjs",
     "package.json",
     "webpack.config.js"
   ]

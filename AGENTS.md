@@ -44,7 +44,7 @@ Users can configure custom builds (via `package.json` `"exifreader"` key) to inc
 
 ## Coding Style
 
-Enforced by ESLint (`.eslintrc.json`). Key rules:
+Enforced by ESLint (`eslint.config.mjs`). Key rules:
 
 - ES modules (`import`/`export`), no CommonJS in `src/`
 - 4-space indent, single quotes, semicolons always
