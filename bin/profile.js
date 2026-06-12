@@ -317,7 +317,7 @@ async function runBenchmark(ExifReader, files, options) {
         for (let i = 0; i < options.warmup; i++) {
             try {
                 await parseFile(ExifReader, result, options);
-            } catch (_warmupError) { // eslint-disable-line no-unused-vars
+            } catch (_warmupError) {
                 // Warmup errors are discarded; the real run will surface them below.
             }
         }
@@ -397,7 +397,7 @@ async function runProbeBytes(ExifReader, files, results, options, libraryHash) {
             const buffer = result.buffer || fs.readFileSync(result.file.path);
             try {
                 result.minBytes = await bisectMinBytes(ExifReader, buffer, options.probeEquality);
-            } catch (_probeError) { // eslint-disable-line no-unused-vars
+            } catch (_probeError) {
                 result.minBytes = null;
             }
             cache[cacheKey] = result.minBytes;
@@ -446,7 +446,7 @@ async function parseQuietly(ExifReader, buffer) {
     try {
         const out = ExifReader.load(buffer);
         return isThenable(out) ? await out : out;
-    } catch (_error) { // eslint-disable-line no-unused-vars
+    } catch (_error) {
         return null;
     }
 }
@@ -488,7 +488,7 @@ function loadCache() {
         if (fs.existsSync(CACHE_FILE)) {
             return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
         }
-    } catch (_error) { // eslint-disable-line no-unused-vars
+    } catch (_error) {
         // Corrupt cache: ignore and rebuild.
     }
     return {};

@@ -146,8 +146,8 @@ describe('utils', () => {
         });
 
         it('should reject when no brotli decompressor is available and DecompressionStream does not support brotli', async () => {
-            const origDecompressionStream = global.DecompressionStream; // eslint-disable-line no-undef
-            global.DecompressionStream = undefined; // eslint-disable-line no-undef
+            const origDecompressionStream = global.DecompressionStream;
+            global.DecompressionStream = undefined;
             try {
                 const dataView = new DataView(new ArrayBuffer(1));
                 await Utils.decompress(
@@ -160,7 +160,7 @@ describe('utils', () => {
             } catch (error) {
                 expect(error).to.include('not supported');
             } finally {
-                global.DecompressionStream = origDecompressionStream; // eslint-disable-line no-undef
+                global.DecompressionStream = origDecompressionStream;
             }
         });
 
@@ -238,7 +238,7 @@ describe('utils', () => {
             const decompressedSize = 1 * 1024 * 1024;
             const input = new Uint8Array(decompressedSize);
             const compressedStream = new Blob([input]).stream().pipeThrough(
-                new CompressionStream('deflate') // eslint-disable-line no-undef
+                new CompressionStream('deflate')
             );
             const compressed = await new Response(compressedStream).arrayBuffer();
 
@@ -286,7 +286,7 @@ describe('utils', () => {
             const decompressedSize = 4 * 1024;
             const input = new Uint8Array(decompressedSize);
             const compressedStream = new Blob([input]).stream().pipeThrough(
-                new CompressionStream('deflate') // eslint-disable-line no-undef
+                new CompressionStream('deflate')
             );
             const compressed = await new Response(compressedStream).arrayBuffer();
 
