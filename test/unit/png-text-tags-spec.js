@@ -5,10 +5,10 @@
 import {expect} from 'chai';
 import {getDataView, concatDataViews, swapProperties} from './test-utils.js';
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../src/image-header-png.js';
-import PngTextTags from '../../src/png-text-tags';
+import PngTextTags from '../../src/png-text-tags.js';
 import Tags from '../../src/tags.js';
 import IptcTags from '../../src/iptc-tags.js';
-import {getStringFromDataView} from '../../src/utils';
+import {getStringFromDataView} from '../../src/utils.js';
 
 describe('png-text-tags', () => {
     let restoreTagReaders;

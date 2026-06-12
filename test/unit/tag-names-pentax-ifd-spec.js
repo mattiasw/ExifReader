@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNamesPentaxIfd from '../../src/tag-names-pentax-ifd';
+import TagNamesPentaxIfd from '../../src/tag-names-pentax-ifd.js';
 
 describe('tag-names-pentax-ifd', () => {
     it('should have tag PentaxVersion', () => {

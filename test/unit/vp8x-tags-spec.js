@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import Vp8xTags from '../../src/vp8x-tags';
+import {getDataView} from './test-utils.js';
+import Vp8xTags from '../../src/vp8x-tags.js';
 
 describe('vp8x-tags', () => {
     const TEST_PADDING = '\x01\x02\x03\x04';

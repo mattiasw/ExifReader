@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import path from 'path';
-import findDependentConfig from '../../bin/findDependentConfig';
+import findDependentConfig from '../../bin/findDependentConfig.js';
 
 // Build paths with the platform separator so they match what the
 // implementation produces via path.join (backslashes on Windows). Hardcoded

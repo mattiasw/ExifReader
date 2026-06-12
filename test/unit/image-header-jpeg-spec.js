@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getConsoleWarnSpy, getDataView} from './test-utils';
-import ImageHeaderJpeg from '../../src/image-header-jpeg';
+import {getConsoleWarnSpy, getDataView} from './test-utils.js';
+import ImageHeaderJpeg from '../../src/image-header-jpeg.js';
 
 const JPEG_IMAGE_START = '\xff\xd8\xff\xe0\x00\x07JFIF\x00';
 const APP0_MARKER = '\xff\xe0';

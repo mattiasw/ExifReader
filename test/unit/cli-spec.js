@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {parseArgs, run, checkLocalInstall} from '../../bin/cli';
+import {parseArgs, run, checkLocalInstall} from '../../bin/cli.js';
 
 describe('cli', () => {
     describe('parseArgs', () => {

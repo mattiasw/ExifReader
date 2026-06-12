@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import XmpTagNames from '../../src/xmp-tag-names';
+import XmpTagNames from '../../src/xmp-tag-names.js';
 
 describe('xmp-tag-names', () => {
     it('should report correct description for tiff:Orientation', () => {

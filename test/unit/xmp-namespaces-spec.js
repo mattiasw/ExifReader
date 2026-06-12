@@ -1,5 +1,5 @@
 import {expect} from 'chai';
-import {isMissingNamespaceError, addMissingNamespaces} from '../../src/xmp-namespaces';
+import {isMissingNamespaceError, addMissingNamespaces} from '../../src/xmp-namespaces.js';
 
 describe('xmp-namespaces', function () {
     describe('isMissingNamespaceError', function () {

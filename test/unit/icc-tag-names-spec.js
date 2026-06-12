@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {iccProfile} from '../../src/icc-tag-names';
-import {getDataView} from './test-utils';
+import {iccProfile} from '../../src/icc-tag-names.js';
+import {getDataView} from './test-utils.js';
 
 const PROFILE_VERSION = '\x02\x40\x00\x00';
 const PROFILE_DATE = '\x07\xd0\x00\x07\x00\x1a\x00\x05\x00\x29\x00\x35';

@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView, getConsoleWarnSpy} from './test-utils';
-import * as Utils from '../../src/utils';
+import {getDataView, getConsoleWarnSpy} from './test-utils.js';
+import * as Utils from '../../src/utils.js';
 
 describe('utils', () => {
     it('should extract string from DataView', () => {

@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView, getByteStringFromNumber, getConsoleWarnSpy} from './test-utils';
+import {getDataView, getByteStringFromNumber, getConsoleWarnSpy} from './test-utils.js';
 import {parseBox, findOffsets, ITEM_INFO_TYPE_EXIF, ITEM_INFO_TYPE_MIME} from '../../src/image-header-iso-bmff.js';
 
 describe('image-header-iso-bmff', () => {

@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getCharacterArray} from '../../src/utils';
-import TagNames from '../../src/iptc-tag-names';
+import {getCharacterArray} from '../../src/utils.js';
+import TagNames from '../../src/iptc-tag-names.js';
 
 const IptcTagNames = TagNames['iptc'];
 

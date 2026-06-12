@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import PngFileTags from '../../src/png-file-tags';
+import {getDataView} from './test-utils.js';
+import PngFileTags from '../../src/png-file-tags.js';
 
 const FILE_DATA_CONTENT =
       '\x01\x02\x03\x04' // Width

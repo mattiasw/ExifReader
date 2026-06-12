@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView, getArrayBuffer} from './test-utils';
-import Thumbnail from '../../src/thumbnail';
+import {getDataView, getArrayBuffer} from './test-utils.js';
+import Thumbnail from '../../src/thumbnail.js';
 
 const OFFSET_TEST_VALUE = 4;
 const COMPRESSION_JPEG = 6;

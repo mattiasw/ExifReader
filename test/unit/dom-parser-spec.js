@@ -2,15 +2,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import {createRequire} from 'node:module';
 import {expect} from 'chai';
-import DOMParserModule from '../../src/dom-parser';
+import DOMParserModule from '../../src/dom-parser.js';
 
 describe('dom-parser', function () {
     let originalNonWebpackRequire;
 
     beforeEach(() => {
         originalNonWebpackRequire = global.__non_webpack_require__;
-        global.__non_webpack_require__ = require;
+        global.__non_webpack_require__ = createRequire(import.meta.url);
         this.originalDOMParser = global.DOMParser;
         if (typeof global.DOMParser !== 'undefined') {
             delete global.DOMParser;

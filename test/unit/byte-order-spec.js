@@ -3,9 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import ByteOrder from '../../src/byte-order';
-import ImageHeader from '../../src/image-header';
+import {getDataView} from './test-utils.js';
+import ByteOrder from '../../src/byte-order.js';
+import ImageHeader from '../../src/image-header.js';
 
 describe('byte order', () => {
     it('should find byte order data', () => {

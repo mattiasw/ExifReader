@@ -33,8 +33,8 @@ function runBuild(options) {
     process.chdir(EXIFREADER_ROOT_DIR);
 
     // Pin the build env regardless of the caller's shell: NODE_ENV=production
-    // keeps webpack in production mode, and BABEL_ENV is only belt-and-suspenders
-    // against a stray BABEL_ENV=test adding the test-only rewire plugin.
+    // keeps webpack in production mode, and BABEL_ENV is belt-and-suspenders
+    // against a stray value selecting an env block in a babel config.
     const env = {...process.env, BABEL_ENV: 'production', NODE_ENV: 'production'};
     if (options.config) {
         env.EXIFREADER_CUSTOM_BUILD = JSON.stringify(options.config);
@@ -77,7 +77,6 @@ function installCustomBuildDependencies(tmpDir) {
     const packages = [
         '@babel/core',
         '@babel/preset-env',
-        '@babel/register',
         'babel-loader',
         'cross-env',
         'string-replace-loader',

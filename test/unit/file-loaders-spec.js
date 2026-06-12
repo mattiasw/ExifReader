@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {fetchRange, nodeGetRange, HTTP_STATUS_RANGE_NOT_SATISFIABLE} from '../../src/file-loaders';
+import {fetchRange, nodeGetRange, HTTP_STATUS_RANGE_NOT_SATISFIABLE} from '../../src/file-loaders.js';
 
 describe('file-loaders', () => {
     describe('nodeGetRange', () => {

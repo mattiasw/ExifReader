@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNamesCanonIfd from '../../src/tag-names-canon-ifd';
+import TagNamesCanonIfd from '../../src/tag-names-canon-ifd.js';
 
 describe('tag-names-canon-ifd', () => {
     it('should have tag CameraSettings', () => {

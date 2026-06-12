@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import JxlFileTags from '../../src/jxl-file-tags';
+import {getDataView} from './test-utils.js';
+import JxlFileTags from '../../src/jxl-file-tags.js';
 
 describe('jxl-file-tags', () => {
     describe('non-small images', () => {

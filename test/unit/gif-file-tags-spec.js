@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import GifFileTags from '../../src/gif-file-tags';
+import {getDataView} from './test-utils.js';
+import GifFileTags from '../../src/gif-file-tags.js';
 
 const GIF_SIGNATURE = 'GIF87a';
 const FILE_DATA_CONTENT =

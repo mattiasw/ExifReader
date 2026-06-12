@@ -6,8 +6,9 @@ import {expect} from 'chai';
 import {DOMParser as XmldomDomParser, onErrorStopParsing} from '@xmldom/xmldom';
 import {DOMParser as LinkedomDomParser} from 'linkedom';
 import {getConsoleWarnSpy, getDataView, swapProperties} from './test-utils.js';
+import {createRequire} from 'node:module';
 import DomParserModule from '../../src/dom-parser.js';
-import XmpTags from '../../src/xmp-tags';
+import XmpTags from '../../src/xmp-tags.js';
 
 const PACKET_WRAPPER_START = '<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>';
 const PACKET_WRAPPER_END = '<?xpacket end="w"?>';
@@ -17,7 +18,7 @@ const META_ELEMENT_END = '</x:xmpmeta>';
 describe('xmp-tags', function () {
     beforeEach(() => {
         this.originalNonWebpackRequire = global.__non_webpack_require__;
-        global.__non_webpack_require__ = require;
+        global.__non_webpack_require__ = createRequire(import.meta.url);
     });
 
     afterEach(() => {

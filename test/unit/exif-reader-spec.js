@@ -6,7 +6,7 @@ import {expect} from 'chai';
 import {getCharacterArray, getBase64Image} from '../../src/utils.js';
 import * as ExifReader from '../../src/exif-reader.js';
 import exifErrors from '../../src/errors.js';
-import {BIG_ENDIAN} from '../../src/byte-order.js';
+import ByteOrder from '../../src/byte-order.js';
 import {getDataView, swapProperties} from './test-utils.js';
 import Constants from '../../src/constants.js';
 import ImageHeader from '../../src/image-header.js';
@@ -542,9 +542,9 @@ describe('exif-reader', function () {
             read(dataView, offset) {
                 capturedDataView = dataView;
                 if (offset === OFFSET_TEST_VALUE) {
-                    return {tags: myTags, byteOrder: BIG_ENDIAN};
+                    return {tags: myTags, byteOrder: ByteOrder.BIG_ENDIAN};
                 }
-                return {tags: {}, byteOrder: BIG_ENDIAN};
+                return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
             },
         });
 
@@ -561,7 +561,7 @@ describe('exif-reader', function () {
                 expect(includeUnknown).to.equal(false);
                 expect(computed).to.equal(true);
 
-                return {tags: myTags, byteOrder: BIG_ENDIAN};
+                return {tags: myTags, byteOrder: ByteOrder.BIG_ENDIAN};
             },
         });
 
@@ -1939,12 +1939,12 @@ function swapTagsRead(tagsModule, tagsValue) {
         read(dataView, offset) {
             if (Array.isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
                 if (tagsModule === Tags) {
-                    return {tags: tagsValue, byteOrder: BIG_ENDIAN};
+                    return {tags: tagsValue, byteOrder: ByteOrder.BIG_ENDIAN};
                 }
                 return tagsValue;
             }
             if (tagsModule === Tags) {
-                return {tags: {}, byteOrder: BIG_ENDIAN};
+                return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
             }
             return {};
         },

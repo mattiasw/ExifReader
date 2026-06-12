@@ -7,6 +7,7 @@
 // real NAA resource blocks. IptcTagNames and TagDecoder injection uses
 // property swapping on the shared default export objects.
 
+import {TextDecoder as UtilTextDecoder} from 'node:util';
 import {expect} from 'chai';
 import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import {getCharacterArray} from '../../src/utils.js';
@@ -242,7 +243,7 @@ describe('iptc-tags', function () {
     describe('using non-ASCII encoding', function () {
         beforeEach(() => {
             this.originalTextDecoder = global.TextDecoder;
-            global.TextDecoder = require('util').TextDecoder;
+            global.TextDecoder = UtilTextDecoder;
         });
 
         afterEach(() => {

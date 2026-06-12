@@ -1,7 +1,5 @@
 // Add/update a single file:
 //     npm run test:integration:update -- --image=<filename without path>
-process.env.BABEL_ENV = process.env.BABEL_ENV || 'test';
-require('@babel/register');
 
 const path = require('path');
 const fs = require('fs');

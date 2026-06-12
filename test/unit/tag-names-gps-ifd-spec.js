@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNamesGpsIfd from '../../src/tag-names-gps-ifd';
-import {getCharacterArray} from '../../src/utils';
+import TagNamesGpsIfd from '../../src/tag-names-gps-ifd.js';
+import {getCharacterArray} from '../../src/utils.js';
 
 describe('tag-names-gps-ifd', () => {
     it('should report correct name and description for GPSVersionID', () => {

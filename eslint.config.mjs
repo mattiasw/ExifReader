@@ -72,6 +72,7 @@ export default defineConfig([
     {
         files: ['test/**/*.js'],
         languageOptions: {
+            ecmaVersion: 2022,
             globals: {
                 ...globals.mocha,
                 ...globals.node,
