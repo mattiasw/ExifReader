@@ -3,9 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNamesExifIfd from '../../src/tag-names-exif-ifd';
-import TagNamesCommon from '../../src/tag-names-common';
-import {getCharacterArray} from '../../src/utils';
+import TagNamesExifIfd from '../../src/tag-names-exif-ifd.js';
+import TagNamesCommon from '../../src/tag-names-common.js';
+import {getCharacterArray} from '../../src/utils.js';
 
 describe('tag-names-exif-ifd', () => {
     it('should report correct name and description for ExposureTime', () => {

@@ -3,9 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import Types from '../../src/types';
-import ByteOrder from '../../src/byte-order';
+import {getDataView} from './test-utils.js';
+import Types from '../../src/types.js';
+import ByteOrder from '../../src/byte-order.js';
 
 describe('types', () => {
     it('should be able to read a byte', () => {

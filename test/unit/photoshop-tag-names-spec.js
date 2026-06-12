@@ -6,8 +6,8 @@ import {expect} from 'chai';
 import PhotoshopTagNames, {
     // OsTypeKeys,
     PathRecordTypes,
-} from '../../src/photoshop-tag-names';
-import {getDataView} from './test-utils';
+} from '../../src/photoshop-tag-names.js';
+import {getDataView} from './test-utils.js';
 
 describe('photoshop-tag-names', () => {
     // it('should have tag CaptionDigest', () => {

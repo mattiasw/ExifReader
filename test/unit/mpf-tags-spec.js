@@ -3,9 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView, getByteStringFromNumber} from './test-utils';
-import MpfTags from '../../src/mpf-tags';
-import {getStringValueFromArray, getBase64Image} from '../../src/utils';
+import {getDataView, getByteStringFromNumber} from './test-utils.js';
+import MpfTags from '../../src/mpf-tags.js';
+import {getStringValueFromArray, getBase64Image} from '../../src/utils.js';
 
 describe('mpf-tags', () => {
     it('should be able to read an MPF IFD with two images', () => {

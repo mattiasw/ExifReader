@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNamesMpfIfd from '../../src/tag-names-mpf-ifd';
+import TagNamesMpfIfd from '../../src/tag-names-mpf-ifd.js';
 
 describe('tag-names-mpf-ifd', () => {
     it('should have tag MPFVersion', () => {

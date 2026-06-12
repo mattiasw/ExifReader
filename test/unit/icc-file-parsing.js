@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import * as fs from 'fs';
-import {parseTags} from '../../src/icc-tags';
+import {parseTags} from '../../src/icc-tags.js';
 const ICC_V2 = './test/unit/icc/sRGB2014.icc';
 const ICC_V4 = './test/unit/icc/sRGB_v4_ICC_preference.icc';
 

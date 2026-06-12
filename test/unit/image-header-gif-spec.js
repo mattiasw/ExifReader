@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import ImageHeaderGif from '../../src/image-header-gif';
+import {getDataView} from './test-utils.js';
+import ImageHeaderGif from '../../src/image-header-gif.js';
 
 describe('image-header-gif', () => {
     it('should handle empty input', () => {

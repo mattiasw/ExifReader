@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {swapProperties} from './test-utils.js';
-import {BIG_ENDIAN} from '../../src/byte-order.js';
+import ByteOrder from '../../src/byte-order.js';
 import * as ExifReader from '../../src/exif-reader.js';
 import ImageHeader from '../../src/image-header.js';
 import Tags from '../../src/tags.js';
@@ -499,7 +499,7 @@ function fakeImageHeader(appMarkersValue) {
 function fakeTagsRead(tagsValue) {
     restoreFunctions.push(swapProperties(Tags, {
         read() {
-            return {tags: tagsValue, byteOrder: BIG_ENDIAN};
+            return {tags: tagsValue, byteOrder: ByteOrder.BIG_ENDIAN};
         },
     }));
 }

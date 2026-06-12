@@ -3,9 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
+import {getDataView} from './test-utils.js';
 import {TYPE_PHYS, TYPE_TIME} from '../../src/image-header-png.js';
-import PngTags from '../../src/png-tags';
+import PngTags from '../../src/png-tags.js';
 
 describe('png-tags', () => {
     describe('pHYs chunks', () => {

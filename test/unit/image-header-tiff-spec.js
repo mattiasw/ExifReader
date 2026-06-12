@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils';
-import ImageHeaderTiff from '../../src/image-header-tiff';
+import {getDataView} from './test-utils.js';
+import ImageHeaderTiff from '../../src/image-header-tiff.js';
 
 describe('image-header-tiff', () => {
     it('should recognize a TIFF file with little-endian encoding', () => {

@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import Composite, {FOCAL_PLANE_RESOLUTION_UNIT} from '../../src/composite';
+import Composite, {FOCAL_PLANE_RESOLUTION_UNIT} from '../../src/composite.js';
 
 describe('composite', () => {
     it('should return undefined when there is nothing to calculate', () => {

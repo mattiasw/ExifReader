@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView, getArrayBuffer} from './test-utils';
-import JfifTags from '../../src/jfif-tags';
+import {getDataView, getArrayBuffer} from './test-utils.js';
+import JfifTags from '../../src/jfif-tags.js';
 
 const JFIF_IDENTIFIER = '\x4a\x46\x49\x46\x00';
 const JFIF_VERSION = '\x01\x02';

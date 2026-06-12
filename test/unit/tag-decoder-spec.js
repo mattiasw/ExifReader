@@ -4,8 +4,8 @@
 
 import {expect} from 'chai';
 import {getArrayBuffer, swapProperties} from './test-utils.js';
-import {getCharacterArray} from '../../src/utils';
-import TagDecoder from '../../src/tag-decoder';
+import {getCharacterArray} from '../../src/utils.js';
+import TagDecoder from '../../src/tag-decoder.js';
 import TextDecoderModule from '../../src/text-decoder.js';
 
 const TAG_VALUE_STRING = 'abcÅÄÖáéí';
