@@ -46,7 +46,7 @@ describe('exif-reader', function () {
     });
 
     it('should throw an error if the passed buffer is non-compliant', () => {
-        expect(() => ExifReader.load()).to.throw;
+        expect(() => ExifReader.load()).to.throw();
     });
 
     describe('managing file loading internally', () => {

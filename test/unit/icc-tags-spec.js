@@ -11,7 +11,11 @@ describe('icc-tags', () => {
     });
 
     it('should not iterate mluc records when the record size cannot advance the read offset', () => {
-        const NUM_RECORDS = 100000;
+        // The claimed record count must stay below the records cap so that
+        // only the record size guard can reject the tag. If that guard is
+        // removed the loop runs and the description becomes defined, which
+        // fails the assertion below.
+        const NUM_RECORDS = 100;
         const SIZE = 180;
         const data = new Uint8Array(SIZE);
         const dataView = new DataView(data.buffer);
