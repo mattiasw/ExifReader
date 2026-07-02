@@ -163,7 +163,7 @@ export function loadView(
     if (
         Constants.USE_JPEG
         && Constants.USE_FILE
-        && hasFileData(fileDataOffset)
+        && fileDataOffset !== undefined
         && tagFilter.shouldParseGroup('file')
         && shouldReadFileTagsForFileTypeOnlyOptimization(includeTags)
     ) {
@@ -183,7 +183,7 @@ export function loadView(
     if (
         Constants.USE_JPEG
         && Constants.USE_JFIF
-        && hasJfifData(jfifDataOffset)
+        && jfifDataOffset !== undefined
         && tagFilter.shouldParseGroup('jfif')
     ) {
         const readTags = JfifTags.read(dataView, jfifDataOffset);
@@ -201,7 +201,7 @@ export function loadView(
 
     if (
         Constants.USE_EXIF
-        && hasExifData(tiffHeaderOffset)
+        && tiffHeaderOffset !== undefined
         && tagFilter.shouldParseGroup('exif')
     ) {
         const {tags: readTags, byteOrder} = readExifTagsSafely(
@@ -223,7 +223,7 @@ export function loadView(
             Constants.USE_TIFF
             && Constants.USE_IPTC
             && parsedExifTags['IPTC-NAA']
-            && !hasIptcData(iptcDataOffset)
+            && iptcDataOffset === undefined
             && tagFilter.shouldParseGroup('iptc')
         ) {
             const readIptcTags = IptcTags.read(
@@ -390,7 +390,7 @@ export function loadView(
     if (
         Constants.USE_JPEG
         && Constants.USE_IPTC
-        && hasIptcData(iptcDataOffset)
+        && iptcDataOffset !== undefined
         && tagFilter.shouldParseGroup('iptc')
     ) {
         const readTags = IptcTags.read(dataView, iptcDataOffset, includeUnknown, tagFilter);
@@ -427,7 +427,7 @@ export function loadView(
         Constants.USE_JXL
         && Constants.USE_EXIF
         && brobExifChunk
-        && !hasExifData(tiffHeaderOffset)
+        && tiffHeaderOffset === undefined
         && tagFilter.shouldParseGroup('exif')
         && async
     ) {
@@ -528,7 +528,7 @@ export function loadView(
 
     if (
         Constants.USE_MPF
-        && hasMpfData(mpfDataOffset)
+        && mpfDataOffset !== undefined
         && tagFilter.shouldParseGroup('mpf')
     ) {
         const readMpfTags = MpfTags.read(
@@ -553,7 +553,7 @@ export function loadView(
     if (
         Constants.USE_PNG
         && Constants.USE_PNG_FILE
-        && hasPngFileData(pngHeaderOffset)
+        && pngHeaderOffset !== undefined
         && tagFilter.shouldParseGroup('png')
     ) {
         const readTags = PngFileTags.read(dataView, pngHeaderOffset);
@@ -606,7 +606,7 @@ export function loadView(
 
     if (
         Constants.USE_PNG
-        && hasPngData(pngChunkOffsets)
+        && pngChunkOffsets !== undefined
         && tagFilter.shouldParseGroup('png')
     ) {
         const readTags = PngTags.read(dataView, pngChunkOffsets);
@@ -623,7 +623,7 @@ export function loadView(
 
     if (
         Constants.USE_WEBP
-        && hasVp8xData(vp8xChunkOffset)
+        && vp8xChunkOffset !== undefined
         && tagFilter.shouldParseGroup('riff')
     ) {
         const readTags = Vp8xTags.read(dataView, vp8xChunkOffset);
@@ -641,7 +641,7 @@ export function loadView(
 
     if (
         Constants.USE_GIF
-        && hasGifFileData(gifHeaderOffset)
+        && gifHeaderOffset !== undefined
         && tagFilter.shouldParseGroup('gif')
     ) {
         const readTags = GifFileTags.read(dataView, gifHeaderOffset);
@@ -659,7 +659,7 @@ export function loadView(
 
     if (
         Constants.USE_JXL
-        && hasJxlCodestreamData(jxlCodestreamOffset)
+        && jxlCodestreamOffset !== undefined
         && tagFilter.shouldParseGroup('file')
     ) {
         const readTags = JxlFileTags.read(dataView, jxlCodestreamOffset);
@@ -859,21 +859,21 @@ function hasPotentialMetaData({
         || (
             Constants.USE_JPEG
             && Constants.USE_FILE
-            && hasFileData(fileDataOffset)
+            && fileDataOffset !== undefined
         )
         || (
             Constants.USE_JPEG
             && Constants.USE_JFIF
-            && hasJfifData(jfifDataOffset)
+            && jfifDataOffset !== undefined
         )
         || (
             Constants.USE_EXIF
-            && hasExifData(tiffHeaderOffset)
+            && tiffHeaderOffset !== undefined
         )
         || (
             Constants.USE_JPEG
             && Constants.USE_IPTC
-            && hasIptcData(iptcDataOffset)
+            && iptcDataOffset !== undefined
         )
         || (
             Constants.USE_XMP
@@ -886,12 +886,12 @@ function hasPotentialMetaData({
         )
         || (
             Constants.USE_MPF
-            && hasMpfData(mpfDataOffset)
+            && mpfDataOffset !== undefined
         )
         || (
             Constants.USE_PNG
             && Constants.USE_PNG_FILE
-            && hasPngFileData(pngHeaderOffset)
+            && pngHeaderOffset !== undefined
         )
         || (
             Constants.USE_PNG
@@ -899,19 +899,19 @@ function hasPotentialMetaData({
         )
         || (
             Constants.USE_PNG
-            && hasPngData(pngChunkOffsets)
+            && pngChunkOffsets !== undefined
         )
         || (
             Constants.USE_WEBP
-            && hasVp8xData(vp8xChunkOffset)
+            && vp8xChunkOffset !== undefined
         )
         || (
             Constants.USE_GIF
-            && hasGifFileData(gifHeaderOffset)
+            && gifHeaderOffset !== undefined
         )
         || (
             Constants.USE_JXL
-            && hasJxlCodestreamData(jxlCodestreamOffset)
+            && jxlCodestreamOffset !== undefined
         );
 }
 
@@ -962,22 +962,6 @@ function getGpsGroupFromExifTags(exifTags) {
     return gps;
 }
 
-function hasFileData(fileDataOffset) {
-    return fileDataOffset !== undefined;
-}
-
-function hasJfifData(jfifDataOffset) {
-    return jfifDataOffset !== undefined;
-}
-
-function hasExifData(tiffHeaderOffset) {
-    return tiffHeaderOffset !== undefined;
-}
-
-function hasIptcData(iptcDataOffset) {
-    return iptcDataOffset !== undefined;
-}
-
 function hasXmpData(xmpChunks) {
     return Array.isArray(xmpChunks) && xmpChunks.length > 0;
 }
@@ -998,30 +982,6 @@ function hasPentaxType1Data(tags) {
         && tags['MakerNote'].__offset;
 }
 
-function hasMpfData(mpfDataOffset) {
-    return mpfDataOffset !== undefined;
-}
-
-function hasPngFileData(pngFileDataOffset) {
-    return pngFileDataOffset !== undefined;
-}
-
 function hasPngTextData(pngTextChunks) {
     return Array.isArray(pngTextChunks) && pngTextChunks.length > 0;
-}
-
-function hasPngData(pngChunkOffsets) {
-    return pngChunkOffsets !== undefined;
-}
-
-function hasVp8xData(vp8xChunkOffset) {
-    return vp8xChunkOffset !== undefined;
-}
-
-function hasGifFileData(gifHeaderOffset) {
-    return gifHeaderOffset !== undefined;
-}
-
-function hasJxlCodestreamData(jxlCodestreamOffset) {
-    return jxlCodestreamOffset !== undefined;
 }
