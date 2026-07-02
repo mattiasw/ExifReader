@@ -109,17 +109,7 @@ export function loadView(
         includeTags = undefined,
         excludeTags = undefined,
         decompress: decompressConfig = undefined
-    } = {
-        expanded: false,
-        async: false,
-        computed: false,
-        includeUnknown: false,
-        includeOffsets: false,
-        domParser: undefined,
-        includeTags: undefined,
-        excludeTags: undefined,
-        decompress: undefined
-    }
+    } = {}
 ) {
     const tagFilter = createTagFilter({includeTags, excludeTags});
     const parsedGroups = Object.create(null);
