@@ -97,10 +97,7 @@ function findJpegOffsets(dataView, metadataBlocks) {
     let iccChunks;
     let mpfDataOffset;
     let exifSegmentCount = 0;
-    let bestExifSegmentScore;
-    let bestExifSegmentTiffHeaderOffset;
-    let bestExifSegmentAppMarkerPosition;
-    let bestExifSegmentFieldLength;
+    let bestExifSegment;
     let sawSos = false;
 
     while (appMarkerPosition + APP_ID_OFFSET + 5 <= dataView.byteLength) {
@@ -128,45 +125,40 @@ function findJpegOffsets(dataView, metadataBlocks) {
             const currentTiffHeaderOffset = appMarkerPosition + TIFF_HEADER_OFFSET;
 
             if (exifSegmentCount === 1) {
-                bestExifSegmentTiffHeaderOffset = currentTiffHeaderOffset;
-                bestExifSegmentAppMarkerPosition = appMarkerPosition;
-                bestExifSegmentFieldLength = fieldLength;
-            } else if (exifSegmentCount === 2) {
-                bestExifSegmentScore = getExifMarkerScore(
-                    dataView,
-                    bestExifSegmentAppMarkerPosition,
-                    bestExifSegmentFieldLength,
-                    bestExifSegmentTiffHeaderOffset
-                );
-                const currentExifSegmentScore = getExifMarkerScore(
-                    dataView,
+                // The single-segment case must stay cheap, so the first
+                // segment is only scored once a second one shows up.
+                bestExifSegment = {
                     appMarkerPosition,
                     fieldLength,
-                    currentTiffHeaderOffset
-                );
-
-                if (currentExifSegmentScore > bestExifSegmentScore) {
-                    bestExifSegmentScore = currentExifSegmentScore;
-                    bestExifSegmentTiffHeaderOffset = currentTiffHeaderOffset;
-                    bestExifSegmentAppMarkerPosition = appMarkerPosition;
-                    bestExifSegmentFieldLength = fieldLength;
-                }
+                    tiffHeaderOffset: currentTiffHeaderOffset,
+                    score: undefined,
+                };
             } else {
+                if (bestExifSegment.score === undefined) {
+                    bestExifSegment.score = getExifMarkerScore(
+                        dataView,
+                        bestExifSegment.appMarkerPosition,
+                        bestExifSegment.fieldLength,
+                        bestExifSegment.tiffHeaderOffset
+                    );
+                }
                 const currentExifSegmentScore = getExifMarkerScore(
                     dataView,
                     appMarkerPosition,
                     fieldLength,
                     currentTiffHeaderOffset
                 );
-                if (currentExifSegmentScore > bestExifSegmentScore) {
-                    bestExifSegmentScore = currentExifSegmentScore;
-                    bestExifSegmentTiffHeaderOffset = currentTiffHeaderOffset;
-                    bestExifSegmentAppMarkerPosition = appMarkerPosition;
-                    bestExifSegmentFieldLength = fieldLength;
+                if (currentExifSegmentScore > bestExifSegment.score) {
+                    bestExifSegment = {
+                        appMarkerPosition,
+                        fieldLength,
+                        tiffHeaderOffset: currentTiffHeaderOffset,
+                        score: currentExifSegmentScore,
+                    };
                 }
             }
 
-            tiffHeaderOffset = bestExifSegmentTiffHeaderOffset;
+            tiffHeaderOffset = bestExifSegment.tiffHeaderOffset;
             blockType = 'exif';
         } else if (Constants.USE_XMP && isApp1XmpMarker(dataView, appMarkerPosition)) {
             if (!xmpChunks) {
