@@ -119,7 +119,7 @@ function parseDate(dataView, offset) {
     return new Date(Date.UTC(year, month, day, hours, minutes, seconds));
 }
 
-function sliceToString(slice) {
+export function sliceToString(slice) {
     return String.fromCharCode.apply(null, new Uint8Array(slice));
 }
 

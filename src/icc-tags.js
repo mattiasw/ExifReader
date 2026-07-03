@@ -1,7 +1,7 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
-import {iccTags, iccProfile} from './icc-tag-names.js';
+import {iccTags, iccProfile, sliceToString} from './icc-tag-names.js';
 import {getStringFromDataView, getUnicodeStringFromDataView, decompress, COMPRESSION_METHOD_NONE, COMPRESSION_METHOD_DEFLATE} from './utils.js';
 
 export default {
@@ -215,10 +215,6 @@ export function parseTags(dataView) {
     }
 
     return tags;
-}
-
-function sliceToString(slice) {
-    return String.fromCharCode.apply(null, new Uint8Array(slice));
 }
 
 function addTag(tags, tagSignature, value) {
