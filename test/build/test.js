@@ -4,7 +4,9 @@ const fs = require('fs');
 const Exif = require('./exif');
 
 const FIXTURES_PATH = path.join(__dirname, '..', 'fixtures');
-const IMAGE_PARSE_TIMEOUT_MS = 60000;
+// The slowest fixture (issue #240, XMP heavy) has been measured at over 40
+// seconds per parse pair on a thermally throttled machine.
+const IMAGE_PARSE_TIMEOUT_MS = 120000;
 
 describe('image outputs', () => {
     const filter = getFilter(process.argv);
