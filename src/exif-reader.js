@@ -51,21 +51,14 @@ export function load(data, options = {}) {
         validateAutoOptions(options);
         return makeLoadAuto(loadFromData)(data, options);
     }
-    if (isFilePathOrURL(data)) {
+    if (isFilePathOrURL(data) || isBrowserFileObject(data)) {
         if (typeof Promise === 'undefined') {
             throw new Error('Promise is required when async mode is enabled.');
         }
+        const loadFileFunction = isFilePathOrURL(data) ? loadFile : loadFileObject;
         const asyncOptions = objectAssign({}, options, {async: true});
 
-        return loadFile(data, asyncOptions).then((fileContents) => loadFromData(fileContents, asyncOptions));
-    }
-    if (isBrowserFileObject(data)) {
-        if (typeof Promise === 'undefined') {
-            throw new Error('Promise is required when async mode is enabled.');
-        }
-        const asyncOptions = objectAssign({}, options, {async: true});
-
-        return loadFileObject(data, asyncOptions).then((fileContents) => loadFromData(fileContents, asyncOptions));
+        return loadFileFunction(data, asyncOptions).then((fileContents) => loadFromData(fileContents, asyncOptions));
     }
     return loadFromData(data, options);
 }
