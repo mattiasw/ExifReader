@@ -8,7 +8,7 @@
  */
 /* global Buffer */
 
-import {objectAssign, decompress, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray} from './utils.js';
+import {objectAssign, decompress, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray, assertPromiseSupport} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import Constants from './constants.js';
@@ -52,9 +52,7 @@ export function load(data, options = {}) {
         return makeLoadAuto(loadFromData)(data, options);
     }
     if (isFilePathOrURL(data) || isBrowserFileObject(data)) {
-        if (typeof Promise === 'undefined') {
-            throw new Error('Promise is required when async mode is enabled.');
-        }
+        assertPromiseSupport();
         const loadFileFunction = isFilePathOrURL(data) ? loadFile : loadFileObject;
         const asyncOptions = objectAssign({}, options, {async: true});
 
@@ -686,9 +684,7 @@ export function loadView(
     };
 
     if (async) {
-        if (typeof Promise === 'undefined') {
-            throw new Error('Promise is required when async mode is enabled.');
-        }
+        assertPromiseSupport();
 
         return Promise.all(deferredPromises).then(() => {
             const tags = buildTagsFromMergeSteps({
