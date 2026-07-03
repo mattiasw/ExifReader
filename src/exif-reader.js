@@ -8,12 +8,10 @@
  */
 /* global Buffer */
 
-import {objectAssign, decompress, COMPRESSION_METHOD_BROTLI} from './utils.js';
+import {objectAssign, decompress, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
-import DataViewWrapper from './dataview.js';
 import Constants from './constants.js';
-import {getStringValueFromArray} from './utils.js';
 import {getCalculatedGpsValue} from './tag-names-utils.js';
 import ByteOrder from './byte-order.js';
 import {getTiffHeaderOffset} from './image-header-iso-bmff.js';
@@ -86,14 +84,6 @@ function isNodeBuffer(data) {
         return Buffer.isBuffer(data);
     } catch (error) {
         return false;
-    }
-}
-
-function getDataView(data) {
-    try {
-        return new DataView(data);
-    } catch (error) {
-        return new DataViewWrapper(data);
     }
 }
 
