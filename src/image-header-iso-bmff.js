@@ -528,30 +528,15 @@ function parseSubBoxes(dataView, offset, length) {
 }
 
 function parseItemInformationBox(dataView, startOffset, version, contentOffset, length) {
-    const {offsets} = getItemInformationBoxOffsetsAndSizes(version, contentOffset);
+    const FLAGS_SIZE = 3;
+    const entryCountSize = version === 0 ? 2 : 4;
+    const itemInfosOffset = contentOffset + FLAGS_SIZE + entryCountSize;
 
     return {
         type: 'iinf',
-        itemInfos: parseSubBoxes(dataView, offsets.itemInfos, length - (offsets.itemInfos - startOffset)),
+        itemInfos: parseSubBoxes(dataView, itemInfosOffset, length - (itemInfosOffset - startOffset)),
         length
     };
-}
-
-function getItemInformationBoxOffsetsAndSizes(version, contentOffset) {
-    const FLAGS_SIZE = 3;
-
-    const offsets = {entryCount: contentOffset + FLAGS_SIZE};
-    const sizes = {};
-
-    if (version === 0) {
-        sizes.entryCount = 2;
-    } else {
-        sizes.entryCount = 4;
-    }
-
-    offsets.itemInfos = offsets.entryCount + sizes.entryCount;
-
-    return {offsets};
 }
 
 function parseItemInformationEntryBox(dataView, startOffset, version, contentOffset, length) {
