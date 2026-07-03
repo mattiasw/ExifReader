@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import Constants from './constants.js';
-import {getBoxLength, getTiffHeaderOffset} from './image-header-iso-bmff.js';
+import {getBoxLength, getTiffHeaderOffset, BOX_TYPE_OFFSET, BOX_MIN_LENGTH} from './image-header-iso-bmff.js';
 import {pushMetadataBlock} from './utils.js';
 
 export default {
@@ -18,8 +18,6 @@ const JXL_CONTAINER_SIGNATURE = [
 ];
 const JXL_CODESTREAM_SIGNATURE = [0xFF, 0x0A];
 
-const BOX_TYPE_OFFSET = 4;
-const BOX_HEADER_MIN_SIZE = 8;
 const TYPE_EXIF = 0x45786966;
 const TYPE_XML = 0x786D6C20;
 const TYPE_BROB = 0x62726F62;
@@ -98,9 +96,9 @@ function findJxlOffsets(dataView, metadataBlocks) {
         };
     }
 
-    while (offset + BOX_HEADER_MIN_SIZE <= dataView.byteLength) {
+    while (offset + BOX_MIN_LENGTH <= dataView.byteLength) {
         const {length, contentOffset} = getBoxLength(dataView, offset);
-        if (length < BOX_HEADER_MIN_SIZE) {
+        if (length < BOX_MIN_LENGTH) {
             break;
         }
 
