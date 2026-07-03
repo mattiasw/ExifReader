@@ -94,16 +94,7 @@ export function applyMergeStep({
         const returnedTags =
             deps.filterTagsForReturn('xmp', step.parsedTags, tagFilter);
 
-        if (expanded) {
-            tags.xmp = returnedTags;
-
-            return tags;
-        }
-
-        const returnedTagsForFlat = deps.objectAssign({}, returnedTags);
-        delete returnedTagsForFlat._raw;
-
-        return deps.objectAssign({}, tags, returnedTagsForFlat);
+        return mergeXmpGroup(tags, returnedTags, expanded, deps);
     }
 
     if (Constants.USE_ICC && step.type === 'mergeIccDeferred') {
@@ -157,15 +148,7 @@ export function applyMergeStep({
         const returnedTags =
             deps.filterTagsForReturn('xmp', parsedXmpTags, tagFilter);
 
-        if (expanded) {
-            tags.xmp = returnedTags;
-            return tags;
-        }
-
-        const returnedTagsForFlat = deps.objectAssign({}, returnedTags);
-        delete returnedTagsForFlat._raw;
-
-        return deps.objectAssign({}, tags, returnedTagsForFlat);
+        return mergeXmpGroup(tags, returnedTags, expanded, deps);
     }
 
     if (Constants.USE_PNG && step.type === 'mergePngFile') {
@@ -367,6 +350,19 @@ export function mergeAssignGroup(tags, groupKey, returnedTags, expanded, deps) {
     }
 
     return deps.objectAssign({}, tags, returnedTags);
+}
+
+function mergeXmpGroup(tags, returnedTags, expanded, deps) {
+    if (expanded) {
+        tags.xmp = returnedTags;
+
+        return tags;
+    }
+
+    const returnedTagsForFlat = deps.objectAssign({}, returnedTags);
+    delete returnedTagsForFlat._raw;
+
+    return deps.objectAssign({}, tags, returnedTagsForFlat);
 }
 
 export function mergeMergeGroup(tags, groupKey, returnedTags, expanded, deps) {
