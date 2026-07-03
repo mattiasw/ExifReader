@@ -5,12 +5,14 @@
 // Specification:
 // https://aomediacodec.github.io/av1-avif
 
-import {parseBox, findOffsets} from './image-header-iso-bmff.js';
+import {hasMajorBrand, findOffsets} from './image-header-iso-bmff.js';
 
 export default {
     isAvifFile,
     findAvifOffsets
 };
+
+const AVIF_MAJOR_BRANDS = ['avif'];
 
 /**
  * Checks if the provided data view represents an AVIF file.
@@ -19,16 +21,7 @@ export default {
  * @returns {boolean} True if the data view represents an AVIF file, false otherwise.
  */
 function isAvifFile(dataView) {
-    if (!dataView) {
-        return false;
-    }
-
-    try {
-        const headerBox = parseBox(dataView, 0);
-        return headerBox !== undefined && headerBox.majorBrand === 'avif';
-    } catch (error) {
-        return false;
-    }
+    return hasMajorBrand(dataView, AVIF_MAJOR_BRANDS);
 }
 
 /**

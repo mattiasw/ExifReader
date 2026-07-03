@@ -109,6 +109,27 @@ export function parseBox(dataView, offset) {
 }
 
 /**
+ * Checks if the data view starts with an ftyp box whose major brand is one
+ * of the provided brands.
+ *
+ * @param {DataView} dataView The data view to check.
+ * @param {Array<string>} brands The major brands to accept.
+ * @returns {boolean} True if the file's major brand is in the list.
+ */
+export function hasMajorBrand(dataView, brands) {
+    if (!dataView) {
+        return false;
+    }
+
+    try {
+        const headerBox = parseBox(dataView, 0);
+        return headerBox !== undefined && brands.indexOf(headerBox.majorBrand) !== -1;
+    } catch (error) {
+        return false;
+    }
+}
+
+/**
  * @typedef {Object} BoxLength
  * @property {number} length The length of the box including length and type.
  * @property {number} contentOffset
