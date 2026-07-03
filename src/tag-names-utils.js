@@ -2,9 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-export function getStringValue(value) {
-    return value.map((charCode) => String.fromCharCode(charCode)).join('');
-}
+import {getStringValueFromArray as getStringValue} from './utils.js';
+
+export {getStringValue};
 
 export function getEncodedString(value) {
     if (value.length >= 8) {
