@@ -11,106 +11,34 @@ export default {
     read
 };
 
+const bitsDescription = (value) => `${value} ${value === 1 ? 'bit' : 'bits'}`;
+
+// The bit-field values in byte 10 are zero-based, hence the + 1.
+const FIELDS = [
+    {name: 'GIF Version', offset: 3, size: 3, getValue: (dataView, offset) => getStringFromDataView(dataView, offset, 3), description: (value) => value},
+    {name: 'Image Width', offset: 6, size: 2, getValue: (dataView, offset) => dataView.getUint16(offset, true), description: (value) => `${value}px`},
+    {name: 'Image Height', offset: 8, size: 2, getValue: (dataView, offset) => dataView.getUint16(offset, true), description: (value) => `${value}px`},
+    {name: 'Global Color Map', offset: 10, size: 1, getValue: (dataView, offset) => (dataView.getUint8(offset) & 0b10000000) >>> 7, description: (value) => value === 1 ? 'Yes' : 'No'},
+    {name: 'Bits Per Pixel', offset: 10, size: 1, getValue: (dataView, offset) => (dataView.getUint8(offset) & 0b00000111) + 1, description: bitsDescription},
+    {name: 'Color Resolution Depth', offset: 10, size: 1, getValue: (dataView, offset) => ((dataView.getUint8(offset) & 0b01110000) >>> 4) + 1, description: bitsDescription}
+];
+
 function read(dataView) {
-    return {
-        'GIF Version': getGifVersion(dataView),
-        'Image Width': getImageWidth(dataView),
-        'Image Height': getImageHeight(dataView),
-        'Global Color Map': getGlobalColorMap(dataView),
-        'Bits Per Pixel': getBitDepth(dataView),
-        'Color Resolution Depth': getColorResolution(dataView)
-    };
+    const tags = {};
+    for (let i = 0; i < FIELDS.length; i++) {
+        tags[FIELDS[i].name] = getFieldTag(dataView, FIELDS[i]);
+    }
+    return tags;
 }
 
-function getGifVersion(dataView) {
-    const OFFSET = 3;
-    const SIZE = 3;
-
-    if (OFFSET + SIZE > dataView.byteLength) {
+function getFieldTag(dataView, field) {
+    if (field.offset + field.size > dataView.byteLength) {
         return undefined;
     }
 
-    const value = getStringFromDataView(dataView, OFFSET, SIZE);
+    const value = field.getValue(dataView, field.offset);
     return {
         value,
-        description: value
-    };
-}
-
-function getImageWidth(dataView) {
-    const OFFSET = 6;
-    const SIZE = 2;
-
-    if (OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const value = dataView.getUint16(OFFSET, true);
-    return {
-        value,
-        description: `${value}px`
-    };
-}
-
-function getImageHeight(dataView) {
-    const OFFSET = 8;
-    const SIZE = 2;
-
-    if (OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const value = dataView.getUint16(OFFSET, true);
-    return {
-        value,
-        description: `${value}px`
-    };
-}
-
-function getGlobalColorMap(dataView) {
-    const OFFSET = 10;
-    const SIZE = 1;
-
-    if (OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const byteValue = dataView.getUint8(OFFSET);
-    const value = (byteValue & 0b10000000) >>> 7;
-    return {
-        value,
-        description: value === 1 ? 'Yes' : 'No'
-    };
-}
-
-function getColorResolution(dataView) {
-    const OFFSET = 10;
-    const SIZE = 1;
-
-    if (OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const byteValue = dataView.getUint8(OFFSET);
-    const value = ((byteValue & 0b01110000) >>> 4) + 1; // Zero-based.
-    return {
-        value,
-        description: `${value} ${value === 1 ? 'bit' : 'bits'}`
-    };
-}
-
-function getBitDepth(dataView) {
-    const OFFSET = 10;
-    const SIZE = 1;
-
-    if (OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const byteValue = dataView.getUint8(OFFSET);
-    const value = (byteValue & 0b00000111) + 1; // Zero-based.
-    return {
-        value,
-        description: `${value} ${value === 1 ? 'bit' : 'bits'}`
+        description: field.description(value)
     };
 }
