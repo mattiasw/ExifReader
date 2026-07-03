@@ -35,6 +35,9 @@ export const ITEM_INFO_TYPE_EXIF = 0x45786966;
 export const ITEM_INFO_TYPE_MIME = 0x6d696d65;
 const ITEM_INFO_TYPE_URI = 0x75726920;
 
+export const BOX_TYPE_OFFSET = 4;
+export const BOX_MIN_LENGTH = 8;
+
 /**
  * Parses a ISO-BMFF box from the provided data view starting at the given offset.
  *
@@ -43,8 +46,6 @@ const ITEM_INFO_TYPE_URI = 0x75726920;
  * @returns {Object} The parsed box.
  */
 export function parseBox(dataView, offset) {
-    const BOX_TYPE_OFFSET = 4;
-    const BOX_MIN_LENGTH = 8;
     const VERSION_SIZE = 1;
 
     if (!hasBytes(dataView, offset, BOX_MIN_LENGTH)) {
