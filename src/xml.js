@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView} from './utils.js';
+import {getStringFromDataView, pushMetadataBlock} from './utils.js';
 
 export default {
     isXMLFile,
@@ -41,8 +41,8 @@ function isXMLFile(dataView) {
 function findOffsets(dataView, metadataBlocks) {
     const xmpChunks = [];
     xmpChunks.push({dataOffset: XML_MARKER_OFFSET, length: dataView.byteLength});
+    pushMetadataBlock(metadataBlocks, 'xmp', 0, dataView.byteLength);
     if (metadataBlocks) {
-        metadataBlocks.push({type: 'xmp', start: 0, end: dataView.byteLength});
         metadataBlocks.truncated = !hasXmpClosingMarker(dataView);
     }
     return {

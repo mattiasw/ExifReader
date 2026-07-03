@@ -61,6 +61,12 @@ export function getCharacterArray(string) {
     return string.split('').map((character) => character.charCodeAt(0));
 }
 
+export function pushMetadataBlock(metadataBlocks, type, start, end) {
+    if (metadataBlocks && type) {
+        metadataBlocks.push({type, start, end});
+    }
+}
+
 export function assertPromiseSupport() {
     if (typeof Promise === 'undefined') {
         throw new Error('Promise is required when async mode is enabled.');
