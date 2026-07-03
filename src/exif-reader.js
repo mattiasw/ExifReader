@@ -727,31 +727,11 @@ export function loadView(
         if (!includeTagsOptions) {
             return true;
         }
-
-        if (includeTagsOptions.composite === true) {
+        const {composite, file} = includeTagsOptions;
+        if (composite === true || (Array.isArray(composite) && composite.length > 0)) {
             return true;
         }
-
-        if (
-            Array.isArray(includeTagsOptions.composite)
-            && includeTagsOptions.composite.length > 0
-        ) {
-            return true;
-        }
-
-        if (!includeTagsOptions.file || includeTagsOptions.file === true) {
-            return true;
-        }
-
-        if (!Array.isArray(includeTagsOptions.file)) {
-            return true;
-        }
-
-        const isFileTypeOnly =
-            includeTagsOptions.file.length === 1
-            && includeTagsOptions.file[0] === 'FileType';
-
-        return !isFileTypeOnly;
+        return !(Array.isArray(file) && file.length === 1 && file[0] === 'FileType');
     }
 }
 
