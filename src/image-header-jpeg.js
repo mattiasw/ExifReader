@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView} from './utils.js';
+import {getStringFromDataView, pushMetadataBlock} from './utils.js';
 import Constants from './constants.js';
 import ByteOrder from './byte-order.js';
 import {
@@ -210,13 +210,7 @@ function findJpegOffsets(dataView, metadataBlocks) {
         } else {
             break;
         }
-        if (metadataBlocks && blockType) {
-            metadataBlocks.push({
-                type: blockType,
-                start: appMarkerPosition,
-                end: appMarkerPosition + APP_MARKER_SIZE + fieldLength,
-            });
-        }
+        pushMetadataBlock(metadataBlocks, blockType, appMarkerPosition, appMarkerPosition + APP_MARKER_SIZE + fieldLength);
         appMarkerPosition += APP_MARKER_SIZE + fieldLength;
     }
 

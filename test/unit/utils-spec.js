@@ -302,4 +302,22 @@ describe('utils', () => {
             expect(warnSpy.hasWarned).to.equal(false);
         });
     });
+
+    describe('pushMetadataBlock', () => {
+        it('should push a typed block when tracking is active', () => {
+            const metadataBlocks = [];
+            Utils.pushMetadataBlock(metadataBlocks, 'exif', 12, 34);
+            expect(metadataBlocks).to.deep.equal([{type: 'exif', start: 12, end: 34}]);
+        });
+
+        it('should do nothing when there is no block array', () => {
+            expect(() => Utils.pushMetadataBlock(undefined, 'exif', 12, 34)).to.not.throw();
+        });
+
+        it('should not push a block without a type', () => {
+            const metadataBlocks = [];
+            Utils.pushMetadataBlock(metadataBlocks, undefined, 12, 34);
+            expect(metadataBlocks).to.deep.equal([]);
+        });
+    });
 });

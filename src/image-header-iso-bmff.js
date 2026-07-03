@@ -1,5 +1,5 @@
 import Constants from './constants.js';
-import {getNullTerminatedStringFromDataView, getStringFromDataView} from './utils.js';
+import {getNullTerminatedStringFromDataView, getStringFromDataView, pushMetadataBlock} from './utils.js';
 // import {get64BitValue} from './image-header-iso-bmff-utils.js';
 import {parseItemLocationBox} from './image-header-iso-bmff-iloc.js';
 import {hasBytes} from './image-header-iso-bmff-utils.js';
@@ -287,11 +287,7 @@ function pushIlocExtentBlocks(metadataBlocks, ilocItem, blockType, idatContentOf
         if (start === undefined) {
             continue;
         }
-        metadataBlocks.push({
-            type: blockType,
-            start,
-            end: start + extent.extentLength,
-        });
+        pushMetadataBlock(metadataBlocks, blockType, start, start + extent.extentLength);
     }
 }
 
@@ -422,13 +418,7 @@ function findIccChunks(metaBox, metadataBlocks) {
             .properties.find((box) => box.type === 'colr')
             .icc;
         if (icc) {
-            if (metadataBlocks) {
-                metadataBlocks.push({
-                    type: 'icc',
-                    start: icc.offset,
-                    end: icc.offset + icc.length,
-                });
-            }
+            pushMetadataBlock(metadataBlocks, 'icc', icc.offset, icc.offset + icc.length);
             return [icc];
         }
     } catch (error) {

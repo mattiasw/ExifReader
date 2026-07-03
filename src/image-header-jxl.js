@@ -4,6 +4,7 @@
 
 import Constants from './constants.js';
 import {getBoxLength, getTiffHeaderOffset} from './image-header-iso-bmff.js';
+import {pushMetadataBlock} from './utils.js';
 
 export default {
     isJxlFile,
@@ -167,13 +168,7 @@ function findJxlOffsets(dataView, metadataBlocks) {
             }
         }
 
-        if (metadataBlocks && blockType) {
-            metadataBlocks.push({
-                type: blockType,
-                start: offset,
-                end: offset + length,
-            });
-        }
+        pushMetadataBlock(metadataBlocks, blockType, offset, offset + length);
 
         offset += length;
     }
