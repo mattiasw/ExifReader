@@ -37,7 +37,11 @@ describe('tag filtering integration outputs', () => {
                     );
 
                     describe(imageName, function () {
-                        this.timeout(30000); // There are examples of XMP parsing using a lot of CPU time, e.g. issue #240.
+                        // There are examples of XMP parsing using a lot of CPU
+                        // time, e.g. issue #240. That image has been measured
+                        // at over 40 seconds per parse pair on a thermally
+                        // throttled machine, so give real headroom.
+                        this.timeout(120000);
 
                         let result;
                         let storedResult;
