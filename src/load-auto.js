@@ -9,7 +9,7 @@ import {
     concatBuffers, isFilePathOrURL, isBrowserFileObject, isDataUri,
     HTTP_STATUS_OK, HTTP_STATUS_RANGE_NOT_SATISFIABLE,
 } from './file-loaders.js';
-import {objectAssign, dataUriToBuffer} from './utils.js';
+import {objectAssign, dataUriToBuffer, assertPromiseSupport} from './utils.js';
 
 const AUTO_INITIAL_LENGTH = 128 * 1024;
 const AUTO_MAX_ITERATIONS = 4;
@@ -42,9 +42,7 @@ export function validateAutoOptions(options) {
  */
 export function makeLoadAuto(loadFromData) {
     return function loadAuto(data, options) {
-        if (typeof Promise === 'undefined') {
-            throw new Error('Promise is required when async mode is enabled.');
-        }
+        assertPromiseSupport();
         const asyncOptions = objectAssign({}, options, {async: true});
         if (isFilePathOrURL(data)) {
             return loadAdaptiveFromFilenameOrUrl(data, asyncOptions);
