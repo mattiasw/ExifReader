@@ -8,130 +8,45 @@ export default {
     read
 };
 
+const COLOR_TYPES = {
+    0: 'Grayscale',
+    2: 'RGB',
+    3: 'Palette',
+    4: 'Grayscale with Alpha',
+    6: 'RGB with Alpha'
+};
+
+const INTERLACE_TYPES = {
+    0: 'Noninterlaced',
+    1: 'Adam7 Interlace'
+};
+
+const FIELDS = [
+    {name: 'Image Width', offset: 0, size: 4, read: Types.getLongAt, description: (value) => `${value}px`},
+    {name: 'Image Height', offset: 4, size: 4, read: Types.getLongAt, description: (value) => `${value}px`},
+    {name: 'Bit Depth', offset: 8, size: 1, read: Types.getByteAt, description: (value) => `${value}`},
+    {name: 'Color Type', offset: 9, size: 1, read: Types.getByteAt, description: (value) => COLOR_TYPES[value] || 'Unknown'},
+    {name: 'Compression', offset: 10, size: 1, read: Types.getByteAt, description: (value) => value === 0 ? 'Deflate/Inflate' : 'Unknown'},
+    {name: 'Filter', offset: 11, size: 1, read: Types.getByteAt, description: (value) => value === 0 ? 'Adaptive' : 'Unknown'},
+    {name: 'Interlace', offset: 12, size: 1, read: Types.getByteAt, description: (value) => INTERLACE_TYPES[value] || 'Unknown'}
+];
+
 function read(dataView, fileDataOffset) {
-    return {
-        'Image Width': getImageWidth(dataView, fileDataOffset),
-        'Image Height': getImageHeight(dataView, fileDataOffset),
-        'Bit Depth': getBitDepth(dataView, fileDataOffset),
-        'Color Type': getColorType(dataView, fileDataOffset),
-        'Compression': getCompression(dataView, fileDataOffset),
-        'Filter': getFilter(dataView, fileDataOffset),
-        'Interlace': getInterlace(dataView, fileDataOffset)
-    };
+    const tags = {};
+    for (let i = 0; i < FIELDS.length; i++) {
+        tags[FIELDS[i].name] = getFieldTag(dataView, fileDataOffset, FIELDS[i]);
+    }
+    return tags;
 }
 
-function getImageWidth(dataView, fileDataOffset) {
-    const OFFSET = 0;
-    const SIZE = 4;
-
-    if (fileDataOffset + OFFSET + SIZE > dataView.byteLength) {
+function getFieldTag(dataView, fileDataOffset, field) {
+    if (fileDataOffset + field.offset + field.size > dataView.byteLength) {
         return undefined;
     }
 
-    const value = Types.getLongAt(dataView, fileDataOffset);
+    const value = field.read(dataView, fileDataOffset + field.offset);
     return {
         value,
-        description: `${value}px`
-    };
-}
-
-function getImageHeight(dataView, fileDataOffset) {
-    const OFFSET = 4;
-    const SIZE = 4;
-
-    if (fileDataOffset + OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const value = Types.getLongAt(dataView, fileDataOffset + OFFSET);
-    return {
-        value,
-        description: `${value}px`
-    };
-}
-
-function getBitDepth(dataView, fileDataOffset) {
-    const OFFSET = 8;
-    const SIZE = 1;
-
-    if (fileDataOffset + OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const value = Types.getByteAt(dataView, fileDataOffset + OFFSET);
-    return {
-        value,
-        description: `${value}`
-    };
-}
-
-function getColorType(dataView, fileDataOffset) {
-    const OFFSET = 9;
-    const SIZE = 1;
-    const COLOR_TYPES = {
-        0: 'Grayscale',
-        2: 'RGB',
-        3: 'Palette',
-        4: 'Grayscale with Alpha',
-        6: 'RGB with Alpha'
-    };
-
-    if (fileDataOffset + OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const value = Types.getByteAt(dataView, fileDataOffset + OFFSET);
-    return {
-        value,
-        description: COLOR_TYPES[value] || 'Unknown'
-    };
-}
-
-function getCompression(dataView, fileDataOffset) {
-    const OFFSET = 10;
-    const SIZE = 1;
-
-    if (fileDataOffset + OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const value = Types.getByteAt(dataView, fileDataOffset + OFFSET);
-    return {
-        value,
-        description: value === 0 ? 'Deflate/Inflate' : 'Unknown'
-    };
-}
-
-function getFilter(dataView, fileDataOffset) {
-    const OFFSET = 11;
-    const SIZE = 1;
-
-    if (fileDataOffset + OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const value = Types.getByteAt(dataView, fileDataOffset + OFFSET);
-    return {
-        value,
-        description: value === 0 ? 'Adaptive' : 'Unknown'
-    };
-}
-
-function getInterlace(dataView, fileDataOffset) {
-    const OFFSET = 12;
-    const SIZE = 1;
-    const INTERLACE_TYPES = {
-        0: 'Noninterlaced',
-        1: 'Adam7 Interlace'
-    };
-
-    if (fileDataOffset + OFFSET + SIZE > dataView.byteLength) {
-        return undefined;
-    }
-
-    const value = Types.getByteAt(dataView, fileDataOffset + OFFSET);
-    return {
-        value,
-        description: INTERLACE_TYPES[value] || 'Unknown'
+        description: field.description(value)
     };
 }
