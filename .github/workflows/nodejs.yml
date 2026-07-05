@@ -23,7 +23,7 @@ jobs:
           - os: windows-latest
             node-version: 24.x
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v6
       with:
@@ -38,7 +38,7 @@ jobs:
     # because of the Brotli compression used in JPEG XL files.
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: Use Node.js 24.x
       uses: actions/setup-node@v6
       with:
@@ -52,7 +52,7 @@ jobs:
     # `npm run test:build:custom` needs Node.js 24.7+ because of the Brotli compression used in JPEG XL files.
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: Use Node.js 24.x
       uses: actions/setup-node@v6
       with:
@@ -65,7 +65,7 @@ jobs:
   package-windows-basic:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
     - name: Use Node.js 20.x
       uses: actions/setup-node@v6
       with:
