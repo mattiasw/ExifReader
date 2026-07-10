@@ -31,7 +31,7 @@
     "@babel/core": "^7.29.7",
     "@babel/preset-env": "^7.29.7",
     "@eslint/js": "^9.39.4",
-    "@types/node": "^26.0.1",
+    "@types/node": "^26.1.0",
     "babel-loader": "^10.0.0",
     "c8": "^11.0.0",
     "chai": "^6.2.2",
@@ -48,9 +48,9 @@
     "string-replace-loader": "^3.1.0",
     "terser-webpack-plugin": "^5.6.1",
     "typescript": "^6.0.3",
-    "webpack": "5.108.3",
-    "webpack-cli": "^7.1.0",
-    "webpack-dev-server": "^5.2.5"
+    "webpack": "5.108.4",
+    "webpack-cli": "^7.2.1",
+    "webpack-dev-server": "^6.0.0"
   },
   "scripts": {
     "build": "node bin/build.js",
