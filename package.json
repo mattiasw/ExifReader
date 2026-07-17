@@ -30,7 +30,7 @@
   "devDependencies": {
     "@babel/core": "^7.29.7",
     "@babel/preset-env": "^7.29.7",
-    "@eslint/js": "^9.39.4",
+    "@eslint/js": "^9.39.5",
     "@types/node": "^26.1.1",
     "babel-loader": "^10.0.0",
     "c8": "^11.0.0",
@@ -47,7 +47,7 @@
     "rimraf": "^5.0.5",
     "string-replace-loader": "^3.1.0",
     "terser-webpack-plugin": "^5.6.1",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "webpack": "5.108.4",
     "webpack-cli": "^7.2.1",
     "webpack-dev-server": "^5.2.6"
