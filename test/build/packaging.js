@@ -38,9 +38,9 @@ describe('packaging', function () {
         }
     });
 
-    it('declares src as ES modules and nothing else', () => {
+    it('declares src as side-effect-free ES modules and nothing else', () => {
         const content = JSON.parse(fs.readFileSync(path.join(ROOT_PATH, 'src', 'package.json'), 'utf8'));
-        expect(content).to.deep.equal({type: 'module'});
+        expect(content).to.deep.equal({type: 'module', sideEffects: false});
     });
 
     it('resolves require of the package root to the UMD bundle', () => {

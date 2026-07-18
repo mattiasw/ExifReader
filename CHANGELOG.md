@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Custom builds no longer include the modules that were excluded from them,
+  and consumer bundlers can again tree-shake the source modules. A regression
+  in 4.41.1 made the new `src/package.json` hide the root `sideEffects`
+  declaration from bundlers, which roughly doubled the size of custom builds.
+
 ## [4.41.2] - 2026-07-18
 
 ### Fixed
