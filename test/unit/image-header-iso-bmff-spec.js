@@ -291,6 +291,38 @@ describe('image-header-iso-bmff', () => {
             ]);
         });
 
+        it('should return the items whose headers fit when an iloc is truncated mid-item-header', () => {
+            // The buffer ends two bytes into the second item's header. The
+            // complete first item must be returned instead of the whole box
+            // being discarded.
+            const sizesByte = getByteStringFromNumber(0x44, 1);
+            const baseOffsetAndIndexByte = getByteStringFromNumber(0x40, 1);
+            const itemCount = getByteStringFromNumber(2, 2);
+            const itemId = getByteStringFromNumber(2, 2);
+            const dataReferenceIndex = getByteStringFromNumber(0, 2);
+            const baseOffset = getByteStringFromNumber(0, 4);
+            const extentCount = getByteStringFromNumber(1, 2);
+            const extent = getByteStringFromNumber(10, 4) + getByteStringFromNumber(20, 4);
+            const completeItem = itemId + dataReferenceIndex + baseOffset + extentCount + extent;
+            const truncatedItemHeader = getByteStringFromNumber(3, 2);
+            const dataView = getDataView(
+                getFullBox(
+                    'iloc',
+                    0,
+                    sizesByte + baseOffsetAndIndexByte + itemCount + completeItem + truncatedItemHeader
+                )
+            );
+
+            expect(parseBox(dataView, 0).items).to.deep.equal([{
+                itemId: 2,
+                constructionMethod: undefined,
+                dataReferenceIndex: 0,
+                baseOffset: 0,
+                extentCount: 1,
+                extents: [{extentIndex: undefined, extentOffset: 10, extentLength: 20}]
+            }]);
+        });
+
         it('should parse box of type idat', () => {
             const idatContent = '<some content>';
             const dataView = getDataView(getBox('idat', idatContent));
@@ -782,6 +814,36 @@ describe('image-header-iso-bmff', () => {
                 result = findOffsets(dataView);
             }).to.not.throw();
             expect(result.hasAppMarkers).to.be.false;
+        });
+
+        it('should still find the Exif offset when a later iloc item header is truncated', () => {
+            // The Exif payload sits in a skipped box before the meta box so it
+            // survives when the buffer ends mid-header of the second iloc item.
+            const EXIF_ITEM_ID = 2;
+            const exifBlock = buildExifBlock('<TIFF data>');
+            const payloadBox = getBox('mdat', exifBlock);
+            const iinfBox = buildIinfBox([{itemId: EXIF_ITEM_ID, itemType: ITEM_INFO_TYPE_EXIF}]);
+            const sizesByte = getByteStringFromNumber(0x44, 1);
+            const baseOffsetAndIndexByte = getByteStringFromNumber(0x40, 1);
+            const itemCount = getByteStringFromNumber(2, 2);
+            const dataReferenceIndex = getByteStringFromNumber(0, 2);
+            const baseOffset = getByteStringFromNumber(0, 4);
+            const extentCount = getByteStringFromNumber(1, 2);
+            const extent = getByteStringFromNumber(PLAIN_BOX_HEADER_SIZE, 4)
+                + getByteStringFromNumber(exifBlock.length, 4);
+            const exifItem = getByteStringFromNumber(EXIF_ITEM_ID, 2)
+                + dataReferenceIndex + baseOffset + extentCount + extent;
+            const truncatedItemHeader = getByteStringFromNumber(3, 2);
+            const truncatedIloc = getFullBox(
+                'iloc',
+                0,
+                sizesByte + baseOffsetAndIndexByte + itemCount + exifItem + truncatedItemHeader
+            );
+            const dataView = getDataView(payloadBox + getFullBox('meta', 0, iinfBox + truncatedIloc));
+
+            const result = findOffsets(dataView);
+
+            expect(result.tiffHeaderOffset).to.equal(PLAIN_BOX_HEADER_SIZE + 4 + 'Exif\x00\x00'.length);
         });
 
         describe('parseBox header guards', () => {
