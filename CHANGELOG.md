@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of crashing, and `require()` of the same files works on Node 22.12
   and later. The default entry points are unchanged.
 
+### Security
+
+- Fixed a denial-of-service vulnerability (GHSA-pj96-35fp-cfcc) where a crafted
+  HEIC or AVIF file could trigger excessive memory allocation and crash the
+  process during metadata parsing. See the advisory for details.
+
 ## [4.41.0] - 2026-06-08
 
 ### Added

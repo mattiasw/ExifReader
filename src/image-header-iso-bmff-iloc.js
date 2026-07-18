@@ -1,5 +1,10 @@
 import {get64BitValue} from './image-header-iso-bmff-utils.js';
 
+// Absolute backstop on the number of extent objects a single iloc box may
+// allocate, guarding against memory exhaustion from a crafted file
+// (GHSA-pj96-35fp-cfcc). It is far above any legitimate file.
+const MAX_TOTAL_EXTENTS = 1024 * 1024;
+
 export function parseItemLocationBox(dataView, version, contentOffset, boxLength) {
     const FLAGS_SIZE = 3;
 
@@ -83,8 +88,13 @@ function getItems(dataView, version, offsets, sizes, offsetSize, lengthSize, ind
 
     const items = [];
     let offset = offsets.items;
+    const extentByteSize = sizes.item.extent.extentIndex + sizes.item.extent.extentOffset + sizes.item.extent.extentLength;
+    let totalExtents = 0;
 
     for (let i = 0; i < itemCount; i++) {
+        if (offset >= dataView.byteLength) {
+            break;
+        }
         const item = {extents: []};
         item.itemId = getItemId(dataView, offset, version);
         offset += sizes.item.itemId;
@@ -96,7 +106,8 @@ function getItems(dataView, version, offsets, sizes, offsetSize, lengthSize, ind
         offset += sizes.item.baseOffset;
         item.extentCount = dataView.getUint16(offset);
         offset += sizes.item.extentCount;
-        for (let j = 0; j < item.extentCount; j++) {
+        const extentCount = getBoundedExtentCount(item.extentCount, extentByteSize, offset, dataView.byteLength, MAX_TOTAL_EXTENTS - totalExtents);
+        for (let j = 0; j < extentCount; j++) {
             const extent = {};
 
             extent.extentIndex = getExtentIndex(dataView, version, offset, indexSize);
@@ -108,11 +119,25 @@ function getItems(dataView, version, offsets, sizes, offsetSize, lengthSize, ind
 
             item.extents.push(extent);
         }
+        totalExtents += extentCount;
 
         items.push(item);
     }
 
     return items;
+}
+
+// An extent whose size fields are all zero occupies no bytes and carries no
+// location, so it cannot be substantiated by the buffer and none are produced
+// (GHSA-pj96-35fp-cfcc). Otherwise the count is limited by the bytes left in
+// the buffer and by an absolute backstop, keeping allocation proportional to
+// the input size.
+function getBoundedExtentCount(declaredCount, extentByteSize, offset, byteLength, remainingBudget) {
+    if (extentByteSize === 0) {
+        return 0;
+    }
+    const fitInBuffer = Math.floor((byteLength - offset) / extentByteSize);
+    return Math.max(0, Math.min(declaredCount, fitInBuffer, remainingBudget));
 }
 
 function getItemId(dataView, offset, version) {

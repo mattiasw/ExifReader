@@ -239,6 +239,58 @@ describe('image-header-iso-bmff', () => {
             });
         });
 
+        it('should not allocate extents for an iloc whose extent size fields are all zero', () => {
+            // GHSA-pj96-35fp-cfcc: with offset/length/index sizes all zero, each
+            // extent occupies no bytes and carries no location, so a huge
+            // extentCount must not be honored (it would allocate up to
+            // itemCount x 65535 objects and exhaust memory).
+            const sizesByte = getByteStringFromNumber(0x00, 1);
+            const baseOffsetAndIndexByte = getByteStringFromNumber(0x00, 1);
+            const itemCount = getByteStringFromNumber(1, 2);
+            const itemId = getByteStringFromNumber(1, 2);
+            const dataReferenceIndex = getByteStringFromNumber(0, 2);
+            const extentCount = getByteStringFromNumber(0xffff, 2);
+            const dataView = getDataView(
+                getFullBox(
+                    'iloc',
+                    0,
+                    sizesByte + baseOffsetAndIndexByte + itemCount
+                    + itemId + dataReferenceIndex + extentCount
+                )
+            );
+
+            expect(parseBox(dataView, 0).items[0].extents).to.have.lengthOf(0);
+        });
+
+        it('should cap iloc extents at what the buffer can hold when extentCount is over-declared', () => {
+            // offsetSize=4, lengthSize=4 (0x44) so each extent needs 8 bytes,
+            // but only two extents worth of data are present after a declared
+            // count of 65535. The parser must read the two that fit rather than
+            // allocating 65535 objects or discarding the whole box.
+            const sizesByte = getByteStringFromNumber(0x44, 1);
+            const baseOffsetAndIndexByte = getByteStringFromNumber(0x40, 1);
+            const itemCount = getByteStringFromNumber(1, 2);
+            const itemId = getByteStringFromNumber(1, 2);
+            const dataReferenceIndex = getByteStringFromNumber(0, 2);
+            const baseOffset = getByteStringFromNumber(0, 4);
+            const extentCount = getByteStringFromNumber(0xffff, 2);
+            const twoExtents = getByteStringFromNumber(10, 4) + getByteStringFromNumber(20, 4)
+                + getByteStringFromNumber(30, 4) + getByteStringFromNumber(40, 4);
+            const dataView = getDataView(
+                getFullBox(
+                    'iloc',
+                    0,
+                    sizesByte + baseOffsetAndIndexByte + itemCount
+                    + itemId + dataReferenceIndex + baseOffset + extentCount + twoExtents
+                )
+            );
+
+            expect(parseBox(dataView, 0).items[0].extents).to.deep.equal([
+                {extentIndex: undefined, extentOffset: 10, extentLength: 20},
+                {extentIndex: undefined, extentOffset: 30, extentLength: 40}
+            ]);
+        });
+
         it('should parse box of type idat', () => {
             const idatContent = '<some content>';
             const dataView = getDataView(getBox('idat', idatContent));
