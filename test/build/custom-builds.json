@@ -190,7 +190,8 @@
             "include": {
                 "gif": true
             }
-        }
+        },
+        "maxDistRatio": 0.3
     },
     {
         "id": "tiff-png",

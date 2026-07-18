@@ -34,6 +34,17 @@ describe('custom configuration image outputs', () => {
                     cleanUp();
                 });
 
+                if (configuration.maxDistRatio) {
+                    // Guards module elimination: the parse-output comparison
+                    // below passes even when tree-shaking is broken and the
+                    // bundle ships every module (regression in 4.41.1).
+                    it('stays substantially smaller than the full bundle', () => {
+                        const customSize = fs.statSync(path.join(TEMP_PROJECT_DIR, 'node_modules', 'exifreader', 'dist', 'exif-reader.js')).size;
+                        const fullSize = fs.statSync(path.join(__dirname, '..', '..', 'dist', 'exif-reader.js')).size;
+                        expect(customSize).to.be.below(fullSize * configuration.maxDistRatio);
+                    });
+                }
+
                 fs.readdirSync(path.join(FIXTURES_PATH, 'images')).forEach((imageName) => {
                     it(`matches stored image output for ${imageName}`, async () => {
                         await testFile(imageName, configuration);
