@@ -15,6 +15,7 @@ test/fixtures/tag-filtering-outputs/custom_*
 gh-pages
 local-assets
 .claude/settings.local.json
+CLAUDE.local.md
 .claude/*.lock
 .claude/skills/
 .profile-cache.json
