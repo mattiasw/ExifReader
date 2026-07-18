@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A HEIC or AVIF file whose `iloc` box is cut off in the middle of an item
+  header now returns the metadata items that are fully present, instead of
+  discarding the whole box. This matters for truncated files and for partial
+  reads with the `length` option.
+
 ## [4.41.1] - 2026-07-18
 
 ### Fixed
