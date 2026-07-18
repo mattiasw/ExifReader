@@ -1,4 +1,4 @@
-import {get64BitValue} from './image-header-iso-bmff-utils.js';
+import {get64BitValue, hasBytes} from './image-header-iso-bmff-utils.js';
 
 // Absolute backstop on the number of extent objects a single iloc box may
 // allocate, guarding against memory exhaustion from a crafted file
@@ -89,10 +89,15 @@ function getItems(dataView, version, offsets, sizes, offsetSize, lengthSize, ind
     const items = [];
     let offset = offsets.items;
     const extentByteSize = sizes.item.extent.extentIndex + sizes.item.extent.extentOffset + sizes.item.extent.extentLength;
+    const itemHeaderByteSize = sizes.item.itemId
+        + sizes.item.constructionMethod
+        + sizes.item.dataReferenceIndex
+        + sizes.item.baseOffset
+        + sizes.item.extentCount;
     let totalExtents = 0;
 
     for (let i = 0; i < itemCount; i++) {
-        if (offset >= dataView.byteLength) {
+        if (!hasBytes(dataView, offset, itemHeaderByteSize)) {
             break;
         }
         const item = {extents: []};
