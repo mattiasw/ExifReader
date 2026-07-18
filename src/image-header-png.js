@@ -4,7 +4,7 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringFromDataView, getNullTerminatedStringFromDataView} from './utils.js';
+import {getStringFromDataView, getNullTerminatedStringFromDataView, pushMetadataBlock} from './utils.js';
 import Constants from './constants.js';
 
 export default {
@@ -130,13 +130,7 @@ function findPngOffsets(dataView, async, metadataBlocks) {
             + PNG_CHUNK_TYPE_SIZE
             + PNG_CRC_SIZE;
 
-        if (metadataBlocks && blockType) {
-            metadataBlocks.push({
-                type: blockType,
-                start: offset,
-                end: offset + chunkTotalSize,
-            });
-        }
+        pushMetadataBlock(metadataBlocks, blockType, offset, offset + chunkTotalSize);
 
         offset += chunkTotalSize;
     }

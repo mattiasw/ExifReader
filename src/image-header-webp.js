@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView} from './utils.js';
+import {getStringFromDataView, pushMetadataBlock} from './utils.js';
 import Constants from './constants.js';
 
 export default {
@@ -85,13 +85,7 @@ function findOffsets(dataView, metadataBlocks) {
 
         const chunkTotalSize = CHUNK_HEADER_SIZE + (chunkSize % 2 === 0 ? chunkSize : chunkSize + 1);
 
-        if (metadataBlocks && blockType) {
-            metadataBlocks.push({
-                type: blockType,
-                start: offset,
-                end: offset + chunkTotalSize,
-            });
-        }
+        pushMetadataBlock(metadataBlocks, blockType, offset, offset + chunkTotalSize);
 
         offset += chunkTotalSize;
     }

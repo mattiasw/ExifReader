@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView} from './utils.js';
+import {getStringFromDataView, pushMetadataBlock} from './utils.js';
 
 export default {
     isGifFile,
@@ -34,9 +34,7 @@ function isGifFile(dataView) {
  * @returns {{gifHeaderOffset: number}}
  */
 function findOffsets(_dataView, metadataBlocks) {
-    if (metadataBlocks) {
-        metadataBlocks.push({type: 'gif', start: 0, end: GIF_HEADER_SIZE});
-    }
+    pushMetadataBlock(metadataBlocks, 'gif', 0, GIF_HEADER_SIZE);
     return {
         gifHeaderOffset: 0
     };

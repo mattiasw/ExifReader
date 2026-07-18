@@ -108,21 +108,7 @@ function totalSizeFromFetchResponse(response) {
     if (!response || !response.headers || typeof response.headers.get !== 'function') {
         return undefined;
     }
-    const contentRange = response.headers.get('Content-Range');
-    if (contentRange) {
-        const match = /\/(\d+|\*)$/.exec(contentRange);
-        if (match && match[1] !== '*') {
-            return parseInt(match[1], 10);
-        }
-    }
-    const contentLength = response.headers.get('Content-Length');
-    if (contentLength) {
-        const n = parseInt(contentLength, 10);
-        if (Number.isFinite(n)) {
-            return n;
-        }
-    }
-    return undefined;
+    return totalSizeFromRangeHeaders(response.headers.get('Content-Range'), response.headers.get('Content-Length'));
 }
 
 function isAcceptableFetchStatus(status) {
@@ -178,14 +164,16 @@ function totalSizeFromNodeResponse(response) {
     if (!response || !response.headers) {
         return undefined;
     }
-    const contentRange = response.headers['content-range'];
+    return totalSizeFromRangeHeaders(response.headers['content-range'], response.headers['content-length']);
+}
+
+function totalSizeFromRangeHeaders(contentRange, contentLength) {
     if (contentRange) {
         const match = /\/(\d+|\*)$/.exec(contentRange);
         if (match && match[1] !== '*') {
             return parseInt(match[1], 10);
         }
     }
-    const contentLength = response.headers['content-length'];
     if (contentLength) {
         const n = parseInt(contentLength, 10);
         if (Number.isFinite(n)) {

@@ -1,5 +1,5 @@
 import Constants from './constants.js';
-import {getNullTerminatedStringFromDataView, getStringFromDataView} from './utils.js';
+import {getNullTerminatedStringFromDataView, getStringFromDataView, pushMetadataBlock} from './utils.js';
 // import {get64BitValue} from './image-header-iso-bmff-utils.js';
 import {parseItemLocationBox} from './image-header-iso-bmff-iloc.js';
 import {hasBytes} from './image-header-iso-bmff-utils.js';
@@ -35,6 +35,9 @@ export const ITEM_INFO_TYPE_EXIF = 0x45786966;
 export const ITEM_INFO_TYPE_MIME = 0x6d696d65;
 const ITEM_INFO_TYPE_URI = 0x75726920;
 
+export const BOX_TYPE_OFFSET = 4;
+export const BOX_MIN_LENGTH = 8;
+
 /**
  * Parses a ISO-BMFF box from the provided data view starting at the given offset.
  *
@@ -43,8 +46,6 @@ const ITEM_INFO_TYPE_URI = 0x75726920;
  * @returns {Object} The parsed box.
  */
 export function parseBox(dataView, offset) {
-    const BOX_TYPE_OFFSET = 4;
-    const BOX_MIN_LENGTH = 8;
     const VERSION_SIZE = 1;
 
     if (!hasBytes(dataView, offset, BOX_MIN_LENGTH)) {
@@ -104,6 +105,27 @@ export function parseBox(dataView, offset) {
         };
     } catch (error) {
         return undefined;
+    }
+}
+
+/**
+ * Checks if the data view starts with an ftyp box whose major brand is one
+ * of the provided brands.
+ *
+ * @param {DataView} dataView The data view to check.
+ * @param {Array<string>} brands The major brands to accept.
+ * @returns {boolean} True if the file's major brand is in the list.
+ */
+export function hasMajorBrand(dataView, brands) {
+    if (!dataView) {
+        return false;
+    }
+
+    try {
+        const headerBox = parseBox(dataView, 0);
+        return headerBox !== undefined && brands.indexOf(headerBox.majorBrand) !== -1;
+    } catch (error) {
+        return false;
     }
 }
 
@@ -287,11 +309,7 @@ function pushIlocExtentBlocks(metadataBlocks, ilocItem, blockType, idatContentOf
         if (start === undefined) {
             continue;
         }
-        metadataBlocks.push({
-            type: blockType,
-            start,
-            end: start + extent.extentLength,
-        });
+        pushMetadataBlock(metadataBlocks, blockType, start, start + extent.extentLength);
     }
 }
 
@@ -422,13 +440,7 @@ function findIccChunks(metaBox, metadataBlocks) {
             .properties.find((box) => box.type === 'colr')
             .icc;
         if (icc) {
-            if (metadataBlocks) {
-                metadataBlocks.push({
-                    type: 'icc',
-                    start: icc.offset,
-                    end: icc.offset + icc.length,
-                });
-            }
+            pushMetadataBlock(metadataBlocks, 'icc', icc.offset, icc.offset + icc.length);
             return [icc];
         }
     } catch (error) {
@@ -537,30 +549,15 @@ function parseSubBoxes(dataView, offset, length) {
 }
 
 function parseItemInformationBox(dataView, startOffset, version, contentOffset, length) {
-    const {offsets} = getItemInformationBoxOffsetsAndSizes(version, contentOffset);
+    const FLAGS_SIZE = 3;
+    const entryCountSize = version === 0 ? 2 : 4;
+    const itemInfosOffset = contentOffset + FLAGS_SIZE + entryCountSize;
 
     return {
         type: 'iinf',
-        itemInfos: parseSubBoxes(dataView, offsets.itemInfos, length - (offsets.itemInfos - startOffset)),
+        itemInfos: parseSubBoxes(dataView, itemInfosOffset, length - (itemInfosOffset - startOffset)),
         length
     };
-}
-
-function getItemInformationBoxOffsetsAndSizes(version, contentOffset) {
-    const FLAGS_SIZE = 3;
-
-    const offsets = {entryCount: contentOffset + FLAGS_SIZE};
-    const sizes = {};
-
-    if (version === 0) {
-        sizes.entryCount = 2;
-    } else {
-        sizes.entryCount = 4;
-    }
-
-    offsets.itemInfos = offsets.entryCount + sizes.entryCount;
-
-    return {offsets};
 }
 
 function parseItemInformationEntryBox(dataView, startOffset, version, contentOffset, length) {
