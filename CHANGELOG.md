@@ -26,9 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Fixed a denial-of-service vulnerability (GHSA-pj96-35fp-cfcc) where a crafted
-  HEIC or AVIF file could trigger excessive memory allocation and crash the
-  process during metadata parsing. See the advisory for details.
+- Fixed a denial-of-service vulnerability where a crafted HEIC or AVIF file
+  could trigger excessive memory allocation and crash the process during
+  metadata parsing
+  ([GHSA-pj96-35fp-cfcc](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-pj96-35fp-cfcc)).
+  Reported by @alienkeric.
 
 ## [4.41.0] - 2026-06-08
 
