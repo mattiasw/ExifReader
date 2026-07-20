@@ -184,6 +184,13 @@ Where `file` is one of
 *  URL (browser or Node.js; remember that in a browser context the remote server
    has to set CORS headers that allow for remote loading of the file)
 
+**Security:** When the argument is a string, ExifReader treats it as a URL or a
+local file path and will make a network request or read from the file system.
+Never pass an untrusted or user-controlled string to `load()`. Doing so lets an
+attacker make the process fetch arbitrary URLs (server-side request forgery) or
+open arbitrary local files. For untrusted image data, always pass the bytes
+themselves (an `ArrayBuffer`, a `Buffer`, or a browser `File`), never a string.
+
 **Tip:** To read metadata from an `HTMLImageElement`, wait for its `load` event
 and call `ExifReader.load(image.src)`. The browser should reuse the cached file.
 

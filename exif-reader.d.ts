@@ -434,9 +434,37 @@ export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: Co
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & FlatOnly & {length?: number, async?: false}): Tags;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & ExpandedOnly & {length?: number, async: true}): Promise<ExpandedTags>;
 export function load(data: ArrayBuffer | SharedArrayBuffer | Buffer, options: CommonOptions & FlatOnly & {length?: number, async: true}): Promise<Tags>;
+/**
+ * Security: a string argument is treated as a URL or a local file path, so
+ * `load()` will make a network request or read from the file system. Never pass
+ * an untrusted or user-controlled string, since it enables server-side request
+ * forgery (SSRF) and reads of arbitrary local files. For untrusted image data,
+ * pass the bytes (`ArrayBuffer`, `Buffer`, or `File`) instead.
+ */
 export function load(data: string | File): Promise<Tags>;
+/**
+ * Security: a string argument is treated as a URL or a local file path, so
+ * `load()` will make a network request or read from the file system. Never pass
+ * an untrusted or user-controlled string, since it enables server-side request
+ * forgery (SSRF) and reads of arbitrary local files. For untrusted image data,
+ * pass the bytes (`ArrayBuffer`, `Buffer`, or `File`) instead.
+ */
 export function load(data: string | File, options: CommonOptions & AutoLengthOptions): Promise<ExpandedTags>;
+/**
+ * Security: a string argument is treated as a URL or a local file path, so
+ * `load()` will make a network request or read from the file system. Never pass
+ * an untrusted or user-controlled string, since it enables server-side request
+ * forgery (SSRF) and reads of arbitrary local files. For untrusted image data,
+ * pass the bytes (`ArrayBuffer`, `Buffer`, or `File`) instead.
+ */
 export function load(data: string | File, options: CommonOptions & ExpandedOnly & {length?: number, async?: boolean }): Promise<ExpandedTags>;
+/**
+ * Security: a string argument is treated as a URL or a local file path, so
+ * `load()` will make a network request or read from the file system. Never pass
+ * an untrusted or user-controlled string, since it enables server-side request
+ * forgery (SSRF) and reads of arbitrary local files. For untrusted image data,
+ * pass the bytes (`ArrayBuffer`, `Buffer`, or `File`) instead.
+ */
 export function load(data: string | File, options: CommonOptions & FlatOnly & {length?: number, async?: boolean }): Promise<Tags>;
 export function loadView(data: DataView): Tags;
 export function loadView(data: DataView, options: CommonOptions & ExpandedOnly & {async?: false}): ExpandedTags;

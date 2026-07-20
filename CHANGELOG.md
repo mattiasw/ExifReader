@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Documented that passing a string to `load()` makes ExifReader treat it as a
+  URL or a local file path and perform a network request or a file read, so an
+  untrusted string must never be passed to it. Passing the image bytes instead
+  avoids server-side request forgery and local file access
+  ([GHSA-mjwm-rcx3-79hc](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-mjwm-rcx3-79hc)).
+
 ## [4.41.3] - 2026-07-18
 
 ### Fixed
