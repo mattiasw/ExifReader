@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so they must be escaped or sanitized before being inserted into a page as HTML
   to avoid cross-site scripting
   ([GHSA-hhgj-2jxm-r7x6](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-hhgj-2jxm-r7x6)).
+- Fixed a denial-of-service vulnerability where a crafted image could declare an
+  XMP metadata block far larger than the file itself and make the synchronous
+  parser allocate memory proportional to that declared size instead of to the
+  actual data. The XMP block size is now bounded to the bytes that are really
+  present
+  ([GHSA-q53f-v5gx-7j78](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-q53f-v5gx-7j78)).
 
 ## [4.41.3] - 2026-07-18
 

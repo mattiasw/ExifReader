@@ -1018,6 +1018,18 @@ describe('xmp-tags', function () {
             });
         });
     }
+
+    describe('bounded chunk allocation (GHSA-q53f-v5gx-7j78)', () => {
+        it('does not allocate beyond the available data when a chunk declares a length larger than the buffer', () => {
+            const xmlString = getXmlString('');
+            const dataView = getDataView(xmlString);
+            const oversizedLength = dataView.byteLength + 100000;
+
+            const tags = XmpTags.read(dataView, [{dataOffset: 0, length: oversizedLength}]);
+
+            expect(tags._raw).to.equal(xmlString);
+        });
+    });
 });
 
 function getXmlStringWithPacketWrapper(content) {
