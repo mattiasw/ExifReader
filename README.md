@@ -208,6 +208,14 @@ Where `fileBuffer` is one of
 See the [examples site](https://mattiasw.github.io/ExifReader/) for more
 directions on how to use the library.
 
+**Security:** Treat all returned metadata as untrusted input. Tag values,
+descriptions, and the raw XMP packet (`xmp._raw` when using `expanded: true`)
+come straight from the image and can contain arbitrary text, including HTML-like
+markup. Never insert them into a page as HTML (for example through `innerHTML`)
+without escaping or sanitizing them first, otherwise a crafted image could lead
+to cross-site scripting. Use `textContent`, your framework's escaping, or a
+sanitizer such as DOMPurify when displaying metadata.
+
 #### Grouping
 
 By default, Exif, IPTC and XMP tags are grouped together. This means that if

@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   untrusted string must never be passed to it. Passing the image bytes instead
   avoids server-side request forgery and local file access
   ([GHSA-mjwm-rcx3-79hc](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-mjwm-rcx3-79hc)).
+- Documented that all returned metadata is untrusted input. Tag values and the
+  raw XMP packet come from the image unchanged and can contain HTML-like markup,
+  so they must be escaped or sanitized before being inserted into a page as HTML
+  to avoid cross-site scripting
+  ([GHSA-hhgj-2jxm-r7x6](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-hhgj-2jxm-r7x6)).
 
 ## [4.41.3] - 2026-07-18
 

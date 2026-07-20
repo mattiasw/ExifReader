@@ -228,7 +228,14 @@ export interface ExpandedTags {
     png?: PngTags,
     exif?: ExifTags,
     iptc?: ExifTags,
-    xmp?: { _raw: string } & XmpTags,
+    xmp?: {
+        /**
+         * The raw, unsanitized XMP packet exactly as it appears in the image.
+         * Treat it as untrusted: escape or sanitize it before inserting it into
+         * a page as HTML to avoid cross-site scripting.
+         */
+        _raw: string
+    } & XmpTags,
     icc?: IccTags,
     riff?: RiffTags,
     gif?: GifTags,
