@@ -130,18 +130,19 @@ const images = [
         }
     },
     {
-        url: 'https://i.imgur.com/DX2kvpG.jpg',
+        // A copy of test/fixtures/images/test.jpg served from GitHub Pages.
+        url: 'https://mattiasw.github.io/ExifReader/test-images/e2e.jpg',
         hasThumbnail: false,
         tags: {
             'Bits Per Sample': '8',
-            'Image Height': '3024px',
-            'Image Width': '4032px',
+            'Image Height': '2px',
+            'Image Width': '12px',
             'Color Components': '3',
-            'Subsampling': 'YCbCr4:2:2 (2 1)',
+            'Subsampling': 'YCbCr4:4:4 (1 1)',
             'JFIF Version': '1.1',
-            'Resolution Unit': 'None',
-            'XResolution': '1',
-            'YResolution': '1',
+            'Resolution Unit': 'inches',
+            'XResolution': '180',
+            'YResolution': '180',
             'JFIF Thumbnail Width': '0px',
             'JFIF Thumbnail Height': '0px',
             'FileType': 'JPEG', // File
