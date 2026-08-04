@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- An ICC profile whose declared size is larger than all the data available for
+  the file no longer produces ICC tags. This affects files truncated to fewer
+  bytes than the ICC profile declares, and partial reads using the `length`
+  option, which could previously still return tags for such a profile.
+
+### Security
+
+- Fixed a denial-of-service vulnerability where a crafted WebP, HEIC, or AVIF
+  file could trigger excessive memory allocation during ICC metadata parsing
+  ([GHSA-wx94-r5p4-hx2f](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-wx94-r5p4-hx2f)).
+  Reported by @arpitjain099.
+
 ## [4.41.4] - 2026-08-05
 
 ### Security

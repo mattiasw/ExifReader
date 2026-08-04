@@ -372,6 +372,11 @@ know the metadata is located at the beginning of the file. Just be aware that
 it's common for the metadata to be spread out over a larger area so please try
 it out on your set of files to know if it's suitable for your situation.
 
+One thing to look out for is ICC profiles, which are often large. If the profile
+does not fit inside the part you read, no ICC tags are returned for it. Use
+`length: 'auto'` (see below) if you need the ICC tags without picking a size
+yourself.
+
 Note that this option only works when ExifReader handles the loading of the
 file. If e.g. an already loaded ArrayBuffer or Buffer is passed into ExifReader,
 the whole file will already have been loaded into memory and it's too late.
