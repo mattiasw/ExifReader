@@ -48,11 +48,14 @@ function compressionMethodIsSupported(compressionMethod) {
 
 function readIcc(dataView, iccData) {
     try {
-        const totalIccProfileLength = iccData.reduce((sum, icc) => sum + icc.length, 0);
+        const buffer = getBuffer(dataView);
+        const declaredLength = iccData.reduce((sum, icc) => sum + icc.length, 0);
+        // The declared chunk lengths come from the file and are not trusted, so
+        // bound the profile by the size of the buffer it is copied out of.
+        const totalIccProfileLength = Math.min(declaredLength, buffer.byteLength);
 
         const iccBinaryData = new Uint8Array(totalIccProfileLength);
         let offset = 0;
-        const buffer = getBuffer(dataView);
 
         for (let chunkNumber = 1; chunkNumber <= iccData.length; chunkNumber++) {
             const iccDataChunk = iccData.find((x) => x.chunkNumber === chunkNumber);
