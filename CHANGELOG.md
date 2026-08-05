@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   truncated to the bytes that are present, and the walk now also stops
   cleanly when the data ends in the middle of a resource header, so the
   resources that precede a malformed or truncated one are still returned.
+- A namespace prefix named after a JavaScript object property, for example
+  `__proto__` or `constructor`, is now handled like any other prefix when a
+  missing namespace declaration is repaired. Such a prefix previously got a
+  declaration with a nonsensical namespace URI.
 
 ### Security
 
@@ -31,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   such boxes made each of them walk it again. Items and their extents are now
   bounded by the length their own box declares, or by the end of the available
   data when that comes first, so a truncated file still returns what it holds.
+- Fixed a denial-of-service vulnerability where a crafted image or XMP file using
+  a large number of distinct XML namespace prefixes could make ExifReader spend
+  quadratic time de-duplicating those prefixes while repairing an undeclared
+  namespace prefix before parsing. The prefixes are now de-duplicated in linear
+  time. This affects environments where a DOM parser is available: web browsers,
+  and Node.js when the `domParser` option is used or when `@xmldom/xmldom` is
+  installed.
 
 ## [4.42.0] - 2026-08-05
 
