@@ -27,9 +27,9 @@ export function addMissingNamespaces(xmlString) {
     }
     const rootTagName = rootTagMatch[1];
 
-    const declaredPrefixes = getAllDeclaredNamespacePrefixes(xmlString);
+    const declaredPrefixLookup = getDeclaredNamespacePrefixLookup(xmlString);
     const usedPrefixes = getUsedNamespacePrefixes(xmlString);
-    const missingPrefixes = usedPrefixes.filter((prefix) => declaredPrefixes.indexOf(prefix) === -1);
+    const missingPrefixes = usedPrefixes.filter((prefix) => declaredPrefixLookup[prefix] === undefined);
     if (missingPrefixes.length === 0) {
         return xmlString;
     }
@@ -38,20 +38,22 @@ export function addMissingNamespaces(xmlString) {
     return insertDeclarationsIntoRoot(xmlString, rootTagName, namespaceDeclarations);
 }
 
-function getAllDeclaredNamespacePrefixes(xmlContent) {
-    const prefixes = [];
+// The lookup must not have a prototype. The prefixes come from the image, so a
+// prefix named e.g. __proto__ or constructor would otherwise be found among the
+// inherited properties and be treated as declared.
+function getDeclaredNamespacePrefixLookup(xmlContent) {
+    const prefixes = Object.create(null);
     const namespaceDeclarationRegex = /xmlns:([\w-]+)=["'][^"']+["']/g;
     let match;
     while ((match = namespaceDeclarationRegex.exec(xmlContent)) !== null) {
-        if (prefixes.indexOf(match[1]) === -1) {
-            prefixes.push(match[1]);
-        }
+        prefixes[match[1]] = true;
     }
     return prefixes;
 }
 
 function getUsedNamespacePrefixes(xmlContent) {
     const prefixes = [];
+    const seenPrefixes = Object.create(null); // Must not have a prototype, the prefixes come from the image.
     const prefixUsageRegex = /\b([A-Za-z_][A-Za-z0-9._-]*):[A-Za-z_][A-Za-z0-9._-]*\b/g;
     let match;
     while ((match = prefixUsageRegex.exec(xmlContent)) !== null) {
@@ -59,7 +61,8 @@ function getUsedNamespacePrefixes(xmlContent) {
         if (prefix === 'xmlns' || prefix === 'xml') {
             continue;
         }
-        if (prefixes.indexOf(prefix) === -1) {
+        if (seenPrefixes[prefix] === undefined) {
+            seenPrefixes[prefix] = true;
             prefixes.push(prefix);
         }
     }
@@ -81,10 +84,16 @@ function createNamespaceDeclarations(prefixes) {
     const declarations = [];
     for (let i = 0; i < prefixes.length; i++) {
         const prefix = prefixes[i];
-        const uri = KNOWN_NAMESPACE_URIS[prefix] || 'http://fallback.namespace/' + prefix;
-        declarations.push(' xmlns:' + prefix + '="' + uri + '"');
+        declarations.push(' xmlns:' + prefix + '="' + getNamespaceUri(prefix) + '"');
     }
     return declarations.join('');
+}
+
+function getNamespaceUri(prefix) {
+    if (Object.prototype.hasOwnProperty.call(KNOWN_NAMESPACE_URIS, prefix)) {
+        return KNOWN_NAMESPACE_URIS[prefix];
+    }
+    return 'http://fallback.namespace/' + prefix;
 }
 
 function insertDeclarationsIntoRoot(xmlString, rootTagName, declarations) {
