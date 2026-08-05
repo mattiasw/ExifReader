@@ -8,6 +8,12 @@ import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './tag-names
 import {IFD_ENTRY_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
 
+// The most demanding file in the test corpus decodes tag values totalling
+// 1.3 times its size (some tags legitimately read overlapping bytes), so this
+// leaves real files a wide margin while still keeping a crafted file's total
+// decoding proportional to its size.
+const MAX_VALUE_SIZE_PER_BUFFER_SIZE = 8;
+
 const getTagValueAt = {
     1: Types.getByteAt,
     2: Types.getAsciiAt,
@@ -29,6 +35,15 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
         + Types.getLongAt(dataView, offset, byteOrder);
 }
 
+/**
+ * Reads the tags of an IFD, and for a 0th IFD also those of the thumbnail IFD
+ * it points to.
+ *
+ * @param {{remaining: number}} [valueBudget] - Caps the total size of the
+ * decoded tag values, see getValueBudget. Pass the same object to several
+ * calls to bound them together; omit it to give this call its own budget.
+ * @returns {Object} The read tags, keyed by tag name.
+ */
 export function readIfd(
     dataView,
     ifdType,
@@ -38,7 +53,8 @@ export function readIfd(
     includeUnknown,
     computed = false,
     tagFilter = NOOP_TAG_FILTER,
-    groupKey = 'exif'
+    groupKey = 'exif',
+    valueBudget = getValueBudget(dataView)
 ) {
     const FIELD_COUNT_SIZE = Types.getTypeSize('SHORT');
     const FIELD_SIZE = IFD_ENTRY_LENGTH;
@@ -60,7 +76,8 @@ export function readIfd(
             byteOrder,
             includeUnknown,
             tagFilter,
-            groupKey
+            groupKey,
+            valueBudget
         );
         if (tag !== undefined) {
             tags[tag.name] = {
@@ -92,13 +109,30 @@ export function readIfd(
                     includeUnknown,
                     computed,
                     tagFilter,
-                    'thumbnail'
+                    'thumbnail',
+                    valueBudget
                 );
             }
         }
     }
 
     return tags;
+}
+
+/**
+ * Creates a budget for the total size of the tag values decoded from a buffer.
+ *
+ * Tags can legitimately point at overlapping parts of the buffer, and unknown
+ * tags of a faulty file can do so with large sizes, so the total is allowed to
+ * be a multiple of the buffer size. The multiple keeps the total proportional
+ * to the input, which is what stops a crafted file from having thousands of
+ * tags decode the same bytes over and over.
+ *
+ * @param {DataView} dataView - The buffer the values are decoded from.
+ * @returns {{remaining: number}} The budget, in bytes left to decode.
+ */
+export function getValueBudget(dataView) {
+    return {remaining: dataView.byteLength * MAX_VALUE_SIZE_PER_BUFFER_SIZE};
 }
 
 function getNumberOfFields(dataView, offset, byteOrder) {
@@ -116,7 +150,8 @@ function readTag(
     byteOrder,
     includeUnknown = false,
     tagFilter = NOOP_TAG_FILTER,
-    groupKey = 'exif'
+    groupKey = 'exif',
+    valueBudget
 ) {
     const TAG_CODE_IPTC_NAA = 0x83bb;
     const TAG_TYPE_OFFSET = Types.getTypeSize('SHORT');
@@ -145,7 +180,9 @@ function readTag(
         tagValueOffset = Types.getLongAt(dataView, offset + TAG_VALUE_OFFSET, byteOrder);
         if (tagValueFitsInDataView(dataView, offsetOrigin, tagValueOffset, tagType, tagCount)) {
             const forceByteType = tagCode === TAG_CODE_IPTC_NAA;
-            tagValue = getTagValue(dataView, offsetOrigin + tagValueOffset, tagType, tagCount, byteOrder, forceByteType);
+            const boundedTagCount = getBoundedTagCount(valueBudget.remaining, tagType, tagCount);
+            valueBudget.remaining -= boundedTagCount * Types.typeSizes[tagType];
+            tagValue = getTagValue(dataView, offsetOrigin + tagValueOffset, tagType, boundedTagCount, byteOrder, forceByteType);
         } else {
             tagValue = '<faulty value>';
         }
@@ -222,6 +259,20 @@ function getTagValue(dataView, offset, type, count, byteOrder, forceByteType = f
 
 function tagValueFitsInDataView(dataView, offsetOrigin, tagValueOffset, tagType, tagCount) {
     return offsetOrigin + tagValueOffset + Types.typeSizes[tagType] * tagCount <= dataView.byteLength;
+}
+
+// Draws each out-of-slot value from the shared budget, so a crafted file
+// cannot have thousands of tags decode the same bytes over and over. Real
+// files, including ones whose tags read overlapping bytes, stay far below it.
+function getBoundedTagCount(remainingBudget, tagType, tagCount) {
+    const boundedCount = Math.min(tagCount, Math.floor(remainingBudget / Types.typeSizes[tagType]));
+    if (boundedCount === 1 && tagCount > 1) {
+        // Most types unwrap a single element into a bare value, which would
+        // make a truncated value look like a genuine one-element one. Return
+        // the empty value a zero count already produces instead.
+        return 0;
+    }
+    return boundedCount;
 }
 
 function splitNullSeparatedAsciiString(string) {

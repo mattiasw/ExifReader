@@ -120,6 +120,20 @@ describe('canon-tags', () => {
         expect(tags['LensType'].value).to.equal(61182);
     });
 
+    it('should give every read of a Canon IFD its own decoded-value budget', () => {
+        // A maker note value that is a large part of the data must decode in
+        // full every time. Reading it twice would truncate the second read if
+        // the budget bounding the values were kept across reads.
+        const lensModel = 'C'.repeat(IFD_OFFSET * 2);
+        const dataView = getCanonDataView([getLensModelField(lensModel)]);
+
+        const firstTags = CanonTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, ByteOrder.LITTLE_ENDIAN, false);
+        const secondTags = CanonTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, ByteOrder.LITTLE_ENDIAN, false);
+
+        expect(firstTags['LensModel'].value).to.deep.equal([lensModel]);
+        expect(secondTags['LensModel'].value).to.deep.equal([lensModel]);
+    });
+
     it('should keep LensType shape in computed mode', () => {
         const dataView = getCanonDataView([
             getCameraSettingsField({[CanonTags.CAMERA_SETTINGS_LENS_TYPE]: 61182})
