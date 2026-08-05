@@ -42,6 +42,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   time. This affects environments where a DOM parser is available: web browsers,
   and Node.js when the `domParser` option is used or when `@xmldom/xmldom` is
   installed.
+- Fixed a denial-of-service vulnerability where a crafted image could make Exif
+  parsing decode far more tag data than the file actually contains. Each tag
+  value was bounded against the available data on its own, but nothing bounded
+  their sum, so an IFD declaring many tags whose values all point at the same
+  bytes could multiply memory use and parsing time by several thousand. The
+  decoded values of an IFD and the sub-IFDs it points to are now bounded
+  together by a small multiple of the size of the data being parsed, which
+  real files stay well below.
 
 ## [4.42.0] - 2026-08-05
 
