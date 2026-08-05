@@ -18,21 +18,29 @@ const TAG_ID_SIZE = 2;
 const RESOURCE_LENGTH_SIZE = 4;
 
 const SIGNATURE_SIZE = SIGNATURE.length;
+const TAG_NAME_MIN_SIZE = 2;
+const RESOURCE_BLOCK_MIN_HEADER_SIZE = SIGNATURE_SIZE + TAG_ID_SIZE + TAG_NAME_MIN_SIZE + RESOURCE_LENGTH_SIZE;
 
 function read(bytes, includeUnknown, tagFilter = NOOP_TAG_FILTER) {
     const dataView = getDataView(new Uint8Array(bytes).buffer);
     const tags = {};
     let offset = 0;
 
-    while (offset < bytes.length) {
+    while (offset + RESOURCE_BLOCK_MIN_HEADER_SIZE <= bytes.length) {
         const signature = getStringFromDataView(dataView, offset, SIGNATURE_SIZE);
         offset += SIGNATURE_SIZE;
         const tagId = Types.getShortAt(dataView, offset);
         offset += TAG_ID_SIZE;
         const {tagName, tagNameSize} = getTagName(dataView, offset);
         offset += tagNameSize;
-        const resourceSize = Types.getLongAt(dataView, offset);
+        if (offset + RESOURCE_LENGTH_SIZE > bytes.length) {
+            break;
+        }
+        const declaredResourceSize = Types.getLongAt(dataView, offset);
         offset += RESOURCE_LENGTH_SIZE;
+        // The declared size comes from the file and is not trusted, so bound
+        // it by the bytes that are actually present.
+        const resourceSize = Math.min(declaredResourceSize, bytes.length - offset);
         if (signature === SIGNATURE) {
             const resolvedTagName = getTagNameForFiltering(tagId, tagName, includeUnknown);
             if (!tagFilter.shouldParseTag('photoshop', resolvedTagName, tagId)) {

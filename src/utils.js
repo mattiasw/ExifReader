@@ -148,7 +148,7 @@ export function dataUriToBuffer(dataUri) {
 }
 
 export function padStart(string, length, character) {
-    const padding = strRepeat(character, length - string.length);
+    const padding = strRepeat(character, Math.max(0, length - string.length));
     return padding + string;
 }
 

@@ -4,7 +4,7 @@
 
 import Types from './types.js';
 import {PNG_CHUNK_LENGTH_OFFSET, PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_DATA_OFFSET, PNG_CHUNK_TYPE_SIZE, TYPE_PHYS, TYPE_TIME} from './image-header-png.js';
-import {getStringFromDataView} from './utils.js';
+import {getStringFromDataView, padStart} from './utils.js';
 
 export default {
     read
@@ -102,5 +102,5 @@ function tagFitsInBuffer(dataView, chunkOffset, chunkLength, tagOffset, tagSize)
 }
 
 function pad(number, size) {
-    return `${'0'.repeat(size - ('' + number).length)}${number}`;
+    return padStart('' + number, size, '0');
 }

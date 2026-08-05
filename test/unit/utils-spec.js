@@ -46,6 +46,11 @@ describe('utils', () => {
         expect(Utils.padStart('123', 3, '0')).to.equal('123');
     });
 
+    it('should return a string unchanged when it is wider than the pad length', () => {
+        expect(Utils.padStart('123', 2, '0')).to.equal('123');
+        expect(Utils.padStart('12345', 3, '0')).to.equal('12345');
+    });
+
     it('should parse binary float', () => {
         expect(Utils.parseFloatRadix('0.101', 2)).to.equal(0.625);
         expect(Utils.parseFloatRadix('0.0011', 2)).to.equal(0.1875);

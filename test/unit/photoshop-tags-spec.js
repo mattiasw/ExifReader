@@ -61,6 +61,51 @@ describe('photoshop-tags', () => {
         });
     });
 
+    it('should keep earlier tags and truncate the value when a resource size overruns the buffer', () => {
+        restores.push(swapProperties(TagNames, {0x4711: {name: 'FirstTag'}, 0x4712: {name: 'SecondTag'}}));
+        const overrunningBlock = '8BIM'
+            + getByteStringFromNumber(0x4712, 2)
+            + '\x00\x00'
+            + getByteStringFromNumber(0xffffffff, 4)
+            + '\x42\x43';
+        const bytes = getCharacterArray(getPhotoshopBlockString({id: 0x4711, resource: 'ab'}) + overrunningBlock);
+
+        const tags = PhotoshopTags.read(bytes);
+
+        expect(tags.FirstTag).to.deep.include({id: 0x4711, value: 'ab'});
+        expect(tags.SecondTag).to.deep.include({id: 0x4712, value: '\x42\x43'});
+    });
+
+    it('should emit an empty value when the data ends at the resource header', () => {
+        restores.push(swapProperties(TagNames, {0x4711: {name: 'FirstTag'}}));
+        const bytes = getCharacterArray(
+            '8BIM' + getByteStringFromNumber(0x4711, 2) + '\x00\x00' + getByteStringFromNumber(5, 4)
+        );
+        expect(PhotoshopTags.read(bytes).FirstTag).to.deep.include({id: 0x4711, value: ''});
+    });
+
+    it('should keep earlier tags when the buffer ends inside a resource header', () => {
+        restores.push(swapProperties(TagNames, {0x4711: {name: 'FirstTag'}}));
+        const truncatedHeader = '8BIM' + getByteStringFromNumber(0x4712, 2);
+        const bytes = getCharacterArray(getPhotoshopBlockString({id: 0x4711, resource: 'ab'}) + truncatedHeader);
+
+        const tags = PhotoshopTags.read(bytes);
+
+        expect(tags.FirstTag).to.deep.include({id: 0x4711, value: 'ab'});
+        expect(Object.keys(tags)).to.have.lengthOf(1);
+    });
+
+    it('should keep earlier tags when a resource name runs past the end of the buffer', () => {
+        restores.push(swapProperties(TagNames, {0x4711: {name: 'FirstTag'}}));
+        const nameOverrunningHeader = '8BIM' + getByteStringFromNumber(0x4712, 2) + '\x20' + 'ABCDEF';
+        const bytes = getCharacterArray(getPhotoshopBlockString({id: 0x4711, resource: 'ab'}) + nameOverrunningHeader);
+
+        const tags = PhotoshopTags.read(bytes);
+
+        expect(tags.FirstTag).to.deep.include({id: 0x4711, value: 'ab'});
+        expect(Object.keys(tags)).to.have.lengthOf(1);
+    });
+
     // Tag id 0x4711 does not exist in the real TagNames dictionary so the
     // unknown-tag tests below need no swapping.
     it('should ignore unknown tags', () => {
@@ -73,14 +118,16 @@ describe('photoshop-tags', () => {
         expect(PhotoshopTags.read(bytes, true)).to.deep.equal({'undefined-18193': {id: 0x4711, value: '\x42\x43'}});
     });
 
-    function getPhotoshopBytes({id, name = '', resource = ''}) {
+    function getPhotoshopBytes(block) {
+        return getCharacterArray(getPhotoshopBlockString(block));
+    }
+
+    function getPhotoshopBlockString({id, name = '', resource = ''}) {
         const signature = '8BIM';
-        return getCharacterArray(
-            signature
+        return signature
             + getByteStringFromNumber(id, 2)
             + getPaddedPascalString(name)
-            + getByteStringFromNumber(resource.length, 4) + getPaddedResourceData(resource)
-        );
+            + getByteStringFromNumber(resource.length, 4) + getPaddedResourceData(resource);
     }
 
     function getPaddedPascalString(string) {
