@@ -60,5 +60,21 @@ describe('png-tags', () => {
                 description: '2023-03-12 13:14:26'
             });
         });
+
+        it('should render an out-of-range date field at its natural width', () => {
+            const dataView = getDataView(CHUNK_PREFIX + '\x07\xe7\xc8\x05\x0d\x0e\x1a');
+            expect(PngTags.read(dataView, [0])['Modify Date']).to.deep.equal({
+                value: [2023, 200, 5, 13, 14, 26],
+                description: '2023-200-05 13:14:26'
+            });
+        });
+
+        it('should render a five-digit year at its natural width', () => {
+            const dataView = getDataView(CHUNK_PREFIX + '\xff\xff\x01\x02\x03\x04\x05');
+            expect(PngTags.read(dataView, [0])['Modify Date']).to.deep.equal({
+                value: [65535, 1, 2, 3, 4, 5],
+                description: '65535-01-02 03:04:05'
+            });
+        });
     });
 });

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A PNG `tIME` chunk with a date field too wide for its zero-padded width,
+  e.g. a month byte of 200, no longer makes `load()` throw a `RangeError`
+  that also discards all other metadata in the file. The field is now
+  rendered at its natural width in the `Modify Date` description, and the
+  date formatting no longer uses an ES2015 string method that the oldest
+  supported runtimes lack.
+- A Photoshop 8BIM resource whose declared size runs past the end of the
+  available data no longer makes `load()` throw. The resource value is
+  truncated to the bytes that are present, and the walk now also stops
+  cleanly when the data ends in the middle of a resource header, so the
+  resources that precede a malformed or truncated one are still returned.
+
 ## [4.42.0] - 2026-08-05
 
 ### Changed
