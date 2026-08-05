@@ -63,18 +63,26 @@ function extractCompleteChunks(dataView, chunks) {
 }
 
 function combineChunks(dataView, chunks) {
-    const totalLength = chunks.reduce((size, chunk) => size + chunk.length, 0);
+    const slices = chunks.map((chunk) => getBoundedChunkBytes(dataView, chunk));
+    const totalLength = slices.reduce((size, slice) => size + slice.length, 0);
     const combinedChunks = new Uint8Array(totalLength);
     let offset = 0;
 
-    for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        const slice = dataView.buffer.slice(chunk.dataOffset, chunk.dataOffset + chunk.length);
-        combinedChunks.set(new Uint8Array(slice), offset);
-        offset += chunk.length;
+    for (let i = 0; i < slices.length; i++) {
+        combinedChunks.set(slices[i], offset);
+        offset += slices[i].length;
     }
 
     return new DataView(combinedChunks.buffer);
+}
+
+// A chunk length comes verbatim from the image and is not trusted. Bound it to
+// the bytes actually present so a crafted length cannot force a huge allocation.
+function getBoundedChunkBytes(dataView, chunk) {
+    const bufferLength = dataView.buffer.byteLength;
+    const start = Math.min(Math.max(chunk.dataOffset, 0), bufferLength);
+    const end = Math.min(start + Math.max(chunk.length, 0), bufferLength);
+    return new Uint8Array(dataView.buffer.slice(start, end));
 }
 
 function readTags(tags, chunkDataView, domParser) {
