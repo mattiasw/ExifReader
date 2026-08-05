@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.41.4] - 2026-08-05
+
 ### Security
 
 - Documented that passing a string to `load()` makes ExifReader treat it as a
@@ -1139,7 +1141,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.41.3...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.41.4...HEAD
+[4.41.4]: https://github.com/mattiasw/ExifReader/compare/v4.41.3...v4.41.4
 [4.41.3]: https://github.com/mattiasw/ExifReader/compare/v4.41.2...v4.41.3
 [4.41.2]: https://github.com/mattiasw/ExifReader/compare/v4.41.1...v4.41.2
 [4.41.1]: https://github.com/mattiasw/ExifReader/compare/v4.41.0...v4.41.1
