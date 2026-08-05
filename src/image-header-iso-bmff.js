@@ -90,7 +90,7 @@ export function parseBox(dataView, offset) {
             return parseMetadataBox(dataView, offset, contentOffset + VERSION_SIZE, length);
         }
         if (type === TYPE_ILOC) {
-            return parseItemLocationBox(dataView, version, contentOffset + VERSION_SIZE, length);
+            return parseItemLocationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
         }
         if (type === TYPE_IINF) {
             return parseItemInformationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
