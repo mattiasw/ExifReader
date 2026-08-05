@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cleanly when the data ends in the middle of a resource header, so the
   resources that precede a malformed or truncated one are still returned.
 
+### Security
+
+- Fixed a denial-of-service vulnerability where a crafted HEIC or AVIF file could
+  make metadata parsing allocate far more memory, and take far longer, than the
+  size of the file warrants. The item list of an `iloc` box was bounded by the
+  size of the whole file rather than by the length the box itself declares, so a
+  tiny `iloc` box could walk everything that followed it, and a file packed with
+  such boxes made each of them walk it again. Items and their extents are now
+  bounded by the length their own box declares, or by the end of the available
+  data when that comes first, so a truncated file still returns what it holds.
+
 ## [4.42.0] - 2026-08-05
 
 ### Changed

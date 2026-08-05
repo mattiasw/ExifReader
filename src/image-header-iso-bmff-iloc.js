@@ -1,11 +1,19 @@
-import {get64BitValue, hasBytes} from './image-header-iso-bmff-utils.js';
+import {get64BitValue} from './image-header-iso-bmff-utils.js';
 
 // Absolute backstop on the number of extent objects a single iloc box may
 // allocate, guarding against memory exhaustion from a crafted file
 // (GHSA-pj96-35fp-cfcc). It is far above any legitimate file.
 const MAX_TOTAL_EXTENTS = 1024 * 1024;
 
-export function parseItemLocationBox(dataView, version, contentOffset, boxLength) {
+/**
+ * @param {DataView} dataView
+ * @param {number} startOffset The offset of the box's length field.
+ * @param {number} version
+ * @param {number} contentOffset The offset of the content, after the version byte.
+ * @param {number} boxLength The declared length, counted from startOffset.
+ * @returns {Object} The box with its items, each holding its extents.
+ */
+export function parseItemLocationBox(dataView, startOffset, version, contentOffset, boxLength) {
     const FLAGS_SIZE = 3;
 
     const {offsets, sizes} = getItemLocationBoxOffsetsAndSizes(version, contentOffset + FLAGS_SIZE);
@@ -19,10 +27,13 @@ export function parseItemLocationBox(dataView, version, contentOffset, boxLength
     const indexSize = getIndexSize(dataView, offsets.indexSize, version);
     sizes.item.extent.extentIndex = indexSize !== undefined ? indexSize : 0;
     const itemCount = getItemCount(dataView, offsets.itemCount, version);
+    // Items and their extents may only be backed by bytes this box declares, and
+    // only by bytes that are really there when the file is truncated.
+    const boxEnd = Math.min(startOffset + boxLength, dataView.byteLength);
 
     return {
         type: 'iloc',
-        items: getItems(dataView, version, offsets, sizes, offsetSize, lengthSize, indexSize, itemCount),
+        items: getItems(dataView, boxEnd, version, offsets, sizes, offsetSize, lengthSize, indexSize, itemCount),
         length: boxLength
     };
 }
@@ -81,7 +92,7 @@ function getItemCount(dataView, offset, version) {
     return undefined;
 }
 
-function getItems(dataView, version, offsets, sizes, offsetSize, lengthSize, indexSize, itemCount) {
+function getItems(dataView, boxEnd, version, offsets, sizes, offsetSize, lengthSize, indexSize, itemCount) {
     if (itemCount === undefined) {
         return [];
     }
@@ -97,7 +108,7 @@ function getItems(dataView, version, offsets, sizes, offsetSize, lengthSize, ind
     let totalExtents = 0;
 
     for (let i = 0; i < itemCount; i++) {
-        if (!hasBytes(dataView, offset, itemHeaderByteSize)) {
+        if (offset + itemHeaderByteSize > boxEnd) {
             break;
         }
         const item = {extents: []};
@@ -111,7 +122,7 @@ function getItems(dataView, version, offsets, sizes, offsetSize, lengthSize, ind
         offset += sizes.item.baseOffset;
         item.extentCount = dataView.getUint16(offset);
         offset += sizes.item.extentCount;
-        const extentCount = getBoundedExtentCount(item.extentCount, extentByteSize, offset, dataView.byteLength, MAX_TOTAL_EXTENTS - totalExtents);
+        const extentCount = getBoundedExtentCount(item.extentCount, extentByteSize, offset, boxEnd, MAX_TOTAL_EXTENTS - totalExtents);
         for (let j = 0; j < extentCount; j++) {
             const extent = {};
 
@@ -127,22 +138,28 @@ function getItems(dataView, version, offsets, sizes, offsetSize, lengthSize, ind
         totalExtents += extentCount;
 
         items.push(item);
+
+        // Extent bytes left unread put the walk off an item boundary, so the
+        // next item would be built from extent data. Stop with the valid ones.
+        if ((item.extentCount - extentCount) * extentByteSize > 0) {
+            break;
+        }
     }
 
     return items;
 }
 
 // An extent whose size fields are all zero occupies no bytes and carries no
-// location, so it cannot be substantiated by the buffer and none are produced
+// location, so it cannot be substantiated by the box and none are produced
 // (GHSA-pj96-35fp-cfcc). Otherwise the count is limited by the bytes left in
-// the buffer and by an absolute backstop, keeping allocation proportional to
+// the box and by an absolute backstop, keeping allocation proportional to
 // the input size.
-function getBoundedExtentCount(declaredCount, extentByteSize, offset, byteLength, remainingBudget) {
+function getBoundedExtentCount(declaredCount, extentByteSize, offset, boxEnd, remainingBudget) {
     if (extentByteSize === 0) {
         return 0;
     }
-    const fitInBuffer = Math.floor((byteLength - offset) / extentByteSize);
-    return Math.max(0, Math.min(declaredCount, fitInBuffer, remainingBudget));
+    const fitInBox = Math.floor((boxEnd - offset) / extentByteSize);
+    return Math.max(0, Math.min(declaredCount, fitInBox, remainingBudget));
 }
 
 function getItemId(dataView, offset, version) {
