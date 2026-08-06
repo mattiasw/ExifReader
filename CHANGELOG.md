@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   such boxes made each of them walk it again. Items and their extents are now
   bounded by the length their own box declares, or by the end of the available
   data when that comes first, so a truncated file still returns what it holds.
+- Fixed a second denial-of-service vulnerability of the same class as the `iloc`
+  bound above, one level up in the generic box walk. A HEIC or AVIF box was only
+  checked for where it started inside its container, never for how far it read,
+  so a small well-formed container holding a box that over-declared its length
+  still let that box run to the end of the file. That made the `iloc` bound
+  bypassable by wrapping each `iloc` in a container, and packing a file with such
+  containers was again quadratic in the file size. A box is now bounded by the
+  container that declares it, and one that over-declares is read only as far as
+  its container reaches instead of being discarded, so truncated files keep
+  degrading gracefully.
 - Fixed a denial-of-service vulnerability where a crafted image or XMP file using
   a large number of distinct XML namespace prefixes could make ExifReader spend
   quadratic time de-duplicating those prefixes while repairing an undeclared
