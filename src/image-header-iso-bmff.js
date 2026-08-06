@@ -43,9 +43,12 @@ export const BOX_MIN_LENGTH = 8;
  *
  * @param {DataView} dataView - The DataView to parse.
  * @param {number} offset - The offset at which to start parsing.
+ * @param {number} [containerEnd] - The end of the box that declares this one.
+ *     A box may not read past it, whatever length it declares for itself.
+ *     Defaults to the end of the data, which is what the outermost boxes get.
  * @returns {Object} The parsed box.
  */
-export function parseBox(dataView, offset) {
+export function parseBox(dataView, offset, containerEnd = dataView.byteLength) {
     const VERSION_SIZE = 1;
 
     if (!hasBytes(dataView, offset, BOX_MIN_LENGTH)) {
@@ -66,10 +69,10 @@ export function parseBox(dataView, offset) {
             return parseFileTypeBox(dataView, contentOffset, length);
         }
         if (type === TYPE_IPRP) {
-            return parseItemPropertiesBox(dataView, offset, contentOffset, length);
+            return parseItemPropertiesBox(dataView, offset, contentOffset, length, containerEnd);
         }
         if (type === TYPE_IPCO) {
-            return parseItemPropertyContainerBox(dataView, offset, contentOffset, length);
+            return parseItemPropertyContainerBox(dataView, offset, contentOffset, length, containerEnd);
         }
         if (type === TYPE_COLR) {
             return parseColorInformationBox(dataView, contentOffset, length);
@@ -87,13 +90,13 @@ export function parseBox(dataView, offset) {
         const version = dataView.getUint8(contentOffset);
 
         if (type === TYPE_META) {
-            return parseMetadataBox(dataView, offset, contentOffset + VERSION_SIZE, length);
+            return parseMetadataBox(dataView, offset, contentOffset + VERSION_SIZE, length, containerEnd);
         }
         if (type === TYPE_ILOC) {
-            return parseItemLocationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
+            return parseItemLocationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length, containerEnd);
         }
         if (type === TYPE_IINF) {
-            return parseItemInformationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
+            return parseItemInformationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length, containerEnd);
         }
         if (type === TYPE_INFE) {
             return parseItemInformationEntryBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
@@ -460,18 +463,18 @@ function parseFileTypeBox(dataView, contentOffset, boxLength) {
     };
 }
 
-function parseItemPropertiesBox(dataView, startOffset, contentOffset, length) {
+function parseItemPropertiesBox(dataView, startOffset, contentOffset, length, containerEnd) {
     return {
         type: 'iprp',
-        subBoxes: parseSubBoxes(dataView, contentOffset, length - (contentOffset - startOffset)),
+        subBoxes: parseSubBoxes(dataView, contentOffset, length - (contentOffset - startOffset), containerEnd),
         length,
     };
 }
 
-function parseItemPropertyContainerBox(dataView, startOffset, contentOffset, length) {
+function parseItemPropertyContainerBox(dataView, startOffset, contentOffset, length, containerEnd) {
     return {
         type: 'ipco',
-        properties: parseSubBoxes(dataView, contentOffset, length - (contentOffset - startOffset)),
+        properties: parseSubBoxes(dataView, contentOffset, length - (contentOffset - startOffset), containerEnd),
         length,
     };
 }
@@ -503,12 +506,12 @@ function parseIcc(dataView, contentOffset) {
     };
 }
 
-function parseMetadataBox(dataView, startOffset, contentOffset, length) {
+function parseMetadataBox(dataView, startOffset, contentOffset, length, containerEnd) {
     const FLAGS_SIZE = 3;
 
     return {
         type: 'meta',
-        subBoxes: parseSubBoxes(dataView, contentOffset + FLAGS_SIZE, length - (contentOffset + FLAGS_SIZE - startOffset)),
+        subBoxes: parseSubBoxes(dataView, contentOffset + FLAGS_SIZE, length - (contentOffset + FLAGS_SIZE - startOffset), containerEnd),
         length
     };
 }
@@ -525,18 +528,27 @@ function parseItemDataBox(contentOffset, length) {
  * @param {DataView} dataView
  * @param {number} offset The offset to start parsing from.
  * @param {number} length The length of all sub boxes combined.
+ * @param {number} containerEnd The end of the box these sub boxes belong to.
  * @return {Array<Object>}
  */
-function parseSubBoxes(dataView, offset, length) {
+function parseSubBoxes(dataView, offset, length, containerEnd) {
     const ACCEPTED_ITEM_INFO_TYPES = [
         ITEM_INFO_TYPE_EXIF,
         ITEM_INFO_TYPE_MIME,
     ];
 
+    // A sub box may declare any length it likes, so bound it by the bytes this
+    // container has, and by the ones that are really there when the file is
+    // truncated. An overrunning box still gets parsed for what fits, which is
+    // what keeps a cut-off file returning the metadata it does contain.
+    const subBoxesEnd = Math.min(offset + length, containerEnd);
+
     const subBoxes = [];
     let currentOffset = offset;
-    while (currentOffset < offset + length) {
-        const box = parseBox(dataView, currentOffset);
+    // Requiring room for a whole header keeps a box from taking its type from
+    // the bytes after the container, which invents one out of two boxes.
+    while (currentOffset + BOX_MIN_LENGTH <= subBoxesEnd) {
+        const box = parseBox(dataView, currentOffset, subBoxesEnd);
         if (box === undefined) {
             break;
         }
@@ -548,14 +560,14 @@ function parseSubBoxes(dataView, offset, length) {
     return subBoxes;
 }
 
-function parseItemInformationBox(dataView, startOffset, version, contentOffset, length) {
+function parseItemInformationBox(dataView, startOffset, version, contentOffset, length, containerEnd) {
     const FLAGS_SIZE = 3;
     const entryCountSize = version === 0 ? 2 : 4;
     const itemInfosOffset = contentOffset + FLAGS_SIZE + entryCountSize;
 
     return {
         type: 'iinf',
-        itemInfos: parseSubBoxes(dataView, itemInfosOffset, length - (itemInfosOffset - startOffset)),
+        itemInfos: parseSubBoxes(dataView, itemInfosOffset, length - (itemInfosOffset - startOffset), containerEnd),
         length
     };
 }

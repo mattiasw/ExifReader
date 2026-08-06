@@ -11,9 +11,11 @@ const MAX_TOTAL_EXTENTS = 1024 * 1024;
  * @param {number} version
  * @param {number} contentOffset The offset of the content, after the version byte.
  * @param {number} boxLength The declared length, counted from startOffset.
+ * @param {number} containerEnd The end of the box that declares this one, never
+ *     past the end of the available data.
  * @returns {Object} The box with its items, each holding its extents.
  */
-export function parseItemLocationBox(dataView, startOffset, version, contentOffset, boxLength) {
+export function parseItemLocationBox(dataView, startOffset, version, contentOffset, boxLength, containerEnd) {
     const FLAGS_SIZE = 3;
 
     const {offsets, sizes} = getItemLocationBoxOffsetsAndSizes(version, contentOffset + FLAGS_SIZE);
@@ -28,8 +30,9 @@ export function parseItemLocationBox(dataView, startOffset, version, contentOffs
     sizes.item.extent.extentIndex = indexSize !== undefined ? indexSize : 0;
     const itemCount = getItemCount(dataView, offsets.itemCount, version);
     // Items and their extents may only be backed by bytes this box declares, and
-    // only by bytes that are really there when the file is truncated.
-    const boxEnd = Math.min(startOffset + boxLength, dataView.byteLength);
+    // only by ones its container really has, which is already no further than
+    // the end of the available data.
+    const boxEnd = Math.min(startOffset + boxLength, containerEnd);
 
     return {
         type: 'iloc',

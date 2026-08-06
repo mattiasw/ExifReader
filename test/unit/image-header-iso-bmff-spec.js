@@ -580,6 +580,125 @@ describe('image-header-iso-bmff', () => {
             expect(ilocBoxes.map((box) => box.items.length)).to.deep.equal(new Array(ILOC_BOX_COUNT).fill(0));
         });
 
+        it('should not let a sub box read past the container that declares it', () => {
+            // The ipco declares just its own header plus the iloc's 16-byte one,
+            // so the iloc's item list would start exactly where the ipco ends.
+            // The iloc declares a length reaching far beyond that, but it may
+            // only read what the container holds.
+            const wouldBeWalked = '\x00'.repeat(64);
+            const dataView = getDataView(
+                getBox('ipco', buildOverDeclaringTinyIloc()) + wouldBeWalked
+            );
+
+            expect(parseBox(dataView, 0).properties[0].items).to.have.lengthOf(0);
+        });
+
+        it('should keep every sub box inside its container for a meta box packed with them', () => {
+            // The attack shape: each container is small and well formed, but the
+            // iloc inside it over-declares its length. Bounding only where a
+            // child starts let every one of them re-walk the whole tail, which
+            // made the work and the allocation quadratic in the file size.
+            const CONTAINER_COUNT = 16;
+            const wrappedIloc = getBox('ipco', buildOverDeclaringTinyIloc());
+            const dataView = getDataView(getFullBox('meta', 0, wrappedIloc.repeat(CONTAINER_COUNT)));
+
+            const containers = parseBox(dataView, 0).subBoxes.filter((box) => box.type === 'ipco');
+
+            // Every container is still parsed, so this cannot pass by the walk
+            // bailing out early.
+            expect(containers).to.have.lengthOf(CONTAINER_COUNT);
+            expect(containers.map((box) => box.properties[0].items.length))
+                .to.deep.equal(new Array(CONTAINER_COUNT).fill(0));
+        });
+
+        it('should not build a sub box out of bytes its container does not fully hold', () => {
+            // The ipco has four bytes left, too few for a box header, so the
+            // type would have to be read from the box after it. Doing that
+            // invents a child that is not there, and an invented iloc or iinf
+            // shadows the real one when metadata is looked up by type.
+            const lengthOfAPhantom = getByteStringFromNumber(16, 4);
+            const ipco = getBox('ipco', lengthOfAPhantom);
+            // This box's length field spells "iloc" when read as four characters.
+            const nextBoxWhoseLengthSpellsAType = getByteStringFromNumber(0x696c6f63, 4)
+                + 'free' + '\x00'.repeat(24);
+            const dataView = getDataView(getBox('iprp', ipco + nextBoxWhoseLengthSpellsAType));
+
+            expect(parseBox(dataView, 0).subBoxes[0].properties).to.have.lengthOf(0);
+        });
+
+        it('should not let a nested container hand its children more than it was given', () => {
+            // Every box between the meta box and the iloc over-declares its
+            // length. Only the meta box is honest, so its end is what all of
+            // them are held to, however deep they sit.
+            const outsideTheMetaBox = '\x00'.repeat(64);
+            const overDeclaringIpco = withDeclaredLength(
+                getBox('ipco', buildOverDeclaringTinyIloc()),
+                OVER_DECLARED_BOX_LENGTH
+            );
+            const overDeclaringIprp = withDeclaredLength(
+                getBox('iprp', overDeclaringIpco),
+                OVER_DECLARED_BOX_LENGTH
+            );
+            const dataView = getDataView(
+                getFullBox('meta', 0, overDeclaringIprp) + outsideTheMetaBox
+            );
+
+            const iprp = parseBox(dataView, 0).subBoxes[0];
+
+            expect(iprp.subBoxes[0].properties[0].items).to.have.lengthOf(0);
+        });
+
+        it('should not let an over-declaring meta hand its children more than it was given', () => {
+            // A meta box is normally outermost, where the data end is its bound,
+            // but the walk will follow one nested inside another box too, and
+            // there it is held to that box like any other child.
+            const outsideTheIprpBox = '\x00'.repeat(64);
+            const overDeclaringMeta = withDeclaredLength(
+                getFullBox('meta', 0, buildOverDeclaringTinyIloc()),
+                OVER_DECLARED_BOX_LENGTH
+            );
+            const dataView = getDataView(getBox('iprp', overDeclaringMeta) + outsideTheIprpBox);
+
+            expect(parseBox(dataView, 0).subBoxes[0].subBoxes[0].items).to.have.lengthOf(0);
+        });
+
+        it('should not let an over-declaring iinf hand its children more than it was given', () => {
+            // Same as above for the other container that holds sub boxes, since
+            // each one passes the bound down separately.
+            const outsideTheMetaBox = '\x00'.repeat(64);
+            const entryCount = getByteStringFromNumber(1, 2);
+            const overDeclaringIinf = withDeclaredLength(
+                getFullBox('iinf', 0, entryCount + buildOverDeclaringTinyIloc()),
+                OVER_DECLARED_BOX_LENGTH
+            );
+            const dataView = getDataView(
+                getFullBox('meta', 0, overDeclaringIinf) + outsideTheMetaBox
+            );
+
+            expect(parseBox(dataView, 0).subBoxes[0].itemInfos[0].items).to.have.lengthOf(0);
+        });
+
+        it('should still return the items a truncated meta box does hold', () => {
+            // Both the meta box and the iloc inside it declare more than the
+            // buffer holds, and the buffer stops partway through the second
+            // item's header. The container bound must not cost us the item that
+            // is fully present.
+            const TRUNCATED_HEADER_BYTES = 2;
+            const cutOffMidSecondHeader = ILOC_ITEMS_OFFSET + ILOC_ITEM_HEADER_SIZE + ILOC_EXTENT_SIZE
+                + TRUNCATED_HEADER_BYTES;
+            const truncatedIloc = withDeclaredLength(
+                buildIlocBoxWithTwoItems().substring(0, cutOffMidSecondHeader),
+                OVER_DECLARED_BOX_LENGTH
+            );
+            const dataView = getDataView(withDeclaredLength(
+                getFullBox('meta', 0, truncatedIloc),
+                OVER_DECLARED_BOX_LENGTH
+            ));
+
+            expect(parseBox(dataView, 0).subBoxes[0].items.map((item) => item.itemId))
+                .to.deep.equal([1]);
+        });
+
         it('should parse box of type idat', () => {
             const idatContent = '<some content>';
             const dataView = getDataView(getBox('idat', idatContent));
@@ -1159,6 +1278,25 @@ const ILOC_ITEM_HEADER_SIZE_NO_BASE_OFFSET = 6;
 // number of bytes actually written, which getFullBox cannot express.
 function withDeclaredLength(box, declaredLength) {
     return getByteStringFromNumber(declaredLength, 4) + box.substring(4);
+}
+
+// A length no test buffer comes near, for boxes that claim far more than they
+// or their container actually hold.
+const OVER_DECLARED_BOX_LENGTH = 0x00ffffff;
+
+// Just the 16-byte header of an iloc, declaring a length that reaches well past
+// whatever container it is put in. Its item list would start exactly where the
+// header ends, so a correctly bounded parse reads no items from it.
+function buildOverDeclaringTinyIloc() {
+    // offsetSize 0 and lengthSize 1, so an extent takes a single byte.
+    const sizesByte = getByteStringFromNumber(0x01, 1);
+    const baseOffsetAndIndexByte = getByteStringFromNumber(0x00, 1);
+    const itemCount = getByteStringFromNumber(0xffff, 2);
+
+    return withDeclaredLength(
+        getFullBox('iloc', 0, sizesByte + baseOffsetAndIndexByte + itemCount),
+        OVER_DECLARED_BOX_LENGTH
+    );
 }
 
 // Two iloc items of one extent each, used to check that the second item is
