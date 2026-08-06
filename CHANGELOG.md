@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- An XMP tag value that comes from an `rdf:value` element with child elements
+  is now an object without a prototype, so that a child element named
+  `__proto__` can be kept under its own name. Such an object has no inherited
+  methods, so e.g. `hasOwnProperty` cannot be called on it.
+
 ### Fixed
 
 - A PNG `tIME` chunk with a date field too wide for its zero-padded width,
@@ -23,7 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A namespace prefix named after a JavaScript object property, for example
   `__proto__` or `constructor`, is now handled like any other prefix when a
   missing namespace declaration is repaired. Such a prefix previously got a
-  declaration with a nonsensical namespace URI.
+  declaration with a nonsensical namespace URI. An XMP element or attribute
+  without a namespace prefix and named after such a property, for example
+  `<constructor>`, is now handled like any other one too. Such an element was
+  previously mistaken for a repeat of an element that was never there, which
+  gave its tag a wrong value, e.g. a list collapsed into its last item, and an
+  element named `__proto__` was lost altogether while its content replaced the
+  prototype of the object holding it. The description of such an element or
+  attribute was also made by calling an inherited object property, which put a
+  JavaScript value where the description text should be, e.g. `false` for a
+  name of `hasOwnProperty`.
 
 ### Security
 

@@ -1016,6 +1016,113 @@ describe('xmp-tags', function () {
                     });
                 });
             });
+
+            describe('names that are also object property names', () => {
+                // A name without a namespace prefix always ends up in a tag named
+                // "undefined", since the tag name is what follows the colon. That is
+                // a separate matter from the name being an object property name.
+                it('should not describe a value with an inherited property of the tag name table', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description>
+                            <constructor>4711</constructor>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['undefined'].value).to.equal('4711');
+                    // Without the fix this is a String object built by the
+                    // inherited Object function, not a primitive.
+                    expect(typeof tags['undefined'].description).to.equal('string');
+                    expect(tags['undefined'].description).to.equal('4711');
+                });
+
+                it('should not describe an attribute value with an inherited property of the tag name table', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description hasOwnProperty="4711"></rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['undefined'].value).to.equal('4711');
+                    // Without the fix the inherited hasOwnProperty is called here,
+                    // which makes the description false instead of a string.
+                    expect(tags['undefined'].description).to.equal('4711');
+                });
+
+                it('should parse a list in an element named after an object property like any other list', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description>
+                            <constructor>
+                                <rdf:Bag>
+                                    <rdf:li>4711</rdf:li>
+                                    <rdf:li>4812</rdf:li>
+                                </rdf:Bag>
+                            </constructor>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['undefined'].value).to.deep.equal([
+                        {value: '4711', attributes: {}, description: '4711'},
+                        {value: '4812', attributes: {}, description: '4812'}
+                    ]);
+                    expect(tags['undefined'].description).to.equal('4711, 4812');
+                });
+
+                it('should still describe a list with the description function of a real tag name', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/">
+                            <exif:ComponentsConfiguration>
+                                <rdf:Seq>
+                                    <rdf:li>1</rdf:li>
+                                    <rdf:li>2</rdf:li>
+                                    <rdf:li>3</rdf:li>
+                                    <rdf:li>0</rdf:li>
+                                </rdf:Seq>
+                            </exif:ComponentsConfiguration>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['ComponentsConfiguration'].description).to.equal('YCbCr');
+                });
+
+                it('should read a child of rdf:value named after an object property without leaking the property', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value><constructor>4711</constructor></rdf:value>
+                                <xmp:MyQualifier>4812</xmp:MyQualifier>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(Object.keys(tags['MyXMPTag'].value)).to.deep.equal(['constructor']);
+                    expect(tags['MyXMPTag'].value['constructor'].value).to.equal('4711');
+                    expect(tags['MyXMPTag'].attributes).to.deep.equal({MyQualifier: '4812'});
+                    expect(tags['MyXMPTag'].description).to.equal('constructor: 4711');
+                });
+
+                it('should read a child of rdf:value named __proto__', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value><__proto__>4711</__proto__></rdf:value>
+                                <xmp:MyQualifier>4812</xmp:MyQualifier>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(Object.keys(tags['MyXMPTag'].value)).to.deep.equal(['__proto__']);
+                    // The object has no prototype, which is what lets the
+                    // __proto__ key be kept, and the caller gets that object.
+                    expect(Object.getPrototypeOf(tags['MyXMPTag'].value)).to.equal(null);
+                    expect(tags['MyXMPTag'].value['__proto__'].value).to.equal('4711');
+                    expect(tags['MyXMPTag'].attributes).to.deep.equal({MyQualifier: '4812'});
+                    expect(tags['MyXMPTag'].description).to.equal('__proto__: 4711');
+                });
+            });
         });
     }
 
