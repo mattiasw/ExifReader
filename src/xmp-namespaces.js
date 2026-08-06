@@ -43,7 +43,9 @@ export function addMissingNamespaces(xmlString) {
 // inherited properties and be treated as declared.
 function getDeclaredNamespacePrefixLookup(xmlContent) {
     const prefixes = Object.create(null);
-    const namespaceDeclarationRegex = /xmlns:([\w-]+)=["'][^"']+["']/g;
+    // Must not miss a name getUsedNamespacePrefixes finds: one missed on the
+    // root element is redeclared there, and the retry fails on the duplicate.
+    const namespaceDeclarationRegex = /xmlns:([A-Za-z_][A-Za-z0-9._-]*)=["'][^"']+["']/g;
     let match;
     while ((match = namespaceDeclarationRegex.exec(xmlContent)) !== null) {
         prefixes[match[1]] = true;

@@ -990,6 +990,32 @@ describe('xmp-tags', function () {
                 });
             });
 
+            // Declaring the dotted prefix a second time drops every tag in the
+            // packet. Only a parser that reports the unbound xmp prefix reaches
+            // the repair, so the linkedom run passes even without it.
+            it('should keep the tags of a packet that declares a prefix containing a dot', () => {
+                const xmlString = `<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:a.b="http://ns.example.com/ab">
+                    <rdf:Description a.b:MyDottedTag="4711">
+                        <xmp:MyXMPTag>4812</xmp:MyXMPTag>
+                    </rdf:Description>
+                </rdf:RDF>`;
+                const dataView = getDataView(xmlString);
+                const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                expect(tags).to.deep.equal({
+                    _raw: xmlString,
+                    MyDottedTag: {
+                        value: '4711',
+                        attributes: {},
+                        description: '4711'
+                    },
+                    MyXMPTag: {
+                        value: '4812',
+                        attributes: {},
+                        description: '4812'
+                    }
+                });
+            });
+
             describe('exceptions', () => {
                 it('should rename MicrosoftPhoto:Rating to RatingPercent', () => {
                     const xmlString = getXmlString(`
