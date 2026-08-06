@@ -60,6 +60,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decoded values of an IFD and the sub-IFDs it points to are now bounded
   together by a small multiple of the size of the data being parsed, which
   real files stay well below.
+- Fixed a denial-of-service vulnerability where a crafted JPEG could make MPF
+  (Multi-Picture Format) parsing allocate far more memory than the size of the
+  file warrants. Each declared sub-image is copied out of the file, and while a
+  single copy was already clamped to the file size, nothing bounded the number
+  of copies or their sum, so an MPF index declaring many entries that each claim
+  the whole file made the parser retain a copy per entry. A file of around
+  128 KiB could retain more than a gigabyte. The total size of the extracted
+  sub-images is now bounded to a small multiple of the input size, which real
+  multi-image files stay well below. A declared offset or size of 2 GiB or
+  more, which the parser reads as a negative number that would otherwise be
+  interpreted relative to the end of the buffer, is also handled: such an
+  offset is now clamped to the start of the file, and such a size yields an
+  empty image.
 
 ## [4.42.0] - 2026-08-05
 
