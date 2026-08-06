@@ -49,7 +49,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the undeclared prefix did not recognize it. The repair therefore added a
   second declaration for a prefix that was already declared, and the parse
   retry then failed on the duplicate attribute, which discarded every tag in
-  the packet.
+  the packet. A prefix of any shape was lost the same way when its declaration
+  put whitespace around the equals sign, as in `xmlns:xmp = "..."`, which XML
+  permits just as it permits the dot.
 
 ### Security
 
