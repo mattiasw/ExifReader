@@ -8,11 +8,14 @@ import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './tag-names
 import {IFD_ENTRY_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
 
-// The most demanding file in the test corpus decodes tag values totalling
-// 1.3 times its size (some tags legitimately read overlapping bytes), so this
-// leaves real files a wide margin while still keeping a crafted file's total
-// decoding proportional to its size.
-const MAX_VALUE_SIZE_PER_BUFFER_SIZE = 8;
+// Measured across the test corpus, the most demanding parse decodes tag
+// values totalling 1.2241 times the size of the buffer they are read from
+// (deliberately faulty files parsed with includeUnknown; real images peak
+// near 0.81x, as some tags legitimately read overlapping bytes), so a budget
+// of 4x is 3.27 times that worst case. The multiple is expensive here: a
+// decoded byte was measured to cost about 16 bytes of heap, mostly as an
+// array element plus its share of the joined description string.
+const MAX_VALUE_SIZE_PER_BUFFER_SIZE = 4;
 
 const getTagValueAt = {
     1: Types.getByteAt,
