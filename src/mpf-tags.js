@@ -14,6 +14,12 @@ export default {
 
 const ENTRY_SIZE = 16;
 
+// The most demanding MPF file in the test corpus has sub-images whose declared
+// sizes total 1.0001x its size (they can overlap slightly), so this leaves real
+// files a wide margin while keeping a crafted file's total copied bytes
+// proportional to its size instead of n^2.
+const MAX_IMAGE_SIZE_PER_BUFFER_SIZE = 8;
+
 function read(
     dataView,
     dataOffset,
@@ -49,6 +55,8 @@ function addMpfImages(dataView, dataOffset, tags, byteOrder) {
         return tags;
     }
 
+    const bufferLength = dataView.buffer.byteLength;
+    let remainingImageBytes = bufferLength * MAX_IMAGE_SIZE_PER_BUFFER_SIZE;
     const images = [];
     for (let i = 0; i < Math.ceil(tags['MPEntry'].value.length / ENTRY_SIZE); i++) {
         images[i] = {};
@@ -84,7 +92,10 @@ function addMpfImages(dataView, dataOffset, tags, byteOrder) {
             description: '' + dependentImage2EntryNumber
         };
 
-        images[i].image = dataView.buffer.slice(imageOffset, imageOffset + imageSize);
+        const start = Math.min(Math.max(imageOffset, 0), bufferLength);
+        const end = Math.min(start + Math.max(imageSize, 0), bufferLength, start + remainingImageBytes);
+        images[i].image = dataView.buffer.slice(start, end);
+        remainingImageBytes -= end - start;
         deferInit(images[i], 'base64', function () {
             return getBase64Image(this.image);
         });
