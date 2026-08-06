@@ -61,13 +61,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   container that declares it, and one that over-declares is read only as far as
   its container reaches instead of being discarded, so truncated files keep
   degrading gracefully.
-- Fixed a denial-of-service vulnerability where a crafted image or XMP file using
-  a large number of distinct XML namespace prefixes could make ExifReader spend
-  quadratic time de-duplicating those prefixes while repairing an undeclared
-  namespace prefix before parsing. The prefixes are now de-duplicated in linear
-  time. This affects environments where a DOM parser is available: web browsers,
-  and Node.js when the `domParser` option is used or when `@xmldom/xmldom` is
-  installed.
+- Fixed a denial-of-service vulnerability where a crafted image or XMP file
+  could make ExifReader spend quadratic time repairing an undeclared XML
+  namespace prefix before parsing. The repair step was quadratic in two
+  independent ways: de-duplicating the found prefixes, which a packet using a
+  large number of distinct prefixes could exploit, and scanning the packet for
+  prefix usages, where a long colon-free run of prefix-like characters made
+  the scan re-read the rest of the run from each position in it that could
+  start a prefix. Both are now linear. This affects environments where a DOM
+  parser is available: web browsers, and Node.js when the `domParser` option is
+  used or when `@xmldom/xmldom` is installed (which it is by default, as an
+  `optionalDependency`).
 - Fixed a denial-of-service vulnerability where a crafted image could make Exif
   parsing decode far more tag data than the file actually contains. Each tag
   value was bounded against the available data on its own, but nothing bounded

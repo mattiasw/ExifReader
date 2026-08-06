@@ -146,6 +146,68 @@ describe('xmp-namespaces', function () {
             expect(result.match(/xmlns:b=/g)).to.have.lengthOf(1);
         });
 
+        it('should find both prefixes of adjacent usages that share a single separator character', function () {
+            const xmlString = '<root><x:a><y:b>a:b c:d</y:b></x:a><e:f g:h="1"i:j="2"/></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            for (const prefix of ['x', 'y', 'a', 'c', 'e', 'g', 'i']) {
+                expect(result, prefix).to.match(new RegExp(`xmlns:${prefix}="`));
+            }
+        });
+
+        it('should find a prefix usage at the very start of the string', function () {
+            const xmlString = 'a:b<root>Content</root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.match(/xmlns:a="http:\/\/fallback\.namespace\/a"/);
+        });
+
+        it('should treat every other token in a colon chain as a prefix', function () {
+            // In "a:b:c:d" the first token is a:b; the b is consumed as its
+            // local part, so the next found prefix is c. In "e:f:g" the f is
+            // consumed as the local part of e's token, so it is never a prefix.
+            const xmlString = '<root><n:m p="a:b:c:d" q="e:f:g" r="adobe:docid:photoshop:abc123"/></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            for (const prefix of ['n', 'a', 'c', 'e', 'adobe', 'photoshop']) {
+                expect(result, prefix).to.match(new RegExp(`xmlns:${prefix}="`));
+            }
+            for (const nonPrefix of ['b', 'd', 'f', 'g', 'docid']) {
+                expect(result, nonPrefix).to.not.match(new RegExp(`xmlns:${nonPrefix}=`));
+            }
+        });
+
+        it('should handle a dotted prefix inside an attribute value', function () {
+            const xmlString = '<root><s:t u="xmp.iid:F77F117407206811822AB3958E7D1AC6"/></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.match(/xmlns:xmp\.iid="/);
+            expect(result).to.not.match(/xmlns:iid=/);
+        });
+
+        it('should not treat a token as a usage when other prefix characters precede it', function () {
+            // Each of these tokens sits inside a single run of prefix
+            // characters whose start cannot begin a prefix, so the run holds
+            // no usage. The word-boundary scan that the linear scan replaced
+            // treated the letters after the dots and the dash as prefixes.
+            const xmlString = '<root><x:child>1.a:b .c:d -e:f</x:child></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.match(/xmlns:x="/);
+            expect(result.match(/xmlns:/g)).to.have.lengthOf(1);
+        });
+
+        it('should scan a colon chain from its first possible token', function () {
+            // ".X" cannot start a prefix, so the chain's first token is a:a
+            // and its prefix is a. The word-boundary scan that the linear
+            // scan replaced started at the X and read X:a as the first token.
+            const xmlString = '<root><x:child>.X:a:a</x:child></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.match(/xmlns:a="/);
+            expect(result).to.not.match(/xmlns:X=/);
+        });
+
         // The number of distinct prefixes grows with the size of the XMP packet, so
         // both the declared and the used prefixes have to be looked up in constant
         // time to keep a large packet from blocking the CPU. Looking either of them
@@ -169,6 +231,20 @@ describe('xmp-namespaces', function () {
 
             expect(result.match(/xmlns:p\d+=/g)).to.have.lengthOf(numberOfUsages);
             expect(result.match(/xmlns:d\d+=/g)).to.have.lengthOf(numberOfDeclarations);
+        });
+
+        // A long run of prefix-like characters without a colon produces no
+        // usages at all, but used to make the usage scan re-read the rest of
+        // the run from each position in it that could start a prefix. That
+        // is quadratic time, so this times out unless the scan is linear.
+        it('should handle a large colon-free run without slowing down quadratically', function () {
+            this.timeout(4000);
+            const filler = 'a.'.repeat(262144);
+            const xmlString = `<root><x:child>${filler}</x:child></root>`;
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.match(/<root xmlns:x="http:\/\/fallback\.namespace\/x">/);
+            expect(result.match(/xmlns:/g)).to.have.lengthOf(1);
         });
 
         it('should handle prefixes that have the same names as object properties', function () {
