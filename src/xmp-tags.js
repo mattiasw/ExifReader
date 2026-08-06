@@ -179,8 +179,11 @@ function getTextValue(node) {
     return node.nodeValue;
 }
 
+// The elements object must not have a prototype. The element names come from
+// the image, so an element named e.g. constructor would be found among the
+// inherited properties, and one named __proto__ would replace the prototype.
 function getElementsFromNodes(nodes) {
-    const elements = {};
+    const elements = Object.create(null);
 
     nodes.forEach((node) => {
         if (isElement(node)) {
@@ -284,7 +287,7 @@ function getLocalName(name) {
 function getDescription(value, name = undefined) {
     if (Array.isArray(value)) {
         const arrayDescription = getDescriptionOfArray(value);
-        if ((name) && (typeof XmpTagNames[name] === 'function')) {
+        if (hasTagNameFunction(name)) {
             return XmpTagNames[name](value, arrayDescription);
         }
         return arrayDescription;
@@ -294,7 +297,7 @@ function getDescription(value, name = undefined) {
     }
 
     try {
-        if ((name) && (typeof XmpTagNames[name] === 'function')) {
+        if (hasTagNameFunction(name)) {
             return XmpTagNames[name](value);
         }
         return decodeURIComponent(escape(value));
@@ -310,6 +313,12 @@ function getDescriptionOfArray(value) {
         }
         return getDescription(item);
     }).join(', ');
+}
+
+// The name comes from the image, so an inherited property of the tag name table
+// must not be mistaken for a description function.
+function hasTagNameFunction(name) {
+    return Object.prototype.hasOwnProperty.call(XmpTagNames, name) && (typeof XmpTagNames[name] === 'function');
 }
 
 function getDescriptionOfObject(value) {
