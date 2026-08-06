@@ -54,7 +54,14 @@ function getDeclaredNamespacePrefixLookup(xmlContent) {
 function getUsedNamespacePrefixes(xmlContent) {
     const prefixes = [];
     const seenPrefixes = Object.create(null); // Must not have a prototype, the prefixes come from the image.
-    const prefixUsageRegex = /\b([A-Za-z_][A-Za-z0-9._-]*):[A-Za-z_][A-Za-z0-9._-]*\b/g;
+    // The token must start the string or follow a consumed delimiter, i.e. a
+    // character that cannot be part of a prefix. A word boundary must not be
+    // used here: with \b, each letter following a dot or dash in a long
+    // colon-free run of prefix-like characters ("a.a.a...") starts a match
+    // attempt that reads the rest of the run, which makes the scan quadratic.
+    // (Lookbehind would read better but is not supported by the oldest
+    // targeted runtimes.)
+    const prefixUsageRegex = /(?:^|[^A-Za-z0-9._-])([A-Za-z_][A-Za-z0-9._-]*):[A-Za-z_][A-Za-z0-9._-]*/g;
     let match;
     while ((match = prefixUsageRegex.exec(xmlContent)) !== null) {
         const prefix = match[1];
