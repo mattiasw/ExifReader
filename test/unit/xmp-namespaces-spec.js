@@ -208,6 +208,55 @@ describe('xmp-namespaces', function () {
             expect(result).to.not.match(/xmlns:X=/);
         });
 
+        it('should recognize a declaration of a prefix that contains a dot', function () {
+            const xmlString = '<root xmlns:a.b="http://example.com/a"><a.b:child>Content</a.b:child></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.equal(xmlString);
+        });
+
+        // A shape the usage scan finds but the declaration scan misses gets a
+        // second declaration appended, and the parse retry then fails on the
+        // duplicate attribute.
+        it('should recognize a declaration of every prefix shape the usage scan finds', function () {
+            const prefixes = ['a', '_a', 'a1', 'a-b', 'a.b', 'a.b.c', 'xmp.iid'];
+            const declarationFor = (prefix) => ` xmlns:${prefix}="http://example.com/${prefix}"`;
+            const usages = prefixes.map((prefix) => `<${prefix}:child>Content</${prefix}:child>`).join('');
+            const xmlString = `<root${prefixes.map(declarationFor).join('')}>${usages}</root>`;
+
+            expect(addMissingNamespaces(xmlString)).to.equal(xmlString);
+
+            // Dropping one declaration must bring back exactly that prefix.
+            // Without this the test would also pass if neither scan found a
+            // shape, which is what it is meant to rule out.
+            for (const droppedPrefix of prefixes) {
+                const declarations = prefixes.filter((prefix) => prefix !== droppedPrefix).map(declarationFor).join('');
+                const result = addMissingNamespaces(`<root${declarations}>${usages}</root>`);
+                const fallback = `xmlns:${droppedPrefix}="http://fallback.namespace/${droppedPrefix}"`;
+
+                expect(result, droppedPrefix).to.contain(fallback);
+            }
+        });
+
+        it('should declare a missing dotted prefix without declaring an already declared one again', function () {
+            const xmlString = '<root xmlns:a.b="http://example.com/a"><a.b:one>One</a.b:one><c.d:two>Two</c.d:two></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result.match(/xmlns:a\.b=/g)).to.have.lengthOf(1);
+            expect(result).to.match(/xmlns:c\.d="http:\/\/fallback\.namespace\/c\.d"/);
+        });
+
+        // Neither shape ever lost tags: an unused declaration is never looked
+        // up, and one below the root was merely shadowed by the redundant
+        // declaration added to the root. Now nothing is added for either.
+        it('should leave a dotted declaration alone when it is unused or not on the root element', function () {
+            const unused = '<root xmlns:a.b="http://example.com/a"><x:child>Content</x:child></root>';
+            const belowRoot = '<root><mid xmlns:a.b="http://example.com/a"><a.b:child>Content</a.b:child></mid></root>';
+
+            expect(addMissingNamespaces(unused).match(/xmlns:a\.b=/g)).to.have.lengthOf(1);
+            expect(addMissingNamespaces(belowRoot).match(/xmlns:a\.b=/g)).to.have.lengthOf(1);
+        });
+
         // The number of distinct prefixes grows with the size of the XMP packet, so
         // both the declared and the used prefixes have to be looked up in constant
         // time to keep a large packet from blocking the CPU. Looking either of them

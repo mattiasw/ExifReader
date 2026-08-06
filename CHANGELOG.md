@@ -40,6 +40,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attribute was also made by calling an inherited object property, which put a
   JavaScript value where the description text should be, e.g. `false` for a
   name of `hasOwnProperty`.
+- An XMP packet no longer loses all of its tags when three things coincide: its
+  root element declares a namespace prefix containing a dot, such as
+  `xmlns:xmp.iid="..."`; that name also appears before a colon somewhere in the
+  packet (a value like `xmp.iid:F77F1174` is enough); and some other prefix is
+  used where it is not declared. A dot is legal anywhere but first in an XML
+  namespace prefix, so the declaration is valid, but the repair that runs for
+  the undeclared prefix did not recognize it. The repair therefore added a
+  second declaration for a prefix that was already declared, and the parse
+  retry then failed on the duplicate attribute, which discarded every tag in
+  the packet.
 
 ### Security
 
