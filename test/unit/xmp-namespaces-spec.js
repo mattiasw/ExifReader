@@ -246,6 +246,20 @@ describe('xmp-namespaces', function () {
             expect(result).to.match(/xmlns:c\.d="http:\/\/fallback\.namespace\/c\.d"/);
         });
 
+        // XML allows whitespace on either side of the equals sign of an
+        // attribute (Eq ::= S? '=' S?), so a declaration written that way is a
+        // shape the usage scan finds but the declaration scan has to find too.
+        it('should recognize a declaration with whitespace around the equals sign', function () {
+            const spaced = '<root xmlns:a.b = "http://example.com/a"><a.b:one>One</a.b:one><c:two>Two</c:two></root>';
+            const broken = '<root xmlns:a.b\n    =\t"http://example.com/a"><a.b:one>One</a.b:one></root>';
+
+            const result = addMissingNamespaces(spaced);
+
+            expect(result.match(/xmlns:a\.b\s*=/g)).to.have.lengthOf(1);
+            expect(result).to.match(/xmlns:c="http:\/\/fallback\.namespace\/c"/);
+            expect(addMissingNamespaces(broken)).to.equal(broken);
+        });
+
         // Neither shape ever lost tags: an unused declaration is never looked
         // up, and one below the root was merely shadowed by the redundant
         // declaration added to the root. Now nothing is added for either.
