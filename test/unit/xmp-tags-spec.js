@@ -9,6 +9,7 @@ import {getConsoleWarnSpy, getDataView, swapProperties} from './test-utils.js';
 import {createRequire} from 'node:module';
 import DomParserModule from '../../src/dom-parser.js';
 import XmpTags from '../../src/xmp-tags.js';
+import XmpTagNames from '../../src/xmp-tag-names.js';
 
 const PACKET_WRAPPER_START = '<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>';
 const PACKET_WRAPPER_END = '<?xpacket end="w"?>';
@@ -1169,6 +1170,112 @@ describe('xmp-tags', function () {
                     expect(tags['MyXMPTag'].value['__proto__'].value).to.equal('4711');
                     expect(tags['MyXMPTag'].attributes).to.deep.equal({MyQualifier: '4812'});
                     expect(tags['MyXMPTag'].description).to.equal('__proto__: 4711');
+                });
+            });
+
+            describe('lists with a description function that throws', () => {
+                it('should keep an exif:GPSLatitude list whose description function only handles a plain value', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/">
+                            <exif:GPSLatitude>
+                                <rdf:Seq>
+                                    <rdf:li>48,28.8N</rdf:li>
+                                </rdf:Seq>
+                            </exif:GPSLatitude>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['GPSLatitude']).to.deep.equal({
+                        value: [
+                            {value: '48,28.8N', attributes: {}, description: '48,28.8N'}
+                        ],
+                        attributes: {},
+                        description: '48,28.8N'
+                    });
+                });
+
+                it('should keep an exif:ColorSpace list whose description function only handles a plain value', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/">
+                            <exif:ColorSpace>
+                                <rdf:Alt>
+                                    <rdf:li>1</rdf:li>
+                                </rdf:Alt>
+                            </exif:ColorSpace>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['ColorSpace']).to.deep.equal({
+                        value: [
+                            {value: '1', attributes: {}, description: '1'}
+                        ],
+                        attributes: {},
+                        description: '1'
+                    });
+                });
+
+                it('should keep a tiff:ResolutionUnit list whose items cannot be converted to a string', () => {
+                    // An item whose own toString is not a function cannot be coerced to a
+                    // string, so the description function throws when it converts the list.
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:tiff="http://ns.adobe.com/tiff/1.0/" xmlns:xmp="http://ns.example.com/xmp">
+                            <tiff:ResolutionUnit>
+                                <rdf:Seq>
+                                    <rdf:li xmp:toString="4711"/>
+                                </rdf:Seq>
+                            </tiff:ResolutionUnit>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['ResolutionUnit']).to.deep.equal({
+                        value: [
+                            {toString: {value: '4711', attributes: {}, description: '4711'}}
+                        ],
+                        attributes: {},
+                        description: 'toString: 4711'
+                    });
+                });
+
+                describe('with an injected description function', () => {
+                    let restoreXmpTagNames;
+
+                    beforeEach(() => {
+                        restoreXmpTagNames = swapProperties(XmpTagNames, {
+                            'xmp:MyThrowingTag'() {
+                                throw new Error('Test error');
+                            }
+                        });
+                    });
+
+                    afterEach(() => {
+                        restoreXmpTagNames();
+                    });
+
+                    it('should describe the list the way a list without a description function is described', () => {
+                        const xmlString = getXmlString(`
+                            <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                                <xmp:MyThrowingTag>
+                                    <rdf:Bag>
+                                        <rdf:li>4711</rdf:li>
+                                        <rdf:li>4812</rdf:li>
+                                    </rdf:Bag>
+                                </xmp:MyThrowingTag>
+                            </rdf:Description>
+                        `);
+                        const dataView = getDataView(xmlString);
+                        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                        expect(tags['MyThrowingTag']).to.deep.equal({
+                            value: [
+                                {value: '4711', attributes: {}, description: '4711'},
+                                {value: '4812', attributes: {}, description: '4812'}
+                            ],
+                            attributes: {},
+                            description: '4711, 4812'
+                        });
+                    });
                 });
             });
         });

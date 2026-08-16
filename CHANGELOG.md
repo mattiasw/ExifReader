@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   root element, so the retried parse failed too. The repair now also places
   the declarations correctly in a self-closing root element and no longer
   cuts the root tag short at a `>` inside a quoted attribute value.
+- An XMP tag written as a list (`rdf:Bag`, `rdf:Seq`, or `rdf:Alt`) is no
+  longer dropped from the output when ExifReader has a description function for
+  the tag that throws on a list, for example `exif:GPSLatitude`,
+  `exif:GPSLongitude`, or `exif:ColorSpace`. Such a tag is now returned with
+  its list value, and its description is the descriptions of the list items
+  joined together, which is what a list without a description function gets.
 
 ## [4.43.0] - 2026-08-16
 
