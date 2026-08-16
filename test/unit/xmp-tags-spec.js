@@ -1017,6 +1017,29 @@ describe('xmp-tags', function () {
                 });
             });
 
+            // Declaring the empty-URI prefix a second time drops every tag in
+            // the packet. It is only used in text here, because xmldom rejects
+            // the packet as soon as such a prefix names an element or an
+            // attribute. As above, only a parser that reports the unbound xmp
+            // prefix reaches the repair.
+            it('should keep the tags of a packet that declares a prefix with an empty namespace URI', () => {
+                const xmlString = `<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:stEvt="">
+                    <rdf:Description>
+                        <xmp:MyXMPTag>stEvt:action</xmp:MyXMPTag>
+                    </rdf:Description>
+                </rdf:RDF>`;
+                const dataView = getDataView(xmlString);
+                const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                expect(tags).to.deep.equal({
+                    _raw: xmlString,
+                    MyXMPTag: {
+                        value: 'stEvt:action',
+                        attributes: {},
+                        description: 'stEvt:action'
+                    }
+                });
+            });
+
             // With the declarations inserted at the comment's tag-like
             // content instead of the root element, the retry fails and every
             // tag in the packet is lost. As above, only a parser that reports
