@@ -21,11 +21,10 @@ export function isMissingNamespaceError(error) {
 
 // This should fix most missing namespace errors, but it's not a complete solution.
 export function addMissingNamespaces(xmlString) {
-    const rootTagMatch = xmlString.match(/<([A-Za-z_][A-Za-z0-9._-]*)([^>]*)>/);
-    if (!rootTagMatch) {
+    const insertionIndex = findRootTagInsertionIndex(xmlString);
+    if (insertionIndex === -1) {
         return xmlString;
     }
-    const rootTagName = rootTagMatch[1];
 
     const declaredPrefixLookup = getDeclaredNamespacePrefixLookup(xmlString);
     const usedPrefixes = getUsedNamespacePrefixes(xmlString);
@@ -35,7 +34,62 @@ export function addMissingNamespaces(xmlString) {
     }
 
     const namespaceDeclarations = createNamespaceDeclarations(missingPrefixes);
-    return insertDeclarationsIntoRoot(xmlString, rootTagName, namespaceDeclarations);
+    return xmlString.slice(0, insertionIndex) + namespaceDeclarations + xmlString.slice(insertionIndex);
+}
+
+function findRootTagInsertionIndex(xmlString) {
+    let index = 0;
+    while (index < xmlString.length) {
+        index = xmlString.indexOf('<', index);
+        if (index === -1) {
+            return -1;
+        }
+        if (/[A-Za-z_]/.test(xmlString.charAt(index + 1))) {
+            return findInsertionIndexInStartTag(xmlString, index + 1);
+        }
+        if (hasSubstringAt(xmlString, '<!--', index)) {
+            index = skipPast(xmlString, index + '<!--'.length, '-->');
+        } else if (hasSubstringAt(xmlString, '<![CDATA[', index)) {
+            index = skipPast(xmlString, index + '<![CDATA['.length, ']]>');
+        } else if (xmlString.charAt(index + 1) === '?') {
+            index = skipPast(xmlString, index + '<?'.length, '?>');
+        } else {
+            index++;
+        }
+    }
+    return -1;
+}
+
+function findInsertionIndexInStartTag(xmlString, fromIndex) {
+    let quoteCharacter;
+    for (let i = fromIndex; i < xmlString.length; i++) {
+        const character = xmlString.charAt(i);
+        if (quoteCharacter !== undefined) {
+            if (character === quoteCharacter) {
+                quoteCharacter = undefined;
+            }
+        } else if (character === '"' || character === '\'') {
+            quoteCharacter = character;
+        } else if (character === '>') {
+            if (xmlString.charAt(i - 1) === '/') {
+                return i - 1;
+            }
+            return i;
+        }
+    }
+    return -1;
+}
+
+function hasSubstringAt(xmlString, substring, index) {
+    return xmlString.slice(index, index + substring.length) === substring;
+}
+
+function skipPast(xmlString, fromIndex, endMarker) {
+    const endIndex = xmlString.indexOf(endMarker, fromIndex);
+    if (endIndex === -1) {
+        return xmlString.length;
+    }
+    return endIndex + endMarker.length;
 }
 
 // The lookup must not have a prototype. The prefixes come from the image, so a
@@ -104,9 +158,4 @@ function getNamespaceUri(prefix) {
         return KNOWN_NAMESPACE_URIS[prefix];
     }
     return 'http://fallback.namespace/' + prefix;
-}
-
-function insertDeclarationsIntoRoot(xmlString, rootTagName, declarations) {
-    const rootTagPattern = new RegExp('<' + rootTagName + '([^>]*)>');
-    return xmlString.replace(rootTagPattern, '<' + rootTagName + '$1' + declarations + '>');
 }

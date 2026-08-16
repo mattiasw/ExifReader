@@ -19,6 +19,79 @@ describe('xmp-namespaces', function () {
             expect(result).to.equal(xmlString);
         });
 
+        it('should insert declarations into the root element, not into a comment that contains something tag-like', function () {
+            const xmlString = '<!-- <b:note> --><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:Description><undeclared:Tag>1</undeclared:Tag></rdf:Description></x:xmpmeta>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result.indexOf('<!-- <b:note> -->')).to.equal(0);
+            expect(result).to.match(/<x:xmpmeta [^>]*xmlns:undeclared="http:\/\/fallback\.namespace\/undeclared"[^>]*>/);
+        });
+
+        it('should skip a processing instruction that contains something tag-like', function () {
+            const xmlString = '<?xpacket <a:b> ?><root><x:child>1</x:child></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result.indexOf('<?xpacket <a:b> ?>')).to.equal(0);
+            expect(result).to.match(/<root [^>]*xmlns:x="http:\/\/fallback\.namespace\/x"[^>]*>/);
+        });
+
+        it('should skip a CDATA section that contains something tag-like', function () {
+            const xmlString = '<![CDATA[<b:note>]]><root><x:child>1</x:child></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result.indexOf('<![CDATA[<b:note>]]>')).to.equal(0);
+            expect(result).to.match(/<root [^>]*xmlns:x="http:\/\/fallback\.namespace\/x"[^>]*>/);
+        });
+
+        it('should return the original string if it only holds a comment, even one that contains something tag-like', function () {
+            const xmlString = '<!-- <b:note> -->';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.equal(xmlString);
+        });
+
+        it('should return the original string if an unterminated comment swallows the root element', function () {
+            const xmlString = '<!-- <b:note> <root><x:child>1</x:child></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.equal(xmlString);
+        });
+
+        it('should insert declarations before the slash of a self-closing root element', function () {
+            const xmlString = '<root a:b="1"/>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.equal('<root a:b="1" xmlns:a="http://fallback.namespace/a"/>');
+        });
+
+        it('should not end the root start tag at a ">" inside a quoted attribute value', function () {
+            const xmlString = '<root a="b>c"><x:child>1</x:child></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.equal('<root a="b>c" xmlns:x="http://fallback.namespace/x"><x:child>1</x:child></root>');
+        });
+
+        it('should handle single-quoted attribute values and quote characters inside the other kind of quotes', function () {
+            const xmlString = '<root a="it\'s" b=\'>\'><x:child>1</x:child></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.equal('<root a="it\'s" b=\'>\' xmlns:x="http://fallback.namespace/x"><x:child>1</x:child></root>');
+        });
+
+        it('should return the original string if the root start tag never ends', function () {
+            const xmlString = '<root x:a="1"';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.equal(xmlString);
+        });
+
+        it('should step over a "<" that does not start an element, comment, CDATA section, or processing instruction', function () {
+            const xmlString = '1 < 2 <root><x:child>1</x:child></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.equal('1 < 2 <root xmlns:x="http://fallback.namespace/x"><x:child>1</x:child></root>');
+        });
+
         it('should not modify XML if all used prefixes are already declared on root element', function () {
             const xmlString = `
                 <root xmlns:x="http://example.com/x">
@@ -308,6 +381,18 @@ describe('xmp-namespaces', function () {
 
             expect(result).to.match(/<root xmlns:x="http:\/\/fallback\.namespace\/x">/);
             expect(result.match(/xmlns:/g)).to.have.lengthOf(1);
+        });
+
+        // A root scan that re-reads or re-copies the rest of the input for
+        // each construct it skips does on the order of 10^11 character
+        // operations here, which makes this time out.
+        it('should skip a large number of comments without slowing down quadratically', function () {
+            this.timeout(4000);
+            const comments = '<!-- <b:note> -->'.repeat(100000);
+            const xmlString = `${comments}<root><x:child>1</x:child></root>`;
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.contain('<root xmlns:b="http://fallback.namespace/b" xmlns:x="http://fallback.namespace/x">');
         });
 
         it('should handle prefixes that have the same names as object properties', function () {

@@ -1016,6 +1016,28 @@ describe('xmp-tags', function () {
                 });
             });
 
+            // With the declarations inserted at the comment's tag-like
+            // content instead of the root element, the retry fails and every
+            // tag in the packet is lost. As above, only a parser that reports
+            // the unbound xmp prefix reaches the repair.
+            it('should keep the tags of a packet whose leading comment contains something tag-like', () => {
+                const xmlString = `<!-- <b:note> --><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                    <rdf:Description>
+                        <xmp:MyXMPTag>4711</xmp:MyXMPTag>
+                    </rdf:Description>
+                </rdf:RDF>`;
+                const dataView = getDataView(xmlString);
+                const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                expect(tags).to.deep.equal({
+                    _raw: xmlString,
+                    MyXMPTag: {
+                        value: '4711',
+                        attributes: {},
+                        description: '4711'
+                    }
+                });
+            });
+
             describe('exceptions', () => {
                 it('should rename MicrosoftPhoto:Rating to RatingPercent', () => {
                     const xmlString = getXmlString(`

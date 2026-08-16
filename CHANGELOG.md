@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- An XMP packet in need of a namespace repair no longer loses all of its tags
+  when a comment, processing instruction, or CDATA section before the root
+  element contains something that looks like a tag. The synthesized
+  declarations were inserted at the first tag-like text instead of into the
+  root element, so the retried parse failed too. The repair now also places
+  the declarations correctly in a self-closing root element and no longer
+  cuts the root tag short at a `>` inside a quoted attribute value.
+
 ## [4.43.0] - 2026-08-16
 
 ### Changed
