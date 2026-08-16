@@ -27,9 +27,9 @@ export function addMissingNamespaces(xmlString) {
     }
     const rootTagName = rootTagMatch[1];
 
-    const declaredPrefixes = getAllDeclaredNamespacePrefixes(xmlString);
+    const declaredPrefixLookup = getDeclaredNamespacePrefixLookup(xmlString);
     const usedPrefixes = getUsedNamespacePrefixes(xmlString);
-    const missingPrefixes = usedPrefixes.filter((prefix) => declaredPrefixes.indexOf(prefix) === -1);
+    const missingPrefixes = usedPrefixes.filter((prefix) => declaredPrefixLookup[prefix] === undefined);
     if (missingPrefixes.length === 0) {
         return xmlString;
     }
@@ -38,28 +38,41 @@ export function addMissingNamespaces(xmlString) {
     return insertDeclarationsIntoRoot(xmlString, rootTagName, namespaceDeclarations);
 }
 
-function getAllDeclaredNamespacePrefixes(xmlContent) {
-    const prefixes = [];
-    const namespaceDeclarationRegex = /xmlns:([\w-]+)=["'][^"']+["']/g;
+// The lookup must not have a prototype. The prefixes come from the image, so a
+// prefix named e.g. __proto__ or constructor would otherwise be found among the
+// inherited properties and be treated as declared.
+function getDeclaredNamespacePrefixLookup(xmlContent) {
+    const prefixes = Object.create(null);
+    // Must not miss a name getUsedNamespacePrefixes finds: one missed on the
+    // root element is redeclared there, and the retry fails on the duplicate.
+    // XML allows whitespace on either side of the equals sign (Eq ::= S? '=' S?).
+    const namespaceDeclarationRegex = /xmlns:([A-Za-z_][A-Za-z0-9._-]*)\s*=\s*["'][^"']+["']/g;
     let match;
     while ((match = namespaceDeclarationRegex.exec(xmlContent)) !== null) {
-        if (prefixes.indexOf(match[1]) === -1) {
-            prefixes.push(match[1]);
-        }
+        prefixes[match[1]] = true;
     }
     return prefixes;
 }
 
 function getUsedNamespacePrefixes(xmlContent) {
     const prefixes = [];
-    const prefixUsageRegex = /\b([A-Za-z_][A-Za-z0-9._-]*):[A-Za-z_][A-Za-z0-9._-]*\b/g;
+    const seenPrefixes = Object.create(null); // Must not have a prototype, the prefixes come from the image.
+    // The token must start the string or follow a consumed delimiter, i.e. a
+    // character that cannot be part of a prefix. A word boundary must not be
+    // used here: with \b, each letter following a dot or dash in a long
+    // colon-free run of prefix-like characters ("a.a.a...") starts a match
+    // attempt that reads the rest of the run, which makes the scan quadratic.
+    // (Lookbehind would read better but is not supported by the oldest
+    // targeted runtimes.)
+    const prefixUsageRegex = /(?:^|[^A-Za-z0-9._-])([A-Za-z_][A-Za-z0-9._-]*):[A-Za-z_][A-Za-z0-9._-]*/g;
     let match;
     while ((match = prefixUsageRegex.exec(xmlContent)) !== null) {
         const prefix = match[1];
         if (prefix === 'xmlns' || prefix === 'xml') {
             continue;
         }
-        if (prefixes.indexOf(prefix) === -1) {
+        if (seenPrefixes[prefix] === undefined) {
+            seenPrefixes[prefix] = true;
             prefixes.push(prefix);
         }
     }
@@ -81,10 +94,16 @@ function createNamespaceDeclarations(prefixes) {
     const declarations = [];
     for (let i = 0; i < prefixes.length; i++) {
         const prefix = prefixes[i];
-        const uri = KNOWN_NAMESPACE_URIS[prefix] || 'http://fallback.namespace/' + prefix;
-        declarations.push(' xmlns:' + prefix + '="' + uri + '"');
+        declarations.push(' xmlns:' + prefix + '="' + getNamespaceUri(prefix) + '"');
     }
     return declarations.join('');
+}
+
+function getNamespaceUri(prefix) {
+    if (Object.prototype.hasOwnProperty.call(KNOWN_NAMESPACE_URIS, prefix)) {
+        return KNOWN_NAMESPACE_URIS[prefix];
+    }
+    return 'http://fallback.namespace/' + prefix;
 }
 
 function insertDeclarationsIntoRoot(xmlString, rootTagName, declarations) {

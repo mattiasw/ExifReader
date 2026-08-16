@@ -5,7 +5,7 @@
 import {objectAssign} from './utils.js';
 import ByteOrder from './byte-order.js';
 import {IFD_TYPE_0TH, IFD_TYPE_EXIF, IFD_TYPE_GPS, IFD_TYPE_INTEROPERABILITY} from './tag-names.js';
-import {readIfd, get0thIfdOffset} from './tags-helpers.js';
+import {readIfd, get0thIfdOffset, getValueBudget} from './tags-helpers.js';
 
 const SUB_IFDS = [
     {pointerKey: 'Exif IFD Pointer', ifdType: IFD_TYPE_EXIF},
@@ -19,15 +19,18 @@ export default {
 
 function read(dataView, tiffHeaderOffset, includeUnknown, computed = false, tagFilter = undefined) {
     const byteOrder = ByteOrder.getByteOrder(dataView, tiffHeaderOffset);
-    let tags = read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter);
+    // One decoded-value budget shared by the 0th, sub-, and thumbnail IFD
+    // reads so their combined decoded values stay proportional to the input.
+    const valueBudget = getValueBudget(dataView);
+    let tags = read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget);
     for (let i = 0; i < SUB_IFDS.length; i++) {
-        tags = readSubIfd(SUB_IFDS[i], tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter);
+        tags = readSubIfd(SUB_IFDS[i], tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget);
     }
 
     return {tags, byteOrder};
 }
 
-function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter) {
+function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget) {
     const ifdOffset = get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder);
     if (ifdOffset === undefined) {
         return {};
@@ -41,11 +44,12 @@ function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, compu
         includeUnknown,
         computed,
         tagFilter,
-        'exif'
+        'exif',
+        valueBudget
     );
 }
 
-function readSubIfd(subIfd, tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter) {
+function readSubIfd(subIfd, tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget) {
     const pointerTag = tags[subIfd.pointerKey];
     if (pointerTag === undefined) {
         return tags;
@@ -62,7 +66,8 @@ function readSubIfd(subIfd, tags, dataView, tiffHeaderOffset, byteOrder, include
             includeUnknown,
             computed,
             tagFilter,
-            'exif'
+            'exif',
+            valueBudget
         )
     );
 }
