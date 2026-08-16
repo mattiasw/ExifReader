@@ -200,6 +200,25 @@ expandedTags["xmp"]?.["DateTimeOriginal"].attributes["some-key"] ===
 expandedTags["xmp"]?.["DateTimeOriginal"].attributes === "some value";
 expandedTags["xmp"]?.["DateTimeOriginal"].value === "2014:09:21 16:00:56";
 
+// A tag parsed from an rdf:value element with child elements has an object
+// value whose entries are regular tags, keyed by local name.
+const xmpStructureValue = expandedTags["xmp"]?.["MyStructureTag"].value;
+if (typeof xmpStructureValue === "object" && !Array.isArray(xmpStructureValue)) {
+    const nestedDescription: string =
+        xmpStructureValue["MyInnerTag"].description;
+    const nestedAttribute: string =
+        xmpStructureValue["MyInnerTag"].attributes["some-key"];
+    xmpStructureValue["MyInnerTag"].value === "4711";
+    nestedDescription === nestedAttribute;
+    // @ts-expect-error
+    const nestedNumber: number = xmpStructureValue["MyInnerTag"].description;
+    nestedNumber === 0;
+    // @ts-expect-error
+    xmpStructureValue["MyInnerTag"].descriptions === "4711";
+    // @ts-expect-error
+    xmpStructureValue["MyInnerTag"].attributes === "some value";
+}
+
 ////////
 // PNG
 if (tags["Color Type"]) {

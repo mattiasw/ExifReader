@@ -1062,6 +1062,316 @@ describe('xmp-tags', function () {
                 });
             });
 
+            describe('an rdf:value element with child elements', () => {
+                it('should read the children as regular tags keyed by local name', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value><xmp:MyInnerTag>4711</xmp:MyInnerTag></rdf:value>
+                                <xmp:MyQualifier>4812</xmp:MyQualifier>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag']).to.deep.equal({
+                        value: {
+                            MyInnerTag: {value: '4711', attributes: {}, description: '4711'}
+                        },
+                        attributes: {MyQualifier: '4812'},
+                        description: 'MyInnerTag: 4711'
+                    });
+                });
+
+                it('should read a list inside a child of rdf:value', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value>
+                                    <xmp:MyInnerTag>
+                                        <rdf:Bag>
+                                            <rdf:li>4711</rdf:li>
+                                            <rdf:li>4812</rdf:li>
+                                        </rdf:Bag>
+                                    </xmp:MyInnerTag>
+                                </rdf:value>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag']).to.deep.equal({
+                        value: {
+                            MyInnerTag: {
+                                value: [
+                                    {value: '4711', attributes: {}, description: '4711'},
+                                    {value: '4812', attributes: {}, description: '4812'}
+                                ],
+                                attributes: {},
+                                description: '4711, 4812'
+                            }
+                        },
+                        attributes: {},
+                        description: 'MyInnerTag: 4711, 4812'
+                    });
+                });
+
+                it('should read the children of an rdf:value inside a nested rdf:Description', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag>
+                                <rdf:Description xmp:MyQualifier="4812">
+                                    <rdf:value><xmp:MyInnerTag>4711</xmp:MyInnerTag></rdf:value>
+                                </rdf:Description>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag']).to.deep.equal({
+                        value: {
+                            MyInnerTag: {value: '4711', attributes: {}, description: '4711'}
+                        },
+                        attributes: {MyQualifier: '4812'},
+                        description: 'MyInnerTag: 4711'
+                    });
+                });
+
+                it('should describe a child with the description function for its name', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmlns:tiff="http://ns.adobe.com/tiff/1.0/">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value><tiff:Orientation>3</tiff:Orientation></rdf:value>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag'].value['Orientation'].description).to.equal('Rotate 180');
+                    // The description of the whole value is composed from the
+                    // values of its tags, not from their descriptions.
+                    expect(tags['MyXMPTag'].description).to.equal('Orientation: 3');
+                });
+
+                it('should give an unprefixed child the undefined name, so two of them collapse into one', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value><__proto__>4711</__proto__><constructor>4812</constructor></rdf:value>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(Object.getPrototypeOf(tags['MyXMPTag'].value)).to.equal(null);
+                    expect(tags['MyXMPTag'].value).to.deep.equal({
+                        undefined: {value: '4812', attributes: {}, description: '4812'}
+                    });
+                });
+
+                it('should read a list written directly inside rdf:value as a list', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value>
+                                    <rdf:Bag>
+                                        <rdf:li>4711</rdf:li>
+                                        <rdf:li>4812</rdf:li>
+                                    </rdf:Bag>
+                                </rdf:value>
+                                <xmp:MyQualifier>4813</xmp:MyQualifier>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag']).to.deep.equal({
+                        value: [
+                            {value: '4711', attributes: {}, description: '4711'},
+                            {value: '4812', attributes: {}, description: '4812'}
+                        ],
+                        attributes: {MyQualifier: '4813'},
+                        description: '4711, 4812'
+                    });
+                });
+
+                it('should keep a qualified list whose description function only handles a plain value', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/">
+                            <exif:GPSLatitude rdf:parseType="Resource">
+                                <rdf:value>
+                                    <rdf:Seq>
+                                        <rdf:li>48,28.8N</rdf:li>
+                                    </rdf:Seq>
+                                </rdf:value>
+                                <exif:MyQualifier>4711</exif:MyQualifier>
+                            </exif:GPSLatitude>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['GPSLatitude']).to.deep.equal({
+                        value: [
+                            {value: '48,28.8N', attributes: {}, description: '48,28.8N'}
+                        ],
+                        attributes: {MyQualifier: '4711'},
+                        description: '48,28.8N'
+                    });
+                });
+
+                it('should let a list inside rdf:value take the place of its sibling elements', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value>
+                                    <rdf:Bag><rdf:li>4711</rdf:li></rdf:Bag>
+                                    <xmp:MySibling>4812</xmp:MySibling>
+                                </rdf:value>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag'].value).to.deep.equal([
+                        {value: '4711', attributes: {}, description: '4711'}
+                    ]);
+                });
+
+                it('should keep the text and the language of a qualified alternatives list', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmlns:dc="http://purl.org/dc/elements/1.1/">
+                            <dc:title rdf:parseType="Resource">
+                                <rdf:value>
+                                    <rdf:Alt>
+                                        <rdf:li xml:lang="x-default">My title</rdf:li>
+                                    </rdf:Alt>
+                                </rdf:value>
+                                <xmp:MyQualifier>4711</xmp:MyQualifier>
+                            </dc:title>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['title']).to.deep.equal({
+                        value: [
+                            {value: 'My title', attributes: {lang: 'x-default'}, description: 'My title'}
+                        ],
+                        attributes: {MyQualifier: '4711'},
+                        description: 'My title'
+                    });
+                });
+
+                // The value itself has no prototype, but the objects inside it
+                // are built the same way as everywhere else in the output, so
+                // an attribute named __proto__ still replaces the prototype of
+                // the tag it belongs to. Pinned here to keep that visible.
+                it('should protect the prototype of the value but not of the tags inside it', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value><xmp:MyInnerTag xmp:__proto__="4711"/></rdf:value>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(Object.getPrototypeOf(tags['MyXMPTag'].value)).to.equal(null);
+                    expect(Object.getPrototypeOf(tags['MyXMPTag'].value['MyInnerTag'].value)).to.deep.equal({
+                        value: '4711',
+                        attributes: {},
+                        description: '4711'
+                    });
+                });
+
+                it('should not keep the grandchildren of a child that holds elements of its own', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value><xmp:MyInnerTag><xmp:MyDeepTag>4711</xmp:MyDeepTag></xmp:MyInnerTag></rdf:value>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag']).to.deep.equal({
+                        value: {
+                            MyInnerTag: {value: {}, attributes: {}, description: ''}
+                        },
+                        attributes: {},
+                        description: 'MyInnerTag: '
+                    });
+                });
+            });
+
+            describe('repeated rdf:value elements', () => {
+                it('should use the last rdf:value of a tag', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value>4711</rdf:value>
+                                <rdf:value>4812</rdf:value>
+                            </xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag']).to.deep.equal({
+                        value: '4812',
+                        attributes: {},
+                        description: '4812'
+                    });
+                });
+
+                it('should use the last of repeated list elements instead of dropping the tag', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag rdf:parseType="Resource">
+                                <rdf:value>
+                                    <rdf:Bag><rdf:li>4711</rdf:li></rdf:Bag>
+                                    <rdf:Bag><rdf:li>4812</rdf:li></rdf:Bag>
+                                </rdf:value>
+                            </xmp:MyXMPTag>
+                            <xmp:MyOtherXMPTag>
+                                <rdf:Bag><rdf:li>4813</rdf:li></rdf:Bag>
+                                <rdf:Bag><rdf:li>4814</rdf:li></rdf:Bag>
+                            </xmp:MyOtherXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag'].value).to.deep.equal([
+                        {value: '4812', attributes: {}, description: '4812'}
+                    ]);
+                    expect(tags['MyOtherXMPTag'].value).to.deep.equal([
+                        {value: '4814', attributes: {}, description: '4814'}
+                    ]);
+                });
+
+                it('should keep a list whose item has repeated rdf:value elements', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPArray>
+                                <rdf:Bag>
+                                    <rdf:li rdf:parseType="Resource">
+                                        <rdf:value>4711</rdf:value>
+                                        <rdf:value>4812</rdf:value>
+                                    </rdf:li>
+                                </rdf:Bag>
+                            </xmp:MyXMPArray>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPArray']).to.deep.equal({
+                        value: [
+                            {value: '4812', attributes: {}, description: '4812'}
+                        ],
+                        attributes: {},
+                        description: '4812'
+                    });
+                });
+            });
+
             describe('exceptions', () => {
                 it('should rename MicrosoftPhoto:Rating to RatingPercent', () => {
                     const xmlString = getXmlString(`
@@ -1162,7 +1472,7 @@ describe('xmp-tags', function () {
                     const xmlString = getXmlString(`
                         <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                             <xmp:MyXMPTag rdf:parseType="Resource">
-                                <rdf:value><constructor>4711</constructor></rdf:value>
+                                <rdf:value><xmp:constructor>4711</xmp:constructor></rdf:value>
                                 <xmp:MyQualifier>4812</xmp:MyQualifier>
                             </xmp:MyXMPTag>
                         </rdf:Description>
@@ -1170,7 +1480,11 @@ describe('xmp-tags', function () {
                     const dataView = getDataView(xmlString);
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
                     expect(Object.keys(tags['MyXMPTag'].value)).to.deep.equal(['constructor']);
-                    expect(tags['MyXMPTag'].value['constructor'].value).to.equal('4711');
+                    expect(tags['MyXMPTag'].value['constructor']).to.deep.equal({
+                        value: '4711',
+                        attributes: {},
+                        description: '4711'
+                    });
                     expect(tags['MyXMPTag'].attributes).to.deep.equal({MyQualifier: '4812'});
                     expect(tags['MyXMPTag'].description).to.equal('constructor: 4711');
                 });
@@ -1179,7 +1493,7 @@ describe('xmp-tags', function () {
                     const xmlString = getXmlString(`
                         <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                             <xmp:MyXMPTag rdf:parseType="Resource">
-                                <rdf:value><__proto__>4711</__proto__></rdf:value>
+                                <rdf:value><xmp:__proto__>4711</xmp:__proto__></rdf:value>
                                 <xmp:MyQualifier>4812</xmp:MyQualifier>
                             </xmp:MyXMPTag>
                         </rdf:Description>
@@ -1190,13 +1504,17 @@ describe('xmp-tags', function () {
                     // The object has no prototype, which is what lets the
                     // __proto__ key be kept, and the caller gets that object.
                     expect(Object.getPrototypeOf(tags['MyXMPTag'].value)).to.equal(null);
-                    expect(tags['MyXMPTag'].value['__proto__'].value).to.equal('4711');
+                    expect(tags['MyXMPTag'].value['__proto__']).to.deep.equal({
+                        value: '4711',
+                        attributes: {},
+                        description: '4711'
+                    });
                     expect(tags['MyXMPTag'].attributes).to.deep.equal({MyQualifier: '4812'});
                     expect(tags['MyXMPTag'].description).to.equal('__proto__: 4711');
                 });
             });
 
-            describe('lists with a description function that throws', () => {
+            describe('lists with a description function written for a plain value', () => {
                 it('should keep an exif:GPSLatitude list whose description function only handles a plain value', () => {
                     const xmlString = getXmlString(`
                         <rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/">
@@ -1237,6 +1555,36 @@ describe('xmp-tags', function () {
                         attributes: {},
                         description: '1'
                     });
+                });
+
+                it('should describe a tiff:XResolution list whose description function hands the list back', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:tiff="http://ns.adobe.com/tiff/1.0/">
+                            <tiff:XResolution>
+                                <rdf:Seq>
+                                    <rdf:li>72</rdf:li>
+                                </rdf:Seq>
+                            </tiff:XResolution>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['XResolution'].description).to.equal('72');
+                });
+
+                it('should describe a tiff:Orientation list whose description function hands the list back', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:tiff="http://ns.adobe.com/tiff/1.0/">
+                            <tiff:Orientation>
+                                <rdf:Seq>
+                                    <rdf:li>3</rdf:li>
+                                </rdf:Seq>
+                            </tiff:Orientation>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['Orientation'].description).to.equal('3');
                 });
 
                 it('should keep a tiff:ResolutionUnit list whose items cannot be converted to a string', () => {

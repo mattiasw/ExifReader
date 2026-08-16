@@ -7,8 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The value of an XMP tag that comes from an `rdf:value` element with child
+  elements is now an object of regular tags instead of the parser's internal
+  nodes. Each child is keyed by its local name (`Inner` instead of `my:Inner`)
+  and has `value`, `attributes`, and `description` like any other tag, which is
+  what the TypeScript definitions have described all along. The description of
+  the tag itself follows the new names, for example `Inner: 42` where it used
+  to be `my:Inner: 42`.
+- The content of an `rdf:value` element is now parsed much as the content of
+  the tag element itself would have been. A list written directly inside
+  `rdf:value` is therefore a list tag now, so a qualified value written as an
+  `rdf:Alt` with `xml:lang` keeps both its text and its language where it used
+  to come back as raw parser nodes. Such a list also takes the place of any
+  sibling elements inside the same `rdf:value`.
+- Two further consequences of that parsing, if you read these values: a child
+  without a namespace prefix lands under the name `undefined`, as an element
+  without a prefix does everywhere else in the output, so two such children
+  collapse into one; and a child that holds elements of its own, without being
+  marked `rdf:parseType="Resource"` itself, is kept without them.
+- The value object of such a tag still has no prototype, as it has since
+  4.43.0, but only that object. The tags nested inside it are now built the way
+  tags are built everywhere else, so an element or attribute named `__proto__`
+  below the value itself is lost instead of being kept: it replaces the
+  prototype of the object it would have been stored in, which can also put
+  `value`, `attributes`, and `description` entries in the output where they
+  were not present before. For the same reason a child of the `rdf:value`
+  element itself keeps the name `__proto__` only when it has a namespace
+  prefix, since an unprefixed one is named `undefined` like any other
+  unprefixed element.
+
 ### Fixed
 
+- The description of an XMP tag written as a list is now always a string. When
+  ExifReader has a description function for the tag that neither handles a list
+  nor throws on one, for example `tiff:Orientation` or `tiff:XResolution`, the
+  function handed the list back unchanged and the list itself became the
+  description, where the TypeScript definitions promise a string. The
+  descriptions of the list items joined together are used instead, which is
+  what a list without a description function gets. Together with the entry
+  below about a description function that throws, a list description is now a
+  string whatever the function does with it.
+- An XMP tag with more than one `rdf:value` child element is no longer lost or
+  returned without a value. The repeated elements were collected into a list
+  that the value parser did not recognize, which left the tag with a `value` of
+  `undefined` and the description `"undefined"`, and which threw for an item of
+  an `rdf:Bag`, `rdf:Seq`, or `rdf:Alt`, dropping the whole list tag. The last
+  `rdf:value` now wins, which is how a repeated tag is handled.
+- An XMP tag with more than one `rdf:Bag`, `rdf:Seq`, or `rdf:Alt` element is
+  no longer dropped from the output. Reading the list items threw because the
+  repeated elements were collected into a list of their own. The last one now
+  wins, as it does for any other repeated element.
 - An XMP packet in need of a namespace repair no longer loses all of its tags
   when a comment, processing instruction, or CDATA section before the root
   element contains something that looks like a tag. The synthesized
