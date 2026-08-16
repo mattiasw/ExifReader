@@ -16,6 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   root element, so the retried parse failed too. The repair now also places
   the declarations correctly in a self-closing root element and no longer
   cuts the root tag short at a `>` inside a quoted attribute value.
+- An XMP packet in need of a namespace repair no longer loses all of its tags
+  when its root element declares one of its prefixes with an empty namespace
+  URI, as in `xmlns:p=""`, and that prefix also appears somewhere other than
+  as an element or attribute name. The scan that finds the declared prefixes
+  required a URI of at least one character, so the repair added a second
+  declaration for a prefix the packet already declares, and the parse retry
+  then failed on the duplicate attribute, which discarded every tag in the
+  packet. A packet where such a prefix names an element or an attribute is
+  still rejected by `@xmldom/xmldom`. A browser's XML parser rejects the empty
+  declaration itself, with an error the repair does not act on, so in a
+  browser such a packet is lost either way.
 - An XMP tag written as a list (`rdf:Bag`, `rdf:Seq`, or `rdf:Alt`) is no
   longer dropped from the output when ExifReader has a description function for
   the tag that throws on a list, for example `exif:GPSLatitude`,

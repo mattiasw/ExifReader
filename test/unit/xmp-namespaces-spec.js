@@ -333,6 +333,51 @@ describe('xmp-namespaces', function () {
             expect(addMissingNamespaces(broken)).to.equal(broken);
         });
 
+        // An empty URI is illegal on a prefixed declaration in XML Namespaces
+        // 1.0 and undeclares the prefix in 1.1, but the scan has to find the
+        // declaration either way, or the prefix is declared a second time on
+        // the root element and the retry fails on the duplicate attribute.
+        it('should recognize a declaration with an empty namespace URI', function () {
+            const xmlString = '<root xmlns:a="" xmlns:b=\'\' xmlns:c = "" xmlns:d=\'http://example.com/d\'><a:one>One</a:one><b:two>Two</b:two><c:three>Three</c:three><d:four>Four</d:four><e:five>Five</e:five></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            for (const prefix of ['a', 'b', 'c', 'd']) {
+                expect(result.match(new RegExp(`xmlns:${prefix}\\s*=`, 'g')), prefix).to.have.lengthOf(1);
+            }
+            expect(result).to.match(/xmlns:e="http:\/\/fallback\.namespace\/e"/);
+            expect(result.match(/xmlns:/g)).to.have.lengthOf(5);
+
+            // A self-closing root element puts the insertion point at the
+            // slash, so a declaration written last ends right against the
+            // boundary the scan compares with.
+            const selfClosing = '<root a:b="1" xmlns:a=""/>';
+            expect(addMissingNamespaces(selfClosing)).to.equal(selfClosing);
+        });
+
+        // Only the root start tag can collect a duplicate, so declaration-like
+        // text before it is not a declaration. Counting it as one would cost
+        // the packet every tag, which is what the empty URI is tolerated to
+        // avoid in the first place.
+        it('should not treat an empty declaration before the root element as a declaration', function () {
+            const inComment = '<!-- xmlns:a="" --><root><a:child>Content</a:child></root>';
+            const inProcessingInstruction = '<?xpacket xmlns:a="" ?><root><a:child>Content</a:child></root>';
+
+            expect(addMissingNamespaces(inComment)).to.contain('<root xmlns:a="http://fallback.namespace/a">');
+            expect(addMissingNamespaces(inProcessingInstruction)).to.contain('<root xmlns:a="http://fallback.namespace/a">');
+        });
+
+        // A duplicate attribute needs both declarations on one element, so an
+        // empty declaration below the root cannot cause one. Counting it as a
+        // declaration there would only rob a usage outside its element of the
+        // declaration the repair adds to the root, which is what binds it.
+        it('should still repair a prefix whose only empty declaration is below the root element', function () {
+            const xmlString = '<root><mid xmlns:a=""/><a:child>Content</a:child></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.match(/<root xmlns:a="http:\/\/fallback\.namespace\/a">/);
+            expect(result.match(/xmlns:a\s*=/g)).to.have.lengthOf(2);
+        });
+
         // Neither shape ever lost tags: an unused declaration is never looked
         // up, and one below the root was merely shadowed by the redundant
         // declaration added to the root. Now nothing is added for either.

@@ -21,12 +21,16 @@ export function isMissingNamespaceError(error) {
 
 // This should fix most missing namespace errors, but it's not a complete solution.
 export function addMissingNamespaces(xmlString) {
-    const insertionIndex = findRootTagInsertionIndex(xmlString);
+    const rootTagStartIndex = findRootTagStartIndex(xmlString);
+    if (rootTagStartIndex === -1) {
+        return xmlString;
+    }
+    const insertionIndex = findInsertionIndexInStartTag(xmlString, rootTagStartIndex + 1);
     if (insertionIndex === -1) {
         return xmlString;
     }
 
-    const declaredPrefixLookup = getDeclaredNamespacePrefixLookup(xmlString);
+    const declaredPrefixLookup = getDeclaredNamespacePrefixLookup(xmlString, rootTagStartIndex, insertionIndex);
     const usedPrefixes = getUsedNamespacePrefixes(xmlString);
     const missingPrefixes = usedPrefixes.filter((prefix) => declaredPrefixLookup[prefix] === undefined);
     if (missingPrefixes.length === 0) {
@@ -37,7 +41,7 @@ export function addMissingNamespaces(xmlString) {
     return xmlString.slice(0, insertionIndex) + namespaceDeclarations + xmlString.slice(insertionIndex);
 }
 
-function findRootTagInsertionIndex(xmlString) {
+function findRootTagStartIndex(xmlString) {
     let index = 0;
     while (index < xmlString.length) {
         index = xmlString.indexOf('<', index);
@@ -45,7 +49,7 @@ function findRootTagInsertionIndex(xmlString) {
             return -1;
         }
         if (/[A-Za-z_]/.test(xmlString.charAt(index + 1))) {
-            return findInsertionIndexInStartTag(xmlString, index + 1);
+            return index;
         }
         if (hasSubstringAt(xmlString, '<!--', index)) {
             index = skipPast(xmlString, index + '<!--'.length, '-->');
@@ -95,17 +99,27 @@ function skipPast(xmlString, fromIndex, endMarker) {
 // The lookup must not have a prototype. The prefixes come from the image, so a
 // prefix named e.g. __proto__ or constructor would otherwise be found among the
 // inherited properties and be treated as declared.
-function getDeclaredNamespacePrefixLookup(xmlContent) {
+function getDeclaredNamespacePrefixLookup(xmlContent, rootTagStartIndex, insertionIndex) {
     const prefixes = Object.create(null);
     // Must not miss a name getUsedNamespacePrefixes finds: one missed on the
     // root element is redeclared there, and the retry fails on the duplicate.
     // XML allows whitespace on either side of the equals sign (Eq ::= S? '=' S?).
-    const namespaceDeclarationRegex = /xmlns:([A-Za-z_][A-Za-z0-9._-]*)\s*=\s*["'][^"']+["']/g;
+    const namespaceDeclarationRegex = /xmlns:([A-Za-z_][A-Za-z0-9._-]*)\s*=\s*["']([^"']*)["']/g;
     let match;
     while ((match = namespaceDeclarationRegex.exec(xmlContent)) !== null) {
-        prefixes[match[1]] = true;
+        // An empty URI (illegal in Namespaces 1.0, an undeclaration in 1.1)
+        // counts only in the root start tag, the one element a duplicate can
+        // land on. Elsewhere it has to stay missing, so that the repair still
+        // declares the prefix on the root and binds the usages it can.
+        if (match[2] !== '' || isInRootStartTag(match.index, rootTagStartIndex, insertionIndex)) {
+            prefixes[match[1]] = true;
+        }
     }
     return prefixes;
+}
+
+function isInRootStartTag(index, rootTagStartIndex, insertionIndex) {
+    return index > rootTagStartIndex && index < insertionIndex;
 }
 
 function getUsedNamespacePrefixes(xmlContent) {
