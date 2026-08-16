@@ -288,7 +288,12 @@ function getDescription(value, name = undefined) {
     if (Array.isArray(value)) {
         const arrayDescription = getDescriptionOfArray(value);
         if (hasTagNameFunction(name)) {
-            return XmpTagNames[name](value, arrayDescription);
+            // A description function written for a plain value throws on a list.
+            try {
+                return XmpTagNames[name](value, arrayDescription);
+            } catch (error) {
+                return arrayDescription;
+            }
         }
         return arrayDescription;
     }
