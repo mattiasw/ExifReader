@@ -1062,6 +1062,59 @@ describe('xmp-tags', function () {
                 });
             });
 
+            // Declaration-like text inside another attribute's value on the
+            // root element is not a declaration, but a scan that counts it as
+            // one suppresses the repair for the genuinely undeclared prefix,
+            // and every tag in the packet is lost. As above, only a parser
+            // that reports the unbound prefix reaches the repair.
+            it('should keep the tags of a packet whose root element holds an attribute value that looks like a declaration', () => {
+                const xmlString = `<x:xmpmeta xmlns:x="adobe:ns:meta/" x:note='xmlns:p="urn:z"'><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                    <rdf:Description xmlns:my="http://example.com/my/">
+                        <my:MyXMPTag>4711</my:MyXMPTag>
+                        <p:MyOtherTag>4812</p:MyOtherTag>
+                    </rdf:Description>
+                </rdf:RDF></x:xmpmeta>`;
+                const dataView = getDataView(xmlString);
+                const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                expect(tags).to.deep.equal({
+                    _raw: xmlString,
+                    MyXMPTag: {
+                        value: '4711',
+                        attributes: {},
+                        description: '4711'
+                    },
+                    MyOtherTag: {
+                        value: '4812',
+                        attributes: {},
+                        description: '4812'
+                    }
+                });
+            });
+
+            it('should keep the tags of a packet whose root element holds an attribute value that looks like an empty declaration', () => {
+                const xmlString = `<x:xmpmeta xmlns:x="adobe:ns:meta/" x:note='xmlns:p=""'><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                    <rdf:Description xmlns:my="http://example.com/my/">
+                        <my:MyXMPTag>4711</my:MyXMPTag>
+                        <p:MyOtherTag>4812</p:MyOtherTag>
+                    </rdf:Description>
+                </rdf:RDF></x:xmpmeta>`;
+                const dataView = getDataView(xmlString);
+                const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                expect(tags).to.deep.equal({
+                    _raw: xmlString,
+                    MyXMPTag: {
+                        value: '4711',
+                        attributes: {},
+                        description: '4711'
+                    },
+                    MyOtherTag: {
+                        value: '4812',
+                        attributes: {},
+                        description: '4812'
+                    }
+                });
+            });
+
             describe('an rdf:value element with child elements', () => {
                 it('should read the children as regular tags keyed by local name', () => {
                     const xmlString = getXmlString(`
