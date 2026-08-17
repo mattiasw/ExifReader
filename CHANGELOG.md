@@ -27,19 +27,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without a prefix does everywhere else in the output, so two such children
   collapse into one; and a child that holds elements of its own, without being
   marked `rdf:parseType="Resource"` itself, is kept without them.
-- The value object of such a tag still has no prototype, as it has since
-  4.43.0, but only that object. The tags nested inside it are now built the way
-  tags are built everywhere else, so an element or attribute named `__proto__`
-  below the value itself is lost instead of being kept: it replaces the
-  prototype of the object it would have been stored in, which can also put
-  `value`, `attributes`, and `description` entries in the output where they
-  were not present before. For the same reason a child of the `rdf:value`
-  element itself keeps the name `__proto__` only when it has a namespace
-  prefix, since an unprefixed one is named `undefined` like any other
-  unprefixed element.
+- The value object of such a tag still has no prototype, as it has since 4.43.0.
+  A child of it named `__proto__` is kept under that name, and so is one nested
+  further down, which is new (see the entry below).
 
 ### Fixed
 
+- An XMP element or attribute named `__proto__` is now kept as a tag under that
+  name. Such a name was used in a plain property assignment, which JavaScript
+  takes as a request to replace the prototype of the object holding the tag, so
+  the tag was lost and the fields of the tag object (`value`, `attributes`, and
+  `description`) showed up as properties of the object it should have been
+  stored in, including among the top level XMP tags, where the image had no such
+  tags. The value of an `rdf:value` element with child elements was the only
+  place already protected, since 4.43.0.
 - The description of an XMP tag written as a list is now always a string. When
   ExifReader has a description function for the tag that neither handles a list
   nor throws on one, for example `tiff:Orientation` or `tiff:XResolution`, the

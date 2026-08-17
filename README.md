@@ -215,16 +215,13 @@ markup. Never insert them into a page as HTML (for example through `innerHTML`)
 without escaping or sanitizing them first, otherwise a crafted image could lead
 to cross-site scripting. Use `textContent`, your framework's escaping, or a
 sanitizer such as DOMPurify when displaying metadata. The property names inside
-a tag value come from the image too, and a value parsed from an XMP `rdf:value`
-element that holds child elements other than a list is returned as an object
-without a prototype, so that a direct child element whose local name is
-`__proto__` can be kept under that name. Such an object has no inherited
-methods, and copying it into an object of your own with `Object.assign` or a
-deep merge helper without filtering the keys could let a crafted image replace
-that object's prototype. That covers only that one object; elsewhere in the
-output a name of `__proto__` replaces the prototype of the object it would have
-been stored in, which can put unexpected `value`, `attributes`, and
-`description` entries in the metadata.
+a tag value come from the image too, and a tag whose name is `__proto__` is kept
+under that name as a regular property, so it does not replace the prototype of
+the object holding it. A value parsed from an XMP `rdf:value` element that holds
+child elements other than a list is returned as an object without a prototype.
+Such an object has no inherited methods, and copying it into an object of your
+own with `Object.assign` or a deep merge helper without filtering the keys could
+let a crafted image replace that object's prototype.
 
 #### Grouping
 

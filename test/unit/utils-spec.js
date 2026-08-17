@@ -325,4 +325,40 @@ describe('utils', () => {
             expect(metadataBlocks).to.deep.equal([]);
         });
     });
+
+    describe('setProperty', () => {
+        it('should set a regular property', () => {
+            const object = {};
+            Utils.setProperty(object, 'MyKey', 4711);
+            expect(object).to.deep.equal({MyKey: 4711});
+        });
+
+        it('should keep a property named __proto__ under its own name', () => {
+            const object = {};
+            Utils.setProperty(object, '__proto__', {MyKey: 4711});
+            expect(Object.keys(object)).to.deep.equal(['__proto__']);
+            expect(Object.getPrototypeOf(object)).to.equal(Object.prototype);
+        });
+
+        it('should not let a property named __proto__ add inherited properties', () => {
+            const object = {};
+            Utils.setProperty(object, '__proto__', {MyKey: 4711});
+            expect(object.MyKey).to.be.undefined;
+        });
+    });
+
+    describe('objectAssign', () => {
+        it('should copy properties from all sources', () => {
+            expect(Utils.objectAssign({a: 1}, {b: 2}, {c: 3})).to.deep.equal({a: 1, b: 2, c: 3});
+        });
+
+        it('should copy a property named __proto__ without replacing the prototype', () => {
+            const source = {};
+            Utils.setProperty(source, '__proto__', {MyKey: 4711});
+            const target = Utils.objectAssign({}, source);
+            expect(Object.keys(target)).to.deep.equal(['__proto__']);
+            expect(Object.getPrototypeOf(target)).to.equal(Object.prototype);
+            expect(target.MyKey).to.be.undefined;
+        });
+    });
 });

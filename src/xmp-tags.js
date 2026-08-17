@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView, objectAssign} from './utils.js';
+import {getStringFromDataView, objectAssign, setProperty} from './utils.js';
 import XmpTagNames from './xmp-tag-names.js';
 import DOMParser from './dom-parser.js';
 import {isMissingNamespaceError, addMissingNamespaces} from './xmp-namespaces.js';
@@ -218,7 +218,7 @@ function getAttributes(element) {
     const attributes = {};
 
     for (let i = 0; i < element.attributes.length; i++) {
-        attributes[element.attributes[i].nodeName] = decodeURIComponent(escape(element.attributes[i].value));
+        setProperty(attributes, element.attributes[i].nodeName, decodeURIComponent(escape(element.attributes[i].value)));
     }
 
     return attributes;
@@ -255,11 +255,11 @@ function parseNodeAttributesAsTags(attributes) {
     for (const name in attributes) {
         try {
             if (isTagAttribute(name)) {
-                tags[getLocalName(name)] = {
+                setProperty(tags, getLocalName(name), {
                     value: attributes[name],
                     attributes: {},
                     description: getDescription(attributes[name], name)
-                };
+                });
             }
         } catch (error) {
             // Keep going and try to parse the rest of the tags.
@@ -373,7 +373,7 @@ function parseNodeChildrenAsTags(children, tags = {}) {
     for (const name in children) {
         try {
             if (!isNamespaceDefinition(name)) {
-                tags[getLocalName(name)] = parseNodeAsTag(children[name], name);
+                setProperty(tags, getLocalName(name), parseNodeAsTag(children[name], name));
             }
         } catch (error) {
             // Keep going and try to parse the rest of the tags.
@@ -447,7 +447,7 @@ function parseNodeAttributes(node) {
 
     for (const name in node.attributes) {
         if ((name !== 'rdf:parseType') && (name !== 'rdf:resource') && (!isNamespaceDefinition(name))) {
-            attributes[getLocalName(name)] = node.attributes[name];
+            setProperty(attributes, getLocalName(name), node.attributes[name]);
         }
     }
 
@@ -459,7 +459,7 @@ function parseNodeChildrenAsAttributes(node) {
 
     for (const name in node.value) {
         if ((name !== 'rdf:value') && (!isNamespaceDefinition(name))) {
-            attributes[getLocalName(name)] = node.value[name].value;
+            setProperty(attributes, getLocalName(name), node.value[name].value);
         }
     }
 
