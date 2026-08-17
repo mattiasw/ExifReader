@@ -378,6 +378,52 @@ describe('xmp-namespaces', function () {
             expect(result.match(/xmlns:a\s*=/g)).to.have.lengthOf(2);
         });
 
+        // The scan is a text scan, so without tracking the quotes of the root
+        // start tag it counts declaration-like text inside another attribute's
+        // value as a declaration. That suppresses the repair for a genuinely
+        // undeclared prefix, and the packet loses every tag.
+        it('should not treat a declaration inside the value of another attribute on the root element as a declaration', function () {
+            const doubleInsideSingle = '<root xmlns:x="http://example.com/x" x:note=\'xmlns:p="z"\'><p:child>1</p:child></root>';
+            const emptyUri = '<root xmlns:x="http://example.com/x" x:note=\'xmlns:p=""\'><p:child>1</p:child></root>';
+            const singleInsideDouble = '<root xmlns:x="http://example.com/x" x:note="xmlns:p=\'z\'"><p:child>1</p:child></root>';
+
+            for (const xmlString of [doubleInsideSingle, emptyUri, singleInsideDouble]) {
+                const result = addMissingNamespaces(xmlString);
+
+                expect(result, xmlString).to.match(/xmlns:p="http:\/\/fallback\.namespace\/p"/);
+                expect(result.match(/xmlns:x=/g), xmlString).to.have.lengthOf(1);
+            }
+        });
+
+        // Matched from inside the value, the declaration-like text reads as
+        // xmlns:p=' xmlns:q=", which also consumes the genuine declaration of
+        // q. A scan that accepts or steps past such a match declares q a
+        // second time, and the retry fails on the duplicate attribute.
+        it('should not let a declaration-like attribute value hide the declaration that follows it', function () {
+            const xmlString = '<root xmlns:x="http://example.com/x" x:note=\'xmlns:p=\' xmlns:q="u"><p:a>1</p:a><q:b>2</q:b></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result.match(/xmlns:q=/g)).to.have.lengthOf(1);
+            expect(result).to.match(/xmlns:p="http:\/\/fallback\.namespace\/p"/);
+        });
+
+        // Every declaration shape the scan has to find remains an attribute
+        // of the root start tag when declaration-like values sit between the
+        // declarations. One missed here would be redeclared, and the retry
+        // would fail on the duplicate attribute.
+        it('should recognize every genuine declaration on a root element that also holds declaration-like attribute values', function () {
+            const xmlString = '<root a=\'xmlns:v="z"\' xmlns:a.b="http://example.com/ab" b="xmlns:w=\'z\'" xmlns:c = "http://example.com/c" xmlns:d=\'\'><a.b:one>One</a.b:one><c:two>Two</c:two><d:three>Three</d:three></root>';
+
+            expect(addMissingNamespaces(xmlString)).to.equal(xmlString);
+        });
+
+        it('should still repair a prefix whose only empty declaration is in element text below the root element', function () {
+            const xmlString = '<root><a:child>xmlns:p=""</a:child><p:other>1</p:other></root>';
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result).to.match(/xmlns:p="http:\/\/fallback\.namespace\/p"/);
+        });
+
         // Neither shape ever lost tags: an unused declaration is never looked
         // up, and one below the root was merely shadowed by the redundant
         // declaration added to the root. Now nothing is added for either.
@@ -426,6 +472,26 @@ describe('xmp-namespaces', function () {
 
             expect(result).to.match(/<root xmlns:x="http:\/\/fallback\.namespace\/x">/);
             expect(result.match(/xmlns:/g)).to.have.lengthOf(1);
+        });
+
+        // The declaration matches have to be merged with the root start tag's
+        // attribute value spans in one forward pass. Looking up each match's
+        // span with a scan over all the spans does on the order of 10^9 span
+        // comparisons here, which makes this time out.
+        it('should handle a large number of attribute values without slowing down quadratically', function () {
+            this.timeout(4000);
+            const numberOfAttributes = 50000;
+            const attributes = [];
+            const usages = [];
+            for (let i = 0; i < numberOfAttributes; i++) {
+                attributes.push(` n${i}='xmlns:a${i}="u"' xmlns:d${i}="w${i}"`);
+                usages.push(`d${i}:v a${i}:v`);
+            }
+            const xmlString = `<root${attributes.join('')}><x:child>${usages.join(' ')}</x:child></root>`;
+            const result = addMissingNamespaces(xmlString);
+
+            expect(result.match(/xmlns:a\d+=/g)).to.have.lengthOf(2 * numberOfAttributes);
+            expect(result.match(/xmlns:d\d+=/g)).to.have.lengthOf(numberOfAttributes);
         });
 
         // A root scan that re-reads or re-copies the rest of the input for

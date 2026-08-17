@@ -78,6 +78,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still rejected by `@xmldom/xmldom`. A browser's XML parser rejects the empty
   declaration itself, with an error the repair does not act on, so in a
   browser such a packet is lost either way.
+- An XMP packet in need of a namespace repair no longer loses all of its tags
+  when an attribute value on its root element contains text that looks like a
+  namespace declaration, as in `note='xmlns:p="urn:z"'`, and the prefix it
+  names is used in the packet without a real declaration. The scan that finds
+  the declared prefixes could not tell a declaration from the same characters
+  inside another attribute's quoted value, so the prefix counted as declared,
+  no declaration was added for it, and the retried parse failed on the same
+  unbound prefix. Such text could also hide the genuine declaration that
+  followed it from the scan, and that prefix was then declared a second time,
+  which failed the retry on the duplicate attribute.
 - An XMP tag written as a list (`rdf:Bag`, `rdf:Seq`, or `rdf:Alt`) is no
   longer dropped from the output when ExifReader has a description function for
   the tag that throws on a list, for example `exif:GPSLatitude`,
