@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.44.0] - 2026-08-21
+
 ### Changed
 
 - The value of an XMP tag that comes from an `rdf:value` element with child
@@ -1346,7 +1348,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.43.0...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.44.0...HEAD
+[4.44.0]: https://github.com/mattiasw/ExifReader/compare/v4.43.0...v4.44.0
 [4.43.0]: https://github.com/mattiasw/ExifReader/compare/v4.42.0...v4.43.0
 [4.42.0]: https://github.com/mattiasw/ExifReader/compare/v4.41.4...v4.42.0
 [4.41.4]: https://github.com/mattiasw/ExifReader/compare/v4.41.3...v4.41.4
