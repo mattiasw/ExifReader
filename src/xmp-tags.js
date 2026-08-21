@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView, objectAssign} from './utils.js';
+import {getStringFromDataView, objectAssign, setProperty} from './utils.js';
 import XmpTagNames from './xmp-tag-names.js';
 import DOMParser from './dom-parser.js';
 import {isMissingNamespaceError, addMissingNamespaces} from './xmp-namespaces.js';
@@ -218,7 +218,7 @@ function getAttributes(element) {
     const attributes = {};
 
     for (let i = 0; i < element.attributes.length; i++) {
-        attributes[element.attributes[i].nodeName] = decodeURIComponent(escape(element.attributes[i].value));
+        setProperty(attributes, element.attributes[i].nodeName, decodeURIComponent(escape(element.attributes[i].value)));
     }
 
     return attributes;
@@ -255,11 +255,11 @@ function parseNodeAttributesAsTags(attributes) {
     for (const name in attributes) {
         try {
             if (isTagAttribute(name)) {
-                tags[getLocalName(name)] = {
+                setProperty(tags, getLocalName(name), {
                     value: attributes[name],
                     attributes: {},
                     description: getDescription(attributes[name], name)
-                };
+                });
             }
         } catch (error) {
             // Keep going and try to parse the rest of the tags.
@@ -288,7 +288,17 @@ function getDescription(value, name = undefined) {
     if (Array.isArray(value)) {
         const arrayDescription = getDescriptionOfArray(value);
         if (hasTagNameFunction(name)) {
-            return XmpTagNames[name](value, arrayDescription);
+            // A description is a string, so a description function written for
+            // a plain value is ignored when it throws on a list or returns
+            // something other than a string.
+            try {
+                const description = XmpTagNames[name](value, arrayDescription);
+                if (typeof description === 'string') {
+                    return description;
+                }
+            } catch (error) {
+                // Fall back to the descriptions of the items.
+            }
         }
         return arrayDescription;
     }
@@ -359,13 +369,11 @@ function getClearTextKey(key) {
     return key;
 }
 
-function parseNodeChildrenAsTags(children) {
-    const tags = {};
-
+function parseNodeChildrenAsTags(children, tags = {}) {
     for (const name in children) {
         try {
             if (!isNamespaceDefinition(name)) {
-                tags[getLocalName(name)] = parseNodeAsTag(children[name], name);
+                setProperty(tags, getLocalName(name), parseNodeAsTag(children[name], name));
             }
         } catch (error) {
             // Keep going and try to parse the rest of the tags.
@@ -439,7 +447,7 @@ function parseNodeAttributes(node) {
 
     for (const name in node.attributes) {
         if ((name !== 'rdf:parseType') && (name !== 'rdf:resource') && (!isNamespaceDefinition(name))) {
-            attributes[getLocalName(name)] = node.attributes[name];
+            setProperty(attributes, getLocalName(name), node.attributes[name]);
         }
     }
 
@@ -451,7 +459,7 @@ function parseNodeChildrenAsAttributes(node) {
 
     for (const name in node.value) {
         if ((name !== 'rdf:value') && (!isNamespaceDefinition(name))) {
-            attributes[getLocalName(name)] = node.value[name].value;
+            setProperty(attributes, getLocalName(name), node.value[name].value);
         }
     }
 
@@ -459,7 +467,31 @@ function parseNodeChildrenAsAttributes(node) {
 }
 
 function parseRdfValue(node) {
-    return getURIValue(node.value['rdf:value']) || node.value['rdf:value'].value;
+    const rdfValueNode = getLastNode(node.value['rdf:value']);
+    return getURIValue(rdfValueNode) || parseRdfValueContent(rdfValueNode);
+}
+
+// Repeated elements are collected into an array, and the last one wins, which
+// is how a repeated tag is handled too.
+function getLastNode(node) {
+    if (isDuplicateTag(node)) {
+        return node[node.length - 1];
+    }
+    return node;
+}
+
+// An rdf:value element stands in for the tag element, so a list inside it is
+// the value of the tag rather than a tag of its own.
+function parseRdfValueContent(rdfValueNode) {
+    if (isArray(rdfValueNode)) {
+        return parseNodeAsArray(rdfValueNode).value;
+    }
+    if (typeof rdfValueNode.value === 'object') {
+        // The child names come from the image, so a child named __proto__ must
+        // not be able to replace this object's prototype.
+        return parseNodeChildrenAsTags(rdfValueNode.value, Object.create(null));
+    }
+    return rdfValueNode.value;
 }
 
 function hasNestedStructureRdfDescription(node) {
@@ -507,7 +539,7 @@ function isArray(node) {
 }
 
 function getArrayChild(value) {
-    return value['rdf:Bag'] || value['rdf:Seq'] || value['rdf:Alt'];
+    return getLastNode(value['rdf:Bag'] || value['rdf:Seq'] || value['rdf:Alt']);
 }
 
 function parseNodeAsArray(node, name) {

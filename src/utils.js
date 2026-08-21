@@ -76,11 +76,28 @@ export function assertPromiseSupport() {
 export function objectAssign() {
     for (let i = 1; i < arguments.length; i++) {
         for (const property in arguments[i]) {
-            arguments[0][property] = arguments[i][property];
+            setProperty(arguments[0], property, arguments[i][property]);
         }
     }
 
     return arguments[0];
+}
+
+/**
+ * Sets a property whose name may come from an image. A plain assignment to
+ * `__proto__` replaces the object's prototype instead of storing the value,
+ * which loses the entry and makes the prototype's properties look like content.
+ *
+ * @param {object} object The object to set the property on.
+ * @param {string} key The property name.
+ * @param {*} value The property value.
+ */
+export function setProperty(object, key, value) {
+    if (key === '__proto__') {
+        Object.defineProperty(object, key, {value, enumerable: true, writable: true, configurable: true});
+        return;
+    }
+    object[key] = value;
 }
 
 export function deferInit(object, key, initializer) {
