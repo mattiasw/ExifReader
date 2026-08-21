@@ -476,8 +476,7 @@ export function loadView(
     }
 
     if (
-        (Constants.USE_JPEG || Constants.USE_WEBP)
-        && Constants.USE_ICC
+        Constants.USE_ICC
         && hasIccData(iccChunks)
         && tagFilter.shouldParseGroup('icc')
     ) {
@@ -839,8 +838,7 @@ function hasPotentialMetaData({
             && hasXmpData(xmpChunks)
         )
         || (
-            (Constants.USE_JPEG || Constants.USE_WEBP)
-            && Constants.USE_ICC
+            Constants.USE_ICC
             && hasIccData(iccChunks)
         )
         || (

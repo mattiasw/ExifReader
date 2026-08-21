@@ -1186,6 +1186,16 @@ describe('exif-reader', function () {
             });
         });
 
+        it('should handle when both JPEG and WebP files have been excluded', () => {
+            useFlags.USE_JPEG = false;
+            useFlags.USE_WEBP = false;
+            const myTags = {MyIccTag: 42};
+            swapForCustomBuild({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}, useFlags);
+            swapIccTagsRead(myTags);
+
+            expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({icc: myTags});
+        });
+
         it('should handle when thumbnail has been excluded', () => {
             useFlags.USE_THUMBNAIL = false;
             swap(Thumbnail, {get: () => true});

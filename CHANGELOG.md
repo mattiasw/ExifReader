@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A custom build that includes the `icc` module together with `heic`, `avif`,
+  or `png`, but without `jpeg` or `webp`, now returns the ICC tags. The ICC
+  data was found while reading the image header and then never parsed, so the
+  tags were missing with no warning and no error. For `png` this applies to an
+  asynchronous parse, since that is the only kind that reads the `iCCP` chunk.
+  Such a build gets bigger, since the ICC parser it asks for is now included.
+  A build that also includes `jpeg` or `webp` was never affected, and neither
+  was `tiff`, which reads its ICC data from an Exif tag instead.
+
 ## [4.44.0] - 2026-08-21
 
 ### Changed
