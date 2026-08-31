@@ -80,7 +80,7 @@ export default defineConfig([
         },
     },
     {
-        files: ['bin/**/*.js', 'webpack.config.js', 'cypress.config.js'],
+        files: ['bin/**/*.js', 'webpack.config.js', 'cypress.config.js', '.mocharc.cjs'],
         languageOptions: {
             globals: {
                 ...globals.node,

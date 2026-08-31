@@ -85,7 +85,8 @@
       "text"
     ],
     "exclude": [
-      "test/**"
+      "test/**",
+      ".mocharc.cjs"
     ]
   },
   "browserslist": [
