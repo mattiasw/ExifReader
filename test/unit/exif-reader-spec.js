@@ -20,6 +20,7 @@ import XmpTags from '../../src/xmp-tags.js';
 import IccTags from '../../src/icc-tags.js';
 import CanonTags from '../../src/canon-tags.js';
 import PentaxTags from '../../src/pentax-tags.js';
+import PhotoshopTags from '../../src/photoshop-tags.js';
 import PngFileTags from '../../src/png-file-tags.js';
 import PngTextTags from '../../src/png-text-tags.js';
 import PngTags from '../../src/png-tags.js';
@@ -586,6 +587,18 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should skip an inline XMP segment whose Exif value lies outside the file', () => {
+        const myExifTags = {ApplicationNotes: {value: '<faulty value>'}};
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        expect(ExifReader.loadView()).to.deep.equal(myExifTags);
+    });
+
+    it('should skip an inline XMP segment whose Exif value is not a byte array', () => {
+        const myExifTags = {ApplicationNotes: {value: 42}};
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        expect(ExifReader.loadView()).to.deep.equal(myExifTags);
+    });
+
     it('should be able to find ICC segment inside Exif APP segment (used in TIFF files)', () => {
         const myExifTags = {ICC_Profile: {value: [1, 2, 3]}};
         const myIccTags = {MyIccTag: 42};
@@ -643,6 +656,31 @@ describe('exif-reader', function () {
         swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
         swapMakerNoteTagsRead(myPentaxTags, PentaxTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
+    it('should skip a MakerNote whose value lies outside the file', () => {
+        const myExifTags = {
+            MakerNote: {
+                __offset: OFFSET_TEST_VALUE_MAKER_NOTE,
+                value: '<faulty value>'
+            }
+        };
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        expect(ExifReader.loadView()).to.deep.equal(myExifTags);
+    });
+
+    it('should skip Photoshop settings whose value lies outside the file', () => {
+        const myExifTags = {
+            ImageSourceData: {value: [1]},
+            PhotoshopSettings: {value: '<faulty value>'}
+        };
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swap(PhotoshopTags, {
+            read() {
+                throw new Error('The Photoshop parser must not be handed a non-array value.');
+            }
+        });
+        expect(ExifReader.loadView()).to.deep.equal(myExifTags);
     });
 
     it('should be able to find IPTC APP segment', () => {
@@ -755,6 +793,84 @@ describe('exif-reader', function () {
         );
 
         expect(result.FileType).to.deep.equal({value: 'jxl', description: 'JPEG XL'});
+    });
+
+    it('should bound the brob Exif data by the bytes present when the box declares a larger length', () => {
+        let receivedLength;
+        swapImageHeader({
+            fileType: {value: 'jxl', description: 'JPEG XL'},
+            brobExifChunk: {dataOffset: 0, length: 100}
+        });
+
+        const result = ExifReader.loadView(
+            new DataView(new ArrayBuffer(10)),
+            {
+                async: true,
+                decompress: {
+                    brotli: (data) => {
+                        receivedLength = data.length;
+                        return Promise.reject(new Error('fail'));
+                    }
+                }
+            }
+        );
+
+        expect(result).to.be.instanceOf(Promise);
+        return result.then(() => {
+            expect(receivedLength).to.equal(10);
+        });
+    });
+
+    it('should bound the brob Exif data at zero when the box declares a length below its header size', () => {
+        let receivedLength;
+        swapImageHeader({
+            fileType: {value: 'jxl', description: 'JPEG XL'},
+            brobExifChunk: {dataOffset: 0, length: -4}
+        });
+
+        const result = ExifReader.loadView(
+            new DataView(new ArrayBuffer(10)),
+            {
+                async: true,
+                decompress: {
+                    brotli: (data) => {
+                        receivedLength = data.length;
+                        return Promise.reject(new Error('fail'));
+                    }
+                }
+            }
+        );
+
+        expect(result).to.be.instanceOf(Promise);
+        return result.then(() => {
+            expect(receivedLength).to.equal(0);
+        });
+    });
+
+    it('should bound the brob XMP data by the bytes present when the box declares a larger length', () => {
+        let receivedLength;
+        swapImageHeader({
+            fileType: {value: 'jxl', description: 'JPEG XL'},
+            brobXmpChunk: {dataOffset: 0, length: 100}
+        });
+
+        const result = ExifReader.loadView(
+            new DataView(new ArrayBuffer(10)),
+            {
+                async: true,
+                decompress: {
+                    brotli: (data) => {
+                        receivedLength = data.length;
+                        return Promise.reject(new Error('fail'));
+                    }
+                }
+            }
+        );
+
+        expect(result).to.be.instanceOf(Promise);
+        return result.then(() => {
+            expect(receivedLength).to.equal(10);
+        });
     });
 
     it('should expand brob Exif into exif group', async () => {

@@ -38,7 +38,8 @@ function read(dataView, jfifDataOffset) {
 }
 
 function getLength(dataView, jfifDataOffset) {
-    return Types.getShortAt(dataView, jfifDataOffset);
+    // The declared length is untrusted, so bound it by the bytes present.
+    return Math.min(Types.getShortAt(dataView, jfifDataOffset), dataView.byteLength - jfifDataOffset);
 }
 
 function getVersion(dataView, jfifDataOffset, length) {

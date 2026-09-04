@@ -21,7 +21,8 @@ function read(dataView, fileDataOffset) {
 }
 
 function getLength(dataView, fileDataOffset) {
-    return Types.getShortAt(dataView, fileDataOffset);
+    // The declared length is untrusted, so bound it by the bytes present.
+    return Math.min(Types.getShortAt(dataView, fileDataOffset), dataView.byteLength - fileDataOffset);
 }
 
 function getDataPrecision(dataView, fileDataOffset, length) {

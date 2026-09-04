@@ -149,6 +149,16 @@ describe('image-header-jpeg', () => {
         expect(ImageHeaderJpeg.findJpegOffsets(dataView).iptcDataOffset).to.equal(20);
     });
 
+    it('should not recognize an APP13 segment that is cut off after its identifier', () => {
+        const dataView = getDataView('\xff\xd8\xff\xed\xff\xffPhotoshop 3.0');
+        expect(ImageHeaderJpeg.findJpegOffsets(dataView).iptcDataOffset).to.be.undefined;
+    });
+
+    it('should not recognize an APP2 ICC segment that is cut off before its chunk bytes', () => {
+        expect(ImageHeaderJpeg.findJpegOffsets(getDataView('\xff\xd8\xff\xe2\xff\xffICC_PROFILE\x00')).iccChunks).to.be.undefined;
+        expect(ImageHeaderJpeg.findJpegOffsets(getDataView('\xff\xd8\xff\xe2\xff\xffICC_PROFILE\x00\x01')).iccChunks).to.be.undefined;
+    });
+
     it('should keep first valid IPTC APP13 offset when later APP13 segment is malformed', () => {
         const firstIptcSegment = '\xff\xed\x00\x14Photoshop 3.0\x008BIM';
         const malformedIptcSegment = '\xff\xed\x00\x14Photoshop 3.0\x00ABCD';
@@ -370,6 +380,13 @@ describe('image-header-jpeg', () => {
             expect(iccBlocks).to.have.lengthOf(2);
             expect(iccBlocks[0]).to.deep.equal({type: 'icc', start: 2, end: 164});
             expect(iccBlocks[1]).to.deep.equal({type: 'icc', start: 164, end: 230});
+        });
+
+        it('should not emit a block for a segment that is cut off before its chunk bytes', () => {
+            const metadataBlocks = [];
+            ImageHeaderJpeg.findJpegOffsets(getDataView('\xff\xd8\xff\xe2\xff\xffICC_PROFILE\x00\x01'), metadataBlocks);
+            expect(metadataBlocks).to.have.lengthOf(0);
+            expect(metadataBlocks.truncated).to.equal(true);
         });
     });
 });

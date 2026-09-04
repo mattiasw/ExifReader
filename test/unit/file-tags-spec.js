@@ -13,6 +13,8 @@ const FILE_DATA_CONTENT_ONLY_DATA_PRECISION = '\xff\xc0\x00\x03\x08';
 const FILE_DATA_CONTENT_ONLY_IMAGE_HEIGHT = '\xff\xc0\x00\x05\x08\x01\x02';
 const FILE_DATA_CONTENT_ONLY_IMAGE_WIDTH = '\xff\xc0\x00\x07\x08\x01\x02\x02\x03';
 const FILE_DATA_CONTENT_ONLY_COLOR_COMPONENTS = '\xff\xc0\x00\x08\x08\x01\x02\x02\x03\x03';
+const FILE_DATA_CONTENT_TRUNCATED_AFTER_COLOR_COMPONENTS = '\xff\xc0\xff\xff\x08\x00\x64\x00\x64\x03';
+const FILE_DATA_CONTENT_TRUNCATED_AFTER_LENGTH = '\xff\xc0\xff\xff';
 const OFFSET = 2;
 
 describe('file-tags', () => {
@@ -80,5 +82,24 @@ describe('file-tags', () => {
         expect(FileTags.read(getDataView(FILE_DATA_CONTENT_ONLY_IMAGE_HEIGHT), OFFSET)['Image Height']).to.not.be.undefined;
         expect(FileTags.read(getDataView(FILE_DATA_CONTENT_ONLY_IMAGE_WIDTH), OFFSET)['Image Width']).to.not.be.undefined;
         expect(FileTags.read(getDataView(FILE_DATA_CONTENT_ONLY_COLOR_COMPONENTS), OFFSET)['Color Components']).to.not.be.undefined;
+    });
+
+    it('should only read the fields that fit when the declared length is larger than the data', () => {
+        const tags = FileTags.read(getDataView(FILE_DATA_CONTENT_TRUNCATED_AFTER_COLOR_COMPONENTS), OFFSET);
+        expect(tags['Bits Per Sample']).to.deep.equal({value: 8, description: '8'});
+        expect(tags['Image Height']).to.deep.equal({value: 100, description: '100px'});
+        expect(tags['Image Width']).to.deep.equal({value: 100, description: '100px'});
+        expect(tags['Color Components']).to.deep.equal({value: 3, description: '3'});
+        expect(tags['Subsampling']).to.be.undefined;
+    });
+
+    it('should read no fields when the data ends right after the length field', () => {
+        expect(FileTags.read(getDataView(FILE_DATA_CONTENT_TRUNCATED_AFTER_LENGTH), OFFSET)).to.deep.equal({
+            'Bits Per Sample': undefined,
+            'Image Height': undefined,
+            'Image Width': undefined,
+            'Color Components': undefined,
+            'Subsampling': undefined
+        });
     });
 });

@@ -118,6 +118,14 @@ describe('photoshop-tags', () => {
         expect(PhotoshopTags.read(bytes, true)).to.deep.equal({'undefined-18193': {id: 0x4711, value: '\x42\x43'}});
     });
 
+    it('should read no tags when handed a faulty value string instead of bytes', () => {
+        expect(PhotoshopTags.read('<faulty value>')).to.deep.equal({});
+    });
+
+    it('should read no tags when handed a number instead of bytes', () => {
+        expect(PhotoshopTags.read(Number.MAX_SAFE_INTEGER)).to.deep.equal({});
+    });
+
     function getPhotoshopBytes(block) {
         return getCharacterArray(getPhotoshopBlockString(block));
     }

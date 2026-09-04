@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A JFIF thumbnail that is cut off by the end of the data, for example when
+  the `length` option reads only the first part of a file, is now left out
+  instead of being returned with fewer bytes than its declared size.
+
 ### Fixed
 
 - A custom build that includes the `icc` module together with `heic`, `avif`,
@@ -17,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Such a build gets bigger, since the ICC parser it asks for is now included.
   A build that also includes `jpeg` or `webp` was never affected, and neither
   was `tiff`, which reads its ICC data from an Exif tag instead.
+
+### Security
+
+- Fixed a denial-of-service vulnerability where a truncated or crafted image
+  file could make `load()` throw an uncaught exception instead of returning
+  the metadata the file holds
+  ([GHSA-cw75-mh4g-4h2j](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-cw75-mh4g-4h2j)).
+  Reported by @zikk090.
 
 ## [4.44.0] - 2026-08-21
 

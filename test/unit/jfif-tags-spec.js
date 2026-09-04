@@ -17,6 +17,8 @@ const JFIF_DATA_CONTENT_XRESOLUTION = `\x00\x0c${JFIF_IDENTIFIER}${JFIF_VERSION}
 const JFIF_DATA_CONTENT_YRESOLUTION = `\x00\x0e${JFIF_IDENTIFIER}${JFIF_VERSION}\x99\x00\xab\x00\xbc`;
 const JFIF_THUMBNAIL_PIXEL_DATA = '\x0a\x0b\x0c\x0d\x0e\x0f';
 const JFIF_DATA_CONTENT_THUMBNAIL = `\x00\x16${JFIF_IDENTIFIER}${JFIF_VERSION}\x99\x00\xab\x00\xbc\x01\x02${JFIF_THUMBNAIL_PIXEL_DATA}`;
+const JFIF_DATA_CONTENT_TRUNCATED_AFTER_IDENTIFIER = `\xff\xff${JFIF_IDENTIFIER}`;
+const JFIF_DATA_CONTENT_TRUNCATED_THUMBNAIL = JFIF_DATA_CONTENT_THUMBNAIL.slice(0, -3);
 const OFFSET = 0;
 
 describe('jfif-tags', () => {
@@ -91,5 +93,22 @@ describe('jfif-tags', () => {
         const expectedValue = Array.from(getArrayBuffer(JFIF_THUMBNAIL_PIXEL_DATA));
         expect(thumbnailValue).to.deep.equal(expectedValue);
         expect(tags['JFIF Thumbnail'].description).to.equal('<24-bit RGB pixel data>');
+    });
+
+    it('should read no tags when the declared length is larger than the data', () => {
+        expect(JfifTags.read(getDataView(JFIF_DATA_CONTENT_TRUNCATED_AFTER_IDENTIFIER), OFFSET)).to.deep.equal({});
+    });
+
+    it('should leave out a thumbnail whose pixel data is cut off', () => {
+        const tags = JfifTags.read(getDataView(JFIF_DATA_CONTENT_TRUNCATED_THUMBNAIL), OFFSET);
+        expect(tags['JFIF Thumbnail Width']).to.deep.equal({
+            value: 0x01,
+            description: '1px'
+        });
+        expect(tags['JFIF Thumbnail Height']).to.deep.equal({
+            value: 0x02,
+            description: '2px'
+        });
+        expect(tags).to.not.have.property('JFIF Thumbnail');
     });
 });

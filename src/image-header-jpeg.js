@@ -247,7 +247,10 @@ function isSOF2Marker(dataView, appMarkerPosition) {
 function isApp2ICCMarker(dataView, appMarkerPosition) {
     const markerIdLength = APP2_ICC_IDENTIFIER.length;
 
+    // The ICC branch reads the two chunk bytes that follow the identifier, so a
+    // segment without them must not be recognized here.
     return (dataView.getUint16(appMarkerPosition) === APP2_MARKER)
+        && (appMarkerPosition + ICC_TOTAL_CHUNKS_OFFSET < dataView.byteLength)
         && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP2_ICC_IDENTIFIER);
 }
 
@@ -314,7 +317,10 @@ function isApp13PhotoshopMarker(dataView, appMarkerPosition) {
     const resourceIdentifierOffset = appMarkerPosition + APP_ID_OFFSET
         + markerIdLength + 1;
 
-    return (dataView.getUint16(appMarkerPosition) === APP13_MARKER)
+    // The null byte and the 8BIM identifier lie past the bytes the marker walk
+    // guarantees, so a segment without them must not be recognized here.
+    return (resourceIdentifierOffset + resourceIdentifierLength <= dataView.byteLength)
+        && (dataView.getUint16(appMarkerPosition) === APP13_MARKER)
         && (getStringFromDataView(dataView, appMarkerPosition + APP_ID_OFFSET, markerIdLength) === APP13_IPTC_IDENTIFIER)
         && (dataView.getUint8(appMarkerPosition + APP_ID_OFFSET + markerIdLength) === 0x00)
         && (getStringFromDataView(dataView, resourceIdentifierOffset, resourceIdentifierLength) === APP13_RESOURCE_BLOCK_IDENTIFIER);

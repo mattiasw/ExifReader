@@ -41,6 +41,21 @@ describe('png-text-tags', () => {
         });
     });
 
+    it('should not read past the end of an iTXt chunk that is cut off after its compression flag', () => {
+        const tagData = 'Comment\x00\x01';
+        const dataView = getDataView(tagData);
+        const chunks = [
+            {type: TYPE_ITXT, offset: 0, length: 100}
+        ];
+
+        const {readTags} = PngTextTags.read(dataView, chunks);
+
+        expect(readTags['Comment']).to.deep.equal({
+            value: '',
+            description: ''
+        });
+    });
+
     it('should read compressed zTXt tags', async () => {
         const dataView = await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.');
         const chunks = [
