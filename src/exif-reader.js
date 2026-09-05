@@ -230,6 +230,7 @@ export function loadView(
             Constants.USE_TIFF
             && Constants.USE_XMP
             && parsedExifTags['ApplicationNotes']
+            && Array.isArray(parsedExifTags['ApplicationNotes'].value)
             && !hasXmpData(xmpChunks)
             && tagFilter.shouldParseGroup('xmp')
         ) {
@@ -259,6 +260,7 @@ export function loadView(
             Constants.USE_PHOTOSHOP
             && parsedExifTags['ImageSourceData']
             && parsedExifTags['PhotoshopSettings']
+            && Array.isArray(parsedExifTags['PhotoshopSettings'].value)
             && tagFilter.shouldParseGroup('photoshop')
         ) {
             const readPhotoshopTags = PhotoshopTags.read(
@@ -412,11 +414,7 @@ export function loadView(
         && tagFilter.shouldParseGroup('exif')
         && async
     ) {
-        const compressedExifData = new DataView(
-            dataView.buffer,
-            dataView.byteOffset + brobExifChunk.dataOffset,
-            brobExifChunk.length
-        );
+        const compressedExifData = getBrobDataView(dataView, brobExifChunk);
         deferredPromises.push(
             decompress(compressedExifData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
                 .then((decompressedDataView) => {
@@ -451,11 +449,7 @@ export function loadView(
         && tagFilter.shouldParseGroup('xmp')
         && async
     ) {
-        const compressedXmpData = new DataView(
-            dataView.buffer,
-            dataView.byteOffset + brobXmpChunk.dataOffset,
-            brobXmpChunk.length
-        );
+        const compressedXmpData = getBrobDataView(dataView, brobXmpChunk);
         deferredPromises.push(
             decompress(compressedXmpData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
                 .then((decompressedDataView) => {
@@ -734,6 +728,14 @@ export function loadView(
     }
 }
 
+function getBrobDataView(dataView, brobChunk) {
+    // The box length is untrusted and comes through negative for a box shorter
+    // than its header, so bound the view by the bytes present. The JXL header
+    // parser never reports a dataOffset past the end of the view.
+    const length = Math.max(0, Math.min(brobChunk.length, dataView.byteLength - brobChunk.dataOffset));
+    return new DataView(dataView.buffer, dataView.byteOffset + brobChunk.dataOffset, length);
+}
+
 function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter) {
     try {
         return Tags.read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter);
@@ -934,7 +936,8 @@ function hasCanonData(tags) {
 
 function hasPentaxType1Data(tags) {
     const PENTAX_ID_STRING = 'PENTAX ';
-    return tags['MakerNote'].value.length > PENTAX_ID_STRING.length
+    return Array.isArray(tags['MakerNote'].value)
+        && tags['MakerNote'].value.length > PENTAX_ID_STRING.length
         && getStringValueFromArray(tags['MakerNote'].value.slice(0, PENTAX_ID_STRING.length)) === PENTAX_ID_STRING
         && tags['MakerNote'].__offset;
 }

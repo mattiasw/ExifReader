@@ -147,7 +147,7 @@ function getNameAndValue(dataView, offset, length, type, async, decompressConfig
 
 function getCompressionMethod({type, dataView, offset}) {
     if (type === TYPE_ITXT) {
-        if (dataView.getUint8(offset) === COMPRESSION_FLAG_COMPRESSED) {
+        if (offset + 1 < dataView.byteLength && dataView.getUint8(offset) === COMPRESSION_FLAG_COMPRESSED) {
             return dataView.getUint8(offset + 1);
         }
     } else if (type === TYPE_ZTXT) {
