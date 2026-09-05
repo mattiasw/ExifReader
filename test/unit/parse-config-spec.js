@@ -84,11 +84,20 @@ describe('parseConfig', () => {
             expect(includes.exif).to.equal(true);
         });
 
-        it('excludes the thumbnail and mpf modules together with exif', () => {
+        it('excludes the thumbnail module together with exif', () => {
             const includes = parseConfig({exclude: ['exif']});
             expect(includes.exif).to.equal(false);
             expect(includes.thumbnail).to.equal(false);
-            expect(includes.mpf).to.equal(false);
+        });
+
+        it('keeps the mpf module when excluding exif', () => {
+            // MPF has its own JPEG segment and parses without the Exif module.
+            const includes = parseConfig({exclude: ['exif']});
+            expect(includes.mpf).to.equal(true);
+        });
+
+        it('excludes the mpf module when it is named alongside exif', () => {
+            expect(parseConfig({exclude: ['exif', 'mpf']}).mpf).to.equal(false);
         });
     });
 

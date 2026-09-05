@@ -879,11 +879,11 @@ Possible modules to include or exclude:
 | `file`        | JPEG file details: image width, height etc.            |
 | `jfif`        | JFIF details in JPEG files: resolution, thumbnail etc. |
 | `png_file`    | PNG file details: image width, height etc.             |
-| `exif`        | Regular Exif tags. If excluded, will also exclude `mpf`, `photoshop` and `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
+| `exif`        | Regular Exif tags. If excluded, will also exclude `photoshop` and `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
 | `iptc`        | IPTC tags.                                             |
 | `xmp`         | XMP tags.                                              |
 | `icc`         | ICC color profile tags.                                |
-| `mpf`         | Multi-picture Format tags. Does not need `exif`, but excluding `exif` also excludes it. |
+| `mpf`         | Multi-picture Format tags. Does not need `exif`.       |
 | `photoshop`   | Photoshop tags. Needs `exif`.                          |
 | `maker_notes` | Proprietary camera maker tags. Needs `exif`.           |
 | `thumbnail`   | Thumbnail image. Including it also includes `exif`.    |

@@ -53,7 +53,6 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
                 !(
                     excludesConfig.includes(module)
                     || ((module === 'thumbnail') && excludesConfig.includes('exif'))
-                    || ((module === 'mpf') && excludesConfig.includes('exif'))
                 );
         }
         return includes;

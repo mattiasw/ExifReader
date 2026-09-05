@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tags are read from their own JPEG segment, so an include pattern naming
   `mpf` without `exif` has always worked, and such a build stays smaller
   without the `exif` module.
+- A custom build that excludes the `exif` module now keeps the `mpf` module
+  instead of dropping it. Such a build gets bigger, since the MPF parser brings
+  back the shared IFD reading code, and that pulls in the Exif tag name tables
+  alongside the MPF ones. It also copies out the sub-images that phone JPEGs
+  embed, which costs time and memory, and with `length: 'auto'` it reads more
+  of the file. A build that wants none of that can exclude `mpf`, and a build
+  that already excludes `mpf` was never affected.
 - The custom build module table now says that the `photoshop` module needs
   `exif`. Photoshop tags are read from Exif tags, so an include pattern naming
   `photoshop` without `exif` returns nothing.
