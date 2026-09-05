@@ -201,8 +201,7 @@ export function loadView(
         parsedGroups.exif = parsedExifTags;
 
         if (
-            Constants.USE_TIFF
-            && Constants.USE_IPTC
+            Constants.USE_IPTC
             && parsedExifTags['IPTC-NAA']
             && iptcDataOffset === undefined
             && tagFilter.shouldParseGroup('iptc')
@@ -227,8 +226,7 @@ export function loadView(
         }
 
         if (
-            Constants.USE_TIFF
-            && Constants.USE_XMP
+            Constants.USE_XMP
             && parsedExifTags['ApplicationNotes']
             && Array.isArray(parsedExifTags['ApplicationNotes'].value)
             && !hasXmpData(xmpChunks)
@@ -282,8 +280,7 @@ export function loadView(
         }
 
         if (
-            Constants.USE_TIFF
-            && Constants.USE_ICC
+            Constants.USE_ICC
             && parsedExifTags['ICC_Profile']
             && !hasIccData(iccChunks)
             && tagFilter.shouldParseGroup('icc')

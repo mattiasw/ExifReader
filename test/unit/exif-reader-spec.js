@@ -1328,6 +1328,45 @@ describe('exif-reader', function () {
             });
         });
 
+        it('should handle Exif-embedded IPTC tags when TIFF files have been excluded', () => {
+            useFlags.USE_TIFF = false;
+            const myTags = {
+                exif: {'IPTC-NAA': {value: ['<IPTC block array>']}},
+                iptc: {MyIptcTag: 42}
+            };
+            swapForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapTagsRead(Tags, myTags.exif);
+            swapTagsRead(IptcTags, myTags.iptc);
+
+            expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
+        });
+
+        it('should handle Exif-embedded XMP tags when TIFF files have been excluded', () => {
+            useFlags.USE_TIFF = false;
+            const myTags = {
+                exif: {ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')}},
+                xmp: {MyXmpTag: 45}
+            };
+            swapForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapTagsRead(Tags, myTags.exif);
+            swapXmpTagsRead(myTags.xmp);
+
+            expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
+        });
+
+        it('should handle Exif-embedded ICC tags when TIFF files have been excluded', () => {
+            useFlags.USE_TIFF = false;
+            const myTags = {
+                exif: {ICC_Profile: {value: [1, 2, 3]}},
+                icc: {MyIccTag: 44}
+            };
+            swapForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapTagsRead(Tags, myTags.exif);
+            swapIccTagsRead(myTags.icc);
+
+            expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal(myTags);
+        });
+
         it('should handle when thumbnail has been excluded', () => {
             useFlags.USE_THUMBNAIL = false;
             swap(Thumbnail, {get: () => true});

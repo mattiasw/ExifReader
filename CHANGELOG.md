@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Thumbnail` tag. The thumbnail was found in the Exif data and parsed and then
   dropped, so it was missing with no warning and no error. A build that also
   includes `jpeg` or `webp` was never affected.
+- A custom build that includes the `iptc`, `xmp`, or `icc` module together with
+  `exif` but without `tiff` now returns those tags when they are stored inside
+  an Exif tag. Any format can carry them that way, not only TIFF, but they were
+  only parsed when the `tiff` module was included, so such a build was missing
+  them with no warning and no error. For IPTC in a HEIC, AVIF, WebP, or JPEG XL
+  file it is the only route there is, so such a build returned no IPTC tags at
+  all. A build that asks for `iptc` without `jpeg` or `png` gets bigger, since
+  the IPTC parser it asks for is now included. A build that includes `tiff` was
+  never affected.
 
 ## [4.44.1] - 2026-09-05
 
