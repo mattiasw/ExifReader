@@ -4,6 +4,8 @@
 
 import {expect} from 'chai';
 import {objectAssign} from '../../src/utils.js';
+import Constants from '../../src/constants.js';
+import {swapProperties} from './test-utils.js';
 import {
     addPngTextReadTagsToTagsAndGroups,
     applyMergeStep,
@@ -12,7 +14,15 @@ import {
     mergeMergeGroup,
 } from '../../src/loadview-pipeline.js';
 
+const restoreFunctions = [];
+
 describe('loadView pipeline module', function () {
+    afterEach(function () {
+        while (restoreFunctions.length > 0) {
+            restoreFunctions.pop()();
+        }
+    });
+
     it('should merge assign groups in expanded mode', function () {
         const originalTags = {};
         const returnedTags = {MyTag: {value: 1}};
@@ -114,6 +124,31 @@ describe('loadView pipeline module', function () {
         });
 
         expect(tags.Thumbnail.value).to.equal('existing');
+    });
+
+    it('should apply the composite step when Exif tags are included', function () {
+        swap(Constants, {USE_EXIF: true, USE_XMP: false});
+
+        const tags = applyCompositeStep({MyCompositeTag: {value: 4711}});
+
+        expect(tags.MyCompositeTag.value).to.equal(4711);
+    });
+
+    it('should apply the composite step when XMP tags are included', function () {
+        swap(Constants, {USE_EXIF: false, USE_XMP: true});
+
+        const tags = applyCompositeStep({MyCompositeTag: {value: 4711}});
+
+        expect(tags.MyCompositeTag.value).to.equal(4711);
+    });
+
+    it('should not apply the composite step when Exif and XMP tags have been excluded', function () {
+        swap(Constants, {USE_EXIF: false, USE_XMP: false});
+
+        const tags = applyCompositeStep({MyCompositeTag: {value: 4711}});
+
+        expect(tags.MyCompositeTag).to.equal(undefined);
+        expect(tags.MyTag.value).to.equal(42);
     });
 
     it('should remove xmp._raw in flat mode', function () {
@@ -497,4 +532,31 @@ function createTagFilter({returnGroups = {}, returnTags = {}} = {}) {
             return returnTags[key];
         },
     };
+}
+
+function swap(target, replacement) {
+    restoreFunctions.push(swapProperties(target, replacement));
+}
+
+function applyCompositeStep(compositeTags) {
+    const deps = createPipelineDeps();
+    deps.Composite = {
+        get() {
+            return compositeTags;
+        },
+    };
+
+    return applyMergeStep({
+        step: {type: 'composite'},
+        deferredResults: {},
+        parsedGroups: {},
+        expanded: false,
+        tagFilter: createTagFilter({}),
+        dataView: {},
+        tiffHeaderOffset: undefined,
+        fileType: undefined,
+        thumbnailIfdTags: undefined,
+        tags: {MyTag: {value: 42}},
+        deps,
+    });
 }

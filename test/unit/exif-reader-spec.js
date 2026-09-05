@@ -1235,6 +1235,25 @@ describe('exif-reader', function () {
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
+        it('should calculate composite tags when Exif tags but not XMP tags have been excluded', () => {
+            useFlags.USE_EXIF = false;
+            const myTags = {MyXmpTag: 42};
+            swap(Composite, {get: () => ({MyCompositeTag: 4711})});
+            swapForCustomBuild({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}, useFlags);
+            swapXmpTagsRead(myTags);
+            expect(ExifReader.loadView()).to.deep.equal({...myTags, MyCompositeTag: 4711});
+        });
+
+        it('should handle composite tags when Exif and XMP tags have been excluded', () => {
+            useFlags.USE_EXIF = false;
+            useFlags.USE_XMP = false;
+            const myTags = {MyIccTag: 42};
+            swap(Composite, {get: () => ({MyCompositeTag: 4711})});
+            swapForCustomBuild({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}, useFlags);
+            swapIccTagsRead(myTags);
+            expect(ExifReader.loadView()).to.deep.equal(myTags);
+        });
+
         it('should handle when IPTC tags have been excluded', () => {
             useFlags.USE_IPTC = false;
             swapForCustomBuild({iptcDataOffset: OFFSET_TEST_VALUE}, useFlags);

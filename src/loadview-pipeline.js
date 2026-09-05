@@ -239,7 +239,7 @@ export function applyMergeStep({
         return tags;
     }
 
-    if (step.type === 'composite') {
+    if ((Constants.USE_EXIF || Constants.USE_XMP) && step.type === 'composite') {
         if (!tagFilter.shouldReturnGroup('composite')) {
             return tags;
         }

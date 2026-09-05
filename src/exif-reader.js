@@ -647,7 +647,9 @@ export function loadView(
     }
 
     mergeSteps.push({type: 'gps'});
-    mergeSteps.push({type: 'composite'});
+    if (Constants.USE_EXIF || Constants.USE_XMP) {
+        mergeSteps.push({type: 'composite'});
+    }
     mergeSteps.push({type: 'thumbnail'});
     mergeSteps.push({type: 'fileType'});
 
@@ -669,7 +671,9 @@ export function loadView(
         filterTagsForParse,
         filterTagsForReturn,
         getGpsGroupFromExifTags,
-        Composite,
+        // A plain property here would keep the import alive for the bundler, so
+        // a build with neither Exif nor XMP would still carry composite.js.
+        Composite: (Constants.USE_EXIF || Constants.USE_XMP) ? Composite : undefined,
         Thumbnail,
     };
 

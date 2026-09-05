@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A custom build that includes neither the `exif` nor the `xmp` module is now
+  smaller. It no longer carries the code that computes the composite tags
+  (`FocalLength35efl`, `ScaleFactorTo35mmEquivalent` and `FieldOfView`), which
+  are derived from tags in those two groups and so could never be produced in
+  such a build. A build with only PNG support (`{"include": {"png": true}}`)
+  goes from 36002 to 34694 bytes, around 0.5 KiB gzipped. A custom build that
+  includes either module produces a byte-identical bundle and returns the same
+  tags.
+
 ### Fixed
 
 - A custom build whose include pattern names the `thumbnail` module but not
