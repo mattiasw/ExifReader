@@ -52,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   all. A build that asks for `iptc` without `jpeg` or `png` gets bigger, since
   the IPTC parser it asks for is now included. A build that includes `tiff` was
   never affected.
+- A custom build whose include pattern names the `maker_notes` module but not
+  `exif` now gets the `exif` module too, so it returns the maker note tags.
+  Maker notes are read from an Exif tag, and such a build read no Exif data at
+  all, so it returned none of them, with no warning and no error. A custom
+  build that excludes `exif` now also excludes `maker_notes`. The Canon and
+  Pentax tag name tables it kept could never be reached without the `exif`
+  module, so dropping them takes 231 bytes off a build configured with
+  `{"exclude": {"exif": true}}`.
 
 ### Security
 

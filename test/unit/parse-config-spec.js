@@ -68,6 +68,14 @@ describe('parseConfig', () => {
             expect(parseConfig({include: {jpeg: true, thumbnail: ['Something']}}).exif).to.equal(true);
         });
 
+        it('includes exif when only the maker_notes module is named', () => {
+            // Maker notes are read from an Exif tag, so they cannot be
+            // produced without the Exif module.
+            const includes = parseConfig({include: {heic: true, maker_notes: true}});
+            expect(includes.exif).to.equal(true);
+            expect(includes.maker_notes).to.equal(true);
+        });
+
         it('does not include exif when only the mpf module is named', () => {
             // MPF has its own JPEG segment and parses without the Exif module.
             const includes = parseConfig({include: {jpeg: true, mpf: true}});
@@ -88,6 +96,12 @@ describe('parseConfig', () => {
             const includes = parseConfig({exclude: ['exif']});
             expect(includes.exif).to.equal(false);
             expect(includes.thumbnail).to.equal(false);
+        });
+
+        it('excludes the maker_notes module together with exif', () => {
+            const includes = parseConfig({exclude: ['exif']});
+            expect(includes.exif).to.equal(false);
+            expect(includes.maker_notes).to.equal(false);
         });
 
         it('keeps the mpf module when excluding exif', () => {

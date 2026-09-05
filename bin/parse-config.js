@@ -2,6 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+// A module listed here cannot produce anything without the module it maps to.
+// The thumbnail is stored in the Exif metadata, in IFD1, and maker notes are
+// read from an Exif tag. MPF is not listed: it has its own JPEG segment and
+// parses without the Exif module.
+const MODULE_DEPENDENCIES = {
+    thumbnail: 'exif',
+    maker_notes: 'exif'
+};
+
 module.exports = parseConfig;
 
 /**
@@ -41,7 +50,7 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
     if (includesConfig) {
         const includes = {};
         for (const module of modules) {
-            includes[module] = includesConfig[module] || isNeededByThumbnail(module, includesConfig);
+            includes[module] = includesConfig[module] || isNeededByAnIncludedModule(module, includesConfig);
         }
         return includes;
     }
@@ -49,10 +58,11 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
     if (excludesConfig) {
         const includes = {};
         for (const module of modules) {
+            const dependency = MODULE_DEPENDENCIES[module];
             includes[module] =
                 !(
                     excludesConfig.includes(module)
-                    || ((module === 'thumbnail') && excludesConfig.includes('exif'))
+                    || (dependency && excludesConfig.includes(dependency))
                 );
         }
         return includes;
@@ -61,8 +71,7 @@ function parseConfig({include: includesConfig, exclude: excludesConfig}) {
     return false;
 }
 
-// The thumbnail is stored in the Exif metadata, in IFD1, so it cannot be read
-// without the Exif module. MPF has its own JPEG segment and parses without it.
-function isNeededByThumbnail(module, includesConfig) {
-    return (module === 'exif') && !!includesConfig.thumbnail;
+function isNeededByAnIncludedModule(module, includesConfig) {
+    return Object.keys(MODULE_DEPENDENCIES)
+        .some((dependent) => (MODULE_DEPENDENCIES[dependent] === module) && !!includesConfig[dependent]);
 }
