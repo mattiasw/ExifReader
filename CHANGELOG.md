@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A custom build that includes the `thumbnail` module but neither `jpeg` nor
+  `webp`, for example one paired with `heic` or `avif`, now returns the
+  `Thumbnail` tag. The thumbnail was found in the Exif data and parsed and then
+  dropped, so it was missing with no warning and no error. A build that also
+  includes `jpeg` or `webp` was never affected.
+
 ## [4.44.1] - 2026-09-05
 
 ### Changed

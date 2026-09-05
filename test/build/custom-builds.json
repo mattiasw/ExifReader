@@ -131,7 +131,8 @@
                 "avif": true,
                 "exif": true,
                 "xmp": true,
-                "icc": true
+                "icc": true,
+                "thumbnail": true
             }
         }
     },

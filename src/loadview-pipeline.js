@@ -291,8 +291,7 @@ export function applyMergeStep({
             parsedGroups.thumbnail = parsedThumbnailIfdTags;
         }
 
-        const thumbnail = (Constants.USE_JPEG || Constants.USE_WEBP)
-            && Constants.USE_EXIF
+        const thumbnail = Constants.USE_EXIF
             && Constants.USE_THUMBNAIL
             && deps.Thumbnail.get(exifDataView || dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
         if (thumbnail) {

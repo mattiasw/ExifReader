@@ -1312,6 +1312,22 @@ describe('exif-reader', function () {
             expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({icc: myTags});
         });
 
+        it('should handle when both JPEG and WebP files have been excluded but the thumbnail is included', () => {
+            useFlags.USE_JPEG = false;
+            useFlags.USE_WEBP = false;
+            const myTags = {
+                exif: {MyExifTag: 43},
+                Thumbnail: {type: 'image/jpeg'}
+            };
+            swapForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapTagsRead(Tags, {...myTags.exif, Thumbnail: myTags.Thumbnail});
+
+            expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({
+                exif: myTags.exif,
+                Thumbnail: myTags.Thumbnail,
+            });
+        });
+
         it('should handle when thumbnail has been excluded', () => {
             useFlags.USE_THUMBNAIL = false;
             swap(Thumbnail, {get: () => true});
