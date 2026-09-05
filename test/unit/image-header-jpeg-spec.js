@@ -18,6 +18,12 @@ const DQT_MARKER = '\xff\xdb';
 const DRI_MARKER = '\xff\xdd';
 const SOS_MARKER = '\xff\xda';
 const SOME_MARKER_CONTENT = `${APP1_MARKER}\x47\x11Exif\x00\x00`;
+// The smallest well-formed APP2 ICC segment: the marker, a field length of 16 covering
+// the length field plus the identifier plus the two chunk bytes, then chunk 1 of 1.
+const MINIMAL_ICC_SEGMENT = '\xff\xe2\x00\x10ICC_PROFILE\x00\x01\x01';
+// A larger APP2 ICC segment: a field length of 20 puts four bytes of profile data after
+// the two chunk bytes, so a scan that reuses another segment's length loses its place.
+const PADDED_ICC_SEGMENT = '\xff\xe2\x00\x14ICC_PROFILE\x00\x01\x01\x00\x00\x00\x00';
 
 describe('image-header-jpeg', () => {
     it('should recognize a JPEG file', () => {
@@ -157,6 +163,44 @@ describe('image-header-jpeg', () => {
     it('should not recognize an APP2 ICC segment that is cut off before its chunk bytes', () => {
         expect(ImageHeaderJpeg.findJpegOffsets(getDataView('\xff\xd8\xff\xe2\xff\xffICC_PROFILE\x00')).iccChunks).to.be.undefined;
         expect(ImageHeaderJpeg.findJpegOffsets(getDataView('\xff\xd8\xff\xe2\xff\xffICC_PROFILE\x00\x01')).iccChunks).to.be.undefined;
+    });
+
+    it('should stop collecting APP2 ICC chunks at the cap', () => {
+        const dataView = getDataView(`\xff\xd8${MINIMAL_ICC_SEGMENT.repeat(300)}`);
+        const {iccChunks} = ImageHeaderJpeg.findJpegOffsets(dataView);
+        expect(iccChunks).to.have.lengthOf(255);
+        // The chunks that are kept are the first ones, not the last ones.
+        expect(iccChunks[0].offset).to.equal(20);
+        expect(iccChunks[254].offset).to.equal(4592);
+    });
+
+    it('should keep every APP2 ICC chunk in a file that stays within the cap', () => {
+        const dataView = getDataView(`\xff\xd8${MINIMAL_ICC_SEGMENT.repeat(255)}`);
+        expect(ImageHeaderJpeg.findJpegOffsets(dataView).iccChunks).to.have.lengthOf(255);
+    });
+
+    it('should leave the APP2 ICC chunks of a file with few chunks untouched', () => {
+        const dataView = getDataView(`\xff\xd8${MINIMAL_ICC_SEGMENT.repeat(10)}`);
+        const {iccChunks} = ImageHeaderJpeg.findJpegOffsets(dataView);
+        expect(iccChunks).to.have.lengthOf(10);
+        expect(iccChunks[9]).to.deep.equal({offset: 182, length: 0, chunkNumber: 1, chunksTotal: 1});
+    });
+
+    it('should still find later segments after the APP2 ICC cap is reached', () => {
+        const dataView = getDataView(`\xff\xd8${MINIMAL_ICC_SEGMENT.repeat(300)}\xff\xe1\x00\x08Exif\x00\x00`);
+        const metadataBlocks = [];
+        const {iccChunks, tiffHeaderOffset} = ImageHeaderJpeg.findJpegOffsets(dataView, metadataBlocks);
+        expect(iccChunks).to.have.lengthOf(255);
+        expect(tiffHeaderOffset).to.equal(5412);
+        expect(metadataBlocks).to.deep.include({type: 'icc', start: 5384, end: 5402});
+        expect(metadataBlocks).to.deep.include({type: 'exif', start: 5402, end: 5412});
+    });
+
+    it('should keep advancing the scan by the size of each APP2 ICC segment past the cap', () => {
+        const dataView = getDataView(`\xff\xd8${MINIMAL_ICC_SEGMENT.repeat(255)}${PADDED_ICC_SEGMENT.repeat(45)}\xff\xe1\x00\x08Exif\x00\x00`);
+        const {iccChunks, tiffHeaderOffset} = ImageHeaderJpeg.findJpegOffsets(dataView);
+        expect(iccChunks).to.have.lengthOf(255);
+        expect(tiffHeaderOffset).to.equal(5592);
     });
 
     it('should keep first valid IPTC APP13 offset when later APP13 segment is malformed', () => {

@@ -99,6 +99,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   That also covers a thumbnail cut off by the end of the data, for example when
   the `length` option reads only the first part of a file, which is how a JFIF
   thumbnail has been handled since 4.44.1.
+- Fixed a denial-of-service vulnerability where a crafted JPEG could make the
+  scan for its metadata segments retain far more memory, and make reading the
+  ICC profile take far longer, than the size of the file warrants. One ICC
+  chunk descriptor was retained per APP2 `ICC_PROFILE` segment with nothing
+  bounding how many, and such a segment can be as small as 16 bytes, so a file
+  packed with them produced around 65000 descriptors per MiB, all before any
+  ICC parsing began. A 10 MiB file retained more than 40 MiB of them. The step
+  that assembles the profile searches the whole list once per chunk, so a file
+  that puts the chunk numbers it needs at the end of the list also made that
+  search linear in the descriptor count, more than a third of a second for a
+  file of 4 MiB. The count is now bounded to 255, which is the widest the
+  format can express, since both the chunk number and the chunk total are
+  single bytes. Segments past that are left out and everything else in the
+  file is parsed as before, so a file that pads out ICC segments in front of
+  its other metadata still returns that metadata. A file with more than 255
+  ICC segments whose first 255 hold a complete profile now returns that
+  profile, where the whole ICC group used to be discarded.
 
 ## [4.44.1] - 2026-09-05
 

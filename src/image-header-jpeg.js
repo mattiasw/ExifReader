@@ -37,6 +37,9 @@ const MPF_DATA_OFFSET = 8;
 const APP2_ICC_IDENTIFIER = 'ICC_PROFILE\0';
 const ICC_CHUNK_NUMBER_OFFSET = APP_ID_OFFSET + APP2_ICC_IDENTIFIER.length;
 const ICC_TOTAL_CHUNKS_OFFSET = ICC_CHUNK_NUMBER_OFFSET + 1;
+// Guards against memory exhaustion from a crafted file. Both chunk fields are a
+// single byte, so a longer list could never be assembled into a profile anyway.
+const MAX_ICC_CHUNKS = 255;
 
 const APP2_MPF_IDENTIFIER = 'MPF\0';
 
@@ -180,15 +183,17 @@ function findJpegOffsets(dataView, metadataBlocks) {
             blockType = 'iptc';
         } else if (Constants.USE_ICC && isApp2ICCMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
-            const iccDataOffset = appMarkerPosition + APP2_ICC_DATA_OFFSET;
-            const iccDataLength = fieldLength - (APP2_ICC_DATA_OFFSET - APP_MARKER_SIZE);
-
-            const iccChunkNumber = dataView.getUint8(appMarkerPosition + ICC_CHUNK_NUMBER_OFFSET);
-            const iccChunksTotal = dataView.getUint8(appMarkerPosition + ICC_TOTAL_CHUNKS_OFFSET);
             if (!iccChunks) {
                 iccChunks = [];
             }
-            iccChunks.push({offset: iccDataOffset, length: iccDataLength, chunkNumber: iccChunkNumber, chunksTotal: iccChunksTotal});
+            if (iccChunks.length < MAX_ICC_CHUNKS) {
+                const iccDataOffset = appMarkerPosition + APP2_ICC_DATA_OFFSET;
+                const iccDataLength = fieldLength - (APP2_ICC_DATA_OFFSET - APP_MARKER_SIZE);
+
+                const iccChunkNumber = dataView.getUint8(appMarkerPosition + ICC_CHUNK_NUMBER_OFFSET);
+                const iccChunksTotal = dataView.getUint8(appMarkerPosition + ICC_TOTAL_CHUNKS_OFFSET);
+                iccChunks.push({offset: iccDataOffset, length: iccDataLength, chunkNumber: iccChunkNumber, chunksTotal: iccChunksTotal});
+            }
             blockType = 'icc';
         } else if (Constants.USE_MPF && isApp2MPFMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
