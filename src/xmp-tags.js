@@ -79,10 +79,13 @@ function combineChunks(dataView, chunks) {
 // A chunk length comes verbatim from the image and is not trusted. Bound it to
 // the bytes actually present so a crafted length cannot force a huge allocation.
 function getBoundedChunkBytes(dataView, chunk) {
-    const bufferLength = dataView.buffer.byteLength;
+    // The bound is the view's own extent, not the buffer's, since the slice
+    // starts at the view's byteOffset.
+    const bufferLength = dataView.byteLength;
+    const byteOffset = dataView.byteOffset || 0;
     const start = Math.min(Math.max(chunk.dataOffset, 0), bufferLength);
     const end = Math.min(start + Math.max(chunk.length, 0), bufferLength);
-    return new Uint8Array(dataView.buffer.slice(start, end));
+    return new Uint8Array(dataView.buffer.slice(byteOffset + start, byteOffset + end));
 }
 
 function readTags(tags, chunkDataView, domParser) {

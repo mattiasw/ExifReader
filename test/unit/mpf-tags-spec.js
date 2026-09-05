@@ -8,6 +8,8 @@ import MpfTags from '../../src/mpf-tags.js';
 import {getStringValueFromArray, getBase64Image} from '../../src/utils.js';
 
 const MP_ENTRY_VALUE_OFFSET = 26;
+const SURROUNDING_BYTE = 0x99;
+const SURROUNDING_SIZE = 4000;
 
 describe('mpf-tags', () => {
     it('should be able to read an MPF IFD with two images', () => {
@@ -251,6 +253,43 @@ describe('mpf-tags', () => {
         expect(tags['Images'][1].image).to.deep.equal(dataView.buffer.slice(0, bufferLength));
     });
 
+    it('should slice extracted images relative to the DataView when it has a non-zero byteOffset', () => {
+        const image0Size = 8;
+        const image1 = '\xa1\xa2\xa3\xa4\xa5\xa6\xa7\xa8';
+        const prefixLength = MP_ENTRY_VALUE_OFFSET + 2 * 16;
+        const entries = [
+            {size: image0Size, offset: 0},
+            {size: image1.length, offset: prefixLength}
+        ];
+        const unpaddedDataView = buildMpfDataView(entries, image1);
+        const dataView = getPaddedDataView(new Uint8Array(unpaddedDataView.buffer), 5);
+
+        const tags = MpfTags.read(dataView, 0);
+
+        expect(Array.from(new Uint8Array(tags['Images'][0].image))).to.deep.equal(
+            Array.from(new Uint8Array(unpaddedDataView.buffer, 0, image0Size))
+        );
+        expect(Array.from(new Uint8Array(tags['Images'][1].image))).to.deep.equal(
+            Array.from(new Uint8Array(getDataView(image1).buffer))
+        );
+    });
+
+    it('should bound an extracted image by the DataView, not by the whole buffer', () => {
+        const image0Size = 8;
+        const declaredSize = 4000;
+        const entries = [
+            {size: image0Size, offset: 0},
+            {size: declaredSize, offset: MP_ENTRY_VALUE_OFFSET + 2 * 16}
+        ];
+        const unpadded = buildMpfDataView(entries);
+        const dataView = getSurroundedDataView(new Uint8Array(unpadded.buffer), 5);
+
+        const tags = MpfTags.read(dataView, 0);
+
+        expect(tags['Images'][1].image.byteLength).to.be.at.most(dataView.byteLength);
+        expect(Array.from(new Uint8Array(tags['Images'][1].image))).to.not.include(SURROUNDING_BYTE);
+    });
+
     it('should not throw when the data is too short for the byte order marker', () => {
         // A truncated MPF segment can leave the data offset at (or past) the
         // end of the buffer. Reading the byte order there must not throw.
@@ -297,4 +336,22 @@ function buildMpEntry(entry) {
         + getByteStringFromNumber((entry.offset || 0) >>> 0, 4)
         + getByteStringFromNumber((entry.dependent1 || 0) >>> 0, 2)
         + getByteStringFromNumber((entry.dependent2 || 0) >>> 0, 2);
+}
+
+// getPaddedDataView leaves the window ending where the buffer ends, so an
+// over-read past the end cannot show up. This one surrounds the window.
+function getSurroundedDataView(bytes, pad) {
+    const buffer = new ArrayBuffer(pad + bytes.length + SURROUNDING_SIZE);
+    const view = new Uint8Array(buffer);
+    view.fill(SURROUNDING_BYTE);
+    view.set(bytes, pad);
+    return new DataView(buffer, pad, bytes.length);
+}
+
+function getPaddedDataView(bytes, pad) {
+    const buffer = new ArrayBuffer(pad + bytes.length);
+    const view = new Uint8Array(buffer);
+    view.fill(0x99, 0, pad);
+    view.set(bytes, pad);
+    return new DataView(buffer, pad);
 }

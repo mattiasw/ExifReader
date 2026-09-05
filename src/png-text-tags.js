@@ -108,6 +108,7 @@ function getNameAndValue(dataView, offset, length, type, async, decompressConfig
     let valueChars;
     let parsingState = STATE_KEYWORD;
     let compressionMethod = COMPRESSION_METHOD_NONE;
+    const byteOffset = dataView.byteOffset || 0;
 
     for (let i = 0; i < length && offset + i < dataView.byteLength; i++) {
         if (parsingState === STATE_COMPRESSION) {
@@ -118,7 +119,7 @@ function getNameAndValue(dataView, offset, length, type, async, decompressConfig
             parsingState = moveToNextState(type, parsingState);
             continue;
         } else if (parsingState === STATE_TEXT) {
-            valueChars = new DataView(dataView.buffer.slice(offset + i, offset + length));
+            valueChars = new DataView(dataView.buffer.slice(byteOffset + offset + i, byteOffset + offset + length));
             break;
         }
         const byte = dataView.getUint8(offset + i);

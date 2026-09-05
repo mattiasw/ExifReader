@@ -35,6 +35,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the IPTC parser it asks for is now included. A build that includes `tiff` was
   never affected.
 
+### Security
+
+- Fixed an information disclosure vulnerability where several readers could
+  return bytes from outside the data being parsed: the JFIF thumbnail, a PNG
+  text value (`tEXt`, `iTXt`, `zTXt`), the Exif thumbnail, MPF sub-images, ICC
+  profile chunks, and XMP chunks. They sliced the underlying buffer with
+  offsets meant for the `DataView`, so when the data was a view that starts
+  partway into a larger buffer, the bytes came from the wrong region of that
+  buffer, which for a `DataView` over a Node.js `Buffer` is whatever else
+  happens to share the pool. No crafted file was needed for this, an ordinary
+  one was enough, and `ArrayBuffer.prototype.slice` clamps instead of throwing,
+  so nothing failed along the way. Such a view reaches the parsers from the
+  public `loadView()`, and for XMP also through the regular `load()` path, from
+  a custom `decompress` function that returns bytes starting partway into a
+  larger buffer, which is what Node's `zlib` returns for a small result. That
+  last case also dropped the XMP tags of a JPEG XL file whose metadata box is
+  Brotli compressed. The readers now slice relative to the view's own position.
+
 ## [4.44.1] - 2026-09-05
 
 ### Changed

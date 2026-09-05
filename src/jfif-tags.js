@@ -153,7 +153,8 @@ function getThumbnail(dataView, jfifDataOffset, thumbnailLength, length) {
         return undefined;
     }
 
-    const value = dataView.buffer.slice(jfifDataOffset + OFFSET, jfifDataOffset + OFFSET + thumbnailLength);
+    const byteOffset = dataView.byteOffset || 0;
+    const value = dataView.buffer.slice(byteOffset + jfifDataOffset + OFFSET, byteOffset + jfifDataOffset + OFFSET + thumbnailLength);
     return {
         value,
         description: '<24-bit RGB pixel data>'

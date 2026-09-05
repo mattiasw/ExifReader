@@ -111,4 +111,24 @@ describe('jfif-tags', () => {
         });
         expect(tags).to.not.have.property('JFIF Thumbnail');
     });
+
+    it('should read the thumbnail relative to the DataView when it has a non-zero byteOffset', () => {
+        const dataView = getPaddedDataView(JFIF_DATA_CONTENT_THUMBNAIL, 7);
+
+        const tags = JfifTags.read(dataView, OFFSET);
+
+        const thumbnailValue = Array.from(new Uint8Array(tags['JFIF Thumbnail'].value));
+        const expectedValue = Array.from(getArrayBuffer(JFIF_THUMBNAIL_PIXEL_DATA));
+        expect(thumbnailValue).to.deep.equal(expectedValue);
+    });
 });
+
+function getPaddedDataView(content, pad) {
+    const buffer = new ArrayBuffer(pad + content.length);
+    const view = new Uint8Array(buffer);
+    view.fill(0x99, 0, pad);
+    for (let i = 0; i < content.length; i++) {
+        view[pad + i] = content.charCodeAt(i);
+    }
+    return new DataView(buffer, pad);
+}

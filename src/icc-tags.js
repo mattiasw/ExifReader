@@ -36,7 +36,8 @@ function readCompressedIcc(dataView, iccData, decompressConfig) {
     if (!compressionMethodIsSupported(iccData[0].compressionMethod)) {
         return {};
     }
-    const compressedDataView = new DataView(dataView.buffer.slice(iccData[0].offset, iccData[0].offset + iccData[0].length));
+    const byteOffset = dataView.byteOffset || 0;
+    const compressedDataView = new DataView(dataView.buffer.slice(byteOffset + iccData[0].offset, byteOffset + iccData[0].offset + iccData[0].length));
     return decompress(compressedDataView, iccData[0].compressionMethod, 'utf-8', 'dataview', decompressConfig)
         .then(parseTags)
         .catch(() => ({}));
@@ -49,6 +50,7 @@ function compressionMethodIsSupported(compressionMethod) {
 function readIcc(dataView, iccData) {
     try {
         const buffer = getBuffer(dataView);
+        const byteOffset = dataView.byteOffset || 0;
         const declaredLength = iccData.reduce((sum, icc) => sum + icc.length, 0);
         // The declared chunk lengths come from the file and are not trusted, so
         // bound the profile by the size of the buffer it is copied out of.
@@ -63,7 +65,7 @@ function readIcc(dataView, iccData) {
                 throw new Error(`ICC chunk ${chunkNumber} not found`);
             }
 
-            const data = buffer.slice(iccDataChunk.offset, iccDataChunk.offset + iccDataChunk.length);
+            const data = buffer.slice(byteOffset + iccDataChunk.offset, byteOffset + iccDataChunk.offset + iccDataChunk.length);
             const chunkData = new Uint8Array(data);
 
             iccBinaryData.set(chunkData, offset);

@@ -55,7 +55,10 @@ function addMpfImages(dataView, dataOffset, tags, byteOrder) {
         return tags;
     }
 
-    const bufferLength = dataView.buffer.byteLength;
+    // The bound is the view's own extent, not the buffer's, since the slice
+    // starts at the view's byteOffset.
+    const bufferLength = dataView.byteLength;
+    const byteOffset = dataView.byteOffset || 0;
     let remainingImageBytes = bufferLength * MAX_IMAGE_SIZE_PER_BUFFER_SIZE;
     const images = [];
     for (let i = 0; i < Math.ceil(tags['MPEntry'].value.length / ENTRY_SIZE); i++) {
@@ -94,7 +97,7 @@ function addMpfImages(dataView, dataOffset, tags, byteOrder) {
 
         const start = Math.min(Math.max(imageOffset, 0), bufferLength);
         const end = Math.min(start + Math.max(imageSize, 0), bufferLength, start + remainingImageBytes);
-        images[i].image = dataView.buffer.slice(start, end);
+        images[i].image = dataView.buffer.slice(byteOffset + start, byteOffset + end);
         remainingImageBytes -= end - start;
         deferInit(images[i], 'base64', function () {
             return getBase64Image(this.image);

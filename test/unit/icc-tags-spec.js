@@ -9,6 +9,7 @@ import ImageHeaderWebp from '../../src/image-header-webp.js';
 import {findOffsets as findIsoBmffOffsets} from '../../src/image-header-iso-bmff.js';
 import DataViewWrapper from '../../src/dataview.js';
 import {getDataView, getByteStringFromNumber, swapProperties} from './test-utils.js';
+import {COMPRESSION_METHOD_DEFLATE} from '../../src/utils.js';
 
 const ICC_PROFILE_PATH = './test/unit/icc/sRGB2014.icc';
 // Any value far larger than the crafted buffers works here. It is kept modest so
@@ -348,6 +349,13 @@ describe('icc-tags', () => {
         expect(tags['ICC Description']).to.not.equal(undefined);
     });
 
+    it('should slice the compressed profile relative to the DataView, not the underlying buffer', async () => {
+        const bytes = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+
+        expect(await captureCompressedIccBytes(bytes, 0)).to.deep.equal(bytes);
+        expect(await captureCompressedIccBytes(bytes, 5)).to.deep.equal(bytes);
+    });
+
     describe('profile size bounds', () => {
         it('should not size the profile from a chunk length that exceeds the buffer', () => {
             const dataView = new DataView(new ArrayBuffer(200));
@@ -491,6 +499,18 @@ describe('icc-tags', () => {
             expect(tags['ICC Description'].value).to.equal('sRGB2014');
         });
 
+        it('should slice a chunk relative to the DataView when it has a non-zero byteOffset', () => {
+            const profile = getIccProfileBytes();
+            const dataView = getPaddedDataView(profile, 20);
+
+            const tags = IccTags.read(
+                dataView,
+                [{offset: 0, length: profile.length, chunkNumber: 1, chunksTotal: 1}]
+            );
+
+            expect(tags['ICC Description'].value).to.equal('sRGB2014');
+        });
+
         // icc-file-parsing.js parses this profile through parseTags directly.
         // This covers the same file through read()'s chunk assembly instead.
         it('should parse a valid single-chunk profile', () => {
@@ -601,4 +621,39 @@ function getIccProfileBytes() {
 
 function getIccProfileDataView() {
     return new DataView(getIccProfileBytes().buffer);
+}
+
+function getPaddedDataView(bytes, pad) {
+    const buffer = new ArrayBuffer(pad + bytes.length);
+    const view = new Uint8Array(buffer);
+    view.fill(0x99, 0, pad);
+    view.set(bytes, pad);
+    return new DataView(buffer, pad);
+}
+
+/**
+ * Reads a single compressed ICC chunk through a custom deflate callback that
+ * records the raw bytes it is handed, instead of actually decompressing them.
+ * This observes exactly what `readCompressedIcc` sliced out of the DataView,
+ * independent of whether the sliced bytes happen to decode into a valid
+ * profile afterwards.
+ *
+ * @param {Array<number>} bytes - The bytes to place at the chunk's declared
+ * offset.
+ * @param {number} pad - How many marker bytes to place before the DataView's
+ * own byteOffset.
+ * @returns {Promise<Array<number>>} The bytes the deflate callback observed.
+ */
+function captureCompressedIccBytes(bytes, pad) {
+    const dataView = getPaddedDataView(new Uint8Array(bytes), pad);
+    const iccData = [{offset: 0, length: bytes.length, chunkNumber: 1, chunksTotal: 1, compressionMethod: COMPRESSION_METHOD_DEFLATE}];
+    let captured;
+    const decompressConfig = {
+        deflate: (uint8) => {
+            captured = Array.from(uint8);
+            return new Uint8Array(0);
+        }
+    };
+
+    return IccTags.read(dataView, iccData, true, decompressConfig).then(() => captured);
 }

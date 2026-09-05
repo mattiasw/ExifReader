@@ -14,8 +14,9 @@ export default {
 function get(dataView, thumbnailTags, tiffHeaderOffset) {
     if (hasJpegThumbnail(thumbnailTags)) {
         thumbnailTags.type = 'image/jpeg';
+        const byteOffset = dataView.byteOffset || 0;
         const offset = tiffHeaderOffset + thumbnailTags.JPEGInterchangeFormat.value;
-        thumbnailTags.image = dataView.buffer.slice(offset, offset + thumbnailTags.JPEGInterchangeFormatLength.value);
+        thumbnailTags.image = dataView.buffer.slice(byteOffset + offset, byteOffset + offset + thumbnailTags.JPEGInterchangeFormatLength.value);
         deferInit(thumbnailTags, 'base64', function () {
             return getBase64Image(this.image);
         });

@@ -3,6 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
+
+const SURROUNDING_SIZE = 200;
 import {DOMParser as XmldomDomParser, onErrorStopParsing} from '@xmldom/xmldom';
 import {DOMParser as LinkedomDomParser} from 'linkedom';
 import {getConsoleWarnSpy, getDataView, swapProperties} from './test-utils.js';
@@ -53,6 +55,45 @@ describe('xmp-tags', function () {
 
             warnSpy.reset();
         });
+    });
+
+    it('should read a chunk relative to the DataView when it has a non-zero byteOffset', () => {
+        const domParser = new XmldomDomParser({onError: onErrorStopParsing});
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="4711">
+            </rdf:Description>
+        `);
+        const dataView = getPaddedDataView(xmlString, 6);
+
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+
+        expect(tags).to.deep.equal({
+            _raw: xmlString,
+            MyXMPTag0: {
+                value: '4711',
+                attributes: {},
+                description: '4711'
+            }
+        });
+    });
+
+    it('should bound a chunk by the DataView, not by the whole buffer', () => {
+        const domParser = new XmldomDomParser({onError: onErrorStopParsing});
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="4711">
+            </rdf:Description>
+        `);
+        const dataView = getSurroundedDataView(xmlString, 6);
+
+        // The declared length runs past the end of the view and into the bytes
+        // that follow it in the buffer.
+        const tags = XmpTags.read(
+            dataView,
+            [{dataOffset: 0, length: xmlString.length + SURROUNDING_SIZE}],
+            domParser
+        );
+
+        expect(tags._raw).to.equal(xmlString);
     });
 
     const domParsers = {
@@ -1846,4 +1887,26 @@ function getXmlString(content) {
     return `<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
         ${content}
     </rdf:RDF>`;
+}
+
+// getPaddedDataView leaves the window ending where the buffer ends, so an
+// over-read past the end cannot show up. This one surrounds the window.
+function getSurroundedDataView(content, pad) {
+    const buffer = new ArrayBuffer(pad + content.length + SURROUNDING_SIZE);
+    const view = new Uint8Array(buffer);
+    view.fill(0x99);
+    for (let i = 0; i < content.length; i++) {
+        view[pad + i] = content.charCodeAt(i);
+    }
+    return new DataView(buffer, pad, content.length);
+}
+
+function getPaddedDataView(content, pad) {
+    const buffer = new ArrayBuffer(pad + content.length);
+    const view = new Uint8Array(buffer);
+    view.fill(0x99, 0, pad);
+    for (let i = 0; i < content.length; i++) {
+        view[pad + i] = content.charCodeAt(i);
+    }
+    return new DataView(buffer, pad);
 }

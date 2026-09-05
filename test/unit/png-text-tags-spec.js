@@ -41,6 +41,21 @@ describe('png-text-tags', () => {
         });
     });
 
+    it('should read a tEXt value relative to the DataView when it has a non-zero byteOffset', () => {
+        const tagDatatEXt = 'MyTag0\x00My value.';
+        const dataView = getPaddedDataView(tagDatatEXt, 4);
+        const chunks = [
+            {type: TYPE_TEXT, offset: 0, length: tagDatatEXt.length}
+        ];
+
+        const {readTags} = PngTextTags.read(dataView, chunks);
+
+        expect(readTags['MyTag0']).to.deep.equal({
+            value: 'My value.',
+            description: 'My value.'
+        });
+    });
+
     it('should not read past the end of an iTXt chunk that is cut off after its compression flag', () => {
         const tagData = 'Comment\x00\x01';
         const dataView = getDataView(tagData);
@@ -211,5 +226,15 @@ describe('png-text-tags', () => {
 
     function stringToHex(text) {
         return text.split('').map((char) => char.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+    }
+
+    function getPaddedDataView(content, pad) {
+        const buffer = new ArrayBuffer(pad + content.length);
+        const view = new Uint8Array(buffer);
+        view.fill(0x99, 0, pad);
+        for (let i = 0; i < content.length; i++) {
+            view[pad + i] = content.charCodeAt(i);
+        }
+        return new DataView(buffer, pad);
     }
 });
