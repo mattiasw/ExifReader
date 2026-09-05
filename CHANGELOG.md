@@ -78,6 +78,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   larger buffer, which is what Node's `zlib` returns for a small result. That
   last case also dropped the XMP tags of a JPEG XL file whose metadata box is
   Brotli compressed. The readers now slice relative to the view's own position.
+- Fixed an information disclosure vulnerability where a crafted image could put
+  bytes from outside the data being parsed into the Exif thumbnail. The offset
+  and the length of the thumbnail are declared by the file and were used
+  unchecked, and a thumbnail IFD can declare the offset with a signed type and
+  make it negative, which is then read relative to the end of the underlying
+  buffer. When the data handed to `loadView()` is a view into a larger buffer,
+  which is what a `DataView` over a Node.js `Buffer` is, since small buffers
+  share a pool, the thumbnail could hold bytes from elsewhere in that buffer,
+  including data another part of the program had put there. Passing a `Buffer`
+  or an `ArrayBuffer` to `load()` was not affected, because the thumbnail is
+  then bounded by the data itself. A declared range that does not lie inside
+  the data now leaves the thumbnail out, with no `image`, `base64`, or `type`.
+  That also covers a thumbnail cut off by the end of the data, for example when
+  the `length` option reads only the first part of a file, which is how a JFIF
+  thumbnail has been handled since 4.44.1.
 
 ## [4.44.1] - 2026-09-05
 

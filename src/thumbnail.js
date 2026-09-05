@@ -13,13 +13,17 @@ export default {
 
 function get(dataView, thumbnailTags, tiffHeaderOffset) {
     if (hasJpegThumbnail(thumbnailTags)) {
-        thumbnailTags.type = 'image/jpeg';
-        const byteOffset = dataView.byteOffset || 0;
         const offset = tiffHeaderOffset + thumbnailTags.JPEGInterchangeFormat.value;
-        thumbnailTags.image = dataView.buffer.slice(byteOffset + offset, byteOffset + offset + thumbnailTags.JPEGInterchangeFormatLength.value);
-        deferInit(thumbnailTags, 'base64', function () {
-            return getBase64Image(this.image);
-        });
+        const length = thumbnailTags.JPEGInterchangeFormatLength.value;
+
+        if (fitsInDataView(dataView, offset, length)) {
+            thumbnailTags.type = 'image/jpeg';
+            const byteOffset = dataView.byteOffset || 0;
+            thumbnailTags.image = dataView.buffer.slice(byteOffset + offset, byteOffset + offset + length);
+            deferInit(thumbnailTags, 'base64', function () {
+                return getBase64Image(this.image);
+            });
+        }
     }
 
     // There is a small possibility of thumbnails in TIFF format but they are
@@ -34,4 +38,18 @@ function hasJpegThumbnail(tags) {
     return tags && ((tags.Compression === undefined) || (COMPRESSION_JPEG.includes(tags.Compression.value)))
         && tags.JPEGInterchangeFormat && tags.JPEGInterchangeFormat.value
         && tags.JPEGInterchangeFormatLength && tags.JPEGInterchangeFormatLength.value;
+}
+
+// The file declares the offset and the length, and slicing clamps a bad range
+// instead of throwing, reading a negative start from the end of the buffer. The
+// bound is the view's own extent, not the buffer's, since the slice starts at
+// the view's byteOffset.
+function fitsInDataView(dataView, offset, length) {
+    return isNonNegativeInteger(offset)
+        && isNonNegativeInteger(length)
+        && (offset + length <= dataView.byteLength);
+}
+
+function isNonNegativeInteger(value) {
+    return (typeof value === 'number') && (value >= 0) && (value % 1 === 0);
 }
