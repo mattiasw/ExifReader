@@ -66,6 +66,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `photoshop`, but this does not change the size of a build configured with
   `{"exclude": {"exif": true}}`: the Photoshop parser and its tag name table
   had no other way into the bundle, so they were already left out.
+- A PNG file read with `async: true` no longer gets a top-level `Thumbnail` tag
+  holding the bare tags of the thumbnail IFD with no thumbnail image in it. It
+  came from Exif data embedded in a PNG text chunk, where the thumbnail image
+  is never read, so there was nothing the tag could be used for, and whether it
+  turned up depended on the tag filter rather than on the file: a filter that
+  left the thumbnail group out removed it already. Reading with
+  `expanded: true` is unaffected, since those tags were never at the top level
+  there.
+- The support table in the README marked thumbnails as not applicable to TIFF
+  files. A TIFF whose 1st IFD describes a JPEG-compressed thumbnail does return
+  it, image included, so the table now lists them as supported.
 
 ### Security
 

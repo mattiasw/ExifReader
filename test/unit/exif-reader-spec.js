@@ -1053,6 +1053,32 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView({}, {expanded: true})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
     });
 
+    it('should retrieve a thumbnail from a TIFF file with a 1st IFD', () => {
+        const thumbnailImage = '\xff\xd8\x11\x22\x33\x44\x55\x66\xff\xd9';
+        const dataView = getDataView(
+            // TIFF header + offset to the 0th IFD.
+            '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x08'
+            // 0th IFD: field count + ImageDescription + offset to the 1st IFD.
+            + '\x00\x01' + '\x01\x0e\x00\x02\x00\x00\x00\x04' + 'Yes\x00' + '\x00\x00\x00\x1a'
+            // 1st IFD: field count + Compression (JPEG) + the thumbnail offset (68) and
+            // length (10) + no further IFD.
+            + '\x00\x03'
+            + '\x01\x03\x00\x03\x00\x00\x00\x01\x00\x06\x00\x00'
+            + '\x02\x01\x00\x04\x00\x00\x00\x01\x00\x00\x00\x44'
+            + '\x02\x02\x00\x04\x00\x00\x00\x01\x00\x00\x00\x0a'
+            + '\x00\x00\x00\x00'
+            + thumbnailImage
+        );
+
+        const tags = ExifReader.loadView(dataView);
+
+        expect(tags['FileType'].value).to.equal('tiff');
+        expect(tags['Thumbnail'].type).to.equal('image/jpeg');
+        expect(Array.from(new Uint8Array(tags['Thumbnail'].image))).to.deep.equal(
+            Array.from(thumbnailImage, (character) => character.charCodeAt(0))
+        );
+    });
+
     it('should add file type', () => {
         const myTags = {MyTag: 42, FileType: 'will be overwritten'};
         swapForLoadView({fileType: {value: 'heic', description: 'HEIC'}, tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);

@@ -160,6 +160,29 @@ describe('tag filtering options', function () {
         expect(tags['Color Type']).to.equal(undefined);
     });
 
+    it('includeTags.thumbnail should not turn the thumbnail IFD of embedded png exif into a Thumbnail tag', function () {
+        fakeImageHeader({
+            fileType: 'png',
+            pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
+        });
+        fakePngTextTagsRead({
+            __exif: {
+                UserComment: {id: 0x9286, value: 'Hello'},
+                Thumbnail: {JPEGInterchangeFormat: {id: 0x0201, value: 272}},
+            },
+        });
+
+        const tags = ExifReader.loadView({}, {
+            includeTags: {
+                exif: true,
+                thumbnail: true,
+            },
+        });
+
+        expect(tags.UserComment).to.not.equal(undefined);
+        expect(tags.Thumbnail).to.equal(undefined);
+    });
+
     it('includeTags: { png: true } should not include embedded exif when exif is not included', function () {
         fakeImageHeader({
             fileType: 'png',

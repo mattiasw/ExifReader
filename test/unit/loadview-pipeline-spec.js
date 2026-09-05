@@ -5,6 +5,7 @@
 import {expect} from 'chai';
 import {objectAssign} from '../../src/utils.js';
 import Constants from '../../src/constants.js';
+import Thumbnail from '../../src/thumbnail.js';
 import {swapProperties} from './test-utils.js';
 import {
     addPngTextReadTagsToTagsAndGroups,
@@ -124,6 +125,91 @@ describe('loadView pipeline module', function () {
         });
 
         expect(tags.Thumbnail.value).to.equal('existing');
+    });
+
+    it('should keep a Thumbnail tag without an image if there are thumbnail IFD tags', function () {
+        const tagFilter = createTagFilter({
+            returnGroups: {thumbnail: true},
+            returnTags: {'thumbnail.Thumbnail': true},
+        });
+        const thumbnailIfdTags = {Compression: {value: 1}};
+        const deps = createPipelineDeps();
+        deps.Thumbnail = Thumbnail;
+
+        const tags = applyMergeStep({
+            step: {type: 'thumbnail'},
+            deferredResults: {},
+            parsedGroups: {},
+            expanded: false,
+            tagFilter,
+            dataView: {},
+            tiffHeaderOffset: 0,
+            fileType: undefined,
+            thumbnailIfdTags,
+            tags: {},
+            deps,
+        });
+
+        expect(tags.Thumbnail).to.deep.equal({Compression: {value: 1}});
+    });
+
+    it('should not return a Thumbnail tag for the thumbnail IFD of embedded PNG text Exif tags', function () {
+        const parsedGroups = {};
+
+        const tags = buildTagsFromMergeSteps({
+            mergeSteps: [
+                {
+                    type: 'processPngTextReadTags',
+                    readTags: {
+                        __exif: {
+                            MyExifTag: {value: 42},
+                            Thumbnail: {JPEGInterchangeFormat: {value: 272}},
+                        },
+                    },
+                },
+                {type: 'thumbnail'},
+            ],
+            deferredResults: {},
+            parsedGroups,
+            expanded: false,
+            tagFilter: createTagFilter({}),
+            dataView: {},
+            tiffHeaderOffset: undefined,
+            fileType: undefined,
+            pngTextIsAsync: false,
+            thumbnailIfdTags: undefined,
+            deps: createPipelineDeps(),
+        });
+
+        expect(tags.MyExifTag.value).to.equal(42);
+        expect(tags.Thumbnail).to.equal(undefined);
+        expect(parsedGroups.exif.Thumbnail).to.deep.equal({JPEGInterchangeFormat: {value: 272}});
+    });
+
+    it('should keep a PNG text tag named Thumbnail when the thumbnail group is returned', function () {
+        const tags = buildTagsFromMergeSteps({
+            mergeSteps: [
+                {type: 'processPngTextReadTagsDeferredList', deferredKey: 'pngText'},
+                {type: 'thumbnail'},
+            ],
+            deferredResults: {
+                pngText: [
+                    {Thumbnail: {value: 'my thumbnail note'}},
+                    {__exif: {Thumbnail: {JPEGInterchangeFormat: {value: 272}}}},
+                ],
+            },
+            parsedGroups: {},
+            expanded: false,
+            tagFilter: createTagFilter({}),
+            dataView: {},
+            tiffHeaderOffset: undefined,
+            fileType: undefined,
+            pngTextIsAsync: false,
+            thumbnailIfdTags: undefined,
+            deps: createPipelineDeps(),
+        });
+
+        expect(tags.Thumbnail.value).to.equal('my thumbnail note');
     });
 
     it('should apply the composite step when Exif tags are included', function () {

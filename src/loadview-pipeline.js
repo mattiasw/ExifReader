@@ -413,7 +413,13 @@ export function addPngTextReadTagsToTagsAndGroups({
                     returnedEmbeddedExifTags
                 );
             } else {
-                tags = deps.objectAssign({}, tags, returnedEmbeddedExifTags);
+                // The thumbnail image is never read from a text chunk, so the
+                // thumbnail IFD would land at the top level with no image.
+                const returnedEmbeddedExifTagsForFlat =
+                    deps.objectAssign({}, returnedEmbeddedExifTags);
+                delete returnedEmbeddedExifTagsForFlat.Thumbnail;
+
+                tags = deps.objectAssign({}, tags, returnedEmbeddedExifTagsForFlat);
             }
         }
     }
