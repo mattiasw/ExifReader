@@ -6,6 +6,7 @@ const path = require('path');
 const TerserPlugin = require('terser-webpack-plugin');
 const findConfigFromClosestPackageJson = require('./bin/findDependentConfig');
 const TagFilterPlugin = require('./bin/TagFilterPlugin');
+const parseConfig = require('./bin/parse-config');
 
 const config = getConfig();
 const includedModules = parseConfig(config);
@@ -91,59 +92,6 @@ module.exports = {
         ]
     }
 };
-
-function parseConfig({include: includesConfig, exclude: excludesConfig}) {
-    const modules = [
-        'file',
-        'jfif',
-        'png_file',
-        'exif',
-        'iptc',
-        'xmp',
-        'icc',
-        'photoshop',
-        'maker_notes',
-        'mpf',
-        'thumbnail',
-        'tiff',
-        'jpeg',
-        'png',
-        'heic',
-        'avif',
-        'jxl',
-        'webp',
-        'gif'
-    ];
-
-    if (includesConfig) {
-        const includes = {};
-        for (const module of modules) {
-            includes[module] =
-                (
-                    Object.keys(includesConfig).includes(module)
-                    || ((module === 'exif') && Object.keys(includesConfig).includes('thumbnail'))
-                    || ((module === 'exif') && Object.keys(includesConfig).includes('mpf'))
-                )
-                && includesConfig[module];
-        }
-        return includes;
-    }
-
-    if (excludesConfig) {
-        const includes = {};
-        for (const module of modules) {
-            includes[module] =
-                !(
-                    excludesConfig.includes(module)
-                    || ((module === 'thumbnail') && excludesConfig.includes('exif'))
-                    || ((module === 'mpf') && excludesConfig.includes('exif'))
-                );
-        }
-        return includes;
-    }
-
-    return false;
-}
 
 function getConfig() {
     const packageJson = getPackageJson();

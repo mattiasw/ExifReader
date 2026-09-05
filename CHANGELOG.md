@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A custom build whose include pattern names the `thumbnail` module but not
+  `exif` now gets the `exif` module too, so it returns the `Thumbnail` tag.
+  The build already meant to do this, but the condition could never be true,
+  so such a build read no Exif data at all, with no warning and no error.
+- The custom build module table no longer claims that `mpf` needs `exif`. MPF
+  tags are read from their own JPEG segment, so an include pattern naming
+  `mpf` without `exif` has always worked, and such a build stays smaller
+  without the `exif` module.
+- The custom build module table now says that the `photoshop` module needs
+  `exif`. Photoshop tags are read from Exif tags, so an include pattern naming
+  `photoshop` without `exif` returns nothing.
 - A custom build that includes the `thumbnail` module but neither `jpeg` nor
   `webp`, for example one paired with `heic` or `avif`, now returns the
   `Thumbnail` tag. The thumbnail was found in the Exif data and parsed and then

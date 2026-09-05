@@ -883,10 +883,10 @@ Possible modules to include or exclude:
 | `iptc`        | IPTC tags.                                             |
 | `xmp`         | XMP tags.                                              |
 | `icc`         | ICC color profile tags.                                |
-| `mpf`         | Multi-picture Format tags. Needs `exif`                |
-| `photoshop`   | Photoshop tags.                                        |
+| `mpf`         | Multi-picture Format tags. Does not need `exif`, but excluding `exif` also excludes it. |
+| `photoshop`   | Photoshop tags. Needs `exif`.                          |
 | `maker_notes` | Proprietary camera maker tags. Needs `exif`.           |
-| `thumbnail`   | Thumbnail image. Needs `exif`.                         |
+| `thumbnail`   | Thumbnail image. Including it also includes `exif`.    |
 
 Notes
 -----

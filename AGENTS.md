@@ -20,7 +20,7 @@ Tag definitions live in `src/tag-names-*.js` (keyed by hex tag ID). Each image f
 Users can configure custom builds (via `package.json` `"exifreader"` key) to include/exclude specific formats and tag groups, reducing bundle size. When adding a new image format or metadata group:
 
 1. Add a `USE_<NAME>` flag to `src/constants.js`
-2. Add the module name to the `modules` array in `webpack.config.js`
+2. Add the module name to the `modules` array in `bin/parse-config.js`
 3. Add the source filename to the string-replace regex in `webpack.config.js` (so `Constants.USE_*` gets replaced)
 4. Add test entries in `test/build/custom-builds.json`
 5. Document the module in the README custom build table

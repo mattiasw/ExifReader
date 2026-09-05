@@ -212,7 +212,6 @@
             "include": {
                 "jpeg": true,
                 "heic": true,
-                "exif": true,
                 "thumbnail": true
             }
         }
