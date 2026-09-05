@@ -3,12 +3,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 // A module listed here cannot produce anything without the module it maps to.
-// The thumbnail is stored in the Exif metadata, in IFD1, and maker notes are
-// read from an Exif tag. MPF is not listed: it has its own JPEG segment and
-// parses without the Exif module.
+// The thumbnail is stored in the Exif metadata, in IFD1, maker notes and
+// Photoshop tags are read from an Exif tag. MPF is not listed: it has its own
+// JPEG segment and parses without the Exif module.
 const MODULE_DEPENDENCIES = {
     thumbnail: 'exif',
-    maker_notes: 'exif'
+    maker_notes: 'exif',
+    photoshop: 'exif'
 };
 
 module.exports = parseConfig;

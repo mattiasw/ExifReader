@@ -60,6 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Pentax tag name tables it kept could never be reached without the `exif`
   module, so dropping them takes 231 bytes off a build configured with
   `{"exclude": {"exif": true}}`.
+- A custom build whose include pattern names the `photoshop` module but not
+  `exif` now gets the `exif` module too, so it returns the Photoshop tags
+  instead of nothing. A custom build that excludes `exif` now also excludes
+  `photoshop`, but this does not change the size of a build configured with
+  `{"exclude": {"exif": true}}`: the Photoshop parser and its tag name table
+  had no other way into the bundle, so they were already left out.
 
 ### Security
 

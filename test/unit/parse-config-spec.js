@@ -82,6 +82,14 @@ describe('parseConfig', () => {
             expect(includes.exif).to.equal(false);
             expect(includes.mpf).to.equal(true);
         });
+
+        it('includes exif when only the photoshop module is named', () => {
+            // Photoshop tags are read from an Exif tag, so they cannot be
+            // produced without the Exif module.
+            const includes = parseConfig({include: {heic: true, photoshop: true}});
+            expect(includes.exif).to.equal(true);
+            expect(includes.photoshop).to.equal(true);
+        });
     });
 
     describe('exclude configurations', () => {
@@ -102,6 +110,12 @@ describe('parseConfig', () => {
             const includes = parseConfig({exclude: ['exif']});
             expect(includes.exif).to.equal(false);
             expect(includes.maker_notes).to.equal(false);
+        });
+
+        it('excludes the photoshop module together with exif', () => {
+            const includes = parseConfig({exclude: ['exif']});
+            expect(includes.exif).to.equal(false);
+            expect(includes.photoshop).to.equal(false);
         });
 
         it('keeps the mpf module when excluding exif', () => {

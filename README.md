@@ -886,7 +886,7 @@ Possible modules to include or exclude:
 | `mpf`         | Multi-picture Format tags. Does not need `exif`.       |
 | `photoshop`   | Photoshop tags. Needs `exif`.                          |
 | `maker_notes` | Proprietary camera maker tags. Needs `exif`.           |
-| `thumbnail`   | Thumbnail image. Including it also includes `exif`.    |
+| `thumbnail`   | Thumbnail image. Needs `exif`.                         |
 
 Notes
 -----
