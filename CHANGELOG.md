@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   goes from 36002 to 34694 bytes, around 0.5 KiB gzipped. A custom build that
   includes either module produces a byte-identical bundle and returns the same
   tags.
+- A custom build that excludes the `exif` module no longer carries the 0th,
+  Exif, GPS and interoperability tag name tables. They came in whenever
+  anything imported the shared tag name module, so a build that kept `mpf`
+  carried them even though it could never read an Exif tag. Leaving them out
+  takes a build configured with `{"exclude": {"exif": true}}` from 117324 down
+  to 96920 bytes, around 5 KiB gzipped, and one configured with
+  `{"include": {"jpeg": true, "mpf": true}}` from 54329 down to 32383 bytes,
+  around 6 KiB gzipped. A custom build that includes `exif` produces a
+  byte-identical bundle and returns the same tags.
 
 ### Fixed
 
@@ -30,11 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without the `exif` module.
 - A custom build that excludes the `exif` module now keeps the `mpf` module
   instead of dropping it. Such a build gets bigger, since the MPF parser brings
-  back the shared IFD reading code, and that pulls in the Exif tag name tables
-  alongside the MPF ones. It also copies out the sub-images that phone JPEGs
-  embed, which costs time and memory, and with `length: 'auto'` it reads more
-  of the file. A build that wants none of that can exclude `mpf`, and a build
-  that already excludes `mpf` was never affected.
+  back the shared IFD reading code. It also copies out the sub-images that
+  phone JPEGs embed, which costs time and memory, and with `length: 'auto'` it
+  reads more of the file. A build that wants none of that can exclude `mpf`,
+  and a build that already excludes `mpf` was never affected.
 - The custom build module table now says that the `photoshop` module needs
   `exif`. Photoshop tags are read from Exif tags, so an include pattern naming
   `photoshop` without `exif` returns nothing.
