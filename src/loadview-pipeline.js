@@ -239,7 +239,7 @@ export function applyMergeStep({
         return tags;
     }
 
-    if (step.type === 'composite') {
+    if ((Constants.USE_EXIF || Constants.USE_XMP) && step.type === 'composite') {
         if (!tagFilter.shouldReturnGroup('composite')) {
             return tags;
         }
@@ -291,8 +291,7 @@ export function applyMergeStep({
             parsedGroups.thumbnail = parsedThumbnailIfdTags;
         }
 
-        const thumbnail = (Constants.USE_JPEG || Constants.USE_WEBP)
-            && Constants.USE_EXIF
+        const thumbnail = Constants.USE_EXIF
             && Constants.USE_THUMBNAIL
             && deps.Thumbnail.get(exifDataView || dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
         if (thumbnail) {
@@ -414,7 +413,13 @@ export function addPngTextReadTagsToTagsAndGroups({
                     returnedEmbeddedExifTags
                 );
             } else {
-                tags = deps.objectAssign({}, tags, returnedEmbeddedExifTags);
+                // The thumbnail image is never read from a text chunk, so the
+                // thumbnail IFD would land at the top level with no image.
+                const returnedEmbeddedExifTagsForFlat =
+                    deps.objectAssign({}, returnedEmbeddedExifTags);
+                delete returnedEmbeddedExifTagsForFlat.Thumbnail;
+
+                tags = deps.objectAssign({}, tags, returnedEmbeddedExifTagsForFlat);
             }
         }
     }

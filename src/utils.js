@@ -196,13 +196,16 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
                     return rejectExceedsMax(maxDecompressedSize);
                 }
                 if (returnType === 'dataview') {
-                    if (result instanceof DataView) {
-                        return result;
-                    }
                     if (result instanceof ArrayBuffer) {
                         return new DataView(result);
                     }
-                    return new DataView(result.buffer, result.byteOffset, result.byteLength);
+                    // A DataView or a pooled Buffer can be a window into a
+                    // larger buffer, and parsers slice dataView.buffer, so
+                    // copy a window out but keep a whole buffer as it is.
+                    if ((result.byteOffset === 0) && (result.byteLength === result.buffer.byteLength)) {
+                        return new DataView(result.buffer);
+                    }
+                    return new DataView(result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength));
                 }
                 return new TextDecoder(encoding).decode(result);
             });
