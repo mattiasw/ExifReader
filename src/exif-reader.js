@@ -92,6 +92,8 @@ export function loadView(
         decompress: decompressConfig = undefined
     } = {}
 ) {
+    dataView = getSelfContainedDataView(dataView);
+
     const tagFilter = createTagFilter({includeTags, excludeTags});
     const parsedGroups = Object.create(null);
     const mergeSteps = [];
@@ -727,6 +729,32 @@ export function loadView(
         }
         return !(Array.isArray(file) && file.length === 1 && file[0] === 'FileType');
     }
+}
+
+// A caller-supplied DataView can be a window into a larger buffer. Extractors
+// slice dataView.buffer, so copy the window out to keep them inside the image.
+function getSelfContainedDataView(dataView) {
+    if (isWindowIntoLargerBuffer(dataView)) {
+        return getDataView(dataView.buffer.slice(dataView.byteOffset, dataView.byteOffset + dataView.byteLength));
+    }
+    return dataView;
+}
+
+function isWindowIntoLargerBuffer(dataView) {
+    return isDataViewLike(dataView)
+        && ((dataView.byteOffset > 0) || (dataView.byteLength < dataView.buffer.byteLength));
+}
+
+// A DataView from another realm, an iframe for example, fails instanceof, so
+// match on the shape instead. A typed array has no getUint8 and the Node Buffer
+// wrapper has no byteOffset, so neither is treated as a window here.
+function isDataViewLike(dataView) {
+    return !!dataView
+        && (typeof dataView.getUint8 === 'function')
+        && (typeof dataView.byteOffset === 'number')
+        && (typeof dataView.byteLength === 'number')
+        && !!dataView.buffer
+        && (typeof dataView.buffer.slice === 'function');
 }
 
 function getBrobDataView(dataView, brobChunk) {

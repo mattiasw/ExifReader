@@ -2,12 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import vm from 'node:vm';
 import {expect} from 'chai';
-import {getCharacterArray, getBase64Image} from '../../src/utils.js';
+import {getCharacterArray, getBase64Image, getDataView as getDataViewOrWrapper} from '../../src/utils.js';
 import * as ExifReader from '../../src/exif-reader.js';
 import exifErrors from '../../src/errors.js';
 import ByteOrder from '../../src/byte-order.js';
-import {getDataView, swapProperties} from './test-utils.js';
+import {getArrayBuffer, getDataView, getByteStringFromNumber, swapProperties} from './test-utils.js';
 import Constants from '../../src/constants.js';
 import ImageHeader from '../../src/image-header.js';
 import Tags from '../../src/tags.js';
@@ -2141,6 +2142,157 @@ describe('exif-reader', function () {
             });
         });
     });
+
+    describe('narrow caller-supplied DataView windows', () => {
+        const OUTSIDE_BYTE = 0x5a;
+        const PADDING_LENGTH = 512;
+        const THUMBNAIL = '\xff\xd8\xff\xdbTHUMBNAIL\xff\xd9';
+        const MPF_IMAGE = '\xff\xd8\xff\xdbSUBIMAGE\xff\xd9';
+
+        it('should not return bytes from outside the window as a thumbnail', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL);
+
+            const tags = ExifReader.loadView(getWindowedDataView(image));
+
+            expect(getBytes(tags.Thumbnail.image)).to.not.include(OUTSIDE_BYTE);
+            expect(getBytes(tags.Thumbnail.image)).to.deep.equal(getBytes(getArrayBuffer(THUMBNAIL)));
+        });
+
+        it('should still return the thumbnail of a full-buffer view', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL);
+
+            const tags = ExifReader.loadView(getDataView(image));
+
+            expect(getBytes(tags.Thumbnail.image)).to.deep.equal(getBytes(getArrayBuffer(THUMBNAIL)));
+        });
+
+        it('should return the same tags for a windowed view as for a full-buffer view', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL);
+
+            const windowedTags = ExifReader.loadView(getWindowedDataView(image));
+            const fullTags = ExifReader.loadView(getDataView(image));
+
+            expect(getBytes(windowedTags.Thumbnail.image)).to.deep.equal(getBytes(fullTags.Thumbnail.image));
+            expect(windowedTags.Thumbnail.base64).to.equal(fullTags.Thumbnail.base64);
+        });
+
+        it('should not return bytes from after a window that starts at offset zero', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL, THUMBNAIL.length + PADDING_LENGTH);
+
+            const tags = ExifReader.loadView(getTrailingPaddedDataView(image));
+
+            expect(getBytes(tags.Thumbnail.image)).to.not.include(OUTSIDE_BYTE);
+        });
+
+        it('should not return bytes from outside the window as an MPF image', () => {
+            const image = getMpfJpeg(MPF_IMAGE);
+
+            const tags = ExifReader.loadView(getWindowedDataView(image));
+
+            expect(getBytes(tags.Images[1].image)).to.not.include(OUTSIDE_BYTE);
+            expect(getBytes(tags.Images[1].image)).to.deep.equal(getBytes(getArrayBuffer(MPF_IMAGE)));
+        });
+
+        it('should hand the parser a view that covers its whole buffer when given a window', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL);
+            const dataView = getWindowedDataView(image);
+
+            const parsedDataView = getDataViewReachingParser(dataView);
+
+            expect(parsedDataView).to.not.equal(dataView);
+            expect(parsedDataView.byteOffset).to.equal(0);
+            expect(parsedDataView.buffer.byteLength).to.equal(image.length);
+        });
+
+        it('should not copy a full-buffer view before parsing it', () => {
+            const dataView = getDataView(getExifJpegWithThumbnail(THUMBNAIL));
+
+            expect(getDataViewReachingParser(dataView)).to.equal(dataView);
+        });
+
+        it('should not copy a DataViewWrapper before parsing it', () => {
+            const dataView = getDataViewOrWrapper(getBufferLikeData(getExifJpegWithThumbnail(THUMBNAIL)));
+
+            const parsedDataView = getDataViewReachingParser(dataView);
+
+            expect(parsedDataView).to.not.be.an.instanceOf(DataView);
+            expect(parsedDataView).to.equal(dataView);
+        });
+
+        it('should not return bytes from outside the window of a DataView from another realm', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL);
+            const dataView = getForeignRealmDataView(image);
+            expect(dataView).to.not.be.an.instanceOf(DataView);
+
+            const tags = ExifReader.loadView(dataView);
+
+            expect(getBytes(tags.Thumbnail.image)).to.not.include(OUTSIDE_BYTE);
+            expect(getBytes(tags.Thumbnail.image)).to.deep.equal(getBytes(getArrayBuffer(THUMBNAIL)));
+        });
+
+        it('should not accept a windowed typed array as a DataView', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL);
+            const buffer = getPaddedBuffer(PADDING_LENGTH + image.length + PADDING_LENGTH, image, PADDING_LENGTH);
+
+            expect(() => ExifReader.loadView(new Uint8Array(buffer, PADDING_LENGTH, image.length))).to.throw(TypeError);
+        });
+
+        function getWindowedDataView(image) {
+            const buffer = getPaddedBuffer(PADDING_LENGTH + image.length + PADDING_LENGTH, image, PADDING_LENGTH);
+            return new DataView(buffer, PADDING_LENGTH, image.length);
+        }
+
+        function getTrailingPaddedDataView(image) {
+            const buffer = getPaddedBuffer(image.length + PADDING_LENGTH, image, 0);
+            return new DataView(buffer, 0, image.length);
+        }
+
+        // A DataView built in another realm, an iframe or a vm context, is not
+        // an instance of the global DataView, and neither is its buffer.
+        function getForeignRealmDataView(image) {
+            const context = vm.createContext({
+                imageBytes: getCharacterArray(image),
+                padding: PADDING_LENGTH,
+                outsideByte: OUTSIDE_BYTE
+            });
+            return vm.runInContext(`
+                const buffer = new ArrayBuffer(padding + imageBytes.length + padding);
+                const bytes = new Uint8Array(buffer);
+                bytes.fill(outsideByte);
+                bytes.set(imageBytes, padding);
+                new DataView(buffer, padding, imageBytes.length);
+            `, context);
+        }
+
+        function getPaddedBuffer(bufferLength, image, imageOffset) {
+            const buffer = new ArrayBuffer(bufferLength);
+            const bytes = new Uint8Array(buffer);
+            bytes.fill(OUTSIDE_BYTE);
+            for (let i = 0; i < image.length; i++) {
+                bytes[imageOffset + i] = image.charCodeAt(i);
+            }
+            return buffer;
+        }
+
+        // The tags cannot show whether the view was copied, since every raw-byte
+        // tag is built with ArrayBuffer.prototype.slice, which always allocates.
+        function getDataViewReachingParser(dataView) {
+            let parsedDataView;
+            swapImageHeaderDynamic((view) => {
+                parsedDataView = view;
+                return {fileDataOffset: OFFSET_TEST_VALUE};
+            });
+            swapTagsRead(FileTags, {MyTag: 42});
+
+            expect(ExifReader.loadView(dataView)).to.deep.equal({MyTag: 42});
+
+            return parsedDataView;
+        }
+
+        function getBytes(buffer) {
+            return Array.from(new Uint8Array(buffer));
+        }
+    });
 });
 
 function swapForLoadView(appMarkersValue, tagsModule, tagsValue) {
@@ -2305,4 +2457,62 @@ function getBufferLikeData(data) {
         readInt32LE: buffer.readInt32LE.bind(buffer),
         readInt32BE: buffer.readInt32BE.bind(buffer),
     };
+}
+
+const IFD_TYPE_SHORT = 3;
+const IFD_TYPE_LONG = 4;
+const IFD_TYPE_UNDEFINED = 7;
+
+function getExifJpegWithThumbnail(thumbnail, declaredThumbnailLength = thumbnail.length) {
+    const IFD0_OFFSET = 8;
+    const IFD1_OFFSET = 26;
+    const THUMBNAIL_OFFSET = 68;
+    const tiffBlock = 'MM\x00\x2a' + getByteStringFromNumber(IFD0_OFFSET, 4)
+        + getByteStringFromNumber(1, 2)
+        + getIfdEntry(0x0100, IFD_TYPE_SHORT, 1, getByteStringFromNumber(1, 2) + '\x00\x00')
+        + getByteStringFromNumber(IFD1_OFFSET, 4)
+        + getByteStringFromNumber(3, 2)
+        + getIfdEntry(0x0103, IFD_TYPE_SHORT, 1, getByteStringFromNumber(6, 2) + '\x00\x00')
+        + getIfdEntry(0x0201, IFD_TYPE_LONG, 1, getByteStringFromNumber(THUMBNAIL_OFFSET, 4))
+        + getIfdEntry(0x0202, IFD_TYPE_LONG, 1, getByteStringFromNumber(declaredThumbnailLength, 4))
+        + getByteStringFromNumber(0, 4)
+        + thumbnail;
+    return '\xff\xd8' + getAppSegment('\xff\xe1', 'Exif\x00\x00' + tiffBlock) + '\xff\xd9';
+}
+
+function getIfdEntry(tag, type, count, value) {
+    return getByteStringFromNumber(tag, 2)
+        + getByteStringFromNumber(type, 2)
+        + getByteStringFromNumber(count, 4)
+        + value;
+}
+
+function getAppSegment(marker, content) {
+    return marker + getByteStringFromNumber(content.length + 2, 2) + content;
+}
+
+function getMpfJpeg(mpfImage) {
+    const IFD0_OFFSET = 8;
+    const MP_ENTRY_OFFSET = 26;
+    const MP_ENTRY_LENGTH = 32;
+    const MPF_IMAGE_OFFSET = MP_ENTRY_OFFSET + MP_ENTRY_LENGTH;
+    // The first entry's offset is forced to zero by the parser, so the offset
+    // under test has to sit in the second entry.
+    const mpEntries = getMpEntry(0x20030000, 0, 0)
+        + getMpEntry(0x00030000, mpfImage.length, MPF_IMAGE_OFFSET);
+    const tiffBlock = 'MM\x00\x2a' + getByteStringFromNumber(IFD0_OFFSET, 4)
+        + getByteStringFromNumber(1, 2)
+        + getIfdEntry(0xb002, IFD_TYPE_UNDEFINED, MP_ENTRY_LENGTH, getByteStringFromNumber(MP_ENTRY_OFFSET, 4))
+        + getByteStringFromNumber(0, 4)
+        + mpEntries
+        + mpfImage;
+    return '\xff\xd8' + getAppSegment('\xff\xe2', 'MPF\x00' + tiffBlock) + '\xff\xd9';
+}
+
+function getMpEntry(attributes, imageSize, imageOffset) {
+    return getByteStringFromNumber(attributes, 4)
+        + getByteStringFromNumber(imageSize, 4)
+        + getByteStringFromNumber(imageOffset, 4)
+        + getByteStringFromNumber(0, 2)
+        + getByteStringFromNumber(0, 2);
 }

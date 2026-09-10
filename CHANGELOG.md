@@ -136,6 +136,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ICC segments whose first 255 hold a complete profile now returns that
   profile, where the whole ICC group used to be discarded.
 
+### Security
+
+- Fixed an information disclosure vulnerability where metadata extraction could
+  return bytes from memory outside the image data. It affected `loadView()`
+  when it was passed a `DataView` that was a window into a larger buffer, and
+  both `load()` and `loadView()` when a custom `decompress` function was used
+  ([GHSA-67g5-g9ch-x4fj](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-67g5-g9ch-x4fj)).
+
 ## [4.44.1] - 2026-09-05
 
 ### Changed

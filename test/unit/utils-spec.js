@@ -223,6 +223,88 @@ describe('utils', () => {
 
             expect(Array.from(receivedData)).to.deep.equal([1, 2, 3]);
         });
+
+        it('should not expose bytes outside a windowed typed array returned by a custom function', async () => {
+            const pool = new Uint8Array([9, 9, 9, 1, 2, 3, 8, 8, 8, 8]);
+            const brotliFn = () => new Uint8Array(pool.buffer, 3, 3);
+
+            const result = await Utils.decompress(
+                new DataView(new ArrayBuffer(1)),
+                Utils.COMPRESSION_METHOD_BROTLI,
+                undefined,
+                'dataview',
+                {brotli: brotliFn}
+            );
+
+            expect(result.byteOffset).to.equal(0);
+            expect(result.buffer.byteLength).to.equal(result.byteLength);
+            expect(Array.from(new Uint8Array(result.buffer))).to.deep.equal([1, 2, 3]);
+        });
+
+        it('should not expose bytes outside a windowed DataView returned by a custom function', async () => {
+            const pool = new Uint8Array([9, 9, 9, 1, 2, 3, 8, 8, 8, 8]);
+            const brotliFn = () => new DataView(pool.buffer, 3, 3);
+
+            const result = await Utils.decompress(
+                new DataView(new ArrayBuffer(1)),
+                Utils.COMPRESSION_METHOD_BROTLI,
+                undefined,
+                'dataview',
+                {brotli: brotliFn}
+            );
+
+            expect(result.byteOffset).to.equal(0);
+            expect(result.buffer.byteLength).to.equal(result.byteLength);
+            expect(Array.from(new Uint8Array(result.buffer))).to.deep.equal([1, 2, 3]);
+        });
+
+        it('should not expose bytes after a window that starts at offset zero', async () => {
+            const pool = new Uint8Array([1, 2, 3, 8, 8, 8, 8]);
+            const brotliFn = () => new Uint8Array(pool.buffer, 0, 3);
+
+            const result = await Utils.decompress(
+                new DataView(new ArrayBuffer(1)),
+                Utils.COMPRESSION_METHOD_BROTLI,
+                undefined,
+                'dataview',
+                {brotli: brotliFn}
+            );
+
+            expect(result.buffer.byteLength).to.equal(result.byteLength);
+            expect(Array.from(new Uint8Array(result.buffer))).to.deep.equal([1, 2, 3]);
+        });
+
+        it('should not copy a typed array that covers its whole buffer', async () => {
+            const bytes = new Uint8Array([1, 2, 3]);
+            const brotliFn = () => bytes;
+
+            const result = await Utils.decompress(
+                new DataView(new ArrayBuffer(1)),
+                Utils.COMPRESSION_METHOD_BROTLI,
+                undefined,
+                'dataview',
+                {brotli: brotliFn}
+            );
+
+            expect(result.buffer).to.equal(bytes.buffer);
+            expect(Array.from(new Uint8Array(result.buffer))).to.deep.equal([1, 2, 3]);
+        });
+
+        it('should keep a whole ArrayBuffer returned by a custom function', async () => {
+            const buffer = new Uint8Array([1, 2, 3]).buffer;
+            const brotliFn = () => buffer;
+
+            const result = await Utils.decompress(
+                new DataView(new ArrayBuffer(1)),
+                Utils.COMPRESSION_METHOD_BROTLI,
+                undefined,
+                'dataview',
+                {brotli: brotliFn}
+            );
+
+            expect(result.buffer).to.equal(buffer);
+            expect(Array.from(new Uint8Array(result.buffer))).to.deep.equal([1, 2, 3]);
+        });
     });
 
     describe('decompression bounds', () => {
