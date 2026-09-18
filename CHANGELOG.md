@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ICC text tags, such as the copyright notice in older profiles, no longer
   have up to six characters cut off at the end.
+- An ICC profile with a large text or description tag, over 64 KB in some
+  JavaScript engines, no longer loses all of its ICC tags.
 
 ## [4.45.1] - 2026-09-18
 

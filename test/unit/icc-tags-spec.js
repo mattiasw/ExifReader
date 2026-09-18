@@ -303,6 +303,21 @@ describe('icc-tags', () => {
         expect(tags.t000.value).to.equal(TEXT);
     });
 
+    it('should decode a text tag larger than the engine argument-count cap in full', () => {
+        const TEXT_OFFSET = 200;
+        const TEXT = 'a'.repeat(200 * 1024);
+        const SIZE = TEXT_OFFSET + 8 + TEXT.length + 1;
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, TEXT);
+        profile.addTagEntry('t000', TEXT_OFFSET, 8 + TEXT.length + 1);
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags.t000.value).to.equal(TEXT);
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+    });
+
     it('should bound total text across desc tags sharing one region', () => {
         const SIZE = 4096;
         const TEXT_OFFSET = 2600;
