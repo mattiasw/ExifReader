@@ -17,6 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer throws an error when the image is passed in as a `Buffer` from the
   `buffer` package, the Buffer polyfill used in browser bundles.
 
+### Security
+
+- Fixed an information disclosure vulnerability where `length: 'auto'` could
+  put bytes from outside the data being parsed into `metadataRange.buffer`.
+  This happened when the data was a `Buffer` from the `buffer` package, the
+  Buffer polyfill used in browser bundles, that is a view into a larger
+  buffer, and the metadata of the image extended past the end of the data, as
+  in a truncated or crafted file. The buffer now stops at the end of the data.
+
 ## [4.45.1] - 2026-09-18
 
 ### Security
