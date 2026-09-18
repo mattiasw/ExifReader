@@ -1677,6 +1677,23 @@ describe('exif-reader', function () {
                 expect(tags.metadataRange.requests).to.equal(0);
             });
 
+            it('should not leak bytes past a Buffer-polyfill view when it is a window into a larger buffer', async () => {
+                // A Buffer from the `buffer` package fails Buffer.isBuffer(), so
+                // it reaches the ArrayBuffer.isView branch of sliceInputBuffer.
+                swapForAutoTest({end: 4096});
+
+                const parent = new Uint8Array(8192);
+                parent.fill(0xee);
+                parent.fill(0xaa, 64, 164);
+                const view = new BufferPolyfillView(parent.buffer, 64, 100);
+
+                const tags = await ExifReader.load(view, AUTO_OPTIONS);
+
+                expect(tags.metadataRange.buffer.byteLength).to.equal(100);
+                const bytes = Array.from(new Uint8Array(tags.metadataRange.buffer));
+                expect(bytes.every((byte) => byte === 0xaa)).to.equal(true);
+            });
+
             it('should reject when the input has no metadataRange (plain TIFF / bare JXL codestream)', () => {
                 swapForAutoTest();
 
@@ -2294,6 +2311,38 @@ describe('exif-reader', function () {
         }
     });
 });
+
+// Shaped like a Buffer from the `buffer` package: a Uint8Array subclass with
+// the Node.js read methods, which Buffer.isBuffer() does not recognize.
+class BufferPolyfillView extends Uint8Array {
+    readUInt8(offset) {
+        return this[offset];
+    }
+
+    readUInt16LE(offset) {
+        return this[offset] | (this[offset + 1] << 8);
+    }
+
+    readUInt16BE(offset) {
+        return (this[offset] << 8) | this[offset + 1];
+    }
+
+    readUInt32LE(offset) {
+        return ((this[offset]) | (this[offset + 1] << 8) | (this[offset + 2] << 16) | (this[offset + 3] << 24)) >>> 0;
+    }
+
+    readUInt32BE(offset) {
+        return ((this[offset] << 24) | (this[offset + 1] << 16) | (this[offset + 2] << 8) | this[offset + 3]) >>> 0;
+    }
+
+    readInt32LE(offset) {
+        return (this[offset]) | (this[offset + 1] << 8) | (this[offset + 2] << 16) | (this[offset + 3] << 24);
+    }
+
+    readInt32BE(offset) {
+        return (this[offset] << 24) | (this[offset + 1] << 16) | (this[offset + 2] << 8) | this[offset + 3];
+    }
+}
 
 function swapForLoadView(appMarkersValue, tagsModule, tagsValue) {
     swapImageHeader(appMarkersValue);
