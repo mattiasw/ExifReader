@@ -282,14 +282,11 @@ export function applyMergeStep({
             return tags;
         }
 
-        const parsedThumbnailIfdTags = thumbnailIfdTags ? deps.filterTagsForParse(
+        const parsedThumbnailIfdTags = deps.filterTagsForParse(
             'thumbnail',
             thumbnailIfdTags,
             tagFilter
-        ) : undefined;
-        if (parsedThumbnailIfdTags) {
-            parsedGroups.thumbnail = parsedThumbnailIfdTags;
-        }
+        );
 
         const thumbnail = Constants.USE_EXIF
             && Constants.USE_THUMBNAIL
