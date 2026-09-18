@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A custom build that excludes the `exif` module is now a little smaller. It
+  no longer carries the code that computes the `gps` group of the expanded
+  result (`Latitude`, `Longitude` and `Altitude`), which is derived from Exif
+  GPS tags and so could never be produced in such a build. A build with only
+  PNG support (`{"include": {"png": true}}`) goes from 35459 to 34666 bytes,
+  around 0.2 KiB gzipped. A custom build that includes `exif` produces a
+  byte-identical bundle.
+
 ### Fixed
 
 - ICC text tags, such as the copyright notice in older profiles, no longer

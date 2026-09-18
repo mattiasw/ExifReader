@@ -222,7 +222,7 @@ export function applyMergeStep({
         return tags;
     }
 
-    if (step.type === 'gps') {
+    if (Constants.USE_EXIF && step.type === 'gps') {
         if (
             expanded
             && tagFilter.shouldReturnGroup('gps')

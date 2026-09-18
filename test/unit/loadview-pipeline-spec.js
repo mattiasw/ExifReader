@@ -212,6 +212,23 @@ describe('loadView pipeline module', function () {
         expect(tags.Thumbnail.value).to.equal('my thumbnail note');
     });
 
+    it('should apply the gps step when Exif tags are included', function () {
+        swap(Constants, {USE_EXIF: true});
+
+        const tags = applyGpsStep({MyGpsTag: {value: 1}});
+
+        expect(tags.gps.MyGpsTag.value).to.equal(1);
+    });
+
+    it('should not apply the gps step when Exif tags have been excluded', function () {
+        swap(Constants, {USE_EXIF: false});
+
+        const tags = applyGpsStep({MyGpsTag: {value: 1}});
+
+        expect(tags.gps).to.equal(undefined);
+        expect(tags.MyTag.value).to.equal(42);
+    });
+
     it('should apply the composite step when Exif tags are included', function () {
         swap(Constants, {USE_EXIF: true, USE_XMP: false});
 
@@ -622,6 +639,25 @@ function createTagFilter({returnGroups = {}, returnTags = {}} = {}) {
 
 function swap(target, replacement) {
     restoreFunctions.push(swapProperties(target, replacement));
+}
+
+function applyGpsStep(gpsGroup) {
+    const deps = createPipelineDeps();
+    deps.getGpsGroupFromExifTags = () => gpsGroup;
+
+    return applyMergeStep({
+        step: {type: 'gps'},
+        deferredResults: {},
+        parsedGroups: {exif: {SomeExifTag: {value: 42}}},
+        expanded: true,
+        tagFilter: createTagFilter({}),
+        dataView: {},
+        tiffHeaderOffset: undefined,
+        fileType: undefined,
+        thumbnailIfdTags: undefined,
+        tags: {MyTag: {value: 42}},
+        deps,
+    });
 }
 
 function applyCompositeStep(compositeTags) {
