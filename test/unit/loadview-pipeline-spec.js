@@ -638,12 +638,6 @@ function createPipelineDeps() {
         getGpsGroupFromExifTags() {
             return undefined;
         },
-        Constants: {
-            USE_JPEG: true,
-            USE_WEBP: true,
-            USE_EXIF: true,
-            USE_THUMBNAIL: true,
-        },
         Composite: {
             get() {
                 return undefined;
