@@ -710,6 +710,89 @@ describe('icc-tags', () => {
         expect(tags['ICC Description']).to.not.equal(undefined);
     });
 
+    it('should return the parsed header tags when a desc tag type signature starts too close to the profile end for its header', () => {
+        const profile = getCraftedIccProfile(300);
+        // A valid text tag first, so an earlier parsed tag is observable.
+        profile.addTagEntry('cprt', 160, 16);
+        profile.writeString(160, 'text');
+        profile.writeString(168, 'Hi');
+        // A desc tag whose type signature starts at byteLength - 11, so its
+        // 4-byte value size would end one byte past the profile.
+        profile.addTagEntry('desc', 289, 11);
+        profile.writeString(289, 'desc');
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+        expect(tags).to.have.nested.property('ICC Copyright.value', 'Hi');
+        expect(tags['ICC Description']).to.equal(undefined);
+    });
+
+    it('should still parse a desc tag whose value size field ends exactly at the profile end', () => {
+        const profile = getCraftedIccProfile(300);
+        // tagOffset + 12 === byteLength: the value size field's last byte is the
+        // profile's last byte, so this must not be treated as out of bounds.
+        profile.addTagEntry('desc', 288, 0);
+        profile.writeString(288, 'desc');
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+        expect(tags).to.have.nested.property('ICC Description.value', '');
+    });
+
+    it('should return the parsed header tags when an mluc tag type signature starts too close to the profile end for its record header', () => {
+        const profile = getCraftedIccProfile(200);
+        // A valid text tag first, so an earlier parsed tag is observable.
+        profile.addTagEntry('cprt', 160, 16);
+        profile.writeString(160, 'text');
+        profile.writeString(168, 'Hi');
+        // An mluc tag positioned so tagOffset + 12 <= byteLength < tagOffset
+        // + 16. The record count read (tagOffset + 8) is in range, but the record
+        // size read (tagOffset + 12) is not.
+        profile.addTagEntry('desc', 185, 15);
+        profile.writeString(185, 'mluc');
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+        expect(tags).to.have.nested.property('ICC Copyright.value', 'Hi');
+        expect(tags['ICC Description']).to.equal(undefined);
+    });
+
+    it('should return the parsed header tags when an mluc tag type signature leaves no room even for the record count', () => {
+        const profile = getCraftedIccProfile(200);
+        // A valid text tag first, so an earlier parsed tag is observable.
+        profile.addTagEntry('cprt', 160, 16);
+        profile.writeString(160, 'text');
+        profile.writeString(168, 'Hi');
+        // An mluc tag positioned so even tagOffset + 8, the record count read,
+        // is out of range.
+        profile.addTagEntry('desc', 190, 10);
+        profile.writeString(190, 'mluc');
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+        expect(tags).to.have.nested.property('ICC Copyright.value', 'Hi');
+        expect(tags['ICC Description']).to.equal(undefined);
+    });
+
+    it('should still parse an mluc tag whose record table starts exactly at the profile end with zero records', () => {
+        const profile = getCraftedIccProfile(200);
+        // tagOffset + 16 === byteLength: the record table starts exactly at the
+        // profile end, so this must not be treated as out of bounds.
+        profile.addTagEntry('desc', 184, 16);
+        profile.writeString(184, 'mluc');
+        profile.dataView.setUint32(192, 0); // numRecords.
+        profile.dataView.setUint32(196, 12); // recordSize.
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags).to.have.nested.property('ICC Signature.value', 'acsp');
+        expect(tags).to.have.nested.property('ICC Description.value').that.deep.equals({});
+    });
+
     it('should slice the compressed profile relative to the DataView, not the underlying buffer', async () => {
         const bytes = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
 

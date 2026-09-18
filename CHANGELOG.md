@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reading the text metadata (tEXt, zTXt or iTXt chunks) of a PNG image no
   longer throws an error when the image is passed in as a `Buffer` from the
   `buffer` package, the Buffer polyfill used in browser bundles.
+- A malformed ICC profile whose description or localized-text tag starts in its
+  last few bytes no longer loses every ICC tag.
 
 ### Security
 
