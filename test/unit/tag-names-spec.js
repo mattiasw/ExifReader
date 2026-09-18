@@ -73,6 +73,24 @@ describe('tag-names', () => {
         expect(tagNames['gps']).to.equal(TagNamesGpsIfd);
         expect(tagNames['interoperability']).to.equal(TagNamesInteroperabilityIfd);
     });
+
+    it('should leave out the MPF tag names when MPF tags have been excluded', async () => {
+        const tagNames = await getTagNamesBuiltWith({USE_MPF: false});
+
+        expect(tagNames['mpf']).to.deep.equal({});
+        for (const ifdType of ['canon', 'pentax']) {
+            expect(Object.keys(tagNames[ifdType])).to.not.be.empty;
+        }
+    });
+
+    it('should leave out the maker note tag names when maker notes have been excluded', async () => {
+        const tagNames = await getTagNamesBuiltWith({USE_MAKER_NOTES: false});
+
+        for (const ifdType of ['canon', 'pentax']) {
+            expect(tagNames[ifdType]).to.deep.equal({});
+        }
+        expect(Object.keys(tagNames['mpf'])).to.not.be.empty;
+    });
 });
 
 // The dictionary is built while the module is evaluated, so a swapped constant
