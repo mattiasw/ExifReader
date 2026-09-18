@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- ICC text tags, such as the copyright notice in older profiles, no longer
+  have up to six characters cut off at the end.
+
 ## [4.45.1] - 2026-09-18
 
 ### Security

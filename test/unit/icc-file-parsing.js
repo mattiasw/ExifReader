@@ -13,7 +13,7 @@ describe('load-icc-v2', () => {
         const ab = new Uint8Array(fs.readFileSync(ICC_V2)).buffer;
         const tags = parseTags(new DataView(ab));
         expect(tags['ICC Description'].value).to.equal('sRGB2014');
-        expect(tags['ICC Copyright'].value).to.equal('Copyright International Color Consortium');
+        expect(tags['ICC Copyright'].value).to.equal('Copyright International Color Consortium, 2015');
         expect(tags['ICC Profile Date'].value).to.equal('2015-02-15T00:00:00.000Z');
     });
 
