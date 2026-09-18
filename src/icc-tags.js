@@ -18,6 +18,9 @@ const TAG_TYPE_SIGNATURE = 'sig ';
 const TAG_TABLE_SINGLE_TAG_DATA = 12;
 const MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE = 12;
 const MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET = 16;
+const MAX_MLUC_RECORDS = 1000;
+const MAX_TAG_COUNT = 1000;
+const MAX_DECODE_BYTES = 1024 * 1024;
 
 // ICC profile data can be longer than application segment max length of ~64k.
 // so it can be split into multiple APP2 segments. Each segment includes
@@ -94,7 +97,6 @@ function doesNotHaveTagData(dataView, tagHeaderOffset) {
 }
 
 export function parseTags(dataView) {
-    const MAX_MLUC_RECORDS = 1000;
     const buffer = dataView.buffer;
 
     const length = dataView.getUint32();
@@ -134,11 +136,11 @@ export function parseTags(dataView) {
         return tags;
     }
 
-    const tagCount = dataView.getUint32(128);
+    const tagCount = Math.min(dataView.getUint32(ICC_TAG_COUNT_OFFSET), MAX_TAG_COUNT);
     let tagHeaderOffset = 132;
     // Budget for everything decoded from tag data (desc, text and mluc) across
-    // the whole profile. Caps it at O(profile size); real profiles use a fraction.
-    const decodeBudget = {remaining: dataView.byteLength};
+    // the whole profile, bounded by its size and a constant far above real text.
+    const decodeBudget = {remaining: Math.min(dataView.byteLength, MAX_DECODE_BYTES)};
 
     for (let i = 0; i < tagCount; i++) {
         if (doesNotHaveTagData(dataView, tagHeaderOffset)) {
@@ -186,8 +188,8 @@ export function parseTags(dataView) {
             // Records may legitimately share or overlap their text within a
             // tag, so clamp each read to the tag bounds and draw from a
             // profile-wide text budget rather than assuming non-overlapping
-            // storage. This caps the total decoded text at O(profile size)
-            // without truncating real profiles.
+            // storage. This caps the total decoded text without truncating
+            // real profiles.
             const tagTextEnd = Math.min(tagSize, dataView.byteLength - tagOffset);
             let offset = tagOffset + MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET;
             const val = [];

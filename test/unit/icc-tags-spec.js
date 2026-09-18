@@ -451,6 +451,42 @@ describe('icc-tags', () => {
         expect(totalRecords).to.be.at.most(Math.floor(SIZE / 12));
     });
 
+    it('should ignore tag table entries past the tag count cap', () => {
+        // One above MAX_TAG_COUNT (1000) in src/icc-tags.js.
+        const TAG_COUNT = 1001;
+        const SIZE = 12400;
+        const SIG_OFFSET = 12200;
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(SIG_OFFSET, 'sig ');
+        profile.writeString(SIG_OFFSET + 8, 'abcd');
+        for (let i = 0; i < TAG_COUNT; i++) {
+            profile.addTagEntry(getRecordCodes(i), SIG_OFFSET, 12);
+        }
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags[getRecordCodes(999)].value).to.equal('abcd');
+        expect(tags[getRecordCodes(1000)]).to.equal(undefined);
+    });
+
+    it('should bound total decoded text by a constant, not only the profile size', () => {
+        // Larger than MAX_DECODE_BYTES (1048576) in src/icc-tags.js.
+        const SIZE = 1024 * 1024 + 128 * 1024;
+        const TEXT_OFFSET = 1000;
+        const TEXT = 'a'.repeat(64 * 1024);
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, TEXT);
+        const signatures = getSignatures('t', 20);
+        for (const signature of signatures) {
+            profile.addTagEntry(signature, TEXT_OFFSET, TEXT.length + 15);
+        }
+
+        const tags = parseTags(profile.dataView);
+
+        expect(getTotalTextLength(tags, signatures)).to.equal(1024 * 1024);
+    });
+
     it('should return the parsed header tags when the profile is truncated before the tag count', () => {
         const SIZE = 130; // >= 84 clears the "too short" guard, < 132 has no room for the tag count.
         const data = new Uint8Array(SIZE);
@@ -521,10 +557,12 @@ describe('icc-tags', () => {
     });
 
     it('should return the parsed header tags when an mluc record count exceeds the cap', () => {
-        const NUM_RECORDS = 100000;
+        // One above MAX_MLUC_RECORDS.
+        const NUM_RECORDS = 1001;
         const RECORD_SIZE = 12;
         // Make the buffer large enough to hold every record so the recordsSize
-        // guard passes and only the record count cap can reject the tag.
+        // and decode budget guards pass and only the record count cap can
+        // reject the tag.
         const SIZE = 160 + NUM_RECORDS * RECORD_SIZE + 100;
         const data = new Uint8Array(SIZE);
         const dataView = new DataView(data.buffer);

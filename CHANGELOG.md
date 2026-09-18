@@ -10,10 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Fixed a denial-of-service vulnerability where a crafted image could make ICC
-  profile parsing use far more memory and time than the size of the profile
-  justifies. What is decoded from the `desc`, `text` and `mluc` tags of a
-  profile is now limited in total to its size, far more than real profiles
-  need
+  profile parsing use excessive memory and time. The number of tags read from
+  a profile and the total amount of data decoded from them now have limits
+  well above what real profiles use
   ([GHSA-wr98-5fqg-jwf3](https://github.com/mattiasw/ExifReader/security/advisories/GHSA-wr98-5fqg-jwf3)).
   Reported by @manus-pi.
 
