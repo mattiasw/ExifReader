@@ -136,9 +136,9 @@ export function parseTags(dataView) {
 
     const tagCount = dataView.getUint32(128);
     let tagHeaderOffset = 132;
-    // Budget for the total mluc text decoded across the whole profile. Caps
-    // the decoded text at O(profile size); real profiles use a small fraction.
-    let remainingMlucTextBytes = dataView.byteLength;
+    // Budget for everything decoded from tag data (desc, text and mluc) across
+    // the whole profile. Caps it at O(profile size); real profiles use a fraction.
+    const decodeBudget = {remaining: dataView.byteLength};
 
     for (let i = 0; i < tagCount; i++) {
         if (doesNotHaveTagData(dataView, tagHeaderOffset)) {
@@ -162,7 +162,7 @@ export function parseTags(dataView) {
                 return tags;
             }
 
-            const val = sliceToString(buffer.slice(tagOffset + 12, tagOffset + tagValueSize + 11));
+            const val = readBoundedString(dataView, tagOffset + 12, tagValueSize - 1, decodeBudget);
             addTag(tags, tagSignature, val);
         } else if (tagType === TAG_TYPE_MULTI_LOCALIZED_UNICODE_TYPE) {
             const numRecords = dataView.getUint32(tagOffset + 8);
@@ -179,6 +179,10 @@ export function parseTags(dataView) {
             if (recordsSize > availableRecordsSize) {
                 return tags;
             }
+            if (recordsSize > decodeBudget.remaining) {
+                return tags;
+            }
+            decodeBudget.remaining -= recordsSize;
             // Records may legitimately share or overlap their text within a
             // tag, so clamp each read to the tag bounds and draw from a
             // profile-wide text budget rather than assuming non-overlapping
@@ -194,8 +198,8 @@ export function parseTags(dataView) {
                 const textOffset = dataView.getUint32(offset + 8);
 
                 const availableInTag = Math.max(0, tagTextEnd - textOffset);
-                const boundedTextLength = Math.min(textLength, availableInTag, remainingMlucTextBytes);
-                remainingMlucTextBytes -= boundedTextLength;
+                const boundedTextLength = Math.min(textLength, availableInTag, decodeBudget.remaining);
+                decodeBudget.remaining -= boundedTextLength;
                 const text = getUnicodeStringFromDataView(dataView, tagOffset + textOffset, boundedTextLength);
                 val.push({languageCode, countryCode, text});
                 offset += recordSize;
@@ -210,7 +214,7 @@ export function parseTags(dataView) {
                 addTag(tags, tagSignature, valObj);
             }
         } else if (tagType === TAG_TYPE_TEXT) {
-            const val = sliceToString(buffer.slice(tagOffset + 8, tagOffset + tagSize - 7));
+            const val = readBoundedString(dataView, tagOffset + 8, tagSize - 15, decodeBudget);
             addTag(tags, tagSignature, val);
         } else if (tagType === TAG_TYPE_SIGNATURE) {
             const val = sliceToString(buffer.slice(tagOffset + 8, tagOffset + 12));
@@ -220,6 +224,12 @@ export function parseTags(dataView) {
     }
 
     return tags;
+}
+
+function readBoundedString(dataView, start, requestedLength, budget) {
+    const length = Math.max(0, Math.min(requestedLength, dataView.byteLength - start, budget.remaining));
+    budget.remaining -= length;
+    return sliceToString(dataView.buffer.slice(start, start + length));
 }
 
 function addTag(tags, tagSignature, value) {

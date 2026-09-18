@@ -218,6 +218,239 @@ describe('icc-tags', () => {
         expect(tags['ICC Description'].value).to.deep.equal({'en-US': 'Hi', 'sv-SE': 'Hi'});
     });
 
+    it('should bound total text across text tags sharing one region', () => {
+        const SIZE = 4096;
+        const TEXT_OFFSET = 2600;
+        const TEXT = 'a'.repeat(1000);
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, TEXT);
+        const signatures = getSignatures('t', 200);
+        for (const signature of signatures) {
+            profile.addTagEntry(signature, TEXT_OFFSET, TEXT.length + 15);
+        }
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags[signatures[0]].value).to.equal(TEXT);
+        expect(getTotalTextLength(tags, signatures)).to.be.at.most(SIZE);
+    });
+
+    it('should bound total text across desc tags sharing one region', () => {
+        const SIZE = 4096;
+        const TEXT_OFFSET = 2600;
+        const TEXT = 'a'.repeat(1000);
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'desc');
+        profile.dataView.setUint32(TEXT_OFFSET + 8, TEXT.length + 1); // ASCII count including the NUL.
+        profile.writeString(TEXT_OFFSET + 12, TEXT);
+        const signatures = getSignatures('d', 200);
+        for (const signature of signatures) {
+            profile.addTagEntry(signature, TEXT_OFFSET, TEXT.length + 13);
+        }
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags[signatures[0]].value).to.equal(TEXT);
+        expect(getTotalTextLength(tags, signatures)).to.be.at.most(SIZE);
+    });
+
+    it('should let text tags use up the budget that later mluc and desc tags draw from', () => {
+        const SIZE = 4096;
+        const TEXT_OFFSET = 2000;
+        const MLUC_OFFSET = 3100;
+        const DESC_OFFSET = 3200;
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, 'a'.repeat(1000));
+        // 4 x 1000 + 82 text bytes leave 14 bytes of budget: 12 for the mluc
+        // record table and 2 for one UTF-16 code unit of its text.
+        for (const signature of getSignatures('t', 4)) {
+            profile.addTagEntry(signature, TEXT_OFFSET, 1015);
+        }
+        profile.addTagEntry('t004', TEXT_OFFSET, 82 + 15);
+
+        profile.writeString(MLUC_OFFSET, 'mluc');
+        profile.dataView.setUint32(MLUC_OFFSET + 8, 1);
+        profile.dataView.setUint32(MLUC_OFFSET + 12, 12);
+        profile.writeString(MLUC_OFFSET + 16, 'enUS');
+        profile.dataView.setUint32(MLUC_OFFSET + 20, 4);
+        profile.dataView.setUint32(MLUC_OFFSET + 24, 28);
+        profile.dataView.setUint16(MLUC_OFFSET + 28, 0x0048); // 'H'
+        profile.dataView.setUint16(MLUC_OFFSET + 30, 0x0069); // 'i'
+        profile.addTagEntry('m000', MLUC_OFFSET, 32);
+
+        profile.writeString(DESC_OFFSET, 'desc');
+        profile.dataView.setUint32(DESC_OFFSET + 8, 4);
+        profile.writeString(DESC_OFFSET + 12, 'Hi!');
+        profile.addTagEntry('d000', DESC_OFFSET, 20);
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags.t004.value).to.have.lengthOf(82);
+        expect(tags.m000.value).to.equal('H');
+        expect(tags.d000.value).to.equal('');
+    });
+
+    it('should let mluc text use up the budget that later text tags draw from', () => {
+        const NUM_RECORDS = 500;
+        const SIZE = 12000;
+        const MLUC_OFFSET = 200;
+        const TEXT_OFFSET = 11500;
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(MLUC_OFFSET, 'mluc');
+        profile.dataView.setUint32(MLUC_OFFSET + 8, NUM_RECORDS);
+        profile.dataView.setUint32(MLUC_OFFSET + 12, 12);
+        for (let recordNum = 0; recordNum < NUM_RECORDS; recordNum++) {
+            const recordOffset = MLUC_OFFSET + 16 + recordNum * 12;
+            profile.writeString(recordOffset, getRecordCodes(recordNum));
+            profile.dataView.setUint32(recordOffset + 4, 0xffffffff); // textLength.
+            profile.dataView.setUint32(recordOffset + 8, 16); // textOffset into the record table.
+        }
+        profile.addTagEntry('m000', MLUC_OFFSET, 11000);
+
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, 'Hi');
+        profile.addTagEntry('t000', TEXT_OFFSET, 2 + 15);
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags.t000.value).to.equal('');
+    });
+
+    it('should decode an mluc record table that uses up exactly the remaining budget', () => {
+        const SIZE = 1000;
+        const MLUC_OFFSET = 170;
+        const TEXT_OFFSET = 200;
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, 'a'.repeat(500));
+        // 500 + 488 text bytes leave exactly the 12 bytes of one mluc record.
+        profile.addTagEntry('t000', TEXT_OFFSET, 500 + 15);
+        profile.addTagEntry('t001', TEXT_OFFSET, 488 + 15);
+        profile.writeString(MLUC_OFFSET, 'mluc');
+        profile.dataView.setUint32(MLUC_OFFSET + 8, 1);
+        profile.dataView.setUint32(MLUC_OFFSET + 12, 12);
+        profile.writeString(MLUC_OFFSET + 16, 'enUS');
+        profile.addTagEntry('m000', MLUC_OFFSET, 28);
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags.m000.value).to.equal('');
+    });
+
+    it('should not truncate desc and text tags that together fill most of the profile', () => {
+        const SIZE = 4096;
+        const DESC_OFFSET = 200;
+        const TEXT_OFFSET = 2100;
+        const DESC_TEXT = 'd'.repeat(1800);
+        const TEXT = 'b'.repeat(1900);
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(DESC_OFFSET, 'desc');
+        profile.dataView.setUint32(DESC_OFFSET + 8, DESC_TEXT.length + 1);
+        profile.writeString(DESC_OFFSET + 12, DESC_TEXT);
+        profile.addTagEntry('d000', DESC_OFFSET, DESC_TEXT.length + 13);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, TEXT);
+        profile.addTagEntry('t000', TEXT_OFFSET, TEXT.length + 15);
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags.d000.value).to.equal(DESC_TEXT);
+        expect(tags.t000.value).to.equal(TEXT);
+    });
+
+    it('should keep shared desc and text strings for every tag (no truncation)', () => {
+        const SIZE = 300;
+        const DESC_OFFSET = 200;
+        const TEXT_OFFSET = 240;
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(DESC_OFFSET, 'desc');
+        profile.dataView.setUint32(DESC_OFFSET + 8, 3);
+        profile.writeString(DESC_OFFSET + 12, 'Hi');
+        profile.addTagEntry('d000', DESC_OFFSET, 15);
+        profile.addTagEntry('d001', DESC_OFFSET, 15);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, 'Hi');
+        profile.addTagEntry('t000', TEXT_OFFSET, 17);
+        profile.addTagEntry('t001', TEXT_OFFSET, 17);
+
+        const tags = parseTags(profile.dataView);
+
+        expect([tags.d000.value, tags.d001.value, tags.t000.value, tags.t001.value])
+            .to.deep.equal(['Hi', 'Hi', 'Hi', 'Hi']);
+    });
+
+    it('should only use up the budget for the text a tag actually decodes', () => {
+        const SIZE = 4096;
+        const HONEST_OFFSET = 200;
+        const OVERSIZED_OFFSET = SIZE - 100;
+        const HONEST_TEXT = 'c'.repeat(3000);
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(OVERSIZED_OFFSET, 'text');
+        profile.writeString(OVERSIZED_OFFSET + 8, 'z'.repeat(92));
+        profile.addTagEntry('t000', OVERSIZED_OFFSET, 0xffffffff);
+        profile.writeString(HONEST_OFFSET, 'text');
+        profile.writeString(HONEST_OFFSET + 8, HONEST_TEXT);
+        profile.addTagEntry('t001', HONEST_OFFSET, HONEST_TEXT.length + 15);
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags.t000.value).to.equal('z'.repeat(92));
+        expect(tags.t001.value).to.equal(HONEST_TEXT);
+    });
+
+    it('should not grow the budget from tags with a negative text length', () => {
+        const SIZE = 8192;
+        const TEXT_OFFSET = 4000;
+        const TEXT = 'a'.repeat(1000);
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, TEXT);
+        // A text tag size below 15 asks for a negative number of characters.
+        for (const signature of getSignatures('n', 300)) {
+            profile.addTagEntry(signature, TEXT_OFFSET, 0);
+        }
+        const signatures = getSignatures('t', 20);
+        for (const signature of signatures) {
+            profile.addTagEntry(signature, TEXT_OFFSET, TEXT.length + 15);
+        }
+
+        const tags = parseTags(profile.dataView);
+
+        expect(getTotalTextLength(tags, signatures)).to.be.at.most(SIZE);
+    });
+
+    it('should bound the mluc records decoded across tags sharing one mluc tag', () => {
+        const NUM_RECORDS = 1000;
+        const SIZE = 13000;
+        const MLUC_OFFSET = 800;
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(MLUC_OFFSET, 'mluc');
+        profile.dataView.setUint32(MLUC_OFFSET + 8, NUM_RECORDS);
+        profile.dataView.setUint32(MLUC_OFFSET + 12, 12);
+        for (let recordNum = 0; recordNum < NUM_RECORDS; recordNum++) {
+            // Empty text at a distinct language-country key so every record is kept.
+            profile.writeString(MLUC_OFFSET + 16 + recordNum * 12, getRecordCodes(recordNum));
+        }
+        const signatures = getSignatures('m', 50);
+        for (const signature of signatures) {
+            profile.addTagEntry(signature, MLUC_OFFSET, 16 + NUM_RECORDS * 12);
+        }
+
+        const tags = parseTags(profile.dataView);
+
+        let totalRecords = 0;
+        for (const signature of signatures) {
+            if (tags[signature]) {
+                totalRecords += Object.keys(tags[signature].value).length;
+            }
+        }
+        expect(Object.keys(tags[signatures[0]].value)).to.have.lengthOf(NUM_RECORDS);
+        // Every record costs at least 12 bytes of the profile-wide budget.
+        expect(totalRecords).to.be.at.most(Math.floor(SIZE / 12));
+    });
+
     it('should return the parsed header tags when the profile is truncated before the tag count', () => {
         const SIZE = 130; // >= 84 clears the "too short" guard, < 132 has no room for the tag count.
         const data = new Uint8Array(SIZE);
@@ -656,4 +889,44 @@ function captureCompressedIccBytes(bytes, pad) {
     };
 
     return IccTags.read(dataView, iccData, true, decompressConfig).then(() => captured);
+}
+
+function getCraftedIccProfile(size) {
+    const data = new Uint8Array(size);
+    const dataView = new DataView(data.buffer);
+    const writeString = (offset, string) => {
+        for (let i = 0; i < string.length; i++) {
+            data[offset + i] = string.charCodeAt(i);
+        }
+    };
+    let tagCount = 0;
+    const addTagEntry = (signature, tagOffset, tagSize) => {
+        const entryOffset = 132 + tagCount * 12;
+        writeString(entryOffset, signature);
+        dataView.setUint32(entryOffset + 4, tagOffset);
+        dataView.setUint32(entryOffset + 8, tagSize);
+        tagCount++;
+        dataView.setUint32(128, tagCount);
+    };
+
+    dataView.setUint32(0, size);
+    writeString(36, 'acsp');
+    return {dataView, writeString, addTagEntry};
+}
+
+function getSignatures(prefix, count) {
+    const signatures = [];
+    for (let i = 0; i < count; i++) {
+        signatures.push(prefix + String(i).padStart(3, '0'));
+    }
+    return signatures;
+}
+
+function getTotalTextLength(tags, signatures) {
+    return signatures.reduce((total, signature) => total + tags[signature].value.length, 0);
+}
+
+function getRecordCodes(recordNum) {
+    const letter = (index) => String.fromCharCode(65 + (index % 26));
+    return letter(recordNum) + letter(Math.floor(recordNum / 26)) + letter(Math.floor(recordNum / 676)) + 'X';
 }
