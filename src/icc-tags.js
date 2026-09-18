@@ -61,9 +61,10 @@ function readIcc(dataView, iccData) {
 
         const iccBinaryData = new Uint8Array(totalIccProfileLength);
         let offset = 0;
+        const chunksByNumber = getChunksByNumber(iccData);
 
         for (let chunkNumber = 1; chunkNumber <= iccData.length; chunkNumber++) {
-            const iccDataChunk = iccData.find((x) => x.chunkNumber === chunkNumber);
+            const iccDataChunk = chunksByNumber[chunkNumber];
             if (!iccDataChunk) {
                 throw new Error(`ICC chunk ${chunkNumber} not found`);
             }
@@ -86,6 +87,18 @@ function getBuffer(dataView) {
         return (new DataView(Uint8Array.from(dataView).buffer)).buffer;
     }
     return dataView.buffer;
+}
+
+// A crafted file can repeat a chunk number. The first descriptor with that
+// number is the one used.
+function getChunksByNumber(iccData) {
+    const chunksByNumber = Object.create(null);
+    for (let i = 0; i < iccData.length; i++) {
+        if (chunksByNumber[iccData[i].chunkNumber] === undefined) {
+            chunksByNumber[iccData[i].chunkNumber] = iccData[i];
+        }
+    }
+    return chunksByNumber;
 }
 
 function iccDoesNotHaveTagCount(dataView) {

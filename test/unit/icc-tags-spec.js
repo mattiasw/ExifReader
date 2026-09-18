@@ -860,6 +860,35 @@ describe('icc-tags', () => {
             expect(tags['ICC Description'].value).to.equal('sRGB2014');
         });
 
+        it('should slice a duplicated chunk number from the first matching descriptor', () => {
+            // A duplicate always leaves a chunk number in 1..iccData.length
+            // missing, so the read returns {} either way. Only the sliced byte
+            // range shows which descriptor was used.
+            const dataView = getIccProfileDataView();
+            const iccData = [
+                {offset: 0, length: 10, chunkNumber: 1, chunksTotal: 1},
+                {offset: 20, length: 10, chunkNumber: 1, chunksTotal: 1}
+            ];
+            const slices = [];
+            const originalSlice = ArrayBuffer.prototype.slice;
+            const restore = swapProperties(ArrayBuffer.prototype, {
+                slice(start, end) {
+                    slices.push([start, end]);
+                    return originalSlice.call(this, start, end);
+                }
+            });
+
+            let tags;
+            try {
+                tags = IccTags.read(dataView, iccData);
+            } finally {
+                restore();
+            }
+
+            expect(slices).to.deep.equal([[0, 10]]);
+            expect(tags).to.deep.equal({});
+        });
+
         it('should slice a chunk relative to the DataView when it has a non-zero byteOffset', () => {
             const profile = getIccProfileBytes();
             const dataView = getPaddedDataView(profile, 20);
