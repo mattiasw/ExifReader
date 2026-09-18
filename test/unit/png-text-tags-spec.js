@@ -9,6 +9,7 @@ import PngTextTags from '../../src/png-text-tags.js';
 import Tags from '../../src/tags.js';
 import IptcTags from '../../src/iptc-tags.js';
 import {getStringFromDataView} from '../../src/utils.js';
+import DataViewWrapper from '../../src/dataview.js';
 
 describe('png-text-tags', () => {
     let restoreTagReaders;
@@ -68,6 +69,51 @@ describe('png-text-tags', () => {
         expect(readTags['Comment']).to.deep.equal({
             value: '',
             description: ''
+        });
+    });
+
+    it('should read a tEXt tag from a Node Buffer backed DataView wrapper', () => {
+        const tagDatatEXt = 'MyTag0\x00My value.';
+        const dataView = toBufferBackedDataView(getDataView(tagDatatEXt));
+        const chunks = [
+            {type: TYPE_TEXT, offset: 0, length: tagDatatEXt.length}
+        ];
+
+        const {readTags} = PngTextTags.read(dataView, chunks);
+
+        expect(readTags['MyTag0']).to.deep.equal({
+            value: 'My value.',
+            description: 'My value.'
+        });
+    });
+
+    it('should read an uncompressed iTXt tag from a Node Buffer backed DataView wrapper', () => {
+        const text = 'My value.';
+        const dataView = toBufferBackedDataView(getItextDataView('MyTagUtf8', 'en', 'MyTagUtf8', text));
+        const chunks = [
+            {type: TYPE_ITXT, offset: 0, length: dataView.byteLength}
+        ];
+
+        const {readTags} = PngTextTags.read(dataView, chunks);
+
+        expect(readTags['MyTagUtf8 (en)']).to.deep.equal({
+            value: text,
+            description: text
+        });
+    });
+
+    it('should read a compressed zTXt tag from a Node Buffer backed DataView wrapper', async () => {
+        const dataView = toBufferBackedDataView(await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.'));
+        const chunks = [
+            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
+        ];
+
+        const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+        const tags = await readTagsPromise;
+
+        expect(tags[0]['MyTag']).to.deep.equal({
+            value: 'My compressed zTXt value.',
+            description: 'My compressed zTXt value.'
         });
     });
 
@@ -226,6 +272,11 @@ describe('png-text-tags', () => {
 
     function stringToHex(text) {
         return text.split('').map((char) => char.charCodeAt(0).toString(16).padStart(2, '0')).join('');
+    }
+
+    function toBufferBackedDataView(dataView) {
+        const bytes = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+        return new DataViewWrapper(Buffer.from(bytes));
     }
 
     function getPaddedDataView(content, pad) {
