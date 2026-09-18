@@ -800,6 +800,13 @@ describe('icc-tags', () => {
         expect(await captureCompressedIccBytes(bytes, 5)).to.deep.equal(bytes);
     });
 
+    it('should slice a compressed profile from a Node Buffer backed DataView wrapper', async () => {
+        const bytes = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
+
+        expect(await captureCompressedIccBytesFromBuffer(bytes, 0)).to.deep.equal(bytes);
+        expect(await captureCompressedIccBytesFromBuffer(bytes, 5)).to.deep.equal(bytes);
+    });
+
     describe('profile size bounds', () => {
         it('should not size the profile from a chunk length that exceeds the buffer', () => {
             const dataView = new DataView(new ArrayBuffer(200));
@@ -1119,7 +1126,29 @@ function getPaddedDataView(bytes, pad) {
  */
 function captureCompressedIccBytes(bytes, pad) {
     const dataView = getPaddedDataView(new Uint8Array(bytes), pad);
-    const iccData = [{offset: 0, length: bytes.length, chunkNumber: 1, chunksTotal: 1, compressionMethod: COMPRESSION_METHOD_DEFLATE}];
+    return captureCompressedIccBytesFromDataView(dataView, 0, bytes.length);
+}
+
+/**
+ * Same as captureCompressedIccBytes, but through a Node Buffer backed
+ * DataViewWrapper (the fallback used when the native DataView rejects the
+ * input), with the chunk placed at the given offset in the Buffer.
+ *
+ * @param {Array<number>} bytes - The bytes to place at the chunk's declared
+ * offset.
+ * @param {number} offset - Where in the Buffer the chunk starts.
+ * @returns {Promise<Array<number>>} The bytes the deflate callback observed.
+ */
+function captureCompressedIccBytesFromBuffer(bytes, offset) {
+    const padded = new Uint8Array(offset + bytes.length);
+    padded.fill(0x99, 0, offset);
+    padded.set(bytes, offset);
+    const dataView = new DataViewWrapper(Buffer.from(padded));
+    return captureCompressedIccBytesFromDataView(dataView, offset, bytes.length);
+}
+
+function captureCompressedIccBytesFromDataView(dataView, offset, length) {
+    const iccData = [{offset, length, chunkNumber: 1, chunksTotal: 1, compressionMethod: COMPRESSION_METHOD_DEFLATE}];
     let captured;
     const decompressConfig = {
         deflate: (uint8) => {

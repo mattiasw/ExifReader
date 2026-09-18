@@ -41,7 +41,10 @@ function readCompressedIcc(dataView, iccData, decompressConfig) {
         return {};
     }
     const byteOffset = dataView.byteOffset || 0;
-    const compressedDataView = new DataView(dataView.buffer.slice(byteOffset + iccData[0].offset, byteOffset + iccData[0].offset + iccData[0].length));
+    const slice = dataView.buffer.slice(byteOffset + iccData[0].offset, byteOffset + iccData[0].offset + iccData[0].length);
+    // On the Node Buffer wrapper, slice() returns a Buffer, which DataView
+    // rejects. Uint8Array copies a Buffer and leaves an ArrayBuffer as is.
+    const compressedDataView = new DataView(new Uint8Array(slice).buffer);
     return decompress(compressedDataView, iccData[0].compressionMethod, 'utf-8', 'dataview', decompressConfig)
         .then(parseTags)
         .catch(() => ({}));
