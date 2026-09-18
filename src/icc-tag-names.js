@@ -119,8 +119,17 @@ function parseDate(dataView, offset) {
     return new Date(Date.UTC(year, month, day, hours, minutes, seconds));
 }
 
+// Engines cap the number of arguments Function.prototype.apply can pass
+// through, so a large slice is converted in fixed-size chunks.
+const MAX_CHARS_PER_CALL = 8192;
+
 export function sliceToString(slice) {
-    return String.fromCharCode.apply(null, new Uint8Array(slice));
+    const bytes = new Uint8Array(slice);
+    const chunks = [];
+    for (let offset = 0; offset < bytes.length; offset += MAX_CHARS_PER_CALL) {
+        chunks.push(String.fromCharCode.apply(null, bytes.subarray(offset, offset + MAX_CHARS_PER_CALL)));
+    }
+    return chunks.join('');
 }
 
 function toCompany(value) {

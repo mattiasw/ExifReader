@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {iccProfile} from '../../src/icc-tag-names.js';
+import {iccProfile, sliceToString} from '../../src/icc-tag-names.js';
 import {getDataView} from './test-utils.js';
 
 const PROFILE_VERSION = '\x02\x40\x00\x00';
@@ -100,4 +100,42 @@ describe('icc-tag-names', () => {
         expect(iccProfile[80].name).to.equal('Profile Creator');
         expect(iccProfile[80].value(dataViewFromString('1234'), 0)).to.equal('1234');
     });
+
+    describe('sliceToString', () => {
+        it('should convert a small slice such as a signature', () => {
+            const bytes = buildBytePattern(4);
+            expect(sliceToString(bytes.buffer)).to.equal(expectedString(bytes));
+        });
+
+        it('should convert a slice of exactly one chunk', () => {
+            const bytes = buildBytePattern(8192);
+            expect(sliceToString(bytes.buffer)).to.equal(expectedString(bytes));
+        });
+
+        it('should convert a slice one byte larger than one chunk', () => {
+            const bytes = buildBytePattern(8193);
+            expect(sliceToString(bytes.buffer)).to.equal(expectedString(bytes));
+        });
+
+        it('should convert a slice spanning several chunks in full', () => {
+            const bytes = buildBytePattern(3 * 8192 + 5);
+            expect(sliceToString(bytes.buffer)).to.equal(expectedString(bytes));
+        });
+    });
 });
+
+function buildBytePattern(length) {
+    const bytes = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+        bytes[i] = i % 256;
+    }
+    return bytes;
+}
+
+function expectedString(bytes) {
+    let result = '';
+    for (let i = 0; i < bytes.length; i++) {
+        result += String.fromCharCode(bytes[i]);
+    }
+    return result;
+}
