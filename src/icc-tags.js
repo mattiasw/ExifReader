@@ -216,8 +216,9 @@ export function parseTags(dataView) {
                 addTag(tags, tagSignature, valObj);
             }
         } else if (tagType === TAG_TYPE_TEXT) {
-            const val = readBoundedString(dataView, tagOffset + 8, tagSize - 15, decodeBudget);
-            addTag(tags, tagSignature, val);
+            const val = readBoundedString(dataView, tagOffset + 8, tagSize - 8, decodeBudget);
+            const nulIndex = val.indexOf('\0');
+            addTag(tags, tagSignature, nulIndex === -1 ? val : val.slice(0, nulIndex));
         } else if (tagType === TAG_TYPE_SIGNATURE) {
             const val = sliceToString(buffer.slice(tagOffset + 8, tagOffset + 12));
             addTag(tags, tagSignature, val);

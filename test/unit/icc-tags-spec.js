@@ -227,13 +227,80 @@ describe('icc-tags', () => {
         profile.writeString(TEXT_OFFSET + 8, TEXT);
         const signatures = getSignatures('t', 200);
         for (const signature of signatures) {
-            profile.addTagEntry(signature, TEXT_OFFSET, TEXT.length + 15);
+            profile.addTagEntry(signature, TEXT_OFFSET, TEXT.length + 9);
         }
 
         const tags = parseTags(profile.dataView);
 
         expect(tags[signatures[0]].value).to.equal(TEXT);
         expect(getTotalTextLength(tags, signatures)).to.be.at.most(SIZE);
+    });
+
+    it('should decode a text tag up to its last character', () => {
+        const SIZE = 300;
+        const TEXT_OFFSET = 200;
+        const TEXT = 'Copyright Example Co';
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, TEXT);
+        // 4-byte type, 4 reserved bytes, then the ASCII string plus its NUL.
+        profile.addTagEntry('t000', TEXT_OFFSET, 8 + TEXT.length + 1);
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags.t000.value).to.equal(TEXT);
+    });
+
+    it('should stop a text tag at its first NUL and ignore bytes after it', () => {
+        const SIZE = 300;
+        const TEXT_OFFSET = 200;
+        const TEXT = 'Copyright Example Co';
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, TEXT);
+        // The NUL terminator sits right after TEXT (zero-filled buffer); pad
+        // the tag with garbage bytes past it.
+        profile.writeString(TEXT_OFFSET + 8 + TEXT.length + 1, 'garbage');
+        profile.addTagEntry('t000', TEXT_OFFSET, 8 + TEXT.length + 1 + 'garbage'.length);
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags.t000.value).to.equal(TEXT);
+    });
+
+    it('should return the available text when a text tag has no NUL terminator', () => {
+        const SIZE = 300;
+        const TEXT_OFFSET = 200;
+        const TEXT = 'Copyright Example Co';
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, TEXT);
+        // Fill the rest of the profile with a non-NUL byte, so the tag never
+        // has a terminator and readBoundedString's clamp to the buffer end
+        // is what stops the read.
+        const tailStart = TEXT_OFFSET + 8 + TEXT.length;
+        for (let i = tailStart; i < SIZE; i++) {
+            profile.dataView.setUint8(i, 0x2e); // '.'
+        }
+        profile.addTagEntry('t000', TEXT_OFFSET, SIZE * 2);
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags.t000.value).to.equal(TEXT + '.'.repeat(SIZE - tailStart));
+    });
+
+    it('should read an unterminated text tag up to the end of its tag size', () => {
+        const SIZE = 300;
+        const TEXT_OFFSET = 200;
+        const TEXT = 'Copyright Example Co';
+        const profile = getCraftedIccProfile(SIZE);
+        profile.writeString(TEXT_OFFSET, 'text');
+        profile.writeString(TEXT_OFFSET + 8, TEXT + 'X');
+        profile.addTagEntry('t000', TEXT_OFFSET, 8 + TEXT.length);
+
+        const tags = parseTags(profile.dataView);
+
+        expect(tags.t000.value).to.equal(TEXT);
     });
 
     it('should bound total text across desc tags sharing one region', () => {
@@ -256,19 +323,21 @@ describe('icc-tags', () => {
     });
 
     it('should let text tags use up the budget that later mluc and desc tags draw from', () => {
-        const SIZE = 4096;
+        // SIZE is 5 bytes above the round 4096 so that 4 x 1001 + 83 text
+        // bytes (each spec-shaped text tag reads its trailing NUL too) still
+        // leave 14 bytes of budget: 12 for the mluc record table and 2 for
+        // one UTF-16 code unit of its text.
+        const SIZE = 4101;
         const TEXT_OFFSET = 2000;
         const MLUC_OFFSET = 3100;
         const DESC_OFFSET = 3200;
         const profile = getCraftedIccProfile(SIZE);
         profile.writeString(TEXT_OFFSET, 'text');
         profile.writeString(TEXT_OFFSET + 8, 'a'.repeat(1000));
-        // 4 x 1000 + 82 text bytes leave 14 bytes of budget: 12 for the mluc
-        // record table and 2 for one UTF-16 code unit of its text.
         for (const signature of getSignatures('t', 4)) {
-            profile.addTagEntry(signature, TEXT_OFFSET, 1015);
+            profile.addTagEntry(signature, TEXT_OFFSET, 1000 + 9);
         }
-        profile.addTagEntry('t004', TEXT_OFFSET, 82 + 15);
+        profile.addTagEntry('t004', TEXT_OFFSET, 82 + 9);
 
         profile.writeString(MLUC_OFFSET, 'mluc');
         profile.dataView.setUint32(MLUC_OFFSET + 8, 1);
@@ -287,7 +356,7 @@ describe('icc-tags', () => {
 
         const tags = parseTags(profile.dataView);
 
-        expect(tags.t004.value).to.have.lengthOf(82);
+        expect(tags.t004.value).to.have.lengthOf(83);
         expect(tags.m000.value).to.equal('H');
         expect(tags.d000.value).to.equal('');
     });
@@ -311,7 +380,7 @@ describe('icc-tags', () => {
 
         profile.writeString(TEXT_OFFSET, 'text');
         profile.writeString(TEXT_OFFSET + 8, 'Hi');
-        profile.addTagEntry('t000', TEXT_OFFSET, 2 + 15);
+        profile.addTagEntry('t000', TEXT_OFFSET, 2 + 9);
 
         const tags = parseTags(profile.dataView);
 
@@ -326,8 +395,11 @@ describe('icc-tags', () => {
         profile.writeString(TEXT_OFFSET, 'text');
         profile.writeString(TEXT_OFFSET + 8, 'a'.repeat(500));
         // 500 + 488 text bytes leave exactly the 12 bytes of one mluc record.
-        profile.addTagEntry('t000', TEXT_OFFSET, 500 + 15);
-        profile.addTagEntry('t001', TEXT_OFFSET, 488 + 15);
+        // +8 rather than the spec-shaped +9: the text tags here read exactly
+        // 500 and 488 bytes of 'a', with no trailing NUL inside the window,
+        // so the budget arithmetic below stays exact.
+        profile.addTagEntry('t000', TEXT_OFFSET, 500 + 8);
+        profile.addTagEntry('t001', TEXT_OFFSET, 488 + 8);
         profile.writeString(MLUC_OFFSET, 'mluc');
         profile.dataView.setUint32(MLUC_OFFSET + 8, 1);
         profile.dataView.setUint32(MLUC_OFFSET + 12, 12);
@@ -352,7 +424,7 @@ describe('icc-tags', () => {
         profile.addTagEntry('d000', DESC_OFFSET, DESC_TEXT.length + 13);
         profile.writeString(TEXT_OFFSET, 'text');
         profile.writeString(TEXT_OFFSET + 8, TEXT);
-        profile.addTagEntry('t000', TEXT_OFFSET, TEXT.length + 15);
+        profile.addTagEntry('t000', TEXT_OFFSET, TEXT.length + 9);
 
         const tags = parseTags(profile.dataView);
 
@@ -392,7 +464,7 @@ describe('icc-tags', () => {
         profile.addTagEntry('t000', OVERSIZED_OFFSET, 0xffffffff);
         profile.writeString(HONEST_OFFSET, 'text');
         profile.writeString(HONEST_OFFSET + 8, HONEST_TEXT);
-        profile.addTagEntry('t001', HONEST_OFFSET, HONEST_TEXT.length + 15);
+        profile.addTagEntry('t001', HONEST_OFFSET, HONEST_TEXT.length + 9);
 
         const tags = parseTags(profile.dataView);
 
@@ -407,13 +479,13 @@ describe('icc-tags', () => {
         const profile = getCraftedIccProfile(SIZE);
         profile.writeString(TEXT_OFFSET, 'text');
         profile.writeString(TEXT_OFFSET + 8, TEXT);
-        // A text tag size below 15 asks for a negative number of characters.
+        // A text tag size below 8 asks for a negative number of bytes.
         for (const signature of getSignatures('n', 300)) {
             profile.addTagEntry(signature, TEXT_OFFSET, 0);
         }
         const signatures = getSignatures('t', 20);
         for (const signature of signatures) {
-            profile.addTagEntry(signature, TEXT_OFFSET, TEXT.length + 15);
+            profile.addTagEntry(signature, TEXT_OFFSET, TEXT.length + 9);
         }
 
         const tags = parseTags(profile.dataView);
@@ -479,7 +551,10 @@ describe('icc-tags', () => {
         profile.writeString(TEXT_OFFSET + 8, TEXT);
         const signatures = getSignatures('t', 20);
         for (const signature of signatures) {
-            profile.addTagEntry(signature, TEXT_OFFSET, TEXT.length + 15);
+            // +8, not the spec-shaped +9: TEXT.length (64K) divides the
+            // budget cap evenly, and no NUL falls inside the read window, so
+            // the decoded total below stays an exact multiple.
+            profile.addTagEntry(signature, TEXT_OFFSET, TEXT.length + 8);
         }
 
         const tags = parseTags(profile.dataView);
