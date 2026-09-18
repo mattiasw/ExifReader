@@ -16,6 +16,7 @@ const TAG_TYPE_MULTI_LOCALIZED_UNICODE_TYPE = 'mluc';
 const TAG_TYPE_TEXT = 'text';
 const TAG_TYPE_SIGNATURE = 'sig ';
 const TAG_TABLE_SINGLE_TAG_DATA = 12;
+const DESC_VALUE_SIZE_OFFSET_END = 12;
 const MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE = 12;
 const MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET = 16;
 const MAX_MLUC_RECORDS = 1000;
@@ -171,6 +172,10 @@ export function parseTags(dataView) {
         const tagType = getStringFromDataView(dataView, tagOffset, 4);
 
         if (tagType === TAG_TYPE_DESC) {
+            if (tagOffset + DESC_VALUE_SIZE_OFFSET_END > dataView.byteLength) {
+                // Tag data is invalid, lets return what we managed to parse
+                return tags;
+            }
             const tagValueSize = dataView.getUint32(tagOffset + 8);
             if (tagValueSize > tagSize) {
                 // Tag data is invalid, lets return what we managed to parse
@@ -180,6 +185,10 @@ export function parseTags(dataView) {
             const val = readBoundedString(dataView, tagOffset + 12, tagValueSize - 1, decodeBudget);
             addTag(tags, tagSignature, val);
         } else if (tagType === TAG_TYPE_MULTI_LOCALIZED_UNICODE_TYPE) {
+            if (tagOffset + MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET > dataView.byteLength) {
+                // Tag data is invalid, lets return what we managed to parse
+                return tags;
+            }
             const numRecords = dataView.getUint32(tagOffset + 8);
             const recordSize = dataView.getUint32(tagOffset + 12);
             if (recordSize < MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE) {
