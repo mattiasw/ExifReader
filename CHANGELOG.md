@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   have up to six characters cut off at the end.
 - An ICC profile with a large text or description tag, over 64 KB in some
   JavaScript engines, no longer loses all of its ICC tags.
+- Reading the text metadata (tEXt, zTXt or iTXt chunks) of a PNG image no
+  longer throws an error when the image is passed in as a `Buffer` from the
+  `buffer` package, the Buffer polyfill used in browser bundles.
 
 ## [4.45.1] - 2026-09-18
 
