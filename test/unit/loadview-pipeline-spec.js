@@ -153,6 +153,47 @@ describe('loadView pipeline module', function () {
         expect(tags.Thumbnail).to.deep.equal({Compression: {value: 1}});
     });
 
+    it('should pass the filtered thumbnail IFD tags, not the raw ones, to Thumbnail.get', function () {
+        const tagFilter = createTagFilter({
+            returnGroups: {thumbnail: true},
+            returnTags: {'thumbnail.Thumbnail': true},
+        });
+        const thumbnailIfdTags = {Compression: {value: 1}};
+        const filteredThumbnailIfdTags = {Compression: {value: 1}, Filtered: true};
+        const deps = createPipelineDeps();
+        let filterArguments;
+        let receivedThumbnailIfdTags;
+        deps.filterTagsForParse = (...args) => {
+            filterArguments = args;
+
+            return filteredThumbnailIfdTags;
+        };
+        deps.Thumbnail = {
+            get(view, parsedThumbnailIfdTags) {
+                receivedThumbnailIfdTags = parsedThumbnailIfdTags;
+
+                return undefined;
+            },
+        };
+
+        applyMergeStep({
+            step: {type: 'thumbnail'},
+            deferredResults: {},
+            parsedGroups: {},
+            expanded: false,
+            tagFilter,
+            dataView: {},
+            tiffHeaderOffset: 0,
+            fileType: undefined,
+            thumbnailIfdTags,
+            tags: {},
+            deps,
+        });
+
+        expect(filterArguments).to.deep.equal(['thumbnail', thumbnailIfdTags, tagFilter]);
+        expect(receivedThumbnailIfdTags).to.equal(filteredThumbnailIfdTags);
+    });
+
     it('should not return a Thumbnail tag for the thumbnail IFD of embedded PNG text Exif tags', function () {
         const parsedGroups = {};
 
