@@ -42,6 +42,12 @@ Users can configure custom builds (via `package.json` `"exifreader"` key) to inc
 1. Run `npm run build` - the `dist/` files must be committed (Bower consumes them from the repo).
 2. The pre-commit hook (`npm run pre-commit`) runs automatically via Husky and must pass.
 
+## Pushing and Pull Requests
+
+Make changes on a topic branch, not on `main`.
+
+Do not push a branch or commits, and do not open a pull request, unless asked to in the current conversation. Preparing a branch for one is fine. Nothing here should reach the remote without the person you are working with knowing about it.
+
 ## Coding Style
 
 Enforced by ESLint (`eslint.config.mjs`). Key rules:
