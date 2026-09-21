@@ -119,7 +119,10 @@ function getNameAndValue(dataView, offset, length, type, async, decompressConfig
             parsingState = moveToNextState(type, parsingState);
             continue;
         } else if (parsingState === STATE_TEXT) {
-            valueChars = new DataView(dataView.buffer.slice(byteOffset + offset + i, byteOffset + offset + length));
+            const slice = dataView.buffer.slice(byteOffset + offset + i, byteOffset + offset + length);
+            // On the Node Buffer wrapper, slice() returns a Buffer, which DataView
+            // rejects. Uint8Array copies a Buffer and leaves an ArrayBuffer as is.
+            valueChars = new DataView(new Uint8Array(slice).buffer);
             break;
         }
         const byte = dataView.getUint8(offset + i);

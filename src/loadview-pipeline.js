@@ -222,7 +222,7 @@ export function applyMergeStep({
         return tags;
     }
 
-    if (step.type === 'gps') {
+    if (Constants.USE_EXIF && step.type === 'gps') {
         if (
             expanded
             && tagFilter.shouldReturnGroup('gps')
@@ -282,14 +282,11 @@ export function applyMergeStep({
             return tags;
         }
 
-        const parsedThumbnailIfdTags = thumbnailIfdTags ? deps.filterTagsForParse(
+        const parsedThumbnailIfdTags = deps.filterTagsForParse(
             'thumbnail',
             thumbnailIfdTags,
             tagFilter
-        ) : undefined;
-        if (parsedThumbnailIfdTags) {
-            parsedGroups.thumbnail = parsedThumbnailIfdTags;
-        }
+        );
 
         const thumbnail = Constants.USE_EXIF
             && Constants.USE_THUMBNAIL

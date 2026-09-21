@@ -16,6 +16,7 @@ const TAG_TYPE_MULTI_LOCALIZED_UNICODE_TYPE = 'mluc';
 const TAG_TYPE_TEXT = 'text';
 const TAG_TYPE_SIGNATURE = 'sig ';
 const TAG_TABLE_SINGLE_TAG_DATA = 12;
+const DESC_VALUE_SIZE_OFFSET_END = 12;
 const MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE = 12;
 const MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET = 16;
 const MAX_MLUC_RECORDS = 1000;
@@ -40,7 +41,10 @@ function readCompressedIcc(dataView, iccData, decompressConfig) {
         return {};
     }
     const byteOffset = dataView.byteOffset || 0;
-    const compressedDataView = new DataView(dataView.buffer.slice(byteOffset + iccData[0].offset, byteOffset + iccData[0].offset + iccData[0].length));
+    const slice = dataView.buffer.slice(byteOffset + iccData[0].offset, byteOffset + iccData[0].offset + iccData[0].length);
+    // On the Node Buffer wrapper, slice() returns a Buffer, which DataView
+    // rejects. Uint8Array copies a Buffer and leaves an ArrayBuffer as is.
+    const compressedDataView = new DataView(new Uint8Array(slice).buffer);
     return decompress(compressedDataView, iccData[0].compressionMethod, 'utf-8', 'dataview', decompressConfig)
         .then(parseTags)
         .catch(() => ({}));
@@ -61,9 +65,10 @@ function readIcc(dataView, iccData) {
 
         const iccBinaryData = new Uint8Array(totalIccProfileLength);
         let offset = 0;
+        const chunksByNumber = getChunksByNumber(iccData);
 
         for (let chunkNumber = 1; chunkNumber <= iccData.length; chunkNumber++) {
-            const iccDataChunk = iccData.find((x) => x.chunkNumber === chunkNumber);
+            const iccDataChunk = chunksByNumber[chunkNumber];
             if (!iccDataChunk) {
                 throw new Error(`ICC chunk ${chunkNumber} not found`);
             }
@@ -86,6 +91,18 @@ function getBuffer(dataView) {
         return (new DataView(Uint8Array.from(dataView).buffer)).buffer;
     }
     return dataView.buffer;
+}
+
+// A crafted file can repeat a chunk number. The first descriptor with that
+// number is the one used.
+function getChunksByNumber(iccData) {
+    const chunksByNumber = Object.create(null);
+    for (let i = 0; i < iccData.length; i++) {
+        if (chunksByNumber[iccData[i].chunkNumber] === undefined) {
+            chunksByNumber[iccData[i].chunkNumber] = iccData[i];
+        }
+    }
+    return chunksByNumber;
 }
 
 function iccDoesNotHaveTagCount(dataView) {
@@ -158,6 +175,10 @@ export function parseTags(dataView) {
         const tagType = getStringFromDataView(dataView, tagOffset, 4);
 
         if (tagType === TAG_TYPE_DESC) {
+            if (tagOffset + DESC_VALUE_SIZE_OFFSET_END > dataView.byteLength) {
+                // Tag data is invalid, lets return what we managed to parse
+                return tags;
+            }
             const tagValueSize = dataView.getUint32(tagOffset + 8);
             if (tagValueSize > tagSize) {
                 // Tag data is invalid, lets return what we managed to parse
@@ -167,6 +188,10 @@ export function parseTags(dataView) {
             const val = readBoundedString(dataView, tagOffset + 12, tagValueSize - 1, decodeBudget);
             addTag(tags, tagSignature, val);
         } else if (tagType === TAG_TYPE_MULTI_LOCALIZED_UNICODE_TYPE) {
+            if (tagOffset + MULTI_LOCALIZED_UNICODE_RECORDS_OFFSET > dataView.byteLength) {
+                // Tag data is invalid, lets return what we managed to parse
+                return tags;
+            }
             const numRecords = dataView.getUint32(tagOffset + 8);
             const recordSize = dataView.getUint32(tagOffset + 12);
             if (recordSize < MIN_MULTI_LOCALIZED_UNICODE_RECORD_SIZE) {
@@ -216,8 +241,9 @@ export function parseTags(dataView) {
                 addTag(tags, tagSignature, valObj);
             }
         } else if (tagType === TAG_TYPE_TEXT) {
-            const val = readBoundedString(dataView, tagOffset + 8, tagSize - 15, decodeBudget);
-            addTag(tags, tagSignature, val);
+            const val = readBoundedString(dataView, tagOffset + 8, tagSize - 8, decodeBudget);
+            const nulIndex = val.indexOf('\0');
+            addTag(tags, tagSignature, nulIndex === -1 ? val : val.slice(0, nulIndex));
         } else if (tagType === TAG_TYPE_SIGNATURE) {
             const val = sliceToString(buffer.slice(tagOffset + 8, tagOffset + 12));
             addTag(tags, tagSignature, val);

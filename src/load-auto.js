@@ -284,7 +284,8 @@ function sliceInputBuffer(data, end) {
         return data.slice(0, end);
     }
     if (ArrayBuffer.isView(data)) {
-        return data.buffer.slice(data.byteOffset, data.byteOffset + end);
+        const viewEnd = Math.max(0, Math.min(end, data.byteLength));
+        return data.buffer.slice(data.byteOffset, data.byteOffset + viewEnd);
     }
     return data;
 }
