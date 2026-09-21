@@ -62,6 +62,8 @@ Enforced by ESLint (`eslint.config.mjs`). Key rules:
 - kebab-case filenames, camelCase variables/functions, PascalCase constructors/class-like exports
 - Place functions in the order they are used. That means the definition of a function is placed after the location from where it is called.
 
+Every `.js` and `.ts` file in `src/`, `bin/` and `test/`, and `exif-reader.d.ts`, starts with the MPL 2.0 license header, after the shebang line if there is one. The linter does not check it, so copy the three-line version from an existing file such as `src/tags.js`.
+
 ## Older runtime support (src/ only)
 
 The browserslist target includes IE10 and other older runtimes. The
