@@ -17,6 +17,14 @@ describe('utils', () => {
         expect(Utils.getStringFromDataView(dataView, 2, 10)).to.equal('MyString');
     });
 
+    it('should decode a byte string as UTF-8', () => {
+        expect(Utils.decodeUtf8ByteString('A\xc3\xbaC \xe5\x85\xac\xe5\x9b\xad')).to.equal('AúC 公园');
+    });
+
+    it('should keep a byte string that is not valid UTF-8 as it is', () => {
+        expect(Utils.decodeUtf8ByteString('abc\xc5\xc4\xd6')).to.equal('abc\xc5\xc4\xd6');
+    });
+
     it('should parse unicode UTF16BE strings', () => {
         const dataView = getDataView('\x0B\x83\x03\x7D\x04\x2F\x00\x54\x00\x65\x00\x73\x00\x74');
         expect(Utils.getUnicodeStringFromDataView(dataView, 0, dataView.byteLength)).to.equal('ஃͽЯTest');

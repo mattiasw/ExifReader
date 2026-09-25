@@ -57,6 +57,16 @@ export function getStringValueFromArray(charArray) {
     return charArray.map((charCode) => String.fromCharCode(charCode)).join('');
 }
 
+// A byte string holds one byte per character. When it is not valid UTF-8 it is
+// returned as it is, so single-byte encoded text stays readable.
+export function decodeUtf8ByteString(byteString) {
+    try {
+        return decodeURIComponent(escape(byteString));
+    } catch (error) {
+        return byteString;
+    }
+}
+
 export function getCharacterArray(string) {
     return string.split('').map((character) => character.charCodeAt(0));
 }
