@@ -2,9 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView, objectAssign, setProperty} from './utils.js';
+import {decodeUtf8ByteString, getStringFromDataView, objectAssign, setProperty} from './utils.js';
 import XmpTagNames from './xmp-tag-names.js';
 import DOMParser from './dom-parser.js';
+import TextDecoder from './text-decoder.js';
 import {isMissingNamespaceError, addMissingNamespaces} from './xmp-namespaces.js';
 
 export default {
@@ -108,13 +109,33 @@ function getDocument(chunkDataView, _domParser) {
         throw new Error();
     }
 
-    const xmlString = typeof chunkDataView === 'string' ? chunkDataView : getStringFromDataView(chunkDataView, 0, chunkDataView.byteLength);
+    const xmlString = decodeXmlSource(chunkDataView);
     const doc = parseFromString(domParser, trimXmlSource(xmlString));
 
     return {
         doc,
         raw: xmlString,
     };
+}
+
+// The packet has to be decoded before it is parsed: a byte string with the
+// UTF-8 bytes as characters can hold a lone U+0085, which xmldom normalizes
+// to a space in attribute values (XML 1.1 line ending), corrupting the text.
+// XMP is UTF-8 by specification, but some writers store a single-byte
+// encoding, and such a packet is kept as one character per byte.
+function decodeXmlSource(source) {
+    if (typeof source === 'string') {
+        return decodeUtf8ByteString(source);
+    }
+    const Decoder = TextDecoder.get();
+    if (Decoder !== undefined) {
+        try {
+            return new Decoder('utf-8', {fatal: true}).decode(source);
+        } catch (error) {
+            // Not valid UTF-8, or not an ArrayBufferView the decoder accepts.
+        }
+    }
+    return decodeUtf8ByteString(getStringFromDataView(source, 0, source.byteLength));
 }
 
 function trimXmlSource(xmlSource) {
@@ -221,7 +242,7 @@ function getAttributes(element) {
     const attributes = {};
 
     for (let i = 0; i < element.attributes.length; i++) {
-        setProperty(attributes, element.attributes[i].nodeName, decodeURIComponent(escape(element.attributes[i].value)));
+        setProperty(attributes, element.attributes[i].nodeName, element.attributes[i].value);
     }
 
     return attributes;
@@ -309,14 +330,14 @@ function getDescription(value, name = undefined) {
         return getDescriptionOfObject(value);
     }
 
-    try {
-        if (hasTagNameFunction(name)) {
+    if (hasTagNameFunction(name)) {
+        try {
             return XmpTagNames[name](value);
+        } catch (error) {
+            return value;
         }
-        return decodeURIComponent(escape(value));
-    } catch (error) {
-        return value;
     }
+    return value;
 }
 
 function getDescriptionOfArray(value) {
