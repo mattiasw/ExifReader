@@ -7,6 +7,7 @@ import Types from './types.js';
 import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './tag-names.js';
 import {IFD_ENTRY_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
+import {decodeUtf8ByteString} from './utils.js';
 
 // Measured across the test corpus, the most demanding parse decodes tag
 // values totalling 1.2241 times the size of the buffer they are read from
@@ -297,11 +298,7 @@ function splitNullSeparatedAsciiString(string) {
 }
 
 function decodeAsciiValue(asciiValue) {
-    try {
-        return asciiValue.map((value) => decodeURIComponent(escape(value)));
-    } catch (error) {
-        return asciiValue;
-    }
+    return asciiValue.map((value) => decodeUtf8ByteString(value));
 }
 
 function getDescriptionFromTagValue(tagValue) {

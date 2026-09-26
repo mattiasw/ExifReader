@@ -159,6 +159,16 @@ describe('tags-helpers', () => {
         expect(tags['MyAsciiTag'].description).to.equal('AúC');
     });
 
+    it('should decode each string of a multi-string ASCII tag on its own', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        // Field count + offsetted ASCII field + offset to next IFD + two NUL-terminated strings
+        // at offset 0x12, the first UTF-8 encoded and the second single-byte encoded.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x02\x00\x00\x00\x0a\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\x41\xc3\xba\x43\x00' + '\x63\x61\x66\xe9\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyAsciiTag'].value).to.deep.equal(['AúC', 'caf\xe9']);
+        expect(tags['MyAsciiTag'].description).to.equal('AúC, caf\xe9');
+    });
+
     it('should be able to read RATIONAL tag', () => {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyRationalTag'}});
         // Field count + offsetted RATIONAL field + offset to next IFD + value 9/2 at offset 0x12.
