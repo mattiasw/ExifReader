@@ -234,9 +234,9 @@ export interface ExpandedTags {
     iptc?: ExifTags,
     xmp?: {
         /**
-         * The raw, unsanitized XMP packet exactly as it appears in the image.
-         * Treat it as untrusted: escape or sanitize it before inserting it into
-         * a page as HTML to avoid cross-site scripting.
+         * The raw, unsanitized XMP packet as it appears in the image, decoded
+         * as text. Treat it as untrusted: escape or sanitize it before
+         * inserting it into a page as HTML to avoid cross-site scripting.
          */
         _raw: string
     } & XmpTags,

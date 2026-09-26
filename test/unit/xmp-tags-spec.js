@@ -10,6 +10,7 @@ import {DOMParser as LinkedomDomParser} from 'linkedom';
 import {getConsoleWarnSpy, getDataView, swapProperties} from './test-utils.js';
 import {createRequire} from 'node:module';
 import DomParserModule from '../../src/dom-parser.js';
+import TextDecoderModule from '../../src/text-decoder.js';
 import XmpTags from '../../src/xmp-tags.js';
 import XmpTagNames from '../../src/xmp-tag-names.js';
 
@@ -195,39 +196,161 @@ describe('xmp-tags', function () {
                 });
             });
 
-            it('should be able to read a UTF-8 value', () => {
-                const xmlString = getXmlString(`
-                    <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
-                        <xmp:MyXMPTag0>abcÅÄÖáéí</xmp:MyXMPTag0>
-                    </rdf:Description>
-                `);
-                const dataView = getDataView(xmlString);
-                const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
-                expect(tags).to.deep.equal({
-                    _raw: xmlString,
-                    MyXMPTag0: {
+            describe('text encoding', () => {
+                // The second byte of "公" is 0x85, which xmldom turns into a line
+                // feed before parsing.
+                const PARK = '公园';
+
+                it('should decode a UTF-8 element value', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag0>${toUtf8ByteString('AúC')}</xmp:MyXMPTag0>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag0']).to.deep.equal({
+                        value: 'AúC',
+                        attributes: {},
+                        description: 'AúC'
+                    });
+                });
+
+                it('should decode a UTF-8 attribute value that contains a 0x85 byte', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/" Iptc4xmpCore:Location="${toUtf8ByteString(PARK)}">
+                            <xmp:MyXMPTag0>${toUtf8ByteString(PARK)}</xmp:MyXMPTag0>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['Location']).to.deep.equal({
+                        value: PARK,
+                        attributes: {},
+                        description: PARK
+                    });
+                    expect(tags['MyXMPTag0']).to.deep.equal({
+                        value: PARK,
+                        attributes: {},
+                        description: PARK
+                    });
+                });
+
+                it('should give the decoded packet as the raw value', () => {
+                    const xmlString = getXmlStringWithPacketWrapper(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="${toUtf8ByteString(PARK)}"></rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags._raw).to.equal(xmlString.replace(toUtf8ByteString('\ufeff'), '\ufeff').replace(toUtf8ByteString(PARK), PARK));
+                });
+
+                it('should decode a packet that is not valid UTF-8 as one character per byte', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag0>abcÅÄÖáéí</xmp:MyXMPTag0>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags._raw).to.equal(xmlString);
+                    expect(tags['MyXMPTag0']).to.deep.equal({
                         value: 'abcÅÄÖáéí',
                         attributes: {},
                         description: 'abcÅÄÖáéí'
+                    });
+                });
+
+                it('should decode a numeric character reference above U+00FF in an attribute value', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="&#x516C;&#x56ED;"></rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag0'].value).to.equal(PARK);
+                });
+
+                it('should keep an attribute value that is not valid UTF-8 as one character per byte', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="abcÅÄÖáéí"></rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag0'].value).to.equal('abcÅÄÖáéí');
+                });
+
+                it('should decode each value on its own when the packet is not valid UTF-8', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="${toUtf8ByteString('café')}" xmp:MyXMPTag1="café">
+                            <xmp:MyXMPTag2>${toUtf8ByteString('café')}</xmp:MyXMPTag2>
+                            <xmp:MyXMPTag3>café</xmp:MyXMPTag3>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags._raw).to.equal(xmlString);
+                    for (const name of ['MyXMPTag0', 'MyXMPTag1', 'MyXMPTag2', 'MyXMPTag3']) {
+                        expect(tags[name], name).to.deep.equal({
+                            value: 'café',
+                            attributes: {},
+                            description: 'café'
+                        });
                     }
                 });
-            });
 
-            it('should be able to read a non-ASCII, non-UTF-8 value', () => {
-                const xmlString = getXmlString(`
-                    <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
-                        <xmp:MyXMPTag0>AÃºC</xmp:MyXMPTag0>
-                    </rdf:Description>
-                `);
-                const dataView = getDataView(xmlString);
-                const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
-                expect(tags).to.deep.equal({
-                    _raw: xmlString,
-                    MyXMPTag0: {
-                        value: 'AÃºC',
-                        attributes: {},
-                        description: 'AúC'
-                    }
+                it('should decode a UTF-8 value when the input is a byte string', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="${toUtf8ByteString(PARK)}"></rdf:Description>
+                    `);
+                    const tags = XmpTags.read(xmlString, undefined, domParser);
+                    expect(tags['MyXMPTag0'].value).to.equal(PARK);
+                });
+
+                describe('without TextDecoder', () => {
+                    let restoreTextDecoder;
+
+                    beforeEach(() => {
+                        restoreTextDecoder = swapProperties(TextDecoderModule, {
+                            get() {
+                                return undefined;
+                            }
+                        });
+                    });
+
+                    afterEach(() => {
+                        restoreTextDecoder();
+                    });
+
+                    it('should decode a UTF-8 attribute value that contains a 0x85 byte', () => {
+                        const xmlString = getXmlString(`
+                            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="${toUtf8ByteString(PARK)}"></rdf:Description>
+                        `);
+                        const dataView = getDataView(xmlString);
+                        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                        expect(tags['MyXMPTag0'].value).to.equal(PARK);
+                    });
+
+                    it('should decode a packet that is not valid UTF-8 as one character per byte', () => {
+                        const xmlString = getXmlString(`
+                            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="abcÅÄÖáéí"></rdf:Description>
+                        `);
+                        const dataView = getDataView(xmlString);
+                        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                        expect(tags['MyXMPTag0'].value).to.equal('abcÅÄÖáéí');
+                    });
+
+                    it('should decode each value on its own when the packet is not valid UTF-8', () => {
+                        const xmlString = getXmlString(`
+                            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="${toUtf8ByteString('café')}" xmp:MyXMPTag1="café">
+                                <xmp:MyXMPTag2>${toUtf8ByteString('café')}</xmp:MyXMPTag2>
+                            </rdf:Description>
+                        `);
+                        const dataView = getDataView(xmlString);
+                        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                        expect(tags['MyXMPTag0'].value).to.equal('café');
+                        expect(tags['MyXMPTag1'].value).to.equal('café');
+                        expect(tags['MyXMPTag2'].value).to.equal('café');
+                    });
                 });
             });
 
@@ -1887,6 +2010,12 @@ function getXmlString(content) {
     return `<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
         ${content}
     </rdf:RDF>`;
+}
+
+// getDataView takes one byte per character, so text that goes into a packet
+// as UTF-8 has to be spelled out as its bytes.
+function toUtf8ByteString(text) {
+    return Array.from(new TextEncoder().encode(text), (byte) => String.fromCharCode(byte)).join('');
 }
 
 // getPaddedDataView leaves the window ending where the buffer ends, so an

@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import TextDecoder from './text-decoder.js';
+import {decodeUtf8ByteString} from './utils.js';
 
 const TAG_HEADER_SIZE = 5;
 
@@ -30,7 +31,7 @@ export default {
 
 function decode(encoding, tagValue) {
     if (typeof tagValue === 'string') {
-        return decodeAsciiValue(tagValue);
+        return decodeUtf8ByteString(tagValue);
     }
     const Decoder = TextDecoder.get();
     if ((typeof Decoder !== 'undefined') && (encoding !== undefined)) {
@@ -65,12 +66,4 @@ function decodeWindows1252(tagValue) {
         codePoints[i] = mapped !== undefined ? mapped : byte;
     }
     return String.fromCharCode.apply(null, codePoints);
-}
-
-function decodeAsciiValue(asciiValue) {
-    try {
-        return decodeURIComponent(escape(asciiValue));
-    } catch (error) {
-        return asciiValue;
-    }
 }

@@ -57,6 +57,35 @@ export function getStringValueFromArray(charArray) {
     return charArray.map((charCode) => String.fromCharCode(charCode)).join('');
 }
 
+/**
+ * Decodes a byte string (one byte per character) as UTF-8. A string that is
+ * not valid UTF-8 is returned as it is, so single-byte encoded text stays
+ * readable.
+ * @param {string} byteString
+ * @returns {string}
+ */
+export function decodeUtf8ByteString(byteString) {
+    const decoded = tryDecodeUtf8ByteString(byteString);
+    if (decoded === undefined) {
+        return byteString;
+    }
+    return decoded;
+}
+
+/**
+ * Decodes a byte string (one byte per character) as UTF-8.
+ * @param {string} byteString
+ * @returns {string | undefined} The decoded text, or undefined when the string
+ * is not valid UTF-8.
+ */
+export function tryDecodeUtf8ByteString(byteString) {
+    try {
+        return decodeURIComponent(escape(byteString));
+    } catch (error) {
+        return undefined;
+    }
+}
+
 export function getCharacterArray(string) {
     return string.split('').map((character) => character.charCodeAt(0));
 }
