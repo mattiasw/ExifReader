@@ -5,7 +5,7 @@ import pluginCypress from 'eslint-plugin-cypress';
 
 export default defineConfig([
     {
-        ignores: ['**/dist/', '**/gh-pages/', 'coverage/'],
+        ignores: ['**/dist/', '**/gh-pages/', 'coverage/', '.claude/'],
     },
     js.configs.recommended,
     {
