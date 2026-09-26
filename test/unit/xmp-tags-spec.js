@@ -261,6 +261,24 @@ describe('xmp-tags', function () {
                     });
                 });
 
+                it('should decode a numeric character reference above U+00FF in an attribute value', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="&#x516C;&#x56ED;"></rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag0'].value).to.equal(PARK);
+                });
+
+                it('should keep an attribute value that is not valid UTF-8 as one character per byte', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="abcÅÄÖáéí"></rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyXMPTag0'].value).to.equal('abcÅÄÖáéí');
+                });
+
                 it('should decode a UTF-8 value when the input is a byte string', () => {
                     const xmlString = getXmlString(`
                         <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="${toUtf8ByteString(PARK)}"></rdf:Description>
