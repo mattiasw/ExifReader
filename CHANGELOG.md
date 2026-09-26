@@ -9,17 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- XMP text is now decoded as UTF-8 before the packet is parsed, so non-ASCII
-  characters come out correctly in tag values, attributes and `xmp._raw`. A
-  packet that is not valid UTF-8 is decoded with one character per byte, as
-  before. Previously the packet was parsed as one character per byte and each
-  value was decoded afterwards, which left `value` (but not `description`) as
-  mojibake for element text. It also failed for characters whose UTF-8
-  encoding contains the byte 0x85, such as many CJK characters, when the
-  `@xmldom/xmldom` parser was used (the default in Node.js): the parser
-  normalized that byte away as a line break in attribute values, the decoding
-  of the value then threw, and the whole XMP group was dropped except for
-  `_raw`.
+- XMP packets are now decoded as UTF-8 before they are parsed, so non-ASCII
+  text comes out correctly in tag values, attributes and `xmp._raw`. A packet
+  that is not valid UTF-8 is parsed with one character per byte and each value
+  is then decoded on its own where it is valid UTF-8, as before. Previously
+  the whole packet was parsed as one character per byte and each value was
+  decoded afterwards, which left `value` (but not `description`) as mojibake
+  for element text. With the `@xmldom/xmldom` parser (the default in Node.js)
+  it also broke any character whose UTF-8 encoding contains the byte 0x85,
+  such as `Å`, some Cyrillic and Arabic letters, and many CJK characters: the
+  parser turned that byte into a line break before parsing, so element text
+  was corrupted in both `value` and `description`, and in attribute values
+  the decoding then threw and the whole XMP group was dropped except for
+  `_raw`. A numeric character reference above U+00FF, or single-byte encoded
+  text, in an attribute value dropped the group in the same way under every
+  parser. If you worked around this by decoding `value` yourself, remove that
+  step, since `decodeURIComponent(escape(...))` throws `URIError` on decoded
+  non-ASCII text.
 
 ## [4.45.2] - 2026-09-21
 
