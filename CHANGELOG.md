@@ -1093,14 +1093,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.5.1] - 2022-08-02
 
+### Added
+
+- XMP raw string type to `ExpandedTags["xmp"]` TypeScript type.
+
 ### Fixed
 
 - Present `ExposureTime` and `ShutterSpeedValue` correctly when value is more
   than 1 second.
-
-### Added
-
-- XMP raw string type to `ExpandedTags["xmp"]` TypeScript type.
 
 ## [4.5.0] - 2022-04-12
 
@@ -1448,15 +1448,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.4.0] - 2018-04-10
 
+### Added
+
+- Default export.
+
 ### Fixed
 
 - Handle faulty tag count values that exceed the file size.
 - Handle empty `rdf:Description` element in XMP.
 - Decode strings in IPTC tags that have non-ASCII, non-UTF-8 chars.
-
-### Added
-
-- Default export.
 
 ## [2.3.0] - 2018-02-10
 
