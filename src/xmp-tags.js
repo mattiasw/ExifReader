@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {decodeUtf8ByteString, getStringFromDataView, objectAssign, setProperty} from './utils.js';
+import {decodeUtf8ByteString, getStringFromDataView, objectAssign, setProperty, tryDecodeUtf8ByteString} from './utils.js';
 import XmpTagNames from './xmp-tag-names.js';
 import DOMParser from './dom-parser.js';
 import TextDecoder from './text-decoder.js';
@@ -91,11 +91,11 @@ function getBoundedChunkBytes(dataView, chunk) {
 
 function readTags(tags, chunkDataView, domParser) {
     try {
-        const {doc, raw} = getDocument(chunkDataView, domParser);
+        const {doc, raw, decodeValue} = getDocument(chunkDataView, domParser);
         tags._raw = (tags._raw || '') + raw;
         const rdf = getRDF(doc);
 
-        objectAssign(tags, parseXMPObject(convertToObject(rdf, true)));
+        objectAssign(tags, parseXMPObject(convertToObject(rdf, true, decodeValue)));
         return true;
     } catch (error) {
         return false;
@@ -109,33 +109,51 @@ function getDocument(chunkDataView, _domParser) {
         throw new Error();
     }
 
-    const xmlString = decodeXmlSource(chunkDataView);
+    const {xmlString, decodeValue} = decodeXmlSource(chunkDataView);
     const doc = parseFromString(domParser, trimXmlSource(xmlString));
 
     return {
         doc,
         raw: xmlString,
+        decodeValue
     };
 }
 
-// The packet has to be decoded before it is parsed: a byte string with the
-// UTF-8 bytes as characters can hold a lone U+0085, which xmldom normalizes
-// to a space in attribute values (XML 1.1 line ending), corrupting the text.
-// XMP is UTF-8 by specification, but some writers store a single-byte
-// encoding, and such a packet is kept as one character per byte.
+// The packet has to be decoded before it is parsed. When it is parsed one
+// character per byte, the UTF-8 encoding of e.g. Å (0xC3 0x85) contains a lone
+// U+0085, which xmldom turns into a line feed before parsing (an XML 1.1 line
+// ending). That corrupts element text, and attribute value normalization then
+// makes it a space. XMP is UTF-8 by specification, but some writers store a
+// single-byte encoding. Such a packet is parsed one character per byte and
+// each value is decoded on its own afterwards where it is valid UTF-8.
 function decodeXmlSource(source) {
     if (typeof source === 'string') {
-        return decodeUtf8ByteString(source);
+        return decodeByteString(source);
     }
     const Decoder = TextDecoder.get();
     if (Decoder !== undefined) {
         try {
-            return new Decoder('utf-8', {fatal: true}).decode(source);
+            return {
+                xmlString: new Decoder('utf-8', {fatal: true}).decode(source),
+                decodeValue: keepValue
+            };
         } catch (error) {
-            // Not valid UTF-8, or not an ArrayBufferView the decoder accepts.
+            // Not valid UTF-8.
         }
     }
-    return decodeUtf8ByteString(getStringFromDataView(source, 0, source.byteLength));
+    return decodeByteString(getStringFromDataView(source, 0, source.byteLength));
+}
+
+function decodeByteString(byteString) {
+    const decoded = tryDecodeUtf8ByteString(byteString);
+    if (decoded !== undefined) {
+        return {xmlString: decoded, decodeValue: keepValue};
+    }
+    return {xmlString: byteString, decodeValue: decodeUtf8ByteString};
+}
+
+function keepValue(value) {
+    return value;
 }
 
 function trimXmlSource(xmlSource) {
@@ -172,17 +190,17 @@ function getRDF(node) {
     throw new Error();
 }
 
-function convertToObject(node, isTopNode = false) {
+function convertToObject(node, isTopNode, decodeValue) {
     const childNodes = getChildNodes(node);
 
     if (hasTextOnlyContent(childNodes)) {
         if (isTopNode) {
             return {};
         }
-        return getTextValue(childNodes[0]);
+        return decodeValue(getTextValue(childNodes[0]));
     }
 
-    return getElementsFromNodes(childNodes);
+    return getElementsFromNodes(childNodes, decodeValue);
 }
 
 function getChildNodes(node) {
@@ -206,12 +224,12 @@ function getTextValue(node) {
 // The elements object must not have a prototype. The element names come from
 // the image, so an element named e.g. constructor would be found among the
 // inherited properties, and one named __proto__ would replace the prototype.
-function getElementsFromNodes(nodes) {
+function getElementsFromNodes(nodes, decodeValue) {
     const elements = Object.create(null);
 
     nodes.forEach((node) => {
         if (isElement(node)) {
-            const nodeElement = getElementFromNode(node);
+            const nodeElement = getElementFromNode(node, decodeValue);
 
             if (elements[node.nodeName] !== undefined) {
                 if (!Array.isArray(elements[node.nodeName])) {
@@ -231,18 +249,18 @@ function isElement(node) {
     return (node.nodeName) && (node.nodeName !== '#text');
 }
 
-function getElementFromNode(node) {
+function getElementFromNode(node, decodeValue) {
     return {
-        attributes: getAttributes(node),
-        value: convertToObject(node)
+        attributes: getAttributes(node, decodeValue),
+        value: convertToObject(node, false, decodeValue)
     };
 }
 
-function getAttributes(element) {
+function getAttributes(element, decodeValue) {
     const attributes = {};
 
     for (let i = 0; i < element.attributes.length; i++) {
-        setProperty(attributes, element.attributes[i].nodeName, element.attributes[i].value);
+        setProperty(attributes, element.attributes[i].nodeName, decodeValue(element.attributes[i].value));
     }
 
     return attributes;

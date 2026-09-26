@@ -25,6 +25,11 @@ describe('utils', () => {
         expect(Utils.decodeUtf8ByteString('abc\xc5\xc4\xd6')).to.equal('abc\xc5\xc4\xd6');
     });
 
+    it('should decode a byte string as UTF-8 or give undefined when it is not valid UTF-8', () => {
+        expect(Utils.tryDecodeUtf8ByteString('A\xc3\xbaC')).to.equal('AúC');
+        expect(Utils.tryDecodeUtf8ByteString('abc\xc5\xc4\xd6')).to.equal(undefined);
+    });
+
     it('should parse unicode UTF16BE strings', () => {
         const dataView = getDataView('\x0B\x83\x03\x7D\x04\x2F\x00\x54\x00\x65\x00\x73\x00\x74');
         expect(Utils.getUnicodeStringFromDataView(dataView, 0, dataView.byteLength)).to.equal('ஃͽЯTest');

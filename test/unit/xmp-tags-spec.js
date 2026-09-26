@@ -197,8 +197,8 @@ describe('xmp-tags', function () {
             });
 
             describe('text encoding', () => {
-                // The second byte of "公" is 0x85, which xmldom treats as a
-                // line break when it normalizes attribute values.
+                // The second byte of "公" is 0x85, which xmldom turns into a line
+                // feed before parsing.
                 const PARK = '公园';
 
                 it('should decode a UTF-8 element value', () => {
@@ -279,6 +279,25 @@ describe('xmp-tags', function () {
                     expect(tags['MyXMPTag0'].value).to.equal('abcÅÄÖáéí');
                 });
 
+                it('should decode each value on its own when the packet is not valid UTF-8', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="${toUtf8ByteString('café')}" xmp:MyXMPTag1="café">
+                            <xmp:MyXMPTag2>${toUtf8ByteString('café')}</xmp:MyXMPTag2>
+                            <xmp:MyXMPTag3>café</xmp:MyXMPTag3>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags._raw).to.equal(xmlString);
+                    for (const name of ['MyXMPTag0', 'MyXMPTag1', 'MyXMPTag2', 'MyXMPTag3']) {
+                        expect(tags[name], name).to.deep.equal({
+                            value: 'café',
+                            attributes: {},
+                            description: 'café'
+                        });
+                    }
+                });
+
                 it('should decode a UTF-8 value when the input is a byte string', () => {
                     const xmlString = getXmlString(`
                         <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="${toUtf8ByteString(PARK)}"></rdf:Description>
@@ -318,6 +337,19 @@ describe('xmp-tags', function () {
                         const dataView = getDataView(xmlString);
                         const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
                         expect(tags['MyXMPTag0'].value).to.equal('abcÅÄÖáéí');
+                    });
+
+                    it('should decode each value on its own when the packet is not valid UTF-8', () => {
+                        const xmlString = getXmlString(`
+                            <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="${toUtf8ByteString('café')}" xmp:MyXMPTag1="café">
+                                <xmp:MyXMPTag2>${toUtf8ByteString('café')}</xmp:MyXMPTag2>
+                            </rdf:Description>
+                        `);
+                        const dataView = getDataView(xmlString);
+                        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                        expect(tags['MyXMPTag0'].value).to.equal('café');
+                        expect(tags['MyXMPTag1'].value).to.equal('café');
+                        expect(tags['MyXMPTag2'].value).to.equal('café');
                     });
                 });
             });
