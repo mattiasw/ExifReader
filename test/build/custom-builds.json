@@ -215,5 +215,14 @@
                 "thumbnail": true
             }
         }
+    },
+    {
+        "id": "exclude-exif",
+        "config": {
+            "exclude": {
+                "exif": true
+            }
+        },
+        "maxDistRatio": 0.8
     }
 ]
