@@ -82,6 +82,7 @@ export default defineConfig([
     {
         files: ['bin/**/*.js', 'webpack.config.js', 'cypress.config.js', '.mocharc.cjs'],
         languageOptions: {
+            ecmaVersion: 2022,
             globals: {
                 ...globals.node,
             },

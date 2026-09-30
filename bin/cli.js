@@ -9,6 +9,8 @@
 const path = require('path');
 const fs = require('fs');
 const {readMarker, markerMatches} = require('./custom-build-marker');
+const {collectImagePaths, loadFullParser, resolveDomParser, analyzeImages, deriveConfig, writeConfigToPackageJson} = require('./analyze');
+const {verifyImages, loadCustomParser} = require('./verify-build');
 
 const EXIFREADER_ROOT_DIR = path.join(__dirname, '..');
 
@@ -26,6 +28,10 @@ if (require.main === module) {
         readMarker,
         checkLocalInstall,
         build: (options) => require('./build').runBuild(options),
+        fs,
+        loadFullParser,
+        loadCustomParser,
+        resolveDomParser,
         log: console.log,
         error: console.error,
         exit: (code) => process.exit(code)
@@ -48,8 +54,11 @@ function run(argv, deps) {
     }
 
     if (args.command === 'build') {
-        runBuildCommand(args, deps);
-        return;
+        return runBuildCommand(args, deps);
+    }
+
+    if (args.command === 'analyze') {
+        return runAnalyzeCommand(args, deps);
     }
 
     if (args.command) {
@@ -67,7 +76,11 @@ function parseArgs(argv) {
         version: args.includes('-v') || args.includes('--version'),
         check: args.includes('--check'),
         ifNeeded: args.includes('--if-needed'),
-        config: configPath(args)
+        config: configPath(args),
+        write: args.includes('--write'),
+        auto: args.includes('--auto'),
+        verify: args.includes('--verify'),
+        paths: positionals(args).slice(1)
     };
 }
 
@@ -95,6 +108,9 @@ function helpText() {
         + '  build              Rebuild dist/exif-reader.js using the "exifreader" custom build\n'
         + '                     configuration (include/exclude) from --config, the\n'
         + '                     EXIFREADER_CUSTOM_BUILD env var, or your project\'s package.json.\n'
+        + '  analyze <paths...> Read the given image files and directories with the full parser\n'
+        + '                     and print the include configuration that reads everything found\n'
+        + '                     in them.\n'
         + '\n'
         + 'Options for build:\n'
         + '  --check            Exit with an error if the installed bundle was not built from\n'
@@ -102,6 +118,15 @@ function helpText() {
         + '  --if-needed        Build only if the installed bundle is not already up to date.\n'
         + '  --config <path>    Read the configuration from a JSON file holding the\n'
         + '                     include/exclude object.\n'
+        + '  --auto <paths...>  Build the configuration that analyze prints for these images\n'
+        + '                     instead of reading one. The configuration is not saved.\n'
+        + '  --verify <paths...>\n'
+        + '                     After building, read these images with the full parser and\n'
+        + '                     with the installed bundle, and fail on any difference.\n'
+        + '\n'
+        + 'Options for analyze:\n'
+        + '  --write            Put the configuration in your project\'s package.json, replacing\n'
+        + '                     its include or exclude section.\n'
         + '\n'
         + 'Options:\n'
         + '  -h, --help         Show this help.\n'
@@ -116,32 +141,178 @@ function runBuildCommand(args, deps) {
     const install = deps.checkLocalInstall(cwd);
     if (!install.ok) {
         fail(deps, install.message);
-        return;
+        return undefined;
     }
 
     if (args.check && args.ifNeeded) {
         fail(deps, '--check and --if-needed cannot be used together. Use --check to only verify the '
             + 'installed bundle, or --if-needed to build it when it is out of date.');
-        return;
+        return undefined;
+    }
+
+    const sampleError = sampleOptionError(args);
+    if (sampleError) {
+        fail(deps, sampleError);
+        return undefined;
+    }
+
+    let imagePaths;
+    if (args.auto || args.verify) {
+        imagePaths = collectImages(args.paths, cwd, deps);
+        if (!imagePaths) {
+            return undefined;
+        }
+    }
+
+    if (args.auto) {
+        return runAutoBuild(args, cwd, imagePaths, install, deps);
     }
 
     const resolved = resolveBuildConfig(args, cwd, deps);
     if (resolved.error) {
         fail(deps, resolved.error);
-        return;
+        return undefined;
     }
     const config = resolved.config;
 
     if (args.check) {
         runCheck(config, install, deps);
-        return;
+        return undefined;
     }
 
     if (!config) {
         fail(deps, noConfigMessage());
-        return;
+        return undefined;
     }
 
+    buildUnlessUpToDate(config, args, install, deps);
+
+    if (args.verify) {
+        return failOnRejection(verifyBuild(imagePaths, cwd, install, deps), deps);
+    }
+    return undefined;
+}
+
+function fail(deps, message) {
+    deps.error(message);
+    deps.exit(1);
+}
+
+function sampleOptionError(args) {
+    if (args.write) {
+        return '--write is an option of analyze, not build. To save the configuration, run '
+            + '"npx exifreader analyze <paths...> --write", then "npx exifreader build".';
+    }
+    if (args.auto && args.config !== undefined) {
+        return '--auto and --config cannot be used together. --auto builds the configuration it derives '
+            + 'from the images, so leave out --config.';
+    }
+    if (args.auto && args.check) {
+        return '--auto and --check cannot be used together. --check never builds, and --auto does not '
+            + 'save the configuration it derives, so there is nothing for --check to compare against.';
+    }
+    if (args.verify && args.check) {
+        return '--verify and --check cannot be used together. To compare the installed bundle with the '
+            + 'full parser without rebuilding an up-to-date one, use --verify with --if-needed.';
+    }
+    if ((args.auto || args.verify) && args.paths.length === 0) {
+        const flag = args.auto ? '--auto' : '--verify';
+        return `${flag} needs the image files or directories to read, for example `
+            + `"npx exifreader build ${flag} ./samples".`;
+    }
+    if (!args.auto && !args.verify && args.paths.length > 0) {
+        return `Unexpected argument: ${args.paths.join(' ')}. Image paths are only read with --auto or `
+            + '--verify, for example "npx exifreader build --auto ./samples".';
+    }
+    return undefined;
+}
+
+function collectImages(paths, cwd, deps) {
+    let collected;
+    try {
+        collected = collectImagePaths(paths.map((imagePath) => path.resolve(cwd, imagePath)), deps.fs);
+    } catch (error) {
+        fail(deps, error.message);
+        return undefined;
+    }
+    reportSkipped(collected.skipped, deps);
+    if (collected.paths.length === 0) {
+        fail(deps, `No files were found in ${paths.join(', ')}.`);
+        return undefined;
+    }
+    return collected.paths;
+}
+
+function reportSkipped(skipped, deps) {
+    for (const entry of skipped) {
+        deps.error(`Skipped ${entry.path}: ${entry.message}`);
+    }
+}
+
+function runAutoBuild(args, cwd, imagePaths, install, deps) {
+    return failOnRejection(analyzeSample(imagePaths, cwd, deps).then((analysis) => {
+        if (!analysis) {
+            return undefined;
+        }
+        buildUnlessUpToDate(analysis.config, args, install, deps);
+        return args.verify ? verifyBuild(analysis.imagePaths, cwd, install, deps) : undefined;
+    }), deps);
+}
+
+function failOnRejection(promise, deps) {
+    return promise.catch((error) => fail(deps, error.message));
+}
+
+// Prints the derived configuration on stdout and the summary on stderr, and
+// resolves to the configuration and the images it was derived from. Resolves
+// to undefined after failing when no image could be read.
+async function analyzeSample(imagePaths, cwd, deps) {
+    const domParser = deps.resolveDomParser(cwd);
+    if (!domParser) {
+        deps.error('@xmldom/xmldom was not found, so the XMP content of the images was not read. '
+            + 'XMP is still included in the configuration when an image has it.');
+    }
+    const parser = await deps.loadFullParser();
+    const {results, skipped} = await withoutConsoleWarnings(!domParser, () => analyzeImages(imagePaths, {fs: deps.fs, parser, domParser}));
+    reportSkipped(skipped, deps);
+    if (results.length === 0) {
+        fail(deps, 'None of the given files could be read as an image, so there is nothing to analyze.');
+        return undefined;
+    }
+
+    const derived = deriveConfig(results.map((result) => result.tags));
+    deps.log(JSON.stringify(derived.config, null, 2));
+    deps.error(`Analyzed ${countOf(results.length, 'image')} (${derived.fileTypes.join(', ')}).`);
+    for (const warning of derived.warnings) {
+        deps.error(warning);
+    }
+    return {config: derived.config, imagePaths: results.map((result) => result.path)};
+}
+
+// Without a DOM parser, ExifReader warns on the console for every image with
+// XMP. The CLI prints one line about it instead.
+async function withoutConsoleWarnings(silence, action) {
+    if (!silence) {
+        return action();
+    }
+    const originalWarn = console.warn;
+    console.warn = ignoreWarning;
+    try {
+        return await action();
+    } finally {
+        console.warn = originalWarn;
+    }
+}
+
+function ignoreWarning() {
+    return undefined;
+}
+
+function countOf(count, noun) {
+    return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+function buildUnlessUpToDate(config, args, install, deps) {
     if (args.ifNeeded && bundleState(config, install, deps) === 'up to date') {
         deps.log(upToDateMessage(install.distPath));
         return;
@@ -154,9 +325,92 @@ function runBuildCommand(args, deps) {
     deps.build({config});
 }
 
-function fail(deps, message) {
-    deps.error(message);
-    deps.exit(1);
+async function verifyBuild(imagePaths, cwd, install, deps) {
+    const domParser = deps.resolveDomParser(cwd);
+    if (!domParser) {
+        deps.error('@xmldom/xmldom was not found, so XMP was compared at group level only.');
+    }
+    const fullParser = await deps.loadFullParser();
+    const customParser = deps.loadCustomParser(install.distPath);
+    const {results, skipped} = await withoutConsoleWarnings(
+        !domParser,
+        () => verifyImages(imagePaths, {fs: deps.fs, fullParser, customParser, domParser})
+    );
+    reportSkipped(skipped, deps);
+    if (results.length === 0) {
+        fail(deps, 'None of the given files could be read as an image, so nothing was verified.');
+        return;
+    }
+
+    const differing = results.filter((result) => result.differences.length > 0);
+    for (const result of differing) {
+        deps.error(result.path);
+        for (const difference of result.differences) {
+            deps.error(`  ${difference}`);
+        }
+    }
+    if (differing.length > 0) {
+        fail(deps, `${differing.length} of ${countOf(results.length, 'image')} gave a different result with the `
+            + 'custom build than with the full parser.');
+        return;
+    }
+    deps.log(`${results.length === 1 ? 'The image' : `All ${results.length} images`} gave the same result with the `
+        + 'custom build as with the full parser.');
+}
+
+function runAnalyzeCommand(args, deps) {
+    const cwd = deps.cwd();
+    if (args.paths.length === 0) {
+        fail(deps, 'analyze needs the image files or directories to read, for example '
+            + '"npx exifreader analyze ./samples".');
+        return undefined;
+    }
+
+    let packageDir;
+    if (args.write) {
+        packageDir = nearestPackageDir(cwd, deps.fs.existsSync);
+        if (!packageDir) {
+            fail(deps, `No package.json found in ${cwd} or any directory above it, so there is nowhere to `
+                + 'write the configuration. Run the command from your project, or leave out --write.');
+            return undefined;
+        }
+    }
+
+    const imagePaths = collectImages(args.paths, cwd, deps);
+    if (!imagePaths) {
+        return undefined;
+    }
+
+    return failOnRejection(analyzeSample(imagePaths, cwd, deps).then((analysis) => {
+        if (!analysis) {
+            return;
+        }
+        if (packageDir) {
+            writeToPackageJson(path.join(packageDir, 'package.json'), analysis.config.include, deps);
+            return;
+        }
+        deps.error('To use it, set it as the "exifreader" section of your package.json and run '
+            + '"npx exifreader build", or save it to a file and run "npx exifreader build --config <file>". '
+            + 'Run this command again with --write to update package.json for you.');
+    }), deps);
+}
+
+function writeToPackageJson(filePath, include, deps) {
+    let outcome;
+    try {
+        outcome = writeConfigToPackageJson(filePath, include, deps.fs);
+    } catch (error) {
+        fail(deps, `Could not write the configuration to ${filePath}: ${error.message}`);
+        return;
+    }
+    if (outcome.created) {
+        deps.error(`Added an "exifreader" section with this configuration to ${filePath}.`);
+    } else if (outcome.replaced) {
+        deps.error(`Replaced ${JSON.stringify(outcome.replaced)} in the "exifreader" section of ${filePath}.`);
+    } else {
+        deps.error(`Added this configuration to the "exifreader" section of ${filePath}.`);
+    }
+    deps.error('Run "npx exifreader build" to build it.');
 }
 
 function resolveBuildConfig(args, cwd, deps) {
