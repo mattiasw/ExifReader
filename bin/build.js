@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const {execSync} = require('child_process');
 const dependentHasExifReaderConfig = require('./findDependentConfig');
+const {writeMarker, removeMarker} = require('./custom-build-marker');
 
 const EXIFREADER_ROOT_DIR = path.join(__dirname, '..');
 
@@ -26,7 +27,8 @@ if (require.main === module) {
  *
  * @param {{config?: object}} [options] When `config` is given (the `exifreader`
  *   config object), it is passed to webpack via the EXIFREADER_CUSTOM_BUILD env
- *   var. Otherwise webpack resolves the config from package.json itself.
+ *   var. Otherwise webpack resolves the config from package.json itself. A
+ *   custom build records its config and version in the dist marker file.
  */
 function runBuild(options) {
     options = options || {};
@@ -39,10 +41,13 @@ function runBuild(options) {
     if (options.config) {
         env.EXIFREADER_CUSTOM_BUILD = JSON.stringify(options.config);
     }
+    const config = env.EXIFREADER_CUSTOM_BUILD ? JSON.parse(env.EXIFREADER_CUSTOM_BUILD) : dependentHasExifReaderConfig();
+    const distDir = path.join(EXIFREADER_ROOT_DIR, 'dist');
+    removeMarker(distDir);
 
     let tmpDir;
     try {
-        if (env.EXIFREADER_CUSTOM_BUILD || hasDependentConfig()) {
+        if (config) {
             tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'exifreader-build-'));
             installCustomBuildDependencies(tmpDir);
             const buildModules = path.join(tmpDir, 'node_modules');
@@ -55,6 +60,9 @@ function runBuild(options) {
         }
 
         execSync(`npx -p ${getPackage('webpack-cli')} -p ${getPackage('webpack')} webpack`, {stdio: 'inherit', env});
+        if (config) {
+            writeMarker(distDir, config, require(path.join(EXIFREADER_ROOT_DIR, 'package.json')).version);
+        }
     } finally {
         if (tmpDir) {
             try {

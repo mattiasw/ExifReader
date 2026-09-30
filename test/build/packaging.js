@@ -14,7 +14,7 @@ const PACK_TIMEOUT_MS = 60000;
 describe('packaging', function () {
     this.timeout(PACK_TIMEOUT_MS);
 
-    it('ships src/package.json in the npm tarball', () => {
+    it('ships src/package.json and no custom build marker in the npm tarball', () => {
         // A separate cache (passed as an environment variable so the path
         // never goes through a shell) keeps the dry run from touching the
         // real npm cache, and skipping scripts keeps stdout parseable as
@@ -33,6 +33,7 @@ describe('packaging', function () {
             ).toString();
             const files = JSON.parse(output)[0].files.map((file) => file.path);
             expect(files).to.include('src/package.json');
+            expect(files).to.not.include('dist/.exifreader-custom-build.json');
         } finally {
             fs.rmSync(cachePath, {recursive: true, force: true});
         }
