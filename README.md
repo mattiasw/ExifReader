@@ -830,6 +830,38 @@ This reads the `exifreader` configuration from your `package.json`, rebuilds the
 library, and writes the result to `node_modules/exifreader/dist/exif-reader.js`.
 It works the same way with npm, yarn, and pnpm.
 
+**Derive the configuration from your images.** Instead of writing the
+configuration by hand, point `analyze` at a directory of sample images (or at
+individual files):
+
+```bash
+npx exifreader analyze ./samples
+```
+
+It reads the images with the full library and prints the smallest `include`
+configuration that reads everything found in them: the file formats, the Exif
+and IPTC tags, and the XMP, ICC, Photoshop, maker note, MPF and thumbnail
+groups. Add `--write` to put it in your `package.json`, replacing any
+`include` or `exclude` section there, then run `npx exifreader build`. To
+analyze and build in one step, and then check the result:
+
+```bash
+npx exifreader build --auto ./samples --verify
+```
+
+`--verify` (which also works without `--auto`) reads the images with both the
+full library and the installed custom bundle and exits with an error listing
+every difference.
+
+The configuration covers exactly what the sample images contain, so use a
+sample that is representative of the images your app reads. A format, tag or
+group that is not in the samples is left out of the build. Pass every sample
+in one run, since each run replaces the configuration instead of adding to it.
+`build --auto` does not save the configuration. A later `npm ci` restores the
+full bundle, and a plain `build`, `build --check` or `build --if-needed` reads
+the configuration in `package.json` instead. For a lasting setup, run `analyze --write` once and then `build` (or
+`build --if-needed` in a script). Use `build --auto` for one-off builds.
+
 **Re-run after every install.** A fresh `npm install`, `npm ci`, or upgrade
 restores the full bundle, so run `npx exifreader build` again afterwards. The
 most reliable approach is to wire it into your own build step, for example (in

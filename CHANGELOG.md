@@ -7,19 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- XMP element text is no longer lost when it spans several DOM nodes. With
-  `linkedom`, text containing an entity or character reference such as
-  `&amp;` came out as an empty object. A CDATA section, an XML comment or a
-  processing instruction inside `rdf:RDF` dropped the whole XMP group except
-  `_raw`. CDATA text is now read, and comments and processing instructions
-  are ignored.
-- With `linkedom`, reading XMP took time quadratic in the number of child
-  nodes or attributes of an element, so a small packet (for example an
-  element with thousands of `&amp;` references, about 60 KB) could take tens
-  of seconds.
-
 ### Added
 
 - `npx exifreader build --check` exits with an error when the installed bundle
@@ -33,6 +20,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   packages (a hoisted `node_modules/exifreader` or pnpm's workspace root store),
   since the last build wins there. Each custom build now records its
   configuration and version in `dist/.exifreader-custom-build.json`.
+- `npx exifreader analyze <paths...>` reads sample images and directories with
+  the full library and prints the smallest `include` configuration that reads
+  everything found in them. `--write` puts it in `package.json`.
+  `npx exifreader build --auto <paths...>` analyzes and builds in one step, and
+  `npx exifreader build --verify <paths...>` compares the installed bundle with
+  the full library on those images and exits with an error on any difference.
+
+### Fixed
+
+- XMP element text is no longer lost when it spans several DOM nodes. With
+  `linkedom`, text containing an entity or character reference such as
+  `&amp;` came out as an empty object. A CDATA section, an XML comment or a
+  processing instruction inside `rdf:RDF` dropped the whole XMP group except
+  `_raw`. CDATA text is now read, and comments and processing instructions
+  are ignored.
+- With `linkedom`, reading XMP took time quadratic in the number of child
+  nodes or attributes of an element, so a small packet (for example an
+  element with thousands of `&amp;` references, about 60 KB) could take tens
+  of seconds.
 
 ## [4.46.0] - 2026-09-26
 
