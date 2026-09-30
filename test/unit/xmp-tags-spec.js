@@ -196,6 +196,105 @@ describe('xmp-tags', function () {
                 });
             });
 
+            describe('text split over several nodes, CDATA sections and comments', () => {
+                it('should read text split at an entity reference as one string', () => {
+                    expectMyXMPTagValue('<xmp:MyXMPTag>a&amp;b</xmp:MyXMPTag>', 'a&b');
+                });
+
+                it('should read text split at a character reference as one string', () => {
+                    expectMyXMPTagValue('<xmp:MyXMPTag>a&#x41;b</xmp:MyXMPTag>', 'aAb');
+                });
+
+                it('should read the text of a CDATA section', () => {
+                    expectMyXMPTagValue('<xmp:MyXMPTag><![CDATA[a<b]]></xmp:MyXMPTag>', 'a<b');
+                });
+
+                it('should read text mixed with a CDATA section as one string', () => {
+                    expectMyXMPTagValue('<xmp:MyXMPTag>x<![CDATA[a<b]]>y</xmp:MyXMPTag>', 'xa<by');
+                });
+
+                it('should ignore a comment inside text', () => {
+                    expectMyXMPTagValue('<xmp:MyXMPTag>a<!-- c -->b</xmp:MyXMPTag>', 'ab');
+                });
+
+                it('should ignore a processing instruction inside text', () => {
+                    expectMyXMPTagValue('<xmp:MyXMPTag>a<?pi x?>b</xmp:MyXMPTag>', 'ab');
+                });
+
+                it('should keep sibling tags around a comment', () => {
+                    expectSiblingTags('<!-- note -->');
+                });
+
+                it('should keep sibling tags around a processing instruction', () => {
+                    expectSiblingTags('<?pi x?>');
+                });
+
+                it('should keep sibling tags around a CDATA section', () => {
+                    expectSiblingTags('<![CDATA[x]]>');
+                });
+
+                it('should decode a UTF-8 sequence split by a CDATA boundary once the text is joined', () => {
+                    expectMyXMPTagValue(`<xmp:MyXMPTag>caf${'\xC3'}<![CDATA[${'\xA9'}]]></xmp:MyXMPTag>`, 'café');
+                });
+
+                it('should read an element with thousands of text nodes in linear time', () => {
+                    expectMyXMPTagValue(`<xmp:MyXMPTag>${'a&amp;'.repeat(10000)}</xmp:MyXMPTag>`, 'a&'.repeat(10000));
+                });
+
+                it('should find rdf:RDF after thousands of comments in linear time', () => {
+                    const xmlString = `${META_ELEMENT_START}
+                        ${'<!-- c -->'.repeat(10000)}
+                        ${getXmlString('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711"></rdf:Description>')}
+                    ${META_ELEMENT_END}`;
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags.MyXMPTag).to.deep.equal({value: '4711', attributes: {}, description: '4711'});
+                });
+
+                // Only linkedom rebuilds the attribute list on every access, and xmldom's own
+                // parsing of this many attributes is slow enough to time out on a loaded machine.
+                if (domParserName === 'linkedom') {
+                    it('should read an element with thousands of attributes in linear time', () => {
+                        const attributes = Array.from({length: 10000}, (_, index) => ` xmp:MyXMPTag${index}="${index}"`).join('');
+                        const xmlString = getXmlString(`<rdf:Description xmlns:xmp="http://ns.example.com/xmp"${attributes}></rdf:Description>`);
+                        const dataView = getDataView(xmlString);
+                        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                        expect(tags.MyXMPTag9999).to.deep.equal({value: '9999', attributes: {}, description: '9999'});
+                    });
+                }
+
+                function expectMyXMPTagValue(element, value) {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            ${element}
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags).to.deep.equal({
+                        _raw: xmlString,
+                        MyXMPTag: {value, attributes: {}, description: value}
+                    });
+                }
+
+                function expectSiblingTags(separator) {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag0>4711</xmp:MyXMPTag0>
+                            ${separator}
+                            <xmp:MyXMPTag1>4812</xmp:MyXMPTag1>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags).to.deep.equal({
+                        _raw: xmlString,
+                        MyXMPTag0: {value: '4711', attributes: {}, description: '4711'},
+                        MyXMPTag1: {value: '4812', attributes: {}, description: '4812'}
+                    });
+                }
+            });
+
             describe('text encoding', () => {
                 // The second byte of "公" is 0x85, which xmldom turns into a line
                 // feed before parsing.
