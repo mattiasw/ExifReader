@@ -6,11 +6,12 @@ const {expect} = require('chai');
 const path = require('path');
 const fs = require('fs');
 const {rimrafSync} = require('rimraf');
-const {execSync, execFileSync} = require('child_process');
+const {execSync, execFileSync, spawnSync} = require('child_process');
 const Exif = require('./exif');
 const configurations = require('./custom-builds.json');
 
 const FIXTURES_PATH = path.join(__dirname, '..', 'fixtures');
+const MARKER_FILE_NAME = '.exifreader-custom-build.json';
 
 describe('custom configuration image outputs', () => {
     const ORIGINAL_DIR = process.cwd();
@@ -69,6 +70,14 @@ describe('custom configuration image outputs', () => {
                         cleanUp();
                     });
 
+                    it('records the custom build marker', () => {
+                        expect(fs.existsSync(path.join(installedDistDir(), MARKER_FILE_NAME))).to.equal(true);
+                    });
+
+                    it('passes build --check against the package.json config', () => {
+                        expect(runCli(['build', '--check']).status).to.equal(0);
+                    });
+
                     fs.readdirSync(path.join(FIXTURES_PATH, 'images')).forEach((imageName) => {
                         it(`matches stored image output for ${imageName}`, async () => {
                             await testFile(imageName, configuration);
@@ -79,17 +88,53 @@ describe('custom configuration image outputs', () => {
 
             if (configuration.cli) {
                 describe('cli build', () => {
+                    let checkBeforeBuild;
+
                     before(() => {
                         setUp();
                         execFileSync('npm', ['install', '--ignore-scripts', '--loglevel=error', PACKAGE], {stdio: 'ignore'});
                         updatePackageJson(configuration.config);
                         const binDir = path.join(TEMP_PROJECT_DIR, 'node_modules', '.bin');
                         expect(fs.existsSync(path.join(binDir, 'exifreader')) || fs.existsSync(path.join(binDir, 'exifreader.cmd'))).to.equal(true);
+                        checkBeforeBuild = runCli(['build', '--check']);
                         execSync('node node_modules/exifreader/bin/cli.js build', {cwd: TEMP_PROJECT_DIR, stdio: 'ignore'});
                     });
 
                     after(() => {
                         cleanUp();
+                    });
+
+                    it('fails build --check on the stock bundle before building', () => {
+                        expect(checkBeforeBuild.status).to.not.equal(0);
+                        expect(checkBeforeBuild.stderr).to.contain('stock full build');
+                    });
+
+                    it('records the custom build marker', () => {
+                        expect(fs.existsSync(path.join(installedDistDir(), MARKER_FILE_NAME))).to.equal(true);
+                    });
+
+                    it('passes build --check after building', () => {
+                        expect(runCli(['build', '--check']).status).to.equal(0);
+                    });
+
+                    it('passes build --check with the same config from a --config file', () => {
+                        const configPath = path.join(TEMP_PROJECT_DIR, 'exifreader-config.json');
+                        fs.writeFileSync(configPath, JSON.stringify(configuration.config));
+                        expect(runCli(['build', '--check', '--config', configPath]).status).to.equal(0);
+                    });
+
+                    it('passes build --check with the same config from EXIFREADER_CUSTOM_BUILD', () => {
+                        const env = {...process.env, EXIFREADER_CUSTOM_BUILD: JSON.stringify(configuration.config)};
+                        expect(runCli(['build', '--check'], env).status).to.equal(0);
+                    });
+
+                    it('does not rebuild with build --if-needed when the bundle is up to date', () => {
+                        const bundlePath = path.join(installedDistDir(), 'exif-reader.js');
+                        const modifiedBefore = fs.statSync(bundlePath).mtimeMs;
+                        const result = runCli(['build', '--if-needed']);
+                        expect(result.status).to.equal(0);
+                        expect(result.stdout).to.contain('up to date');
+                        expect(fs.statSync(bundlePath).mtimeMs).to.equal(modifiedBefore);
                     });
 
                     fs.readdirSync(path.join(FIXTURES_PATH, 'images')).forEach((imageName) => {
@@ -132,6 +177,18 @@ describe('custom configuration image outputs', () => {
         process.chdir(ORIGINAL_DIR);
         rimrafSync(PACKAGE, {disableGlob: true});
         rimrafSync(TEMP_PROJECT_DIR, {disableGlob: true});
+    }
+
+    function installedDistDir() {
+        return path.join(TEMP_PROJECT_DIR, 'node_modules', 'exifreader', 'dist');
+    }
+
+    function runCli(args, env) {
+        return spawnSync('node', [path.join('node_modules', 'exifreader', 'bin', 'cli.js'), ...args], {
+            cwd: TEMP_PROJECT_DIR,
+            encoding: 'utf8',
+            env: env || process.env
+        });
     }
 
     function updatePackageJson(config) {

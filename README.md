@@ -837,9 +837,28 @@ your own `package.json`):
 
 ```json
 "scripts": {
-    "prebuild": "exifreader build"
+    "prebuild": "exifreader build --if-needed"
 }
 ```
+
+With `--if-needed` the rebuild is skipped when the installed bundle was already
+built from the current configuration and exifreader version. Each custom build
+records these in `node_modules/exifreader/dist/.exifreader-custom-build.json`.
+
+To catch a stock or outdated bundle in CI, add a step that runs:
+
+```bash
+npx exifreader build --check
+```
+
+It never builds anything. It exits with a non-zero code when the installed
+bundle is the stock full build or was built from a different configuration or
+exifreader version, and with 0 when it is up to date or when no configuration is
+found. `--check` and `--if-needed` only see the configuration source they are
+given, so pass them the same one as the build: a project that builds with
+`--config exifreader.json` checks with
+`npx exifreader build --check --config exifreader.json`, since without it no
+configuration is found and `--check` exits with 0.
 
 **Deprecated: automatic rebuild on install.** Older versions rebuilt the library
 automatically through an npm `postinstall` script, so a plain install or `npm
@@ -853,11 +872,16 @@ If you are using `vite`, you will need to [clear the dependency cache](https://v
 after a rebuild.
 
 **Advanced and monorepos.** Instead of the `package.json` configuration you can
-pass the same `include`/`exclude` object as JSON in the `EXIFREADER_CUSTOM_BUILD`
-environment variable, which takes priority over `package.json`. In a monorepo,
+put the same `include`/`exclude` object in a JSON file and pass it with
+`npx exifreader build --config <path>` (a relative path is resolved from the
+current directory), or pass it as JSON in the `EXIFREADER_CUSTOM_BUILD`
+environment variable. `--config` takes priority over `EXIFREADER_CUSTOM_BUILD`,
+which takes priority over `package.json`. In a monorepo,
 `npx exifreader build` reads the configuration from the package you run it in,
-but a hoisted `node_modules/exifreader` is shared by every workspace package, so
-there is only one custom bundle and the last build wins.
+but a hoisted `node_modules/exifreader` (or, with pnpm, the copy in the
+workspace root's `node_modules/.pnpm`) is shared by every workspace package, so
+there is only one custom bundle and the last build wins. The CLI prints a
+warning when you build from a workspace package into such a shared copy.
 
 If you're using the include pattern config, remember to include everything you
 want to use. If you want `xmp` and don't specify any file types, you will get

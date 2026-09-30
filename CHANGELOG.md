@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   element with thousands of `&amp;` references, about 60 KB) could take tens
   of seconds.
 
+### Added
+
+- `npx exifreader build --check` exits with an error when the installed bundle
+  is the stock full build or was built from a different configuration or
+  exifreader version, for use in CI. `npx exifreader build --if-needed` skips
+  the rebuild when the bundle is already up to date, which makes it a good fit
+  for a `prebuild` script. `npx exifreader build --config <path>` reads the
+  custom build configuration from a JSON file and takes priority over
+  `EXIFREADER_CUSTOM_BUILD` and `package.json`. The CLI also warns when a
+  workspace package builds into an exifreader copy shared with other workspace
+  packages (a hoisted `node_modules/exifreader` or pnpm's workspace root store),
+  since the last build wins there. Each custom build now records its
+  configuration and version in `dist/.exifreader-custom-build.json`.
+
 ## [4.46.0] - 2026-09-26
 
 ### Fixed
