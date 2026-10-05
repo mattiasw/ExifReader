@@ -12,6 +12,14 @@ export default {
     read
 };
 
+// Node names differ between parsers (#cdata-section vs #cdatasection), so
+// nodes are told apart by their DOM nodeType.
+const ELEMENT_NODE = 1;
+const TEXT_NODE = 3;
+const CDATA_SECTION_NODE = 4;
+const PROCESSING_INSTRUCTION_NODE = 7;
+const COMMENT_NODE = 8;
+
 class ParseError extends Error {
     constructor(message) {
         super(message);
@@ -178,12 +186,14 @@ function parseFromString(domParser, xmlString, isRetry = false) {
 }
 
 function getRDF(node) {
-    for (let i = 0; i < node.childNodes.length; i++) {
-        if (node.childNodes[i].tagName === 'x:xmpmeta') {
-            return getRDF(node.childNodes[i]);
+    const childNodes = node.childNodes;
+
+    for (let i = 0; i < childNodes.length; i++) {
+        if (childNodes[i].tagName === 'x:xmpmeta') {
+            return getRDF(childNodes[i]);
         }
-        if (node.childNodes[i].tagName === 'rdf:RDF') {
-            return node.childNodes[i];
+        if (childNodes[i].tagName === 'rdf:RDF') {
+            return childNodes[i];
         }
     }
 
@@ -197,28 +207,41 @@ function convertToObject(node, isTopNode, decodeValue) {
         if (isTopNode) {
             return {};
         }
-        return decodeValue(getTextValue(childNodes[0]));
+        return decodeValue(getTextValue(childNodes));
     }
 
     return getElementsFromNodes(childNodes, decodeValue);
 }
 
 function getChildNodes(node) {
-    const elements = [];
+    const childNodes = node.childNodes;
+    const nodes = [];
 
-    for (let i = 0; i < node.childNodes.length; i++) {
-        elements.push(node.childNodes[i]);
+    for (let i = 0; i < childNodes.length; i++) {
+        if (!isCommentOrProcessingInstruction(childNodes[i])) {
+            nodes.push(childNodes[i]);
+        }
     }
 
-    return elements;
+    return nodes;
+}
+
+function isCommentOrProcessingInstruction(node) {
+    return node.nodeType === COMMENT_NODE || node.nodeType === PROCESSING_INSTRUCTION_NODE;
 }
 
 function hasTextOnlyContent(nodes) {
-    return (nodes.length === 1) && (nodes[0].nodeName === '#text');
+    return nodes.length > 0 && nodes.every(isText);
 }
 
-function getTextValue(node) {
-    return node.nodeValue;
+function isText(node) {
+    return node.nodeType === TEXT_NODE || node.nodeType === CDATA_SECTION_NODE;
+}
+
+// linkedom splits text at every entity or character reference, and a CDATA
+// section is a node of its own, so the text of an element can span several nodes.
+function getTextValue(nodes) {
+    return nodes.map((node) => node.nodeValue).join('');
 }
 
 // The elements object must not have a prototype. The element names come from
@@ -246,7 +269,7 @@ function getElementsFromNodes(nodes, decodeValue) {
 }
 
 function isElement(node) {
-    return (node.nodeName) && (node.nodeName !== '#text');
+    return node.nodeType === ELEMENT_NODE;
 }
 
 function getElementFromNode(node, decodeValue) {
@@ -257,10 +280,11 @@ function getElementFromNode(node, decodeValue) {
 }
 
 function getAttributes(element, decodeValue) {
+    const elementAttributes = element.attributes;
     const attributes = {};
 
-    for (let i = 0; i < element.attributes.length; i++) {
-        setProperty(attributes, element.attributes[i].nodeName, decodeValue(element.attributes[i].value));
+    for (let i = 0; i < elementAttributes.length; i++) {
+        setProperty(attributes, elementAttributes[i].nodeName, decodeValue(elementAttributes[i].value));
     }
 
     return attributes;
