@@ -613,9 +613,11 @@ const tags = await ExifReader.load(file, {
 #### Limiting decompressed metadata size
 
 To avoid excessive memory use from pathological compressed inputs, ExifReader
-caps the size of any single decompressed metadata block. The default limit is
-128 MiB, which is well above any realistic legitimate value. You can override
-it via the `maxDecompressedSize` field on the `decompress` option (in bytes):
+caps the total decompressed size of the compressed metadata blocks in a file.
+The limit covers all blocks decompressed in one `load()` call together, not
+each block on its own. The default limit is 128 MiB, which is well above any
+realistic legitimate value. You can override it via the `maxDecompressedSize`
+field on the `decompress` option (in bytes):
 
 ```javascript
 const tags = await ExifReader.load(file, {
@@ -626,10 +628,14 @@ const tags = await ExifReader.load(file, {
 });
 ```
 
-If a compressed block would expand beyond the limit, that block is skipped, a
-warning is logged via `console.warn`, and the rest of the tags are returned as
-usual. The limit applies to the built-in Compression Streams paths and to any
-result returned by a custom `brotli`/`deflate` function.
+If a compressed block would take the total beyond the limit, that block and
+every later compressed block are skipped, one warning is logged via
+`console.warn`, and the rest of the tags are returned as usual. Blocks that
+are decompressed at the same time, such as several PNG text chunks, can all be
+skipped when together they go beyond the limit. The limit applies to the
+built-in Compression Streams paths and to any result returned by a custom
+`brotli`/`deflate` function. With `length: 'auto'`, each read attempt parses
+the bytes fetched so far and has its own total.
 
 With `async: true`, ExifReader decompresses at most the first 255 compressed
 PNG text chunks (zTXt and compressed iTXt) of a file and skips later ones.

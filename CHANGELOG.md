@@ -78,6 +78,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nested in a property, took about 7 seconds per MB. Values like these fit in
   formats that allow large XMP packets, such as PNG, WebP and JPEG with
   extended XMP.
+- The `maxDecompressedSize` limit applied to each compressed metadata block
+  separately, so a PNG with many small compressed text chunks, or a file with
+  several compressed blocks in other formats, could make `load()` with
+  `async: true` keep many times the limit: a 131 KB PNG kept 128 Mi
+  characters with a 17 MiB limit. The limit now applies to the total
+  decompressed size of all compressed blocks in the file, and once a block
+  would go over it, that block and the remaining compressed blocks are
+  skipped.
 
 ## [4.46.0] - 2026-09-26
 

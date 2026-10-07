@@ -8,7 +8,7 @@
  */
 /* global Buffer */
 
-import {objectAssign, decompress, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray, assertPromiseSupport} from './utils.js';
+import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray, assertPromiseSupport} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import Constants from './constants.js';
@@ -93,6 +93,7 @@ export function loadView(
     } = {}
 ) {
     dataView = getSelfContainedDataView(dataView);
+    decompressConfig = withDecompressBudget(decompressConfig);
 
     const tagFilter = createTagFilter({includeTags, excludeTags});
     const parsedGroups = Object.create(null);

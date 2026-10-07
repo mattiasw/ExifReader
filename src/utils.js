@@ -212,8 +212,29 @@ export const COMPRESSION_METHOD_DEFLATE = 0;
 export const COMPRESSION_METHOD_BROTLI = 'brotli';
 export const DEFAULT_MAX_DECOMPRESSED_SIZE = 128 * 1024 * 1024;
 
+/**
+ * Returns a copy of the decompress config whose compressed blocks share one
+ * total budget of maxDecompressedSize bytes. The input is never mutated.
+ *
+ * @param {Object|undefined} decompressConfig - The caller's decompress option.
+ * @returns {Object} {brotli, deflate, maxDecompressedSize, budget: {remaining, warned}}
+ */
+export function withDecompressBudget(decompressConfig) {
+    return {
+        brotli: decompressConfig ? decompressConfig.brotli : undefined,
+        deflate: decompressConfig ? decompressConfig.deflate : undefined,
+        maxDecompressedSize: decompressConfig ? decompressConfig.maxDecompressedSize : undefined,
+        budget: {remaining: getMaxDecompressedSize(decompressConfig), warned: false}
+    };
+}
+
 export function decompress(dataView, compressionMethod, encoding, returnType = 'string', decompressConfig) {
     const maxDecompressedSize = getMaxDecompressedSize(decompressConfig);
+    const budget = getDecompressBudget(decompressConfig, maxDecompressedSize);
+
+    if (compressionMethod !== COMPRESSION_METHOD_NONE && budget.remaining < 0) {
+        return rejectExceedsMax(budget, maxDecompressedSize);
+    }
 
     if (decompressConfig && compressionMethod !== COMPRESSION_METHOD_NONE) {
         const decompressType = compressionMethod === COMPRESSION_METHOD_DEFLATE ? 'deflate' : 'brotli';
@@ -221,8 +242,9 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
         if (typeof customFn === 'function') {
             const uint8 = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
             return Promise.resolve(customFn(uint8)).then((result) => {
-                if (getResultByteLength(result) > maxDecompressedSize) {
-                    return rejectExceedsMax(maxDecompressedSize);
+                budget.remaining -= getResultByteLength(result);
+                if (budget.remaining < 0) {
+                    return rejectExceedsMax(budget, maxDecompressedSize);
                 }
                 if (returnType === 'dataview') {
                     if (result instanceof ArrayBuffer) {
@@ -243,7 +265,7 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
 
     if (compressionMethod === COMPRESSION_METHOD_DEFLATE) {
         if (typeof DecompressionStream === 'function') {
-            return readBoundedDecompressedStream(dataView, 'deflate', maxDecompressedSize)
+            return readBoundedDecompressedStream(dataView, 'deflate', budget, maxDecompressedSize)
                 .then((arrayBuffer) => decodeBuffer(arrayBuffer, returnType, encoding));
         }
     }
@@ -251,7 +273,7 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
     if (compressionMethod === COMPRESSION_METHOD_BROTLI) {
         if (typeof DecompressionStream === 'function') {
             try {
-                return readBoundedDecompressedStream(dataView, 'brotli', maxDecompressedSize)
+                return readBoundedDecompressedStream(dataView, 'brotli', budget, maxDecompressedSize)
                     .then((arrayBuffer) => decodeBuffer(arrayBuffer, returnType, encoding));
             } catch (_error) {
                 // brotli not supported by this DecompressionStream implementation
@@ -283,7 +305,14 @@ function getMaxDecompressedSize(decompressConfig) {
     return DEFAULT_MAX_DECOMPRESSED_SIZE;
 }
 
-function readBoundedDecompressedStream(dataView, format, maxDecompressedSize) {
+function getDecompressBudget(decompressConfig, maxDecompressedSize) {
+    if (decompressConfig && decompressConfig.budget) {
+        return decompressConfig.budget;
+    }
+    return {remaining: maxDecompressedSize, warned: false};
+}
+
+function readBoundedDecompressedStream(dataView, format, budget, maxDecompressedSize) {
     const decompressionStream = new DecompressionStream(format);
     const decompressedStream = new Blob([dataView]).stream().pipeThrough(decompressionStream);
     const reader = decompressedStream.getReader();
@@ -298,8 +327,11 @@ function readBoundedDecompressedStream(dataView, format, maxDecompressedSize) {
                 return concatChunks(chunks, total);
             }
             total += value.byteLength;
-            if (total > maxDecompressedSize) {
-                return reader.cancel().then(() => rejectExceedsMax(maxDecompressedSize));
+            // Charge before checking and never give bytes back, so an
+            // exceeded budget stays exhausted for every later block.
+            budget.remaining -= value.byteLength;
+            if (budget.remaining < 0) {
+                return reader.cancel().then(() => rejectExceedsMax(budget, maxDecompressedSize));
             }
             chunks.push(value);
             return pump();
@@ -331,10 +363,11 @@ function getResultByteLength(result) {
     return 0;
 }
 
-function rejectExceedsMax(maxDecompressedSize) {
-    if (typeof console !== 'undefined' && typeof console.warn === 'function') { // eslint-disable-line no-console
+function rejectExceedsMax(budget, maxDecompressedSize) {
+    if (!budget.warned && typeof console !== 'undefined' && typeof console.warn === 'function') { // eslint-disable-line no-console
+        budget.warned = true;
         // eslint-disable-next-line no-console
-        console.warn(`ExifReader: skipped a compressed metadata block that would exceed the maximum decompressed size of ${maxDecompressedSize} bytes.`);
+        console.warn(`ExifReader: the total decompressed metadata size for this call would exceed the maximum of ${maxDecompressedSize} bytes, so this and any later compressed metadata blocks are skipped.`);
     }
-    return Promise.reject(`Decompressed metadata exceeded the maximum allowed size of ${maxDecompressedSize} bytes.`);
+    return Promise.reject(`Decompressed metadata exceeded the maximum allowed total size of ${maxDecompressedSize} bytes.`);
 }

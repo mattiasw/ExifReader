@@ -8,7 +8,7 @@ import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../src/image-header-png.js';
 import PngTextTags from '../../src/png-text-tags.js';
 import Tags from '../../src/tags.js';
 import IptcTags from '../../src/iptc-tags.js';
-import {getStringFromDataView} from '../../src/utils.js';
+import {getStringFromDataView, withDecompressBudget} from '../../src/utils.js';
 import DataViewWrapper from '../../src/dataview.js';
 
 describe('png-text-tags', () => {
@@ -491,6 +491,35 @@ describe('png-text-tags', () => {
             } finally {
                 process.removeListener('unhandledRejection', onUnhandledRejection);
             }
+        });
+
+        it('should stop keeping decompressed text once the total of all chunks reaches the shared limit', async () => {
+            const VALUE_LENGTH = 4 * 1024;
+            const MAX_DECOMPRESSED_SIZE = 10 * 1024;
+            const value = 'A'.repeat(VALUE_LENGTH);
+            const compressedValue = new Uint8Array((await compress(toBytes(value))).buffer);
+            const {dataView, chunks} = buildTextChunks(
+                Array.from({length: 8}, (_, index) => getZtxtChunk('k' + index, compressedValue))
+            );
+            const decompressConfig = withDecompressBudget({maxDecompressedSize: MAX_DECOMPRESSED_SIZE});
+            const unknownCompressionValue = '<text using unknown compression>'.split('');
+
+            const restoreWarn = swapProperties(console, {warn: () => undefined});
+            let tags;
+            try {
+                tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+            } finally {
+                restoreWarn();
+            }
+
+            const values = tags.map((tag, index) => tag['k' + index].value);
+            const fullValues = values.filter((tagValue) => tagValue === value);
+            const skippedValues = values.filter((tagValue) => tagValue !== value);
+            expect(tags).to.have.lengthOf(8);
+            expect(skippedValues).to.deep.equal(Array(skippedValues.length).fill(unknownCompressionValue));
+            expect(fullValues.length * VALUE_LENGTH).to.be.at.most(MAX_DECOMPRESSED_SIZE);
+            expect(fullValues).to.not.be.empty;
+            expect(skippedValues).to.not.be.empty;
         });
 
         function getExpectedTags(start, end) {

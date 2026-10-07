@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView, getConsoleWarnSpy} from './test-utils.js';
+import {getDataView, getConsoleWarnSpy, swapProperties} from './test-utils.js';
 import * as Utils from '../../src/utils.js';
 
 describe('utils', () => {
@@ -400,6 +400,165 @@ describe('utils', () => {
 
             expect(result.byteLength).to.equal(decompressedSize);
             expect(warnSpy.hasWarned).to.equal(false);
+        });
+
+        describe('total budget', () => {
+            it('should copy the caller\'s config and add a budget with the configured limit', () => {
+                const brotli = () => undefined;
+                const deflate = () => undefined;
+                const config = {brotli, deflate, maxDecompressedSize: 4711};
+
+                const result = Utils.withDecompressBudget(config);
+
+                expect(result).to.not.equal(config);
+                expect(result.brotli).to.equal(brotli);
+                expect(result.deflate).to.equal(deflate);
+                expect(result.maxDecompressedSize).to.equal(4711);
+                expect(result.budget.remaining).to.equal(4711);
+                expect(Object.keys(config)).to.deep.equal(['brotli', 'deflate', 'maxDecompressedSize']);
+            });
+
+            it('should use the default limit without a config', () => {
+                const result = Utils.withDecompressBudget(undefined);
+
+                expect(result.budget.remaining).to.equal(Utils.DEFAULT_MAX_DECOMPRESSED_SIZE);
+            });
+
+            it('should reject a streamed block once the shared total is exceeded', async () => {
+                const config = Utils.withDecompressBudget({maxDecompressedSize: 6 * 1024});
+                const compressed = await compressDeflate(new Uint8Array(4 * 1024));
+
+                const first = await decompressDeflate(compressed, config);
+                const secondError = await getRejection(decompressDeflate(compressed, config));
+
+                expect(first.byteLength).to.equal(4 * 1024);
+                expect(secondError).to.match(/total size of 6144 bytes/);
+                expect(warnSpy.hasWarned).to.equal(true);
+            });
+
+            it('should skip a later streamed block without decompressing it once the total is exceeded', async () => {
+                const config = Utils.withDecompressBudget({maxDecompressedSize: 6 * 1024});
+                const compressed = await compressDeflate(new Uint8Array(4 * 1024));
+                const tiny = await compressDeflate(new Uint8Array(1));
+                await decompressDeflate(compressed, config);
+                await getRejection(decompressDeflate(compressed, config));
+
+                const OriginalDecompressionStream = globalThis.DecompressionStream;
+                let constructed = 0;
+                const restore = swapProperties(globalThis, {
+                    DecompressionStream: class extends OriginalDecompressionStream {
+                        constructor(format) {
+                            super(format);
+                            constructed++;
+                        }
+                    }
+                });
+                try {
+                    const error = await getRejection(decompressDeflate(tiny, config));
+
+                    expect(error).to.match(/total size/);
+                    expect(constructed).to.equal(0);
+                } finally {
+                    restore();
+                }
+            });
+
+            it('should reject a custom function result once the shared total is exceeded', async () => {
+                const config = Utils.withDecompressBudget({
+                    deflate: () => new Uint8Array(100),
+                    maxDecompressedSize: 150
+                });
+                const dataView = new DataView(new ArrayBuffer(1));
+
+                const first = await decompressDeflate(dataView.buffer, config);
+                const secondError = await getRejection(decompressDeflate(dataView.buffer, config));
+
+                expect(first.byteLength).to.equal(100);
+                expect(secondError).to.match(/total size of 150 bytes/);
+                expect(warnSpy.hasWarned).to.equal(true);
+            });
+
+            it('should accept custom function results that use up the total exactly, and an empty one after them', async () => {
+                const sizes = [75, 75, 0];
+                let calls = 0;
+                const config = Utils.withDecompressBudget({
+                    deflate: () => new Uint8Array(sizes[calls++]),
+                    maxDecompressedSize: 150
+                });
+                const buffer = new ArrayBuffer(1);
+
+                const results = [
+                    await decompressDeflate(buffer, config),
+                    await decompressDeflate(buffer, config),
+                    await decompressDeflate(buffer, config)
+                ];
+
+                expect(results.map((result) => result.byteLength)).to.deep.equal([75, 75, 0]);
+                expect(calls).to.equal(3);
+                expect(warnSpy.hasWarned).to.equal(false);
+            });
+
+            it('should not call the custom function for a later block once the total is exceeded', async () => {
+                const sizes = [100, 100, 1];
+                let calls = 0;
+                const config = Utils.withDecompressBudget({
+                    deflate: () => new Uint8Array(sizes[calls++]),
+                    maxDecompressedSize: 150
+                });
+                const buffer = new ArrayBuffer(1);
+                await decompressDeflate(buffer, config);
+                await getRejection(decompressDeflate(buffer, config));
+
+                const error = await getRejection(decompressDeflate(buffer, config));
+
+                expect(error).to.match(/total size of 150 bytes/);
+                expect(calls).to.equal(2);
+            });
+
+            it('should warn only once per budget', async () => {
+                const config = Utils.withDecompressBudget({
+                    deflate: () => new Uint8Array(100),
+                    maxDecompressedSize: 150
+                });
+                const buffer = new ArrayBuffer(1);
+                let warnCount = 0;
+                const restore = swapProperties(console, {warn: () => {
+                    warnCount++;
+                }});
+                try {
+                    await decompressDeflate(buffer, config);
+                    await getRejection(decompressDeflate(buffer, config));
+                    await getRejection(decompressDeflate(buffer, config));
+                } finally {
+                    restore();
+                }
+
+                expect(warnCount).to.equal(1);
+            });
+
+            function decompressDeflate(buffer, config) {
+                return Utils.decompress(
+                    new DataView(buffer),
+                    Utils.COMPRESSION_METHOD_DEFLATE,
+                    'latin1',
+                    'dataview',
+                    config
+                );
+            }
+
+            function compressDeflate(input) {
+                const compressedStream = new Blob([input]).stream().pipeThrough(
+                    new CompressionStream('deflate')
+                );
+                return new Response(compressedStream).arrayBuffer();
+            }
+
+            function getRejection(promise) {
+                return promise.then(
+                    () => expect.fail('Decompression should have been rejected.'),
+                    (error) => error
+                );
+            }
         });
     });
 
