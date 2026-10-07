@@ -20,6 +20,9 @@ const CDATA_SECTION_NODE = 4;
 const PROCESSING_INSTRUCTION_NODE = 7;
 const COMMENT_NODE = 8;
 
+const PACKET_TRAILER_START = '<?xpacket end="';
+const PACKET_TRAILER_END = '"?>';
+
 class ParseError extends Error {
     constructor(message) {
         super(message);
@@ -165,7 +168,27 @@ function keepValue(value) {
 }
 
 function trimXmlSource(xmlSource) {
-    return xmlSource.replace(/^.+(<\?xpacket begin)/, '$1').replace(/(<\?xpacket end=".*"\?>).+$/, '$1');
+    return trimAfterPacketTrailer(xmlSource.replace(/^.+(<\?xpacket begin)/, '$1'));
+}
+
+// Gives the same result as the former /(<\?xpacket end=".*"\?>).+$/ in linear
+// time: only text after a trailer on the last line is cut off.
+function trimAfterPacketTrailer(xmlSource) {
+    const lastLineStart = Math.max(
+        xmlSource.lastIndexOf('\n'),
+        xmlSource.lastIndexOf('\r'),
+        xmlSource.lastIndexOf('\u2028'),
+        xmlSource.lastIndexOf('\u2029')
+    ) + 1;
+    const trailerStart = xmlSource.indexOf(PACKET_TRAILER_START, lastLineStart);
+    if (trailerStart === -1) {
+        return xmlSource;
+    }
+    const trailerEnd = xmlSource.lastIndexOf(PACKET_TRAILER_END, xmlSource.length - PACKET_TRAILER_END.length - 1);
+    if (trailerEnd < trailerStart + PACKET_TRAILER_START.length) {
+        return xmlSource;
+    }
+    return xmlSource.slice(0, trailerEnd + PACKET_TRAILER_END.length);
 }
 
 function parseFromString(domParser, xmlString, isRetry = false) {
