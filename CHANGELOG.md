@@ -86,6 +86,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decompressed size of all compressed blocks in the file, and once a block
   would go over it, that block and the remaining compressed blocks are
   skipped.
+- With a numeric `length`, loading a URL now stops reading after `length`
+  bytes when the server ignores the Range request and sends the whole file,
+  so a large or endless response no longer uses up all memory. This applies
+  wherever `fetch` supports streaming response bodies, as in current browsers
+  and Node.js, and in Node.js when no global `fetch` is defined.
 
 ## [4.46.0] - 2026-09-26
 
