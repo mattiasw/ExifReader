@@ -49,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   zero bytes, so a TIFF of a few hundred bytes could block `load()` for
   seconds and use over a gigabyte of memory. Such a tag now gets an empty
   description.
+- A PNG with thousands of compressed text chunks (zTXt or compressed iTXt)
+  read with `async: true` took time quadratic in the number of chunks and
+  memory far above the file size: a 223 KB file took about 8 seconds and
+  500 MB. Decompressions now run a few at a time, their results are merged in
+  linear time, and at most 255 compressed text chunks are decompressed per
+  file.
 
 ## [4.46.0] - 2026-09-26
 
