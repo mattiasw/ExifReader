@@ -55,6 +55,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   500 MB. Decompressions now run a few at a time, their results are merged in
   linear time, and at most 255 compressed text chunks are decompressed per
   file.
+- Fixed a denial-of-service vulnerability where a crafted XMP packet in any
+  image format, or a standalone XMP file, could block `load()` for minutes to
+  hours. Two steps took super-linear time: trimming the end of the packet
+  before parsing (cubic), and, when the packet failed to parse, checking
+  whether the error was a missing namespace (quadratic in the length of the
+  error message, which can repeat part of the packet). Both are now linear.
+  This affects environments where a DOM parser is available: web browsers, and
+  Node.js when the `domParser` option is used or when `@xmldom/xmldom` is
+  installed (which it is by default, as an `optionalDependency`).
 
 ## [4.46.0] - 2026-09-26
 

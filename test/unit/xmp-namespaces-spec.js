@@ -14,6 +14,52 @@ describe('xmp-namespaces', function () {
         it('should not detect parse error if the error is not a parse error', function () {
             expect(isMissingNamespaceError({message: 'some other error message'})).to.be.false;
         });
+
+        it('should detect the Firefox parse errors', function () {
+            expect(isMissingNamespaceError({message: 'XML Parsing Error: prefix not bound to a namespace\nLocation: x'})).to.be.true;
+            expect(isMissingNamespaceError({message: 'XML-tolkningsfel: prefix inte bundet till en namnrymd\nPlats: x'})).to.be.true;
+        });
+
+        it('should detect the Chrome parse error', function () {
+            expect(isMissingNamespaceError({message: 'error on line 1 at column 30: Namespace prefix a on b is not defined'})).to.be.true;
+            expect(isMissingNamespaceError({message: 'Namespace prefix x is not defined'})).to.be.true;
+            expect(isMissingNamespaceError({message: 'Namespace prefix   is not defined'})).to.be.true;
+        });
+
+        it('should need a character between the two parts of the Chrome parse error', function () {
+            expect(isMissingNamespaceError({message: 'Namespace prefix is not defined'})).to.be.false;
+            expect(isMissingNamespaceError({message: 'Namespace prefix  is not defined'})).to.be.false;
+        });
+
+        it('should need the start of the Chrome parse error', function () {
+            expect(isMissingNamespaceError({message: 'The namespace prefix a on b is not defined'})).to.be.false;
+        });
+
+        it('should use the last end of the Chrome parse error on a line', function () {
+            expect(isMissingNamespaceError({message: 'Namespace prefix is not defined x is not defined'})).to.be.true;
+        });
+
+        for (const [name, terminator] of [['\\n', '\n'], ['\\r', '\r'], ['\\u2028', '\u2028'], ['\\u2029', '\u2029']]) {
+            it(`should not detect the Chrome parse error split over two lines by ${name}`, function () {
+                expect(isMissingNamespaceError({message: `Namespace prefix a on b${terminator} is not defined`})).to.be.false;
+            });
+        }
+
+        it('should detect the Chrome parse error on a later line', function () {
+            expect(isMissingNamespaceError({message: 'Namespace prefix a\nNamespace prefix a on b is not defined'})).to.be.true;
+        });
+
+        it('should not detect a parse error in a message that is not a string', function () {
+            expect(isMissingNamespaceError({message: {}})).to.be.false;
+            expect(isMissingNamespaceError({message: undefined})).to.be.false;
+        });
+
+        // The Chrome check used to retry the text between the two parts from
+        // every start part on the line, which is quadratic and makes this time out.
+        it('should classify a long line of Chrome parse error starts in linear time', function () {
+            this.timeout(4000);
+            expect(isMissingNamespaceError({message: 'Namespace prefix '.repeat(40000)})).to.be.false;
+        });
     });
 
     describe('addMissingNamespaces', function () {

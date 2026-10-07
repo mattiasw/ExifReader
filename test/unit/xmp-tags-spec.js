@@ -2064,6 +2064,120 @@ describe('xmp-tags', function () {
         });
     }
 
+    describe('packet trimming before parsing', () => {
+        const DESCRIPTION = '<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="4711"></rdf:Description>';
+
+        it('should trim garbage after the trailer on the same line', () => {
+            const text = getXmlStringWithPacketWrapper(DESCRIPTION);
+
+            const {tags, received} = readWithRecordingParser(text + '\0\0\0');
+
+            expect(received[0]).to.equal(text);
+            expect(tags.MyXMPTag0.value).to.equal('4711');
+        });
+
+        for (const [name, terminator] of [['\\n', '\n'], ['\\r', '\r'], ['\\u2028', '\u2028'], ['\\u2029', '\u2029']]) {
+            it(`should not trim garbage after the trailer on a following line after ${name}`, () => {
+                const text = getXmlStringWithPacketWrapper(DESCRIPTION) + terminator + 'garbage';
+
+                const {received} = readWithRecordingParser(text);
+
+                expect(received[0]).to.equal(text);
+            });
+        }
+
+        it('should not trim a trailer that ends the input', () => {
+            const text = getXmlStringWithPacketWrapper(DESCRIPTION);
+
+            const {received} = readWithRecordingParser(text);
+
+            expect(received[0]).to.equal(text);
+        });
+
+        it('should keep everything through the last trailer end that has a character after it', () => {
+            const text = getXmlStringWithPacketWrapper(DESCRIPTION);
+
+            const {received} = readWithRecordingParser(text + 'junk"?>x');
+
+            expect(received[0]).to.equal(text + 'junk"?>');
+        });
+
+        it('should not keep a trailer end that ends the input', () => {
+            const text = getXmlStringWithPacketWrapper(DESCRIPTION);
+
+            const {received} = readWithRecordingParser(text + 'junk"?>');
+
+            expect(received[0]).to.equal(text);
+        });
+
+        it('should trim from the first trailer start on the last line', () => {
+            const text = getXmlStringWithPacketWrapper(DESCRIPTION);
+
+            const {received} = readWithRecordingParser(text + 'x<?xpacket end="');
+
+            expect(received[0]).to.equal(text);
+        });
+
+        it('should not use the trailer start\'s own quote as the trailer end', () => {
+            const text = getXmlString(DESCRIPTION) + '\n<?xpacket end="?>x';
+
+            const {received} = readWithRecordingParser(text);
+
+            expect(received[0]).to.equal(text);
+        });
+
+        it('should trim after a trailer end that directly follows the trailer start', () => {
+            const text = getXmlString(DESCRIPTION) + '\n<?xpacket end=""?>';
+
+            const {received} = readWithRecordingParser(text + 'x');
+
+            expect(received[0]).to.equal(text);
+        });
+
+        it('should not trim after a trailer with single quotes', () => {
+            const text = getXmlString(DESCRIPTION) + '\n<?xpacket end=\'w\'?>\0\0\0';
+
+            const {received} = readWithRecordingParser(text);
+
+            expect(received[0]).to.equal(text);
+        });
+
+        it('should not trim when the trailer start is only on an earlier line', () => {
+            const text = getXmlString(DESCRIPTION) + '\n<?xpacket end="w"?>x\njunk"?>y';
+
+            const {received} = readWithRecordingParser(text);
+
+            expect(received[0]).to.equal(text);
+        });
+
+        it('should trim garbage before the packet header on the first line', () => {
+            const text = getXmlStringWithPacketWrapper(DESCRIPTION);
+
+            const {received} = readWithRecordingParser('junk' + text);
+
+            expect(received[0]).to.equal(text);
+        });
+
+        // Every trailer start used to be tried against every trailer end on
+        // the line, which is cubic time and makes this time out.
+        it('should trim a packet with many trailer candidates on one line in linear time', function () {
+            this.timeout(4000);
+            const xmlString = '<?xpacket end=""?>'.repeat(1600) + '\n';
+
+            expect(readWithStubParser(xmlString)).to.equal(xmlString);
+        });
+
+        // With no usable trailer end, every trailer start on the last line used
+        // to scan the rest of the line, which is quadratic time and makes this
+        // time out.
+        it('should search a last line of many trailer starts in linear time', function () {
+            this.timeout(4000);
+            const xmlString = '<?xpacket end="'.repeat(40000) + '"?>';
+
+            expect(readWithStubParser(xmlString)).to.equal(xmlString);
+        });
+    });
+
     describe('bounded chunk allocation (GHSA-q53f-v5gx-7j78)', () => {
         it('does not allocate beyond the available data when a chunk declares a length larger than the buffer', () => {
             const xmlString = getXmlString('');
@@ -2115,6 +2229,37 @@ function getXmlString(content) {
 // as UTF-8 has to be spelled out as its bytes.
 function toUtf8ByteString(text) {
     return Array.from(new TextEncoder().encode(text), (byte) => String.fromCharCode(byte)).join('');
+}
+
+function readWithRecordingParser(text) {
+    const bytes = toUtf8ByteString(text);
+    const received = [];
+    const realParser = new XmldomDomParser({onError: onErrorStopParsing});
+    const domParser = {
+        parseFromString(xml, mimeType) {
+            received.push(xml);
+            return realParser.parseFromString(xml, mimeType);
+        }
+    };
+
+    const tags = XmpTags.read(getDataView(bytes), [{dataOffset: 0, length: bytes.length}], domParser);
+
+    return {tags, received};
+}
+
+// Only the trimming is timed: the stub hands back an empty document.
+function readWithStubParser(xmlString) {
+    const received = [];
+    const domParser = {
+        parseFromString(xml) {
+            received.push(xml);
+            return {getElementsByTagName: () => [], childNodes: []};
+        }
+    };
+
+    XmpTags.read(getDataView(xmlString), [{dataOffset: 0, length: xmlString.length}], domParser);
+
+    return received[0];
 }
 
 // getPaddedDataView leaves the window ending where the buffer ends, so an
