@@ -100,7 +100,7 @@ function loadAsyncWithDelays({iccDelayMs, pngTextDelayMs}) {
     fakeIccTagsReadAsync({Collision: {value: 'icc'}}, iccDelayMs);
     fakePngTextTagsReadAsync(
         {Collision: {value: 'pngTextSync'}},
-        [{Collision: {value: 'pngTextAsync'}}],
+        [{readTags: {Collision: {value: 'pngTextAsync'}}}],
         pngTextDelayMs
     );
 

@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import vm from 'node:vm';
+import {deflateSync} from 'node:zlib';
 import {expect} from 'chai';
 import {getCharacterArray, getBase64Image, getDataView as getDataViewOrWrapper} from '../../src/utils.js';
 import * as ExifReader from '../../src/exif-reader.js';
@@ -1061,6 +1062,39 @@ describe('exif-reader', function () {
         });
         swapPngTextTagsRead(myTags, myAsyncTags);
         expect(await ExifReader.loadView(undefined, {async: true})).to.deep.equal({...myTags, ...myAsyncTags});
+    });
+
+    it('should merge embedded Exif from a compressed PNG text chunk and keep a text chunk named __exif as a PNG text tag', async () => {
+        const exifData = 'Exif\0\0payload';
+        const exifValue = `\nexif\n${String(exifData.length).padStart(8, ' ')}\n${Buffer.from(exifData, 'latin1').toString('hex')}`;
+        const exifChunk = getZtxtChunkBytes('Raw profile type exif', exifValue);
+        const keywordChunk = getZtxtChunkBytes('__exif', 'FROMFILE');
+        const dataView = new DataView(new Uint8Array(Buffer.concat([exifChunk, keywordChunk])).buffer);
+        swapImageHeader({
+            pngTextChunks: [
+                {type: 'zTXt', offset: 0, length: exifChunk.length},
+                {type: 'zTXt', offset: exifChunk.length, length: keywordChunk.length}
+            ]
+        });
+        swap(Tags, {
+            read() {
+                return {tags: {MyExifTag: {value: 42, description: '42'}}, byteOrder: ByteOrder.BIG_ENDIAN};
+            }
+        });
+
+        const tags = await ExifReader.loadView(dataView, {async: true, expanded: true});
+
+        expect(tags.exif.MyExifTag).to.deep.equal({value: 42, description: '42'});
+        expect(tags.exif.value).to.equal(undefined);
+        expect(tags.png.__exif).to.deep.equal({value: 'FROMFILE', description: 'FROMFILE'});
+
+        function getZtxtChunkBytes(keyword, value) {
+            const COMPRESSION_METHOD_DEFLATE = '\0';
+            return Buffer.concat([
+                Buffer.from(`${keyword}\0${COMPRESSION_METHOD_DEFLATE}`, 'latin1'),
+                deflateSync(Buffer.from(value, 'latin1'))
+            ]);
+        }
     });
 
     it('should be able to find PNG chunk data segment', () => {
@@ -2536,7 +2570,7 @@ function swapPngTextTagsRead(tagsValue, asyncTagsValue) {
         read(dataView, pngTextChunks, async) {
             if ((pngTextChunks[0].type === 'tEXt' && pngTextChunks[0].offset === OFFSET_TEST_VALUE) && (pngTextChunks[0].length === PNG_FIELD_LENGTH_TEST_VALUE)
                 && (pngTextChunks[1].type === 'zTXt' && pngTextChunks[1].offset === OFFSET_TEST_VALUE) && (pngTextChunks[1].length === PNG_FIELD_LENGTH_TEST_VALUE)) {
-                return {readTags: tagsValue, readTagsPromise: async ? Promise.resolve([asyncTagsValue]) : undefined};
+                return {readTags: tagsValue, readTagsPromise: async ? Promise.resolve([{readTags: asyncTagsValue}]) : undefined};
             }
             return {};
         }

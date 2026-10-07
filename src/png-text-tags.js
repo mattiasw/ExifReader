@@ -4,7 +4,7 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringValueFromArray, getStringFromDataView, decompress, COMPRESSION_METHOD_NONE} from './utils.js';
+import {getStringValueFromArray, getStringFromDataView, decompress, setProperty, COMPRESSION_METHOD_NONE} from './utils.js';
 import TagDecoder from './tag-decoder.js';
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
 import Tags from './tags.js';
@@ -45,10 +45,10 @@ function read(
         if (textChunk.compressionMethod === COMPRESSION_METHOD_NONE) {
             const {name, value, description} = getUncompressedTag(textChunk);
             if (name && tagFilter.shouldParseGroup('png')) {
-                tags[name] = {
+                setProperty(tags, name, {
                     value,
                     description
-                };
+                });
             }
         } else if (async && decompressionTasks.length < MAX_COMPRESSED_TEXT_CHUNKS) {
             decompressionTasks.push(() => decompressTextChunk(textChunk, decompressConfig)
@@ -119,7 +119,7 @@ function getTagsFromDecompressedTag({name, value, description}, includeUnknown, 
                 return {};
             }
             return {
-                __exif: Tags.read(
+                embeddedExifTags: Tags.read(
                     decodeRawData(value),
                     EXIF_OFFSET,
                     includeUnknown,
@@ -132,7 +132,7 @@ function getTagsFromDecompressedTag({name, value, description}, includeUnknown, 
                 return {};
             }
             return {
-                __iptc: IptcTags.read(
+                embeddedIptcTags: IptcTags.read(
                     decodeRawData(value),
                     0,
                     includeUnknown,
@@ -143,12 +143,12 @@ function getTagsFromDecompressedTag({name, value, description}, includeUnknown, 
             if (!tagFilter.shouldParseGroup('png')) {
                 return {};
             }
-            return {
-                [name]: {
-                    value,
-                    description
-                }
-            };
+            const readTags = {};
+            setProperty(readTags, name, {
+                value,
+                description
+            });
+            return {readTags};
         }
     } catch (error) {
         // Ignore the broken tag.

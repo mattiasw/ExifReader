@@ -210,8 +210,11 @@ export function applyMergeStep({
         const merge = createInPlaceMerge(deps);
 
         for (let i = 0; i < tagList.length; i++) {
+            const entry = tagList[i];
             tags = addPngTextReadTagsToTagsAndGroups({
-                readTags: tagList[i],
+                readTags: entry.readTags || {},
+                embeddedExifTags: entry.embeddedExifTags,
+                embeddedIptcTags: entry.embeddedIptcTags,
                 parsedGroups,
                 expanded,
                 tagFilter,
@@ -379,6 +382,8 @@ export function mergeMergeGroup(tags, groupKey, returnedTags, expanded, deps) {
 
 export function addPngTextReadTagsToTagsAndGroups({
     readTags,
+    embeddedExifTags,
+    embeddedIptcTags,
     parsedGroups,
     expanded,
     tagFilter,
@@ -386,11 +391,6 @@ export function addPngTextReadTagsToTagsAndGroups({
     deps,
     merge = createCopyingMerge(deps),
 }) {
-    const embeddedExifTags = readTags.__exif;
-    const embeddedIptcTags = readTags.__iptc;
-    delete readTags.__exif;
-    delete readTags.__iptc;
-
     if (embeddedExifTags) {
         const parsedEmbeddedExifTags =
             deps.filterTagsForParse('exif', embeddedExifTags, tagFilter);

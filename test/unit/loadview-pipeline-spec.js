@@ -74,11 +74,6 @@ describe('loadView pipeline module', function () {
     });
 
     it('should include embedded exif/iptc even when png is excluded', function () {
-        const readTags = {
-            __exif: {EmbeddedExif: {value: 'x'}},
-            __iptc: {EmbeddedIptc: {value: 'y'}},
-            PngTag: {value: 'z'},
-        };
         const parsedGroups = {};
         const tagFilter = createTagFilter({
             returnGroups: {
@@ -89,7 +84,9 @@ describe('loadView pipeline module', function () {
         });
 
         const tags = addPngTextReadTagsToTagsAndGroups({
-            readTags,
+            readTags: {PngTag: {value: 'z'}},
+            embeddedExifTags: {EmbeddedExif: {value: 'x'}},
+            embeddedIptcTags: {EmbeddedIptc: {value: 'y'}},
             parsedGroups,
             expanded: false,
             tagFilter,
@@ -103,6 +100,53 @@ describe('loadView pipeline module', function () {
         expect(parsedGroups.exif.EmbeddedExif.value).to.equal('x');
         expect(parsedGroups.iptc.EmbeddedIptc.value).to.equal('y');
     });
+
+    it('should merge PNG text tags named __exif and __iptc into the png group in expanded mode', function () {
+        const readTags = getPngTextTagsWithSentinelNames();
+        const parsedGroups = {};
+
+        const tags = addPngTextReadTagsToTagsAndGroups({
+            readTags,
+            parsedGroups,
+            expanded: true,
+            tagFilter: createTagFilter({}),
+            tags: {},
+            deps: createPipelineDeps(),
+        });
+
+        expect(tags.exif).to.equal(undefined);
+        expect(tags.iptc).to.equal(undefined);
+        expect(parsedGroups.exif).to.equal(undefined);
+        expect(parsedGroups.iptc).to.equal(undefined);
+        expect(tags.png).to.deep.equal(getPngTextTagsWithSentinelNames());
+        expect(readTags).to.deep.equal(getPngTextTagsWithSentinelNames());
+    });
+
+    it('should merge PNG text tags named __exif and __iptc into the top level in flat mode', function () {
+        const readTags = getPngTextTagsWithSentinelNames();
+        const parsedGroups = {};
+
+        const tags = addPngTextReadTagsToTagsAndGroups({
+            readTags,
+            parsedGroups,
+            expanded: false,
+            tagFilter: createTagFilter({}),
+            tags: {},
+            deps: createPipelineDeps(),
+        });
+
+        expect(tags).to.deep.equal(getPngTextTagsWithSentinelNames());
+        expect(parsedGroups.exif).to.equal(undefined);
+        expect(parsedGroups.iptc).to.equal(undefined);
+        expect(readTags).to.deep.equal(getPngTextTagsWithSentinelNames());
+    });
+
+    function getPngTextTagsWithSentinelNames() {
+        return {
+            __exif: {value: 'FROMFILE', description: 'FROMFILE'},
+            __iptc: {value: 'FROMFILE', description: 'FROMFILE'},
+        };
+    }
 
     it('should not delete an existing Thumbnail tag if thumbnailIfdTags is missing', function () {
         const tagFilter = createTagFilter({
@@ -199,18 +243,19 @@ describe('loadView pipeline module', function () {
 
         const tags = buildTagsFromMergeSteps({
             mergeSteps: [
-                {
-                    type: 'processPngTextReadTags',
-                    readTags: {
-                        __exif: {
+                {type: 'processPngTextReadTagsDeferredList', deferredKey: 'pngText'},
+                {type: 'thumbnail'},
+            ],
+            deferredResults: {
+                pngText: [
+                    {
+                        embeddedExifTags: {
                             MyExifTag: {value: 42},
                             Thumbnail: {JPEGInterchangeFormat: {value: 272}},
                         },
                     },
-                },
-                {type: 'thumbnail'},
-            ],
-            deferredResults: {},
+                ],
+            },
             parsedGroups,
             expanded: false,
             tagFilter: createTagFilter({}),
@@ -235,8 +280,8 @@ describe('loadView pipeline module', function () {
             ],
             deferredResults: {
                 pngText: [
-                    {Thumbnail: {value: 'my thumbnail note'}},
-                    {__exif: {Thumbnail: {JPEGInterchangeFormat: {value: 272}}}},
+                    {readTags: {Thumbnail: {value: 'my thumbnail note'}}},
+                    {embeddedExifTags: {Thumbnail: {JPEGInterchangeFormat: {value: 272}}}},
                 ],
             },
             parsedGroups: {},
@@ -703,7 +748,7 @@ describe('loadView pipeline module', function () {
 
             it(`should let a later duplicate keyword win in ${mode} mode`, function () {
                 const {tags} = buildDeferredPngTextTags({
-                    items: [{MyTag: {value: 'first'}}, {MyTag: {value: 'second'}}],
+                    items: [{readTags: {MyTag: {value: 'first'}}}, {readTags: {MyTag: {value: 'second'}}}],
                     expanded,
                 });
 
@@ -713,8 +758,8 @@ describe('loadView pipeline module', function () {
             it(`should merge several Exif items in ${mode} mode`, function () {
                 const {tags, parsedGroups} = buildDeferredPngTextTags({
                     items: [
-                        {__exif: {Make: {value: 'make 1'}, Model: {value: 'model'}}},
-                        {__exif: {Make: {value: 'make 2'}, Software: {value: 'software'}}},
+                        {embeddedExifTags: {Make: {value: 'make 1'}, Model: {value: 'model'}}},
+                        {embeddedExifTags: {Make: {value: 'make 2'}, Software: {value: 'software'}}},
                     ],
                     expanded,
                 });
@@ -740,8 +785,8 @@ describe('loadView pipeline module', function () {
             it(`should merge several IPTC items in ${mode} mode`, function () {
                 const {tags, parsedGroups} = buildDeferredPngTextTags({
                     items: [
-                        {__iptc: {Headline: {value: 'headline 1'}, Keywords: {value: 'keywords'}}},
-                        {__iptc: {Headline: {value: 'headline 2'}, Caption: {value: 'caption'}}},
+                        {embeddedIptcTags: {Headline: {value: 'headline 1'}, Keywords: {value: 'keywords'}}},
+                        {embeddedIptcTags: {Headline: {value: 'headline 2'}, Caption: {value: 'caption'}}},
                     ],
                     expanded,
                 });
@@ -763,7 +808,7 @@ describe('loadView pipeline module', function () {
 
         it('should let a later embedded Exif tag win over a PNG keyword of the same name in flat mode', function () {
             const {tags} = buildDeferredPngTextTags({
-                items: [{Software: {value: 'png software'}}, {__exif: {Software: {value: 'exif software'}}}],
+                items: [{readTags: {Software: {value: 'png software'}}}, {embeddedExifTags: {Software: {value: 'exif software'}}}],
                 expanded: false,
             });
 
@@ -772,7 +817,7 @@ describe('loadView pipeline module', function () {
 
         it('should let a later PNG keyword win over an embedded Exif tag of the same name in flat mode', function () {
             const {tags} = buildDeferredPngTextTags({
-                items: [{__exif: {Software: {value: 'exif software'}}}, {Software: {value: 'png software'}}],
+                items: [{embeddedExifTags: {Software: {value: 'exif software'}}}, {readTags: {Software: {value: 'png software'}}}],
                 expanded: false,
             });
 
@@ -784,7 +829,7 @@ describe('loadView pipeline module', function () {
             const pngFileTagsSnapshot = structuredClone(pngFileTags);
 
             const {tags} = buildDeferredPngTextTags({
-                items: [{MyTag: {value: 'text'}}],
+                items: [{readTags: {MyTag: {value: 'text'}}}],
                 expanded: true,
                 stepsBefore: [{type: 'mergePngFile', parsedTags: pngFileTags}],
             });
@@ -802,7 +847,7 @@ describe('loadView pipeline module', function () {
                 const syncReadTagsSnapshot = structuredClone(syncReadTags);
 
                 const {tags} = buildDeferredPngTextTags({
-                    items: [{MyTag: {value: 'text'}}, {__exif: {Make: {value: 'make'}}}],
+                    items: [{readTags: {MyTag: {value: 'text'}}}, {embeddedExifTags: {Make: {value: 'make'}}}],
                     expanded,
                     stepsBefore: [{type: 'processPngTextReadTags', readTags: syncReadTags}],
                 });
@@ -817,7 +862,7 @@ describe('loadView pipeline module', function () {
             const parsedGroups = {exif: parsedExifTags};
 
             buildDeferredPngTextTags({
-                items: [{__exif: {Model: {value: 'model'}}}],
+                items: [{embeddedExifTags: {Model: {value: 'model'}}}],
                 expanded: true,
                 parsedGroups,
             });
@@ -827,19 +872,19 @@ describe('loadView pipeline module', function () {
         });
 
         function getSingleTagItems(count) {
-            return Array.from({length: count}, (_, index) => ({[`k${index}`]: {value: index}}));
+            return Array.from({length: count}, (_, index) => ({readTags: {[`k${index}`]: {value: index}}}));
         }
 
         function getMixedItems() {
             return [
-                {Software: {value: 'png software'}, Title: {value: 'title 1'}},
-                {__exif: {Software: {value: 'exif software'}, Make: {value: 'exif make 1'}}},
-                {__iptc: {Headline: {value: 'headline 1'}}},
+                {readTags: {Software: {value: 'png software'}, Title: {value: 'title 1'}}},
+                {embeddedExifTags: {Software: {value: 'exif software'}, Make: {value: 'exif make 1'}}},
+                {embeddedIptcTags: {Headline: {value: 'headline 1'}}},
                 {},
-                {Title: {value: 'title 2'}, Comment: {value: 'comment'}},
-                {__exif: {Make: {value: 'exif make 2'}, Model: {value: 'exif model'}, Thumbnail: {JPEGInterchangeFormat: {value: 272}}}},
-                {Make: {value: 'png make'}},
-                {__iptc: {Headline: {value: 'headline 2'}, Keywords: {value: 'keywords'}}},
+                {readTags: {Title: {value: 'title 2'}, Comment: {value: 'comment'}}},
+                {embeddedExifTags: {Make: {value: 'exif make 2'}, Model: {value: 'exif model'}, Thumbnail: {JPEGInterchangeFormat: {value: 272}}}},
+                {readTags: {Make: {value: 'png make'}}},
+                {embeddedIptcTags: {Headline: {value: 'headline 2'}, Keywords: {value: 'keywords'}}},
             ];
         }
 
@@ -855,8 +900,19 @@ describe('loadView pipeline module', function () {
         }
 
         function buildPngTextTagsOneMergePerItem({items, expanded, deps, stepsBefore}) {
-            const steps = items.map((readTags) => ({type: 'processPngTextReadTags', readTags}));
-            return buildPngTextTags({steps: stepsBefore.concat(steps), expanded, deps});
+            const {tags: tagsBefore, parsedGroups} = buildPngTextTags({steps: stepsBefore, expanded, deps});
+            const tagFilter = createTagFilter({});
+            const tags = items.reduce((mergedTags, item) => addPngTextReadTagsToTagsAndGroups({
+                readTags: item.readTags || {},
+                embeddedExifTags: item.embeddedExifTags,
+                embeddedIptcTags: item.embeddedIptcTags,
+                parsedGroups,
+                expanded,
+                tagFilter,
+                tags: mergedTags,
+                deps,
+            }), tagsBefore);
+            return {tags, parsedGroups};
         }
 
         function buildDeferredPngTextTags({items, expanded, deps, parsedGroups, stepsBefore = []}) {
