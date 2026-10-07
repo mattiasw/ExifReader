@@ -17,18 +17,6 @@ const modules = {
     ]
 };
 
-const filterTagsVisitor = {
-    ObjectProperty(path, opts) {
-        if (path.node.key.type === 'NumericLiteral') {
-            if ((path.node.value.type === 'StringLiteral') && !opts.include.includes(path.node.value.value.toLowerCase())) {
-                path.remove();
-            } else if (path.node.value.type === 'ObjectExpression' && !tagNameIsIncluded(path, path.get('value'), opts.include)) {
-                path.remove();
-            }
-        }
-    }
-};
-
 const parseNameFunctionVisitor = {
     ReturnStatement(path, opts) {
         if ((path.node.argument.type === 'StringLiteral') && opts.include.includes(path.node.argument.value.toLowerCase())) {
@@ -59,8 +47,9 @@ module.exports = function TagFilter() {
         visitor: {
             ExportDefaultDeclaration(path, state) {
                 const type = getFileModuleType(state.filename);
-                if (type && Array.isArray(state.opts.include[type])) {
-                    path.traverse(filterTagsVisitor, {include: state.opts.include[type].map((tagName) => tagName.toLowerCase())});
+                const declarationPath = path.get('declaration');
+                if (type && Array.isArray(state.opts.include[type]) && declarationPath.isObjectExpression()) {
+                    filterTagDictionary(declarationPath, state.opts.include[type].map((tagName) => tagName.toLowerCase()));
                 }
             }
         }
@@ -80,4 +69,24 @@ function getFileModuleType(filename) {
 
 function endsWith(string, suffix) {
     return new RegExp(`${suffix}$`).test(string);
+}
+
+// Walks only the dictionary's own entries: the lookup tables inside a tag's
+// description share the numeric-key shape and must stay.
+function filterTagDictionary(dictionaryPath, include) {
+    for (const propertyPath of dictionaryPath.get('properties')) {
+        if (!propertyPath.isObjectProperty()) {
+            continue;
+        }
+        const valuePath = propertyPath.get('value');
+        if (propertyPath.node.key.type === 'NumericLiteral') {
+            if (valuePath.isStringLiteral() && !include.includes(valuePath.node.value.toLowerCase())) {
+                propertyPath.remove();
+            } else if (valuePath.isObjectExpression() && !tagNameIsIncluded(propertyPath, valuePath, include)) {
+                propertyPath.remove();
+            }
+        } else if (valuePath.isObjectExpression()) {
+            filterTagDictionary(valuePath, include);
+        }
+    }
 }
