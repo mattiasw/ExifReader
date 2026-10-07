@@ -807,6 +807,24 @@ describe('icc-tags', () => {
         expect(await captureCompressedIccBytesFromBuffer(bytes, 5)).to.deep.equal(bytes);
     });
 
+    it('should resolve to no tags when a custom deflate function throws for a compressed profile', async () => {
+        const dataView = getDataView('\x11\x22\x33\x44');
+        const iccData = [{offset: 0, length: 4, chunkNumber: 1, chunksTotal: 1, compressionMethod: COMPRESSION_METHOD_DEFLATE}];
+        const decompressConfig = {
+            deflate: () => {
+                throw new Error('boom');
+            }
+        };
+
+        let result;
+        expect(() => {
+            result = IccTags.read(dataView, iccData, true, decompressConfig);
+        }).to.not.throw();
+
+        expect(result.then).to.be.a('function');
+        expect(await result).to.deep.equal({});
+    });
+
     describe('profile size bounds', () => {
         it('should not size the profile from a chunk length that exceeds the buffer', () => {
             const dataView = new DataView(new ArrayBuffer(200));
