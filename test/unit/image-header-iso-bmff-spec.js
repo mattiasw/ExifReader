@@ -1233,6 +1233,16 @@ describe('image-header-iso-bmff', () => {
                 const dataView = getDataView(getByteStringFromNumber(1, 4) + 'free');
                 expect(parseBox(dataView, 0)).to.be.undefined;
             });
+
+            it('should return undefined for a box whose extended size is zero', () => {
+                // The trailing bytes keep the version-byte check from also returning undefined.
+                const dataView = getDataView(
+                    getByteStringFromNumber(1, 4) + 'free'
+                    + getByteStringFromNumber(0, 4) + getByteStringFromNumber(0, 4)
+                    + '\x00'.repeat(8)
+                );
+                expect(parseBox(dataView, 0)).to.be.undefined;
+            });
         });
     });
 });

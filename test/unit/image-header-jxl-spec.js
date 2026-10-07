@@ -136,6 +136,19 @@ describe('image-header-jxl', () => {
         expect(offsets).to.have.property('hasAppMarkers');
     });
 
+    it('should stop at a box whose length is shorter than its header', () => {
+        const exifContent = '\x00\x00\x00\x00' + 'TIFFHD';
+        const dataView = getDataView(
+            JXL_SIGNATURE + FTYP_BOX
+            + getByteStringFromNumber(4, 4)
+            + getByteStringFromNumber(8 + exifContent.length, 4) + 'Exif' + exifContent
+        );
+        const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+        expect(offsets.hasAppMarkers).to.be.false;
+        expect(offsets.tiffHeaderOffset).to.be.undefined;
+    });
+
     it('should handle file with only the JXL signature', () => {
         const dataView = getDataView(JXL_SIGNATURE);
         const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
