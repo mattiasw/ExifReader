@@ -546,6 +546,10 @@ function parseNodeAttributes(node) {
 function parseNodeChildrenAsAttributes(node) {
     const attributes = {};
 
+    if (typeof node.value !== 'object') {
+        return attributes;
+    }
+
     for (const name in node.value) {
         if ((name !== 'rdf:value') && (!isNamespaceDefinition(name))) {
             setProperty(attributes, getLocalName(name), node.value[name].value);
@@ -600,7 +604,9 @@ function parseNodeAsStructureRdfDescription(node, name) {
         node = node.value['rdf:Description'];
     }
 
-    objectAssign(tag.value, parseNodeChildrenAsTags(node.value));
+    if (typeof node.value === 'object') {
+        objectAssign(tag.value, parseNodeChildrenAsTags(node.value));
+    }
 
     tag.description = getDescription(tag.value, name);
 
@@ -608,9 +614,17 @@ function parseNodeAsStructureRdfDescription(node, name) {
 }
 
 function isCompactStructure(node) {
-    return (Object.keys(node.value).length === 0)
+    return isEmptyValue(node.value)
         && (node.attributes['xml:lang'] === undefined)
         && (node.attributes['rdf:resource'] === undefined);
+}
+
+// A text-only element has a string value; enumerating it would visit every character.
+function isEmptyValue(value) {
+    if (typeof value === 'string') {
+        return value === '';
+    }
+    return Object.keys(value).length === 0;
 }
 
 function parseNodeAsCompactStructure(node, name) {
