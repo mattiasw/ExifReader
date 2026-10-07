@@ -617,6 +617,276 @@ describe('loadView pipeline module', function () {
 
         expect(tags.Collision.value).to.equal('second');
     });
+    describe('processPngTextReadTagsDeferredList step', function () {
+        const MANY_ITEMS = 8000;
+        const MERGE_BUDGET_MS = 200;
+
+        it('should merge many deferred items in linear time in flat mode', function () {
+            const items = getSingleTagItems(MANY_ITEMS);
+
+            const start = performance.now();
+            const {tags} = buildDeferredPngTextTags({items, expanded: false});
+            const elapsed = performance.now() - start;
+
+            expect(elapsed).to.be.below(MERGE_BUDGET_MS);
+            expect(Object.keys(tags)).to.have.lengthOf(MANY_ITEMS);
+            expect(tags[`k${MANY_ITEMS - 1}`].value).to.equal(MANY_ITEMS - 1);
+        });
+
+        it('should merge many deferred items in linear time in expanded mode', function () {
+            const items = getSingleTagItems(MANY_ITEMS);
+
+            const start = performance.now();
+            const {tags} = buildDeferredPngTextTags({items, expanded: true});
+            const elapsed = performance.now() - start;
+
+            expect(elapsed).to.be.below(MERGE_BUDGET_MS);
+            expect(Object.keys(tags.png)).to.have.lengthOf(MANY_ITEMS);
+            expect(Object.keys(tags.pngText)).to.have.lengthOf(MANY_ITEMS);
+        });
+
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
+
+            it(`should give the same result as one merge per item in ${mode} mode`, function () {
+                expectSameAsOneMergePerItem({expanded});
+            });
+
+            it(`should give the same result as one merge per item with a tag filter in ${mode} mode`, function () {
+                const deps = createPipelineDeps();
+                deps.filterTagsForReturn = (groupKey, readTags) => {
+                    if (groupKey !== 'exif') {
+                        return readTags;
+                    }
+                    const returnedTags = objectAssign({}, readTags);
+                    delete returnedTags.Model;
+                    return returnedTags;
+                };
+
+                const {parsedGroups} = expectSameAsOneMergePerItem({expanded, deps});
+
+                expect(parsedGroups.exif.Model.value).to.equal('exif model');
+            });
+        }
+
+        it('should give the expected flat result for a mix of PNG, Exif and IPTC items', function () {
+            const {tags, parsedGroups} = buildDeferredPngTextTags({
+                items: getMixedItems(),
+                expanded: false,
+                stepsBefore: [{type: 'mergePngFile', parsedTags: {Width: {value: 100}}}],
+            });
+
+            expect(JSON.stringify(tags)).to.equal(JSON.stringify({
+                Width: {value: 100},
+                Software: {value: 'exif software'},
+                Title: {value: 'title 2'},
+                Make: {value: 'png make'},
+                Headline: {value: 'headline 2'},
+                Comment: {value: 'comment'},
+                Model: {value: 'exif model'},
+                Keywords: {value: 'keywords'},
+            }));
+            expect(JSON.stringify(parsedGroups.exif)).to.equal(JSON.stringify({
+                Software: {value: 'exif software'},
+                Make: {value: 'exif make 2'},
+                Model: {value: 'exif model'},
+                Thumbnail: {JPEGInterchangeFormat: {value: 272}},
+            }));
+            expect(JSON.stringify(parsedGroups.iptc)).to.equal(JSON.stringify({
+                Headline: {value: 'headline 2'},
+                Keywords: {value: 'keywords'},
+            }));
+        });
+
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
+
+            it(`should let a later duplicate keyword win in ${mode} mode`, function () {
+                const {tags} = buildDeferredPngTextTags({
+                    items: [{MyTag: {value: 'first'}}, {MyTag: {value: 'second'}}],
+                    expanded,
+                });
+
+                expect((expanded ? tags.png : tags).MyTag.value).to.equal('second');
+            });
+
+            it(`should merge several Exif items in ${mode} mode`, function () {
+                const {tags, parsedGroups} = buildDeferredPngTextTags({
+                    items: [
+                        {__exif: {Make: {value: 'make 1'}, Model: {value: 'model'}}},
+                        {__exif: {Make: {value: 'make 2'}, Software: {value: 'software'}}},
+                    ],
+                    expanded,
+                });
+
+                const expectedExifTags = {
+                    Make: {value: 'make 2'},
+                    Model: {value: 'model'},
+                    Software: {value: 'software'},
+                };
+                expect(parsedGroups.exif).to.deep.equal(expectedExifTags);
+                if (expanded) {
+                    expect(tags.exif).to.deep.equal(expectedExifTags);
+                    expect(tags.exif).to.not.equal(parsedGroups.exif);
+                } else {
+                    expect(tags).to.deep.equal(expectedExifTags);
+                }
+            });
+        }
+
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
+
+            it(`should merge several IPTC items in ${mode} mode`, function () {
+                const {tags, parsedGroups} = buildDeferredPngTextTags({
+                    items: [
+                        {__iptc: {Headline: {value: 'headline 1'}, Keywords: {value: 'keywords'}}},
+                        {__iptc: {Headline: {value: 'headline 2'}, Caption: {value: 'caption'}}},
+                    ],
+                    expanded,
+                });
+
+                const expectedIptcTags = {
+                    Headline: {value: 'headline 2'},
+                    Keywords: {value: 'keywords'},
+                    Caption: {value: 'caption'},
+                };
+                expect(parsedGroups.iptc).to.deep.equal(expectedIptcTags);
+                if (expanded) {
+                    expect(tags.iptc).to.deep.equal(expectedIptcTags);
+                    expect(tags.iptc).to.not.equal(parsedGroups.iptc);
+                } else {
+                    expect(tags).to.deep.equal(expectedIptcTags);
+                }
+            });
+        }
+
+        it('should let a later embedded Exif tag win over a PNG keyword of the same name in flat mode', function () {
+            const {tags} = buildDeferredPngTextTags({
+                items: [{Software: {value: 'png software'}}, {__exif: {Software: {value: 'exif software'}}}],
+                expanded: false,
+            });
+
+            expect(tags.Software.value).to.equal('exif software');
+        });
+
+        it('should let a later PNG keyword win over an embedded Exif tag of the same name in flat mode', function () {
+            const {tags} = buildDeferredPngTextTags({
+                items: [{__exif: {Software: {value: 'exif software'}}}, {Software: {value: 'png software'}}],
+                expanded: false,
+            });
+
+            expect(tags.Software.value).to.equal('png software');
+        });
+
+        it('should not mutate the PNG file tags from an earlier mergePngFile step', function () {
+            const pngFileTags = {Width: {value: 100}};
+            const pngFileTagsSnapshot = structuredClone(pngFileTags);
+
+            const {tags} = buildDeferredPngTextTags({
+                items: [{MyTag: {value: 'text'}}],
+                expanded: true,
+                stepsBefore: [{type: 'mergePngFile', parsedTags: pngFileTags}],
+            });
+
+            expect(pngFileTags).to.deep.equal(pngFileTagsSnapshot);
+            expect(tags.pngFile).to.deep.equal({Width: {value: 100}});
+            expect(tags.png).to.deep.equal({Width: {value: 100}, MyTag: {value: 'text'}});
+        });
+
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
+
+            it(`should not mutate the synchronous PNG text tags in ${mode} mode`, function () {
+                const syncReadTags = {SyncTag: {value: 'sync'}};
+                const syncReadTagsSnapshot = structuredClone(syncReadTags);
+
+                const {tags} = buildDeferredPngTextTags({
+                    items: [{MyTag: {value: 'text'}}, {__exif: {Make: {value: 'make'}}}],
+                    expanded,
+                    stepsBefore: [{type: 'processPngTextReadTags', readTags: syncReadTags}],
+                });
+
+                expect(syncReadTags).to.deep.equal(syncReadTagsSnapshot);
+                expect(expanded ? tags.png : tags).to.include.keys('SyncTag', 'MyTag');
+            });
+        }
+
+        it('should not mutate an existing parsed Exif group', function () {
+            const parsedExifTags = {Make: {value: 'make 1'}};
+            const parsedGroups = {exif: parsedExifTags};
+
+            buildDeferredPngTextTags({
+                items: [{__exif: {Model: {value: 'model'}}}],
+                expanded: true,
+                parsedGroups,
+            });
+
+            expect(parsedExifTags).to.deep.equal({Make: {value: 'make 1'}});
+            expect(parsedGroups.exif).to.deep.equal({Make: {value: 'make 1'}, Model: {value: 'model'}});
+        });
+
+        function getSingleTagItems(count) {
+            return Array.from({length: count}, (_, index) => ({[`k${index}`]: {value: index}}));
+        }
+
+        function getMixedItems() {
+            return [
+                {Software: {value: 'png software'}, Title: {value: 'title 1'}},
+                {__exif: {Software: {value: 'exif software'}, Make: {value: 'exif make 1'}}},
+                {__iptc: {Headline: {value: 'headline 1'}}},
+                {},
+                {Title: {value: 'title 2'}, Comment: {value: 'comment'}},
+                {__exif: {Make: {value: 'exif make 2'}, Model: {value: 'exif model'}, Thumbnail: {JPEGInterchangeFormat: {value: 272}}}},
+                {Make: {value: 'png make'}},
+                {__iptc: {Headline: {value: 'headline 2'}, Keywords: {value: 'keywords'}}},
+            ];
+        }
+
+        function expectSameAsOneMergePerItem({expanded, deps = createPipelineDeps()}) {
+            const stepsBefore = [{type: 'mergePngFile', parsedTags: {Width: {value: 100}}}];
+            const actual = buildDeferredPngTextTags({items: getMixedItems(), expanded, deps, stepsBefore});
+            const expected = buildPngTextTagsOneMergePerItem({items: getMixedItems(), expanded, deps, stepsBefore});
+
+            expect(JSON.stringify(actual.tags)).to.equal(JSON.stringify(expected.tags));
+            expect(JSON.stringify(actual.parsedGroups)).to.equal(JSON.stringify(expected.parsedGroups));
+
+            return actual;
+        }
+
+        function buildPngTextTagsOneMergePerItem({items, expanded, deps, stepsBefore}) {
+            const steps = items.map((readTags) => ({type: 'processPngTextReadTags', readTags}));
+            return buildPngTextTags({steps: stepsBefore.concat(steps), expanded, deps});
+        }
+
+        function buildDeferredPngTextTags({items, expanded, deps, parsedGroups, stepsBefore = []}) {
+            return buildPngTextTags({
+                steps: stepsBefore.concat([{type: 'processPngTextReadTagsDeferredList', deferredKey: 'pngText'}]),
+                deferredResults: {pngText: items},
+                expanded,
+                deps,
+                parsedGroups,
+            });
+        }
+
+        function buildPngTextTags({steps, deferredResults = {}, expanded, deps = createPipelineDeps(), parsedGroups = {}}) {
+            const tags = buildTagsFromMergeSteps({
+                mergeSteps: steps,
+                deferredResults,
+                parsedGroups,
+                expanded,
+                tagFilter: createTagFilter({}),
+                dataView: {},
+                tiffHeaderOffset: undefined,
+                fileType: undefined,
+                pngTextChunks: [],
+                pngTextIsAsync: false,
+                thumbnailIfdTags: undefined,
+                deps,
+            });
+            return {tags, parsedGroups};
+        }
+    });
 });
 
 function createPipelineDeps() {

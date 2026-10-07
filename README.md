@@ -631,6 +631,10 @@ warning is logged via `console.warn`, and the rest of the tags are returned as
 usual. The limit applies to the built-in Compression Streams paths and to any
 result returned by a custom `brotli`/`deflate` function.
 
+With `async: true`, ExifReader decompresses at most the first 255 compressed
+PNG text chunks (zTXt and compressed iTXt) of a file and skips later ones.
+Uncompressed text chunks are not limited.
+
 #### Parsing XMP tags when not in a DOM environment
 
 When using for example Node.js or a web worker, there is no native

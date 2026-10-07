@@ -233,6 +233,279 @@ describe('png-text-tags', () => {
         });
     });
 
+    it('should skip compressed Exif and IPTC tags when the tag filter excludes their groups', async () => {
+        let readCalls = 0;
+        restoreTagReaders = swapProperties(Tags, {
+            read: () => {
+                readCalls++;
+                return {tags: {}};
+            }
+        });
+        const restoreIptcTags = swapProperties(IptcTags, {
+            read: () => {
+                readCalls++;
+                return {};
+            }
+        });
+        const exifValue = `\nexif\n       6\n${stringToHex('Exif\0\0')}`;
+        const iptcValue = `\niptc\n       1\n${stringToHex('I')}`;
+        const {dataView, chunks} = buildTextChunks([
+            getZtxtChunk('Raw profile type exif', toBytes(exifValue)),
+            getZtxtChunk('Raw profile type iptc', toBytes(iptcValue)),
+            getZtxtChunk('MyTag', toBytes('My value.'))
+        ]);
+        const tagFilter = {shouldParseGroup: (group) => group === 'png'};
+        const decompressConfig = {deflate: (bytes) => bytes};
+
+        try {
+            const tags = await PngTextTags.read(dataView, chunks, true, false, false, tagFilter, decompressConfig).readTagsPromise;
+
+            expect(readCalls).to.equal(0);
+            expect(tags).to.deep.equal([{}, {}, {MyTag: {value: 'My value.', description: 'My value.'}}]);
+        } finally {
+            restoreIptcTags();
+        }
+    });
+
+    it('should skip compressed PNG text tags when the tag filter excludes the png group', async () => {
+        const {dataView, chunks} = buildTextChunks([getZtxtChunk('MyTag', toBytes('My value.'))]);
+        const tagFilter = {shouldParseGroup: (group) => group !== 'png'};
+        const decompressConfig = {deflate: (bytes) => bytes};
+
+        const tags = await PngTextTags.read(dataView, chunks, true, false, false, tagFilter, decompressConfig).readTagsPromise;
+
+        expect(tags).to.deep.equal([{}]);
+    });
+
+    it('should return an empty object for a compressed tag without a keyword', async () => {
+        const {dataView, chunks} = buildTextChunks([getZtxtChunk('', toBytes('My value.'))]);
+        const decompressConfig = {deflate: (bytes) => bytes};
+
+        const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+
+        expect(tags).to.deep.equal([{}]);
+    });
+
+    describe('many compressed text chunks', () => {
+        const MAX_COMPRESSED_TEXT_CHUNKS = 255;
+        const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;
+
+        it('should decompress only the first 255 of 8000 zTXt chunks, in chunk order, well under a second', async () => {
+            const compressedValue = new Uint8Array((await compress(Uint8Array.from([0x76]))).buffer);
+            const {dataView, chunks} = buildTextChunks(
+                Array.from({length: 8000}, (_, index) => getZtxtChunk('k' + index, compressedValue))
+            );
+
+            const start = performance.now();
+            const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+            const tags = await readTagsPromise;
+            const elapsed = performance.now() - start;
+
+            expect(elapsed).to.be.below(500);
+            expect(tags).to.have.lengthOf(MAX_COMPRESSED_TEXT_CHUNKS);
+            for (let i = 0; i < MAX_COMPRESSED_TEXT_CHUNKS; i++) {
+                expect(tags[i]).to.deep.equal({['k' + i]: {value: 'v', description: 'v'}});
+            }
+        });
+
+        it('should call a custom decompression function for at most 255 chunks', async () => {
+            let calls = 0;
+            const decompressConfig = {
+                deflate: (bytes) => {
+                    calls++;
+                    return bytes;
+                }
+            };
+            const {dataView, chunks} = buildTextChunks(
+                Array.from({length: 300}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)))
+            );
+
+            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+
+            expect(calls).to.equal(MAX_COMPRESSED_TEXT_CHUNKS);
+            expect(tags).to.deep.equal(getExpectedTags(0, MAX_COMPRESSED_TEXT_CHUNKS));
+        });
+
+        it('should count compressed zTXt and iTXt chunks against the same cap', async () => {
+            const calledValues = [];
+            const decompressConfig = {
+                deflate: (bytes) => {
+                    calledValues.push(new TextDecoder().decode(bytes));
+                    return bytes;
+                }
+            };
+            const {dataView, chunks} = buildTextChunks([
+                ...Array.from({length: 200}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index))),
+                ...Array.from({length: 100}, (_, index) => getCompressedItxtChunk('k' + (200 + index), toBytes('v' + (200 + index))))
+            ]);
+
+            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+
+            expect(calledValues).to.have.lengthOf(MAX_COMPRESSED_TEXT_CHUNKS);
+            expect(calledValues).to.not.include('v255');
+            expect(tags).to.deep.equal(getExpectedTags(0, MAX_COMPRESSED_TEXT_CHUNKS));
+        });
+
+        it('should still read uncompressed text chunks and not count them against the cap', async () => {
+            let calls = 0;
+            const decompressConfig = {
+                deflate: (bytes) => {
+                    calls++;
+                    return bytes;
+                }
+            };
+            const compressedChunks = Array.from({length: 300}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)));
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('First', 'first value'),
+                ...compressedChunks.slice(0, 150),
+                getTextChunk('Middle', 'middle value'),
+                ...compressedChunks.slice(150),
+                getTextChunk('Last', 'last value'),
+                getUncompressedItxtChunk('LastItxt', 'last iTXt value')
+            ]);
+
+            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+            const tags = await readTagsPromise;
+
+            expect(readTags).to.deep.equal({
+                First: {value: 'first value', description: 'first value'},
+                Middle: {value: 'middle value', description: 'middle value'},
+                Last: {value: 'last value', description: 'last value'},
+                LastItxt: {value: 'last iTXt value', description: 'last iTXt value'}
+            });
+            expect(calls).to.equal(MAX_COMPRESSED_TEXT_CHUNKS);
+            expect(tags).to.deep.equal(getExpectedTags(0, MAX_COMPRESSED_TEXT_CHUNKS));
+        });
+
+        it('should keep at most 4 decompressions in flight and return the results in chunk order', async () => {
+            const NUMBER_OF_CHUNKS = 10;
+            const pending = [];
+            let calls = 0;
+            let maxPending = 0;
+            const decompressConfig = {
+                deflate: (bytes) => {
+                    calls++;
+                    return new Promise((resolve) => {
+                        pending.push(() => resolve(bytes));
+                        maxPending = Math.max(maxPending, pending.length);
+                    });
+                }
+            };
+            const {dataView, chunks} = buildTextChunks(
+                Array.from({length: NUMBER_OF_CHUNKS}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)))
+            );
+
+            const {readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+            let resolved = false;
+            readTagsPromise.then(() => {
+                resolved = true;
+            });
+
+            const pendingPerRound = [];
+            await flushPromises();
+            while (pending.length > 0) {
+                pendingPerRound.push(pending.length);
+                expect(resolved).to.be.false;
+                pending.splice(0).reverse().forEach((resolve) => resolve());
+                await flushPromises();
+            }
+
+            expect(resolved).to.be.true;
+            expect(pendingPerRound).to.deep.equal([4, 4, 2]);
+            expect(maxPending).to.equal(MAX_DECOMPRESSIONS_IN_FLIGHT);
+            expect(calls).to.equal(NUMBER_OF_CHUNKS);
+            expect(await readTagsPromise).to.deep.equal(getExpectedTags(0, NUMBER_OF_CHUNKS));
+        });
+
+        it('should keep the other chunks when one decompression fails', async () => {
+            const decompressConfig = {
+                deflate: (bytes) => {
+                    if (new TextDecoder().decode(bytes) === 'v1') {
+                        return Promise.reject(new Error('Broken chunk.'));
+                    }
+                    return bytes;
+                }
+            };
+            const {dataView, chunks} = buildTextChunks(
+                Array.from({length: 3}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)))
+            );
+
+            const unknownCompressionValue = '<text using unknown compression>'.split('');
+
+            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+
+            expect(tags).to.deep.equal([
+                {k0: {value: 'v0', description: 'v0'}},
+                {k1: {value: unknownCompressionValue, description: unknownCompressionValue}},
+                {k2: {value: 'v2', description: 'v2'}}
+            ]);
+        });
+
+        it('should not decompress anything when async is not passed', () => {
+            let calls = 0;
+            const decompressConfig = {
+                deflate: (bytes) => {
+                    calls++;
+                    return bytes;
+                }
+            };
+            const {dataView, chunks} = buildTextChunks(
+                Array.from({length: 3}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)))
+            );
+
+            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, false, false, false, undefined, decompressConfig);
+
+            expect(calls).to.equal(0);
+            expect(readTagsPromise).to.be.undefined;
+            expect(readTags).to.deep.equal({});
+        });
+
+        it('should reject without leaving an unhandled rejection when a decompression function throws', async () => {
+            const unhandledRejections = [];
+            const onUnhandledRejection = (reason) => unhandledRejections.push(reason);
+            process.on('unhandledRejection', onUnhandledRejection);
+            try {
+                const decompressConfig = {
+                    deflate: (bytes) => {
+                        const value = new TextDecoder().decode(bytes);
+                        if (value === 'v1' || value === 'v4') {
+                            throw new Error(`Broken ${value}.`);
+                        }
+                        return bytes;
+                    }
+                };
+                const {dataView, chunks} = buildTextChunks(
+                    Array.from({length: 6}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)))
+                );
+
+                const {readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+
+                let rejection;
+                await readTagsPromise.catch((error) => {
+                    rejection = error;
+                });
+                await flushPromises();
+
+                expect(rejection).to.be.an('error');
+                expect(unhandledRejections).to.deep.equal([]);
+            } finally {
+                process.removeListener('unhandledRejection', onUnhandledRejection);
+            }
+        });
+
+        function getExpectedTags(start, end) {
+            const tags = [];
+            for (let i = start; i < end; i++) {
+                tags.push({['k' + i]: {value: 'v' + i, description: 'v' + i}});
+            }
+            return tags;
+        }
+
+        function flushPromises() {
+            return new Promise(setImmediate);
+        }
+    });
+
     async function getCompressedTagData(type, name, value) {
         const COMPRESSION_FLAG = '\x01';
         const COMPRESSION_METHOD = '\x00';
@@ -287,5 +560,45 @@ describe('png-text-tags', () => {
             view[pad + i] = content.charCodeAt(i);
         }
         return new DataView(buffer, pad);
+    }
+
+    function buildTextChunks(textChunks) {
+        const length = textChunks.reduce((total, {bytes}) => total + bytes.length, 0);
+        const bytes = new Uint8Array(length);
+        const chunks = [];
+        let offset = 0;
+        for (const textChunk of textChunks) {
+            bytes.set(textChunk.bytes, offset);
+            chunks.push({type: textChunk.type, offset, length: textChunk.bytes.length});
+            offset += textChunk.bytes.length;
+        }
+        return {dataView: new DataView(bytes.buffer), chunks};
+    }
+
+    function getZtxtChunk(keyword, compressedBytes) {
+        return {type: TYPE_ZTXT, bytes: concatBytes(toBytes(keyword + '\x00\x00'), compressedBytes)};
+    }
+
+    function getCompressedItxtChunk(keyword, compressedBytes) {
+        return {type: TYPE_ITXT, bytes: concatBytes(toBytes(keyword + '\x00\x01\x00\x00\x00'), compressedBytes)};
+    }
+
+    function getTextChunk(keyword, text) {
+        return {type: TYPE_TEXT, bytes: toBytes(keyword + '\x00' + text)};
+    }
+
+    function getUncompressedItxtChunk(keyword, text) {
+        return {type: TYPE_ITXT, bytes: toBytes(keyword + '\x00\x00\x00\x00\x00' + text)};
+    }
+
+    function toBytes(text) {
+        return Uint8Array.from(text, (char) => char.charCodeAt(0));
+    }
+
+    function concatBytes(first, second) {
+        const bytes = new Uint8Array(first.length + second.length);
+        bytes.set(first);
+        bytes.set(second, first.length);
+        return bytes;
     }
 });
