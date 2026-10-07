@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {swapProperties} from './test-utils.js';
+import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import ByteOrder from '../../src/byte-order.js';
 import * as ExifReader from '../../src/exif-reader.js';
 import ImageHeader from '../../src/image-header.js';
@@ -17,6 +17,11 @@ import Thumbnail from '../../src/thumbnail.js';
 import Composite from '../../src/composite.js';
 
 const restoreFunctions = [];
+
+const IFD_TYPE_SHORT = 3;
+const IFD_TYPE_LONG = 4;
+const IFD_TYPE_RATIONAL = 5;
+const FOCAL_PLANE_RESOLUTION_UNIT_MILLIMETERS = 4;
 
 describe('tag filtering options', function () {
     afterEach(() => {
@@ -314,6 +319,72 @@ describe('tag filtering options', function () {
         expect(tags.file['Image Height']).to.equal(undefined);
     });
 
+    it('includeTags: { composite: true } should read the Exif sub-IFD for the composite tags', function () {
+        const image = getExifJpeg([
+            {tag: 0x920a, rational: [50, 1]},
+            {tag: 0xa405, short: 75},
+        ]);
+
+        const tags = ExifReader.loadView(getDataView(image), {
+            expanded: true,
+            includeTags: {composite: true},
+        });
+
+        expect(tags.composite.FocalLength35efl.value).to.equal(75);
+        expect(tags.composite.ScaleFactorTo35mmEquivalent).to.not.equal(undefined);
+        expect(tags.composite.FieldOfView).to.not.equal(undefined);
+        expect(tags.exif).to.equal(undefined);
+        expect(tags.file).to.equal(undefined);
+    });
+
+    it('includeTags: { composite: true } should return the composite tags flat without their dependencies', function () {
+        const image = getExifJpeg([
+            {tag: 0x920a, rational: [50, 1]},
+            {tag: 0xa405, short: 75},
+        ]);
+
+        const tags = ExifReader.loadView(getDataView(image), {
+            includeTags: {composite: true},
+        });
+
+        expect(tags.FocalLength35efl.value).to.equal(75);
+        expect(tags.ScaleFactorTo35mmEquivalent).to.not.equal(undefined);
+        expect(tags.FieldOfView).to.not.equal(undefined);
+        expect(tags.FocalLength).to.equal(undefined);
+        expect(tags['Exif IFD Pointer']).to.equal(undefined);
+    });
+
+    it('includeTags: { composite: true } should compute FocalLength35efl from the file group dimensions', function () {
+        const image = getExifJpeg([
+            {tag: 0x920a, rational: [50, 1]},
+            {tag: 0xa20e, rational: [100, 1]},
+            {tag: 0xa20f, rational: [100, 1]},
+            {tag: 0xa210, short: FOCAL_PLANE_RESOLUTION_UNIT_MILLIMETERS},
+        ], getSof0Segment(3600, 2400));
+
+        const tags = ExifReader.loadView(getDataView(image), {
+            expanded: true,
+            includeTags: {composite: true},
+        });
+
+        expect(tags.composite.FocalLength35efl.value).to.be.closeTo(50, 0.01);
+    });
+
+    it('includeTags: { composite: true } should compute FocalLength35efl from the file group dimensions when flat', function () {
+        const image = getExifJpeg([
+            {tag: 0x920a, rational: [50, 1]},
+            {tag: 0xa20e, rational: [100, 1]},
+            {tag: 0xa20f, rational: [100, 1]},
+            {tag: 0xa210, short: FOCAL_PLANE_RESOLUTION_UNIT_MILLIMETERS},
+        ], getSof0Segment(3600, 2400));
+
+        const tags = ExifReader.loadView(getDataView(image), {
+            includeTags: {composite: true},
+        });
+
+        expect(tags.FocalLength35efl.value).to.be.closeTo(50, 0.01);
+    });
+
     it('excludeTags.file: [FileType] should remove FileType', function () {
         fakeImageHeader({
             fileType: 'jpeg',
@@ -609,4 +680,54 @@ function restoreAllFakes() {
     while (restoreFunctions.length > 0) {
         restoreFunctions.pop()();
     }
+}
+
+/**
+ * Builds a big-endian JPEG whose only IFD0 entry points to an Exif IFD
+ * holding the given tags.
+ *
+ * @param {Array<{tag: number, short?: number, rational?: number[]}>} exifTags
+ * @param {string} [trailingSegments] Segments placed after the Exif APP1.
+ */
+function getExifJpeg(exifTags, trailingSegments = '') {
+    const IFD0_OFFSET = 8;
+    const EXIF_IFD_OFFSET = 26;
+    const IFD_ENTRY_LENGTH = 12;
+    const RATIONAL_LENGTH = 8;
+    const exifIfdLength = 2 + exifTags.length * IFD_ENTRY_LENGTH + 4;
+    const rationalTags = exifTags.filter(({rational}) => rational);
+    const entries = exifTags.map(({tag, short, rational}) => {
+        if (rational) {
+            const valueOffset = EXIF_IFD_OFFSET + exifIfdLength + rationalTags.findIndex((entry) => entry.tag === tag) * RATIONAL_LENGTH;
+            return getIfdEntry(tag, IFD_TYPE_RATIONAL, 1, getByteStringFromNumber(valueOffset, 4));
+        }
+        return getIfdEntry(tag, IFD_TYPE_SHORT, 1, getByteStringFromNumber(short, 2) + '\x00\x00');
+    });
+    const rationalValues = rationalTags.map(({rational}) => {
+        return getByteStringFromNumber(rational[0], 4) + getByteStringFromNumber(rational[1], 4);
+    });
+    const tiffBlock = 'MM\x00\x2a' + getByteStringFromNumber(IFD0_OFFSET, 4)
+        + getByteStringFromNumber(1, 2)
+        + getIfdEntry(0x8769, IFD_TYPE_LONG, 1, getByteStringFromNumber(EXIF_IFD_OFFSET, 4))
+        + getByteStringFromNumber(0, 4)
+        + getByteStringFromNumber(exifTags.length, 2)
+        + entries.join('')
+        + getByteStringFromNumber(0, 4)
+        + rationalValues.join('');
+    return '\xff\xd8' + getSegment('\xff\xe1', 'Exif\x00\x00' + tiffBlock) + trailingSegments + '\xff\xd9';
+}
+
+function getSof0Segment(width, height) {
+    return getSegment('\xff\xc0', '\x08' + getByteStringFromNumber(height, 2) + getByteStringFromNumber(width, 2));
+}
+
+function getIfdEntry(tag, type, count, value) {
+    return getByteStringFromNumber(tag, 2)
+        + getByteStringFromNumber(type, 2)
+        + getByteStringFromNumber(count, 4)
+        + value;
+}
+
+function getSegment(marker, content) {
+    return marker + getByteStringFromNumber(content.length + 2, 2) + content;
 }

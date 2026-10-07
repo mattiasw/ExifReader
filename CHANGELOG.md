@@ -42,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nodes or attributes of an element, so a small packet (for example an
   element with thousands of `&amp;` references, about 60 KB) could take tens
   of seconds.
+- `includeTags: {composite: true}`, or a list of composite tag names,
+  returned no composite tags (`FocalLength35efl`, `ScaleFactorTo35mmEquivalent`
+  and `FieldOfView`) for any image since the include filters were added in
+  4.36.0, because the Exif sub-IFD holding the tags they are computed from was
+  not read.
 
 ### Security
 
