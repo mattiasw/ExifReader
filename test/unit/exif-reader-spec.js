@@ -767,6 +767,78 @@ describe('exif-reader', function () {
         expect(result.MyBrobXmpTag).to.equal(45);
     });
 
+    describe('total decompressed size across brob boxes', () => {
+        const DECOMPRESSED_SIZE = OFFSET_TEST_VALUE + 100;
+
+        beforeEach(() => {
+            swapImageHeader({
+                fileType: {value: 'jxl', description: 'JPEG XL'},
+                brobExifChunk: {dataOffset: 0, length: 10},
+                brobXmpChunk: {dataOffset: 0, length: 10}
+            });
+            swapTagsRead(Tags, {MyBrobExifTag: 42});
+            swap(XmpTags, {
+                read(dataView, xmpData) {
+                    if (xmpData && xmpData[0] && xmpData[0].dataOffset === 0) {
+                        return {MyBrobXmpTag: 45};
+                    }
+                    return {};
+                }
+            });
+            swap(console, {warn: () => undefined});
+        });
+
+        it('should parse both brob boxes when their total is within the limit', async () => {
+            const result = await ExifReader.loadView(
+                new DataView(new ArrayBuffer(10)),
+                getBrobOptions(2 * DECOMPRESSED_SIZE)
+            );
+
+            expect(result.MyBrobExifTag).to.equal(42);
+            expect(result.MyBrobXmpTag).to.equal(45);
+        });
+
+        it('should skip the brob XMP box when it would take the total over the limit', async () => {
+            const result = await ExifReader.loadView(
+                new DataView(new ArrayBuffer(10)),
+                getBrobOptions(Math.floor(1.5 * DECOMPRESSED_SIZE))
+            );
+
+            expect(result.MyBrobExifTag).to.equal(42);
+            expect(result.MyBrobXmpTag).to.be.undefined;
+        });
+
+        it('should give each call a fresh total and leave the caller\'s options unchanged', async () => {
+            const options = getBrobOptions(Math.floor(1.5 * DECOMPRESSED_SIZE));
+            const originalDecompressKeys = Object.keys(options.decompress);
+
+            const firstResult = await ExifReader.loadView(new DataView(new ArrayBuffer(10)), options);
+            expect(Object.keys(options.decompress)).to.deep.equal(originalDecompressKeys);
+            const secondResult = await ExifReader.loadView(new DataView(new ArrayBuffer(10)), options);
+
+            for (const result of [firstResult, secondResult]) {
+                expect(result.MyBrobExifTag).to.equal(42);
+                expect(result.MyBrobXmpTag).to.be.undefined;
+            }
+            expect(options.decompress).to.not.have.property('budget');
+            expect(Object.keys(options.decompress)).to.deep.equal(originalDecompressKeys);
+        });
+
+        function getBrobOptions(maxDecompressedSize) {
+            return {
+                async: true,
+                decompress: {
+                    brotli: () => {
+                        const decompressedBuffer = new ArrayBuffer(DECOMPRESSED_SIZE);
+                        new DataView(decompressedBuffer).setUint32(0, OFFSET_TEST_VALUE - 4);
+                        return Promise.resolve(decompressedBuffer);
+                    },
+                    maxDecompressedSize
+                }
+            };
+        }
+    });
+
     it('should skip brob data in sync mode', () => {
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
