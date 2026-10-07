@@ -41,6 +41,7 @@ export function parseItemLocationBox(dataView, startOffset, version, contentOffs
     return {
         type: 'iloc',
         items: getItems(dataView, boxEnd, version, offsets, sizes, offsetSize, lengthSize, indexSize, itemCount),
+        uses64BitFields: hasAny64BitField(offsetSize, lengthSize, baseOffsetSize, indexSize),
         length: boxLength
     };
 }
@@ -190,9 +191,11 @@ function getVariableSizedValue(dataView, offset, size) {
         return dataView.getUint32(offset);
     }
     if (size === 8) {
-        // eslint-disable-next-line no-console
-        console.warn('This file uses an 8-bit offset which is currently not supported by ExifReader. Contact the maintainer to get it fixed.');
         return get64BitValue(dataView, offset);
     }
     return 0;
+}
+
+function hasAny64BitField(offsetSize, lengthSize, baseOffsetSize, indexSize) {
+    return offsetSize === 8 || lengthSize === 8 || baseOffsetSize === 8 || indexSize === 8;
 }

@@ -196,6 +196,7 @@ describe('image-header-iso-bmff', () => {
                 subBoxes: [{
                     type: 'iloc',
                     items: [],
+                    uses64BitFields: false,
                     length: 14
                 }],
                 length: 26
@@ -235,8 +236,101 @@ describe('image-header-iso-bmff', () => {
                         extentLength: 5014
                     }]
                 }],
+                uses64BitFields: false,
                 length: 34
             });
+        });
+
+        it('should read the low 32 bits of 8-byte iloc fields without warning', () => {
+            const dataView = getDataView(buildSizedIlocBox({
+                version: 0,
+                offsetSize: 8,
+                lengthSize: 8,
+                baseOffsetSize: 8,
+                indexSize: 0,
+                baseOffset: 4812,
+                extents: [{extentOffset: 4913, extentLength: 5014}]
+            }));
+
+            const warnSpy = getConsoleWarnSpy();
+            let box;
+            try {
+                box = parseBox(dataView, 0);
+            } finally {
+                warnSpy.reset();
+            }
+
+            expect(box).to.deep.equal({
+                type: 'iloc',
+                items: [{
+                    itemId: SIZED_ILOC_ITEM_ID,
+                    constructionMethod: undefined,
+                    dataReferenceIndex: 0,
+                    baseOffset: 4812,
+                    extentCount: 1,
+                    extents: [{
+                        extentIndex: undefined,
+                        extentOffset: 4913,
+                        extentLength: 5014
+                    }]
+                }],
+                uses64BitFields: true,
+                length: 46
+            });
+            expect(warnSpy.callCount).to.equal(0);
+        });
+
+        [
+            {field: 'offsetSize', version: 0, offsetSize: 8, lengthSize: 4, baseOffsetSize: 4, indexSize: 0},
+            {field: 'lengthSize', version: 0, offsetSize: 4, lengthSize: 8, baseOffsetSize: 4, indexSize: 0},
+            {field: 'baseOffsetSize', version: 0, offsetSize: 4, lengthSize: 4, baseOffsetSize: 8, indexSize: 0},
+            {field: 'indexSize', version: 1, offsetSize: 4, lengthSize: 4, baseOffsetSize: 4, indexSize: 8},
+        ].forEach(({field, version, offsetSize, lengthSize, baseOffsetSize, indexSize}) => {
+            it(`should flag an iloc box whose ${field} alone is 8 bytes`, () => {
+                const dataView = getDataView(buildSizedIlocBox({
+                    version,
+                    offsetSize,
+                    lengthSize,
+                    baseOffsetSize,
+                    indexSize,
+                    baseOffset: 1,
+                    extents: [{extentIndex: 2, extentOffset: 3, extentLength: 4}]
+                }));
+
+                const box = parseBox(dataView, 0);
+
+                expect(box.items[0].extents).to.have.lengthOf(1);
+                expect(box.uses64BitFields).to.be.true;
+            });
+        });
+
+        it('should not flag a version 0 iloc box whose reserved nibble is 8', () => {
+            const dataView = getDataView(buildSizedIlocBox({
+                version: 0,
+                offsetSize: 4,
+                lengthSize: 4,
+                baseOffsetSize: 4,
+                indexSize: 8,
+                baseOffset: 1,
+                extents: [{extentOffset: 3, extentLength: 4}]
+            }));
+
+            expect(parseBox(dataView, 0).uses64BitFields).to.be.false;
+        });
+
+        it('should not flag an iloc box whose field sizes are all above 8', () => {
+            const INVALID_SIZE = 12;
+            const dataView = getDataView(buildSizedIlocBox({
+                version: 1,
+                offsetSize: INVALID_SIZE,
+                lengthSize: INVALID_SIZE,
+                baseOffsetSize: INVALID_SIZE,
+                indexSize: INVALID_SIZE,
+                baseOffset: 1,
+                extents: []
+            }));
+
+            expect(parseBox(dataView, 0).uses64BitFields).to.be.false;
         });
 
         it('should not allocate extents for an iloc whose extent size fields are all zero', () => {
@@ -1146,6 +1240,52 @@ describe('image-header-iso-bmff', () => {
                 ]);
             });
         });
+
+        describe('8-byte iloc field warning', () => {
+            it('should warn once for an iloc box with thousands of 8-byte extents', () => {
+                const dataView = getDataView(getFullBox('meta', 0, buildSizedIlocExifIinfBox() + build64BitIlocBoxWithManyExtents()));
+
+                expect(countWarnings(() => findOffsets(dataView))).to.equal(1);
+            });
+
+            it('should warn once for an 8-byte iloc box in a meta box without an iinf box', () => {
+                const dataView = getDataView(getFullBox('meta', 0, build64BitIlocBoxWithManyExtents()));
+
+                expect(countWarnings(() => findOffsets(dataView))).to.equal(1);
+            });
+
+            it('should not warn for an iloc box with 4-byte fields', () => {
+                const ilocBox = buildIlocBox({
+                    version: 0,
+                    items: [{itemId: SIZED_ILOC_ITEM_ID, baseOffset: 0, extents: [{extentOffset: 0, extentLength: 16}]}],
+                });
+                const dataView = getDataView(getFullBox('meta', 0, buildSizedIlocExifIinfBox() + ilocBox) + '\x00'.repeat(64));
+
+                expect(countWarnings(() => findOffsets(dataView))).to.equal(0);
+            });
+
+            it('should not warn or throw for a meta box without an iloc box', () => {
+                const dataView = getDataView(getFullBox('meta', 0, buildSizedIlocExifIinfBox()));
+
+                expect(countWarnings(() => findOffsets(dataView))).to.equal(0);
+            });
+
+            it('should not warn when only an iloc box after the first one has 8-byte fields', () => {
+                const dataView = getDataView(getFullBox('meta', 0, buildSizedIlocExifIinfBox() + buildIlocBoxWithTwoItems() + build64BitIlocBoxWithManyExtents()));
+
+                expect(countWarnings(() => findOffsets(dataView))).to.equal(0);
+            });
+
+            function countWarnings(callback) {
+                const warnSpy = getConsoleWarnSpy();
+                try {
+                    callback();
+                } finally {
+                    warnSpy.reset();
+                }
+                return warnSpy.callCount;
+            }
+        });
     });
 
     describe('malformed boxes', () => {
@@ -1391,6 +1531,61 @@ function buildIlocBox({version, items}) {
     }).join('');
 
     return getFullBox('iloc', version, SIZES_BYTE + BASE_OFFSET_AND_INDEX_BYTE + itemCount + itemBytes);
+}
+
+const SIZED_ILOC_ITEM_ID = 2;
+
+function build64BitIlocBoxWithManyExtents() {
+    const EXTENT_COUNT = 5000;
+    return buildSizedIlocBox({
+        version: 0,
+        offsetSize: 8,
+        lengthSize: 8,
+        baseOffsetSize: 8,
+        indexSize: 0,
+        baseOffset: 0,
+        extents: Array.from({length: EXTENT_COUNT}, () => ({extentOffset: 0, extentLength: 0}))
+    });
+}
+
+// One item whose fields have the given byte sizes. Only sizes 4 and 8 write
+// bytes. Version 0 writes indexSize into the reserved nibble but no extent
+// index bytes.
+function buildSizedIlocBox({version, offsetSize, lengthSize, baseOffsetSize, indexSize, baseOffset, extents}) {
+    const hasIndexAndConstructionMethod = version === 1;
+    const sizesByte = getByteStringFromNumber((offsetSize << 4) | lengthSize, 1);
+    const baseOffsetSizeAndIndexByte = getByteStringFromNumber((baseOffsetSize << 4) | indexSize, 1);
+    const itemCount = getByteStringFromNumber(1, 2);
+    const constructionMethod = hasIndexAndConstructionMethod ? getByteStringFromNumber(0, 2) : '';
+    const dataReferenceIndex = getByteStringFromNumber(0, 2);
+    const extentBytes = extents.map((extent) =>
+        (hasIndexAndConstructionMethod ? getSizedValueBytes(extent.extentIndex, indexSize) : '')
+        + getSizedValueBytes(extent.extentOffset, offsetSize)
+        + getSizedValueBytes(extent.extentLength, lengthSize)
+    ).join('');
+
+    return getFullBox(
+        'iloc',
+        version,
+        sizesByte + baseOffsetSizeAndIndexByte + itemCount
+        + getByteStringFromNumber(SIZED_ILOC_ITEM_ID, 2) + constructionMethod + dataReferenceIndex
+        + getSizedValueBytes(baseOffset, baseOffsetSize)
+        + getByteStringFromNumber(extents.length, 2) + extentBytes
+    );
+}
+
+function buildSizedIlocExifIinfBox() {
+    return buildIinfBox([{itemId: SIZED_ILOC_ITEM_ID, itemType: ITEM_INFO_TYPE_EXIF}]);
+}
+
+function getSizedValueBytes(value, size) {
+    if (size === 8) {
+        return getByteStringFromNumber(0, 4) + getByteStringFromNumber(value, 4);
+    }
+    if (size === 4) {
+        return getByteStringFromNumber(value, 4);
+    }
+    return '';
 }
 
 // Bytes of an Exif item: [4-byte tiff-header-offset][Exif\0\0][tiff data].
