@@ -19,6 +19,27 @@ const PACKET_WRAPPER_END = '<?xpacket end="w"?>';
 const META_ELEMENT_START = '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.5-c002 1.000000, 0000/00/00-00:00:00        ">';
 const META_ELEMENT_END = '</x:xmpmeta>';
 
+const MAX_NESTING_DEPTH = 32;
+// The top-level properties are the first level, so the outermost nested tag's members are the second.
+const DEEPEST_ALLOWED_LEVEL = MAX_NESTING_DEPTH - 1;
+const NESTING_SHAPES = {
+    'rdf:parseType="Resource"': {
+        nest: (leaf, inner) => `<xmp:s rdf:parseType="Resource"><xmp:t>${leaf}</xmp:t>${inner}</xmp:s>`,
+        getMembers: (tag) => tag.value,
+        regressionDepth: 1000
+    },
+    'rdf:Description': {
+        nest: (leaf, inner) => `<xmp:s><rdf:Description><xmp:t>${leaf}</xmp:t>${inner}</rdf:Description></xmp:s>`,
+        getMembers: (tag) => tag.value,
+        regressionDepth: 500
+    },
+    'rdf:Seq with rdf:parseType="Resource" items': {
+        nest: (leaf, inner) => `<xmp:s><rdf:Seq><rdf:li rdf:parseType="Resource"><xmp:t>${leaf}</xmp:t>${inner}</rdf:li></rdf:Seq></xmp:s>`,
+        getMembers: (tag) => tag.value[0],
+        regressionDepth: 333
+    }
+};
+
 describe('xmp-tags', function () {
     beforeEach(() => {
         this.originalNonWebpackRequire = global.__non_webpack_require__;
@@ -278,6 +299,11 @@ describe('xmp-tags', function () {
                         `<xmp:MyXMPTag><rdf:Description>${text}</rdf:Description></xmp:MyXMPTag>`,
                         {value: {}, attributes: {}, description: ''}
                     );
+                });
+
+                it('should ignore long text directly inside rdf:RDF in linear time', () => {
+                    const tags = XmpTags.read(getXmlString('A'.repeat(8 * 1024 * 1024)), [], domParser);
+                    expect(Object.keys(tags)).to.deep.equal(['_raw']);
                 });
 
                 it('should drop a structure with rdf:value and a nested rdf:Description holding long text in linear time', () => {
@@ -2119,6 +2145,262 @@ describe('xmp-tags', function () {
                             description: '4711, 4812'
                         });
                     });
+
+                    it('should describe a plain value by itself when its description function throws', () => {
+                        const tags = readNestedXmp('<xmp:MyThrowingTag>4711</xmp:MyThrowingTag>', domParser);
+                        expect(tags['MyThrowingTag']).to.deep.equal({value: '4711', attributes: {}, description: '4711'});
+                    });
+                });
+            });
+
+            describe('descriptions of nested values', () => {
+                it('should describe a member with a description function by its value in the parent', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:MyStruct rdf:parseType="Resource">
+                            <exif:ColorSpace>1</exif:ColorSpace>
+                        </xmp:MyStruct>
+                    `, domParser);
+                    expect(tags['MyStruct']).to.deep.equal({
+                        value: {
+                            ColorSpace: {value: '1', attributes: {}, description: 'sRGB'}
+                        },
+                        attributes: {},
+                        description: 'ColorSpace: 1'
+                    });
+                });
+
+                it('should describe a structure by its members even when its name has a description function', () => {
+                    const tags = readNestedXmp(`
+                        <exif:ColorSpace rdf:parseType="Resource"><xmp:A>1</xmp:A></exif:ColorSpace>
+                    `, domParser);
+                    expect(tags['ColorSpace'].description).to.equal('A: 1');
+                });
+
+                it('should describe a value with child elements by the tags in them', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:MyTag><xmp:Inner xmp:b="2"><xmp:c>3</xmp:c></xmp:Inner></xmp:MyTag>
+                    `, domParser);
+                    expect(tags['MyTag']).to.deep.equal({
+                        value: {
+                            b: {value: '2', attributes: {}, description: '2'},
+                            c: {value: '3', attributes: {}, description: '3'}
+                        },
+                        attributes: {},
+                        description: 'b: 2; c: 3'
+                    });
+                });
+
+                describe('with a description function for a list', () => {
+                    let restoreXmpTagNames;
+
+                    beforeEach(() => {
+                        restoreXmpTagNames = swapProperties(XmpTagNames, {
+                            'xmp:MyListTag': () => 'translated'
+                        });
+                    });
+
+                    afterEach(() => {
+                        restoreXmpTagNames();
+                    });
+
+                    it('should describe a list member by the descriptions of its items in the parent', () => {
+                        const tags = readNestedXmp(`
+                            <xmp:MyStruct rdf:parseType="Resource">
+                                <xmp:MyListTag><rdf:Bag><rdf:li>a</rdf:li><rdf:li>b</rdf:li></rdf:Bag></xmp:MyListTag>
+                            </xmp:MyStruct>
+                        `, domParser);
+                        expect(tags['MyStruct']).to.deep.equal({
+                            value: {
+                                MyListTag: {
+                                    value: [
+                                        {value: 'a', attributes: {}, description: 'a'},
+                                        {value: 'b', attributes: {}, description: 'b'}
+                                    ],
+                                    attributes: {},
+                                    description: 'translated'
+                                }
+                            },
+                            attributes: {},
+                            description: 'MyListTag: a, b'
+                        });
+                    });
+                });
+
+                it('should describe every level of lists of structures holding lists of structures', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:L1><rdf:Seq>
+                            <rdf:li rdf:parseType="Resource">
+                                <xmp:A>a1</xmp:A>
+                                <xmp:L2><rdf:Bag>
+                                    <rdf:li rdf:parseType="Resource">
+                                        <xmp:B>b1</xmp:B>
+                                        <xmp:L3><rdf:Alt>
+                                            <rdf:li rdf:parseType="Resource"><xmp:C>c1</xmp:C></rdf:li>
+                                            <rdf:li>c2</rdf:li>
+                                        </rdf:Alt></xmp:L3>
+                                    </rdf:li>
+                                    <rdf:li>b2</rdf:li>
+                                </rdf:Bag></xmp:L2>
+                            </rdf:li>
+                            <rdf:li>a2</rdf:li>
+                        </rdf:Seq></xmp:L1>
+                    `, domParser);
+                    expect(tags['L1']).to.deep.equal({
+                        value: [
+                            {
+                                A: {value: 'a1', attributes: {}, description: 'a1'},
+                                L2: {
+                                    value: [
+                                        {
+                                            B: {value: 'b1', attributes: {}, description: 'b1'},
+                                            L3: {
+                                                value: [
+                                                    {C: {value: 'c1', attributes: {}, description: 'c1'}},
+                                                    {value: 'c2', attributes: {}, description: 'c2'}
+                                                ],
+                                                attributes: {},
+                                                description: 'C: c1, c2'
+                                            }
+                                        },
+                                        {value: 'b2', attributes: {}, description: 'b2'}
+                                    ],
+                                    attributes: {},
+                                    description: 'B: b1; L3: C: c1, c2, b2'
+                                }
+                            },
+                            {value: 'a2', attributes: {}, description: 'a2'}
+                        ],
+                        attributes: {},
+                        description: 'A: a1; L2: B: b1; L3: C: c1, c2, b2, a2'
+                    });
+                });
+
+                it('should describe every level of nested rdf:value lists', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:V><rdf:Seq>
+                            <rdf:li rdf:parseType="Resource">
+                                <rdf:value><rdf:Seq>
+                                    <rdf:li rdf:parseType="Resource">
+                                        <rdf:value><rdf:Seq><rdf:li>x</rdf:li></rdf:Seq></rdf:value>
+                                        <xmp:q>q2</xmp:q>
+                                    </rdf:li>
+                                    <rdf:li>y</rdf:li>
+                                </rdf:Seq></rdf:value>
+                                <xmp:q>q1</xmp:q>
+                            </rdf:li>
+                        </rdf:Seq></xmp:V>
+                    `, domParser);
+                    expect(tags['V']).to.deep.equal({
+                        value: [
+                            {
+                                value: [
+                                    {
+                                        value: [{value: 'x', attributes: {}, description: 'x'}],
+                                        attributes: {q: 'q2'},
+                                        description: 'x'
+                                    },
+                                    {value: 'y', attributes: {}, description: 'y'}
+                                ],
+                                attributes: {q: 'q1'},
+                                description: 'x, y'
+                            }
+                        ],
+                        attributes: {},
+                        description: 'x, y'
+                    });
+                });
+
+                it('should describe a list item structure with a member named value by its members', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:cuePointParams><rdf:Seq>
+                            <rdf:li rdf:parseType="Resource"><xmp:key>chapter</xmp:key><xmp:value>Intro</xmp:value></rdf:li>
+                            <rdf:li xmp:key="speaker" xmp:value="Ada"/>
+                        </rdf:Seq></xmp:cuePointParams>
+                    `, domParser);
+                    expect(tags['cuePointParams'].description).to.equal('key: chapter; value: Intro, key: speaker; value: Ada');
+                });
+
+                it('should add no properties to nested tags and values', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:MyStruct rdf:parseType="Resource">
+                            <xmp:A>a</xmp:A>
+                            <xmp:B><rdf:Seq><rdf:li rdf:parseType="Resource"><xmp:C>c</xmp:C></rdf:li></rdf:Seq></xmp:B>
+                        </xmp:MyStruct>
+                    `, domParser);
+                    const structure = tags['MyStruct'];
+                    const list = structure.value['B'];
+                    expect(Object.getOwnPropertyNames(structure)).to.deep.equal(['value', 'attributes', 'description']);
+                    expect(Object.getOwnPropertyNames(structure.value)).to.deep.equal(['A', 'B']);
+                    expect(Object.getOwnPropertyNames(list)).to.deep.equal(['value', 'attributes', 'description']);
+                    expect(Object.getOwnPropertyNames(list.value)).to.deep.equal(['0', 'length']);
+                    expect(Object.getOwnPropertyNames(list.value[0])).to.deep.equal(['C']);
+                });
+            });
+
+            describe('nesting depth', () => {
+                for (const shapeName in NESTING_SHAPES) {
+                    const shape = NESTING_SHAPES[shapeName];
+
+                    describe(`of ${shapeName} values`, () => {
+                        it('should keep a value nested to the deepest allowed level', () => {
+                            const tags = readNestedXmp(getNestedStructures(shape, DEEPEST_ALLOWED_LEVEL, getShortLeaf), domParser);
+                            expectNestedLevels(tags, shape, DEEPEST_ALLOWED_LEVEL);
+                        });
+
+                        it('should skip a value nested one level deeper and keep its ancestors and siblings', () => {
+                            const tags = readNestedXmp(getNestedStructures(shape, DEEPEST_ALLOWED_LEVEL + 1, getShortLeaf), domParser);
+                            expectNestedLevels(tags, shape, DEEPEST_ALLOWED_LEVEL);
+                        });
+
+                        it('should read a value nested a thousand DOM elements deep fast and with bounded descriptions', () => {
+                            const xmlString = getNestedXmlString(getNestedStructures(shape, shape.regressionDepth, getLongLeaf));
+                            const {tags, milliseconds} = readTimed(xmlString, domParser);
+                            expect(tags.s.value).to.exist;
+                            expect(milliseconds).to.be.below(1000);
+                            expect(getSummedDescriptionLength(tags)).to.be.at.most(MAX_NESTING_DEPTH * xmlString.length);
+                        });
+                    });
+                }
+
+                describe('of rdf:value lists', () => {
+                    it('should keep a list nested to the deepest allowed level', () => {
+                        const tags = readNestedXmp(getNestedRdfValueLists(DEEPEST_ALLOWED_LEVEL, getShortLeaf), domParser);
+                        expect(tags.v.description).to.equal(getNestedRdfValueListDescription(DEEPEST_ALLOWED_LEVEL));
+                        expect(tags.sibling.value).to.equal('ok');
+                    });
+
+                    it('should skip the tag holding a list nested one level deeper and keep its siblings', () => {
+                        const tags = readNestedXmp(getNestedRdfValueLists(DEEPEST_ALLOWED_LEVEL + 1, getShortLeaf), domParser);
+                        expect(tags.v).to.be.undefined;
+                        expect(tags.sibling.value).to.equal('ok');
+                    });
+
+                    it('should read lists nested a thousand DOM elements deep fast and with bounded descriptions', () => {
+                        const xmlString = getNestedXmlString(getNestedRdfValueLists(333, getLongLeaf));
+                        const {tags, milliseconds} = readTimed(xmlString, domParser);
+                        expect(tags.v).to.be.undefined;
+                        expect(tags.sibling.value).to.equal('ok');
+                        expect(milliseconds).to.be.below(1000);
+                        expect(getSummedDescriptionLength(tags)).to.be.at.most(MAX_NESTING_DEPTH * xmlString.length);
+                    });
+                });
+
+                it('should start every read at the top level', () => {
+                    const shape = NESTING_SHAPES['rdf:parseType="Resource"'];
+                    readNestedXmp(getNestedStructures(shape, DEEPEST_ALLOWED_LEVEL + 10, getShortLeaf), domParser);
+                    const tags = readNestedXmp(getNestedStructures(shape, DEEPEST_ALLOWED_LEVEL, getShortLeaf), domParser);
+                    expectNestedLevels(tags, shape, DEEPEST_ALLOWED_LEVEL);
+                });
+
+                it('should build each description once', () => {
+                    const shape = NESTING_SHAPES['rdf:parseType="Resource"'];
+                    const xmlString = getNestedXmlString(getNestedStructures(shape, DEEPEST_ALLOWED_LEVEL, getLongLeaf));
+                    const {tags, joinedLength} = readCountingJoins(xmlString, domParser);
+                    const summedDescriptionLength = getSummedDescriptionLength(tags);
+                    expectNestedLevels(tags, shape, DEEPEST_ALLOWED_LEVEL, getLongLeaf);
+                    // Joining every description once adds up to their summed length. Re-rendering the
+                    // members of each level joins about ten times as much at this depth.
+                    expect(joinedLength).to.be.at.most(1.5 * summedDescriptionLength);
                 });
             });
         });
@@ -2342,4 +2624,133 @@ function getPaddedDataView(content, pad) {
         view[pad + i] = content.charCodeAt(i);
     }
     return new DataView(buffer, pad);
+}
+
+function readNestedXmp(content, domParser) {
+    return XmpTags.read(getNestedXmlString(content), [], domParser);
+}
+
+function getNestedXmlString(content) {
+    return getXmlString(`
+        <rdf:Description
+            xmlns:xmp="http://ns.example.com/xmp"
+            xmlns:exif="http://ns.adobe.com/exif/1.0/"
+            xmlns:b="http://ns.example.com/b"
+            xmlns:c="http://ns.example.com/c">
+            ${content}
+        </rdf:Description>
+    `);
+}
+
+function getNestedStructures(shape, depth, getLeaf) {
+    let content = '';
+    for (let level = depth; level >= 1; level--) {
+        content = shape.nest(getLeaf(level), content);
+    }
+    return `${content}<xmp:sibling>ok</xmp:sibling>`;
+}
+
+function getShortLeaf(level) {
+    return `leaf${level}`;
+}
+
+function expectNestedLevels(tags, shape, deepestLevel, getLeaf = getShortLeaf) {
+    expect(tags.sibling.value).to.equal('ok');
+    let tag = tags.s;
+    for (let level = 1; level <= deepestLevel; level++) {
+        expect(tag.description).to.equal(getNestedDescription(level, deepestLevel, getLeaf));
+        const members = shape.getMembers(tag);
+        expect(members.t.value).to.equal(getLeaf(level));
+        tag = members.s;
+    }
+    expect(tag).to.be.undefined;
+}
+
+function getNestedDescription(level, deepestLevel, getLeaf) {
+    const memberDescriptions = [];
+    for (let nestedLevel = level; nestedLevel <= deepestLevel; nestedLevel++) {
+        memberDescriptions.push(`t: ${getLeaf(nestedLevel)}`);
+    }
+    return memberDescriptions.join('; s: ');
+}
+
+function getLongLeaf(level) {
+    return `leaf${level}`.padEnd(200, 'x');
+}
+
+function readTimed(xmlString, domParser) {
+    const start = Date.now();
+    const tags = XmpTags.read(xmlString, [], domParser);
+    return {tags, milliseconds: Date.now() - start};
+}
+
+function getSummedDescriptionLength(tags) {
+    let length = 0;
+    for (const name in tags) {
+        if (name !== '_raw') {
+            length += getSummedDescriptionLengthOfTag(tags[name]);
+        }
+    }
+    return length;
+}
+
+function getSummedDescriptionLengthOfTag(tag) {
+    return tag.description.length + getSummedDescriptionLengthOfValue(tag.value);
+}
+
+function getSummedDescriptionLengthOfValue(value) {
+    if (Array.isArray(value)) {
+        return value.reduce((length, item) => length + getSummedDescriptionLengthOfItem(item), 0);
+    }
+    if (typeof value === 'object') {
+        return getSummedDescriptionLength(value);
+    }
+    return 0;
+}
+
+// A list item is either a tag or a bare structure of tags.
+function getSummedDescriptionLengthOfItem(item) {
+    if (typeof item.description === 'string') {
+        return getSummedDescriptionLengthOfTag(item);
+    }
+    return getSummedDescriptionLength(item);
+}
+
+// Every rdf:value list holds a leaf followed by the next level, down to a last item with the value "end".
+function getNestedRdfValueLists(depth, getLeaf) {
+    let item = '<rdf:li rdf:parseType="Resource"><rdf:value>end</rdf:value></rdf:li>';
+    for (let level = depth; level >= 1; level--) {
+        item = `<rdf:li rdf:parseType="Resource"><rdf:value><rdf:Seq><rdf:li>${getLeaf(level)}</rdf:li>${item}</rdf:Seq></rdf:value></rdf:li>`;
+    }
+    return `<xmp:v><rdf:Seq>${item}</rdf:Seq></xmp:v><xmp:sibling>ok</xmp:sibling>`;
+}
+
+function getNestedRdfValueListDescription(depth) {
+    const itemDescriptions = [];
+    for (let level = 1; level <= depth; level++) {
+        itemDescriptions.push(getShortLeaf(level));
+    }
+    return [...itemDescriptions, 'end'].join(', ');
+}
+
+// The document is parsed before Array.prototype.join is counted so that only the reading of the
+// tags is counted, not the DOM parser's own joins.
+function readCountingJoins(xmlString, domParser) {
+    const doc = (domParser || new XmldomDomParser({onError: onErrorStopParsing})).parseFromString(xmlString, 'application/xml');
+    const originalJoin = Array.prototype.join;
+    let joinedLength = 0;
+    const restore = swapProperties(Array.prototype, {
+        join(...args) {
+            const joined = originalJoin.apply(this, args);
+            joinedLength += joined.length;
+            return joined;
+        }
+    });
+    let tags;
+    try {
+        tags = XmpTags.read(xmlString, [], {parseFromString: () => doc});
+    } finally {
+        restore();
+    }
+    return {tags, joinedLength};
 }

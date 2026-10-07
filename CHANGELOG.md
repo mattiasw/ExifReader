@@ -47,6 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `FieldOfView`) for any image since the include filters were added in
   4.36.0, because the Exif sub-IFD holding the tags they are computed from was
   not read.
+- An XMP list whose items are structures with a member named `value`, such as
+  `xmpDM:cuePointParams`, was described as
+  `value: undefined; attributes: undefined; description: undefined` per item
+  instead of by the members of each item.
 
 ### Security
 
@@ -99,6 +103,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   promise, so a caller handling errors with `.catch()` got an uncaught
   exception. Such a text chunk now gets the usual placeholder value, such an
   ICC profile or `brob` box is skipped, and the other tags are returned.
+- XMP values nested many levels deep took time and memory far above their
+  size to read, because every level built the descriptions of all levels below
+  it again: a 248 KB WebP with a value nested 1000 levels deep took about 43
+  seconds and 1.1 GB. Each description is now built once, and a tag whose
+  value would nest deeper than 32 levels is left out.
 
 ## [4.46.0] - 2026-09-26
 
