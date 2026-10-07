@@ -108,6 +108,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it again: a 248 KB WebP with a value nested 1000 levels deep took about 43
   seconds and 1.1 GB. Each description is now built once, and a tag whose
   value would nest deeper than 32 levels is left out.
+- A HEIC or AVIF file whose iloc box used 8-byte offset, length or index
+  fields logged one console warning per such field, so a crafted 8 MB file
+  logged over a million warnings (about 125 MB) and blocked `load()` for
+  seconds. The warning is now logged once instead of once per field.
 
 ## [4.46.0] - 2026-09-26
 

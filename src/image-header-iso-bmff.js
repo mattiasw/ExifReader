@@ -228,6 +228,8 @@ export function findOffsets(dataView, metadataBlocks) {
             return {hasAppMarkers: false};
         }
 
+        warnIfUnsupportedFieldSize(metaBox);
+
         if (Constants.USE_EXIF) {
             const exif = findExifOffset(dataView, metaBox, metadataBlocks);
             if (exif !== undefined) {
@@ -277,6 +279,14 @@ function findMetaBox(dataView) {
     }
 
     return undefined;
+}
+
+function warnIfUnsupportedFieldSize(metaBox) {
+    const ilocBox = metaBox.subBoxes.find((box) => box.type === 'iloc');
+    if (ilocBox && ilocBox.uses64BitFields) {
+        // eslint-disable-next-line no-console
+        console.warn('This file uses 8-byte iloc offset, length or index fields which are currently not fully supported by ExifReader. Contact the maintainer to get it fixed.');
+    }
 }
 
 function findExifOffset(dataView, metaBox, metadataBlocks) {

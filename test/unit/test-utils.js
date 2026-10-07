@@ -60,8 +60,10 @@ function getConsoleWarnSpy() {
 
     const warnSpy = function () {
         warnSpy.hasWarned = true;
+        warnSpy.callCount++;
     };
     warnSpy.hasWarned = false;
+    warnSpy.callCount = 0;
     warnSpy.reset = function () {
         console.warn = originalConsoleWarn;
     };
