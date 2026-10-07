@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Custom builds with an `exif` tag list no longer lose the value descriptions
+  of included tags that use a lookup table. Tags such as FillOrder or
+  SensitivityType described every value as 'Unknown'.
 - XMP element text is no longer lost when it spans several DOM nodes. With
   `linkedom`, text containing an entity or character reference such as
   `&amp;` came out as an empty object. A CDATA section, an XML comment or a
