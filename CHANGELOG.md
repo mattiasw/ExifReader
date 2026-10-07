@@ -112,6 +112,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fields logged one console warning per such field, so a crafted 8 MB file
   logged over a million warnings (about 125 MB) and blocked `load()` for
   seconds. The warning is now logged once instead of once per field.
+- A tag name taken from the file that was `__proto__` (a Photoshop image
+  resource name, an uncompressed PNG text chunk keyword, or any XMP tag when
+  `includeTags` or `excludeTags` is used) replaced the prototype of the object
+  holding the tags instead of becoming a tag, so the tag was lost and its
+  fields (such as `value` and `description`) showed up as keys of the group.
+  It is now kept under its own name. A PNG text chunk with the keyword
+  `__exif` or `__iptc` is now read as a PNG text tag instead of being merged
+  into the Exif or IPTC group.
 
 ## [4.46.0] - 2026-09-26
 

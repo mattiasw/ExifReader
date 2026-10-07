@@ -111,7 +111,7 @@ describe('png-text-tags', () => {
         const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
         const tags = await readTagsPromise;
 
-        expect(tags[0]['MyTag']).to.deep.equal({
+        expect(tags[0].readTags['MyTag']).to.deep.equal({
             value: 'My compressed zTXt value.',
             description: 'My compressed zTXt value.'
         });
@@ -126,7 +126,7 @@ describe('png-text-tags', () => {
         const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
         const tags = await readTagsPromise;
 
-        expect(tags[0]['MyTag']).to.deep.equal({
+        expect(tags[0].readTags['MyTag']).to.deep.equal({
             value: 'My compressed zTXt value.',
             description: 'My compressed zTXt value.'
         });
@@ -178,7 +178,7 @@ describe('png-text-tags', () => {
         const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
         const tags = await readTagsPromise;
 
-        expect(tags[0]['__exif']).to.equal(EXIF_DATA.substring(6));
+        expect(tags[0].embeddedExifTags).to.equal(EXIF_DATA.substring(6));
     });
 
     it('should read zTXt tags with IPTC data', async () => {
@@ -194,7 +194,7 @@ describe('png-text-tags', () => {
         const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
         const tags = await readTagsPromise;
 
-        expect(tags[0]['__iptc']).to.equal(IPTC_DATA);
+        expect(tags[0].embeddedIptcTags).to.equal(IPTC_DATA);
     });
 
     it('should ignore tags that use compression when async is not passed', async () => {
@@ -227,7 +227,7 @@ describe('png-text-tags', () => {
         const {readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
         const tags = await readTagsPromise;
 
-        expect(tags[0][name]).to.deep.equal({
+        expect(tags[0].readTags[name]).to.deep.equal({
             value,
             description: value
         });
@@ -261,7 +261,7 @@ describe('png-text-tags', () => {
             const tags = await PngTextTags.read(dataView, chunks, true, false, false, tagFilter, decompressConfig).readTagsPromise;
 
             expect(readCalls).to.equal(0);
-            expect(tags).to.deep.equal([{}, {}, {MyTag: {value: 'My value.', description: 'My value.'}}]);
+            expect(tags).to.deep.equal([{}, {}, {readTags: {MyTag: {value: 'My value.', description: 'My value.'}}}]);
         } finally {
             restoreIptcTags();
         }
@@ -286,6 +286,68 @@ describe('png-text-tags', () => {
         expect(tags).to.deep.equal([{}]);
     });
 
+    it('should keep an uncompressed tag with the keyword __proto__ as an own tag', () => {
+        const tagData = '__proto__\x00hello';
+        const dataView = getDataView(tagData);
+        const chunks = [
+            {type: TYPE_TEXT, offset: 0, length: tagData.length}
+        ];
+
+        const {readTags} = PngTextTags.read(dataView, chunks);
+
+        expect(Object.keys(readTags)).to.deep.equal(['__proto__']);
+        expect(Object.getPrototypeOf(readTags)).to.equal(Object.prototype);
+        expect(Object.getOwnPropertyDescriptor(readTags, '__proto__').value).to.deep.equal({
+            value: 'hello',
+            description: 'hello'
+        });
+    });
+
+    it('should keep a compressed tag with the keyword __proto__ as an own tag', async () => {
+        const dataView = await getCompressedTagData(TYPE_ZTXT, '__proto__', 'hello');
+        const chunks = [
+            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
+        ];
+
+        const tags = await PngTextTags.read(dataView, chunks, true).readTagsPromise;
+
+        expect(Object.keys(tags[0])).to.deep.equal(['readTags']);
+        const readTags = tags[0].readTags;
+        expect(Object.keys(readTags)).to.deep.equal(['__proto__']);
+        expect(Object.getPrototypeOf(readTags)).to.equal(Object.prototype);
+        expect(Object.getOwnPropertyDescriptor(readTags, '__proto__').value).to.deep.equal({
+            value: 'hello',
+            description: 'hello'
+        });
+    });
+
+    it('should read an uncompressed tag with the keyword __exif as a text tag', () => {
+        const tagData = '__exif\x00FROMFILE';
+        const dataView = getDataView(tagData);
+        const chunks = [
+            {type: TYPE_TEXT, offset: 0, length: tagData.length}
+        ];
+
+        const {readTags} = PngTextTags.read(dataView, chunks);
+
+        expect(readTags).to.deep.equal({__exif: {value: 'FROMFILE', description: 'FROMFILE'}});
+    });
+
+    it('should read compressed tags with the keywords __exif and __iptc as text tags', async () => {
+        const {dataView, chunks} = buildTextChunks([
+            getZtxtChunk('__exif', toBytes('FROMFILE')),
+            getZtxtChunk('__iptc', toBytes('FROMFILE'))
+        ]);
+        const decompressConfig = {deflate: (bytes) => bytes};
+
+        const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+
+        expect(tags).to.deep.equal([
+            {readTags: {__exif: {value: 'FROMFILE', description: 'FROMFILE'}}},
+            {readTags: {__iptc: {value: 'FROMFILE', description: 'FROMFILE'}}}
+        ]);
+    });
+
     describe('many compressed text chunks', () => {
         const MAX_COMPRESSED_TEXT_CHUNKS = 255;
         const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;
@@ -304,7 +366,7 @@ describe('png-text-tags', () => {
             expect(elapsed).to.be.below(500);
             expect(tags).to.have.lengthOf(MAX_COMPRESSED_TEXT_CHUNKS);
             for (let i = 0; i < MAX_COMPRESSED_TEXT_CHUNKS; i++) {
-                expect(tags[i]).to.deep.equal({['k' + i]: {value: 'v', description: 'v'}});
+                expect(tags[i]).to.deep.equal({readTags: {['k' + i]: {value: 'v', description: 'v'}}});
             }
         });
 
@@ -435,9 +497,9 @@ describe('png-text-tags', () => {
             const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
             expect(tags).to.deep.equal([
-                {k0: {value: 'v0', description: 'v0'}},
-                {k1: {value: unknownCompressionValue, description: unknownCompressionValue}},
-                {k2: {value: 'v2', description: 'v2'}}
+                {readTags: {k0: {value: 'v0', description: 'v0'}}},
+                {readTags: {k1: {value: unknownCompressionValue, description: unknownCompressionValue}}},
+                {readTags: {k2: {value: 'v2', description: 'v2'}}}
             ]);
         });
 
@@ -485,12 +547,12 @@ describe('png-text-tags', () => {
                 await flushPromises();
 
                 expect(tags).to.deep.equal([
-                    {k0: {value: 'v0', description: 'v0'}},
-                    {k1: {value: unknownCompressionValue, description: unknownCompressionValue}},
-                    {k2: {value: 'v2', description: 'v2'}},
-                    {k3: {value: 'v3', description: 'v3'}},
-                    {k4: {value: unknownCompressionValue, description: unknownCompressionValue}},
-                    {k5: {value: 'v5', description: 'v5'}}
+                    {readTags: {k0: {value: 'v0', description: 'v0'}}},
+                    {readTags: {k1: {value: unknownCompressionValue, description: unknownCompressionValue}}},
+                    {readTags: {k2: {value: 'v2', description: 'v2'}}},
+                    {readTags: {k3: {value: 'v3', description: 'v3'}}},
+                    {readTags: {k4: {value: unknownCompressionValue, description: unknownCompressionValue}}},
+                    {readTags: {k5: {value: 'v5', description: 'v5'}}}
                 ]);
                 expect(unhandledRejections).to.deep.equal([]);
             } finally {
@@ -517,7 +579,7 @@ describe('png-text-tags', () => {
                 restoreWarn();
             }
 
-            const values = tags.map((tag, index) => tag['k' + index].value);
+            const values = tags.map((tag, index) => tag.readTags['k' + index].value);
             const fullValues = values.filter((tagValue) => tagValue === value);
             const skippedValues = values.filter((tagValue) => tagValue !== value);
             expect(tags).to.have.lengthOf(8);
@@ -530,7 +592,7 @@ describe('png-text-tags', () => {
         function getExpectedTags(start, end) {
             const tags = [];
             for (let i = start; i < end; i++) {
-                tags.push({['k' + i]: {value: 'v' + i, description: 'v' + i}});
+                tags.push({readTags: {['k' + i]: {value: 'v' + i, description: 'v' + i}}});
             }
             return tags;
         }
@@ -553,8 +615,8 @@ describe('png-text-tags', () => {
             const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
             expect(tags).to.deep.equal([
-                {k: {value: unknownCompressionValue, description: unknownCompressionValue}},
-                {good: {value: 'fine', description: 'fine'}}
+                {readTags: {k: {value: unknownCompressionValue, description: unknownCompressionValue}}},
+                {readTags: {good: {value: 'fine', description: 'fine'}}}
             ]);
             expect(calledValues).to.deep.equal(['fine']);
         });
@@ -569,8 +631,8 @@ describe('png-text-tags', () => {
             const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
             expect(tags).to.deep.equal([
-                {k: {value: unknownCompressionValue, description: unknownCompressionValue}},
-                {good: {value: 'fine', description: 'fine'}}
+                {readTags: {k: {value: unknownCompressionValue, description: unknownCompressionValue}}},
+                {readTags: {good: {value: 'fine', description: 'fine'}}}
             ]);
             expect(calledValues).to.deep.equal(['fine']);
         });
@@ -587,8 +649,8 @@ describe('png-text-tags', () => {
 
             const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
-            expect(tags).to.deep.equal([fallbackTag, {good: {value: 'fine', description: 'fine'}}]);
-            expect(tags[0].k.value).to.deep.equal(unknownCompressionValue);
+            expect(tags).to.deep.equal([fallbackTag, {readTags: {good: {value: 'fine', description: 'fine'}}}]);
+            expect(tags[0].readTags.k.value).to.deep.equal(unknownCompressionValue);
             expect(calledValues).to.deep.equal(['fine']);
         });
 

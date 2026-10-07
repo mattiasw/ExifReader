@@ -35,6 +35,21 @@ describe('photoshop-tags', () => {
         expect(PhotoshopTags.read(bytes).TagName1).to.deep.include({id: 0x4711});
     });
 
+    it('should keep a tag with the encoded name __proto__ as an own tag', () => {
+        restores.push(swapProperties(TagNames, {0x4711: {name: 'DefaultTagName', description: () => 'MyDescription'}}));
+        const bytes = getPhotoshopBytes({id: 0x4711, name: '__proto__', resource: '\x42\x43'});
+
+        const tags = PhotoshopTags.read(bytes);
+
+        expect(Object.keys(tags)).to.deep.equal(['__proto__']);
+        expect(Object.getPrototypeOf(tags)).to.equal(Object.prototype);
+        expect(Object.getOwnPropertyDescriptor(tags, '__proto__').value).to.deep.equal({
+            id: 0x4711,
+            value: '\x42\x43',
+            description: 'MyDescription'
+        });
+    });
+
     it('should be able to read tag content', () => {
         restores.push(swapProperties(
             TagNames,

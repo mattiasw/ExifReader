@@ -8,7 +8,7 @@
  */
 /* global Buffer */
 
-import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray, assertPromiseSupport} from './utils.js';
+import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray, assertPromiseSupport, setProperty} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import Constants from './constants.js';
@@ -810,7 +810,7 @@ function filterTags(groupKey, readTags, matchesTag) {
         const tagId = getTagId(tagValue);
 
         if (matchesTag(groupKey, tagName, tagId)) {
-            filteredTags[tagName] = tagValue;
+            setProperty(filteredTags, tagName, tagValue);
         }
     }
 

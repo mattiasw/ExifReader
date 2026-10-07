@@ -143,19 +143,18 @@ describe('tag filtering options', function () {
         }).to.not.throw();
     });
 
-    it('excludeTags: { png: true } should not block embedded exif tags', function () {
+    it('excludeTags: { png: true } should not block embedded exif tags', async function () {
         fakeImageHeader({
             fileType: 'png',
             pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
         });
-        fakePngTextTagsRead({
-            __exif: {
-                UserComment: {id: 0x9286, value: 'Hello'},
-            },
-            'Color Type': {value: 2, description: 'RGB'},
-        });
+        fakePngTextTagsReadAsync(
+            {'Color Type': {value: 2, description: 'RGB'}},
+            [{embeddedExifTags: {UserComment: {id: 0x9286, value: 'Hello'}}}]
+        );
 
-        const tags = ExifReader.loadView({}, {
+        const tags = await ExifReader.loadView({}, {
+            async: true,
             excludeTags: {
                 png: true,
             },
@@ -165,19 +164,20 @@ describe('tag filtering options', function () {
         expect(tags['Color Type']).to.equal(undefined);
     });
 
-    it('includeTags.thumbnail should not turn the thumbnail IFD of embedded png exif into a Thumbnail tag', function () {
+    it('includeTags.thumbnail should not turn the thumbnail IFD of embedded png exif into a Thumbnail tag', async function () {
         fakeImageHeader({
             fileType: 'png',
             pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
         });
-        fakePngTextTagsRead({
-            __exif: {
+        fakePngTextTagsReadAsync({}, [{
+            embeddedExifTags: {
                 UserComment: {id: 0x9286, value: 'Hello'},
                 Thumbnail: {JPEGInterchangeFormat: {id: 0x0201, value: 272}},
             },
-        });
+        }]);
 
-        const tags = ExifReader.loadView({}, {
+        const tags = await ExifReader.loadView({}, {
+            async: true,
             includeTags: {
                 exif: true,
                 thumbnail: true,
@@ -188,19 +188,18 @@ describe('tag filtering options', function () {
         expect(tags.Thumbnail).to.equal(undefined);
     });
 
-    it('includeTags: { png: true } should not include embedded exif when exif is not included', function () {
+    it('includeTags: { png: true } should not include embedded exif when exif is not included', async function () {
         fakeImageHeader({
             fileType: 'png',
             pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
         });
-        fakePngTextTagsRead({
-            __exif: {
-                UserComment: {id: 0x9286, value: 'Hello'},
-            },
-            'Color Type': {value: 2, description: 'RGB'},
-        });
+        fakePngTextTagsReadAsync(
+            {'Color Type': {value: 2, description: 'RGB'}},
+            [{embeddedExifTags: {UserComment: {id: 0x9286, value: 'Hello'}}}]
+        );
 
-        const tags = ExifReader.loadView({}, {
+        const tags = await ExifReader.loadView({}, {
+            async: true,
             includeTags: {
                 png: true,
             },
@@ -261,6 +260,42 @@ describe('tag filtering options', function () {
         expect(tags.xmp.Other).to.equal(undefined);
         expect(tags.xmp._raw).to.equal(undefined);
     });
+
+    for (const [filterName, filterOptions] of [
+        ['includeTags', {includeTags: {xmp: true}}],
+        ['excludeTags', {excludeTags: {exif: ['Make']}}],
+    ]) {
+        it(`${filterName} should keep an XMP tag named __proto__ as an own tag`, function () {
+            fakeImageHeader({
+                fileType: 'jpeg',
+                xmpChunks: [{dataOffset: 0, length: 1}],
+            });
+            fakeXmpTagsRead(getXmpTagsWithProtoTag());
+
+            const tags = ExifReader.loadView({}, {expanded: true, ...filterOptions});
+
+            expect(Object.keys(tags.xmp)).to.include.members(['__proto__', 'Other']);
+            expect(Object.getPrototypeOf(tags.xmp)).to.equal(Object.prototype);
+            expect(Object.getOwnPropertyDescriptor(tags.xmp, '__proto__').value.value).to.equal('polluted');
+            expect(tags.xmp.value).to.equal(undefined);
+            expect(tags.xmp.description).to.equal(undefined);
+        });
+
+        it(`${filterName} should keep an XMP tag named __proto__ as an own top-level tag when flat`, function () {
+            fakeImageHeader({
+                fileType: 'jpeg',
+                xmpChunks: [{dataOffset: 0, length: 1}],
+            });
+            fakeXmpTagsRead(getXmpTagsWithProtoTag());
+
+            const tags = ExifReader.loadView({}, filterOptions);
+
+            expect(Object.keys(tags)).to.include('__proto__');
+            expect(Object.getPrototypeOf(tags)).to.equal(Object.prototype);
+            expect(tags.value).to.equal(undefined);
+            expect(tags.description).to.equal(undefined);
+        });
+    }
 
     it('includeTags.file should control FileType output', function () {
         fakeImageHeader({
@@ -606,10 +641,10 @@ function fakeTagsReadToThrow() {
     }));
 }
 
-function fakePngTextTagsRead(tagsValue) {
+function fakePngTextTagsReadAsync(readTags, asyncEntries) {
     restoreFunctions.push(swapProperties(PngTextTags, {
         read() {
-            return {readTags: tagsValue, readTagsPromise: undefined};
+            return {readTags, readTagsPromise: Promise.resolve(asyncEntries)};
         },
     }));
 }
@@ -620,6 +655,13 @@ function fakeXmpTagsRead(tagsValue) {
             return tagsValue;
         },
     }));
+}
+
+function getXmpTagsWithProtoTag() {
+    return JSON.parse(
+        '{"__proto__": {"value": "polluted", "attributes": {}, "description": "polluted"},'
+        + ' "Other": {"value": "other", "attributes": {}, "description": "other"}}'
+    );
 }
 
 function fakeXmpTagsReadToThrow() {
