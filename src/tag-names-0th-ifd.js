@@ -372,10 +372,22 @@ export default {
 };
 
 function decodeXPValue(value) {
+    if (!Array.isArray(value)) {
+        // A one-element value arrives as a bare number, which Uint8Array would take as a length.
+        return '';
+    }
     // The XP tags are encoded as UCS-2 which uses two bytes per character but
     // it's close to UTF-16 so we can use that to decode them.
     // https://www.loc.gov/preservation/digital/formats/content/tiff_tags.shtml
     const decodedValue = new TextDecoder('utf-16').decode(new Uint8Array(value));
     // Some softwares pad the string with null characters so we remove them.
-    return decodedValue.replace(/\u0000+$/, ''); // eslint-disable-line no-control-regex
+    return removeTrailingNulls(decodedValue);
+}
+
+function removeTrailingNulls(text) {
+    let end = text.length;
+    while (end > 0 && text.charCodeAt(end - 1) === 0) {
+        end--;
+    }
+    return text.slice(0, end);
 }

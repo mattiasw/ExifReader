@@ -383,6 +383,36 @@ describe('tag-names-0th-ifd', () => {
         expect(TagNames0thIfd[0x9c9f].description([115, 0, 117, 0, 98, 0, 106, 0, 101, 0, 99, 0, 116, 0])).to.equal('subject');
     });
 
+    it('should remove trailing null padding from an XP tag value', () => {
+        expect(TagNames0thIfd[0x9c9b].description([116, 0, 105, 0, 116, 0, 108, 0, 101, 0, 0, 0, 0, 0])).to.equal('title');
+    });
+
+    it('should decode an XP tag value of only null characters to an empty string', () => {
+        expect(TagNames0thIfd[0x9c9b].description([0, 0, 0, 0])).to.equal('');
+    });
+
+    it('should keep a null character in the middle of an XP tag value', () => {
+        expect(TagNames0thIfd[0x9c9b].description([97, 0, 0, 0, 98, 0])).to.equal('a\u0000b');
+    });
+
+    // Trimming the trailing null characters with a regex was quadratic in the length
+    // of a run of them and took seconds here, which makes this time out.
+    it('should not slow down quadratically on a long run of null characters in an XP tag value', function () {
+        this.timeout(1000);
+        const bytes = new Array(160002).fill(0);
+        bytes[160000] = 97;
+        expect(TagNames0thIfd[0x9c9b].description(bytes)).to.equal('\u0000'.repeat(80000) + 'a');
+    });
+
+    it('should not use a bare number XP tag value as a length', () => {
+        expect(TagNames0thIfd[0x9c9b].description(5)).to.equal('');
+        expect(TagNames0thIfd[0x9c9b].description(-1)).to.equal('');
+    });
+
+    it('should decode a faulty XP tag value to an empty string', () => {
+        expect(TagNames0thIfd[0x9c9b].description('<faulty value>')).to.equal('');
+    });
+
     it('should have tag GDALMetadata', () => {
         expect(TagNames0thIfd[0xa480]).to.equal('GDALMetadata');
     });

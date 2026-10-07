@@ -40,6 +40,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   element with thousands of `&amp;` references, about 60 KB) could take tens
   of seconds.
 
+### Security
+
+- Decoding the XPTitle, XPComment, XPAuthor, XPKeywords and XPSubject tags
+  took time quadratic in the length of a run of NUL characters in the value,
+  so a small file (for example an 80 KB TIFF) could block `load()` for
+  seconds. An XP tag stored as a single number was also decoded as that many
+  zero bytes, so a TIFF of a few hundred bytes could block `load()` for
+  seconds and use over a gigabyte of memory. Such a tag now gets an empty
+  description.
+
 ## [4.46.0] - 2026-09-26
 
 ### Fixed
