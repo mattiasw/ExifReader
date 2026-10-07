@@ -251,6 +251,62 @@ describe('xmp-tags', function () {
                     expect(tags.MyXMPTag).to.deep.equal({value: '4711', attributes: {}, description: '4711'});
                 });
 
+                it('should read a long text value in linear time', () => {
+                    const text = 'A'.repeat(8 * 1024 * 1024);
+                    expectMyXMPTagValue(`<xmp:MyXMPTag>${text}</xmp:MyXMPTag>`, text);
+                });
+
+                it('should read a long text value in a list item in linear time', () => {
+                    const text = 'A'.repeat(8 * 1024 * 1024);
+                    expectMyXMPTag(
+                        `<xmp:MyXMPTag><rdf:Bag><rdf:li>${text}</rdf:li></rdf:Bag></xmp:MyXMPTag>`,
+                        {value: [{value: text, attributes: {}, description: text}], attributes: {}, description: text}
+                    );
+                });
+
+                it('should ignore long text directly inside a resource structure in linear time', () => {
+                    const text = 'A'.repeat(1024 * 1024);
+                    expectMyXMPTag(
+                        `<xmp:MyXMPTag rdf:parseType="Resource">${text}</xmp:MyXMPTag>`,
+                        {value: {}, attributes: {}, description: ''}
+                    );
+                });
+
+                it('should ignore long text directly inside a nested rdf:Description in linear time', () => {
+                    const text = 'A'.repeat(1024 * 1024);
+                    expectMyXMPTag(
+                        `<xmp:MyXMPTag><rdf:Description>${text}</rdf:Description></xmp:MyXMPTag>`,
+                        {value: {}, attributes: {}, description: ''}
+                    );
+                });
+
+                it('should drop a structure with rdf:value and a nested rdf:Description holding long text in linear time', () => {
+                    const text = 'A'.repeat(6 * 1024 * 1024);
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag0>4711</xmp:MyXMPTag0>
+                            <xmp:MyXMPTag rdf:parseType="Resource"><rdf:value>x</rdf:value><rdf:Description>${text}</rdf:Description></xmp:MyXMPTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags).to.deep.equal({
+                        _raw: xmlString,
+                        MyXMPTag0: {value: '4711', attributes: {}, description: '4711'}
+                    });
+                });
+
+                it('should read an element holding only an empty CDATA section as an empty structure', () => {
+                    expectMyXMPTag('<xmp:MyXMPTag><![CDATA[]]></xmp:MyXMPTag>', {value: {}, attributes: {}, description: ''});
+                });
+
+                it('should read a list item holding only an empty CDATA section as an empty structure', () => {
+                    expectMyXMPTag(
+                        '<xmp:MyXMPTag><rdf:Bag><rdf:li><![CDATA[]]></rdf:li></rdf:Bag></xmp:MyXMPTag>',
+                        {value: [{}], attributes: {}, description: ''}
+                    );
+                });
+
                 // Only linkedom rebuilds the attribute list on every access, and xmldom's own
                 // parsing of this many attributes is slow enough to time out on a loaded machine.
                 if (domParserName === 'linkedom') {
@@ -264,6 +320,10 @@ describe('xmp-tags', function () {
                 }
 
                 function expectMyXMPTagValue(element, value) {
+                    expectMyXMPTag(element, {value, attributes: {}, description: value});
+                }
+
+                function expectMyXMPTag(element, tag) {
                     const xmlString = getXmlString(`
                         <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                             ${element}
@@ -273,7 +333,7 @@ describe('xmp-tags', function () {
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
                     expect(tags).to.deep.equal({
                         _raw: xmlString,
-                        MyXMPTag: {value, attributes: {}, description: value}
+                        MyXMPTag: tag
                     });
                 }
 

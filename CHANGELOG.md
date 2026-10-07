@@ -64,6 +64,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This affects environments where a DOM parser is available: web browsers, and
   Node.js when the `domParser` option is used or when `@xmldom/xmldom` is
   installed (which it is by default, as an `optionalDependency`).
+- A long text value in an XMP packet took time and memory far above its size
+  to read: an 8 MB value took about 3 seconds and 800 MB. Text directly inside
+  an element with `rdf:parseType="Resource"`, or inside an `rdf:Description`
+  nested in a property, took about 7 seconds per MB. Values like these fit in
+  formats that allow large XMP packets, such as PNG, WebP and JPEG with
+  extended XMP.
 
 ## [4.46.0] - 2026-09-26
 
