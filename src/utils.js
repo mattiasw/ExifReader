@@ -240,8 +240,7 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
         const decompressType = compressionMethod === COMPRESSION_METHOD_DEFLATE ? 'deflate' : 'brotli';
         const customFn = decompressConfig[decompressType];
         if (typeof customFn === 'function') {
-            const uint8 = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
-            return Promise.resolve(customFn(uint8)).then((result) => {
+            return new Promise((resolve) => resolve(customFn(getUint8View(dataView)))).then((result) => {
                 budget.remaining -= getResultByteLength(result);
                 if (budget.remaining < 0) {
                     return rejectExceedsMax(budget, maxDecompressedSize);
@@ -310,6 +309,10 @@ function getDecompressBudget(decompressConfig, maxDecompressedSize) {
         return decompressConfig.budget;
     }
     return {remaining: maxDecompressedSize, warned: false};
+}
+
+function getUint8View(dataView) {
+    return new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
 }
 
 function readBoundedDecompressedStream(dataView, format, budget, maxDecompressedSize) {

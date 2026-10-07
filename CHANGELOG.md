@@ -91,6 +91,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a large or endless response no longer uses up all memory. This applies
   wherever `fetch` supports streaming response bodies, as in current browsers
   and Node.js, and in Node.js when no global `fetch` is defined.
+- With `async: true` and a custom `decompress.deflate` or `decompress.brotli`
+  function, a PNG zTXt or compressed iTXt chunk with no compressed text after
+  its header, or a custom decompression function that throws (for PNG text, a
+  compressed PNG ICC profile, or JPEG XL `brob` Exif and XMP boxes), made
+  `load()` and `loadView()` throw synchronously instead of returning a
+  promise, so a caller handling errors with `.catch()` got an uncaught
+  exception. Such a text chunk now gets the usual placeholder value, such an
+  ICC profile or `brob` box is skipped, and the other tags are returned.
 
 ## [4.46.0] - 2026-09-26
 

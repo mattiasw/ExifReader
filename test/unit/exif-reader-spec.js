@@ -868,6 +868,36 @@ describe('exif-reader', function () {
         expect(result.FileType).to.deep.equal({value: 'jxl', description: 'JPEG XL'});
     });
 
+    it('should return a promise that resolves when a custom brob decompression function throws', async () => {
+        swapImageHeader({
+            fileType: {value: 'jxl', description: 'JPEG XL'},
+            brobExifChunk: {dataOffset: 0, length: 10},
+            brobXmpChunk: {dataOffset: 0, length: 10}
+        });
+
+        let calls = 0;
+        let promise;
+        expect(() => {
+            promise = ExifReader.loadView(
+                new DataView(new ArrayBuffer(10)),
+                {
+                    async: true,
+                    decompress: {
+                        brotli: () => {
+                            calls++;
+                            throw new Error('fail');
+                        }
+                    }
+                }
+            );
+        }).to.not.throw();
+
+        expect(promise).to.be.instanceOf(Promise);
+        const result = await promise;
+        expect(result.FileType).to.deep.equal({value: 'jxl', description: 'JPEG XL'});
+        expect(calls).to.equal(2);
+    });
+
     it('should bound the brob Exif data by the bytes present when the box declares a larger length', () => {
         let receivedLength;
         swapImageHeader({
