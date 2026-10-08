@@ -6,6 +6,7 @@ import {objectAssign} from './utils.js';
 import ByteOrder from './byte-order.js';
 import {IFD_TYPE_0TH, IFD_TYPE_EXIF, IFD_TYPE_GPS, IFD_TYPE_INTEROPERABILITY} from './tag-names.js';
 import {readIfd, get0thIfdOffset, getValueBudget} from './tags-helpers.js';
+import {TIFF_HEADER_LENGTH} from './tiff-constants.js';
 
 const SUB_IFDS = [
     {pointerKey: 'Exif IFD Pointer', ifdType: IFD_TYPE_EXIF},
@@ -62,6 +63,11 @@ function readSubIfd(subIfd, tags, dataView, tiffHeaderOffset, byteOrder, include
     if (pointerTag === undefined) {
         return tags;
     }
+    // An IFD starts past the TIFF header. An SLONG pointer can be negative, and
+    // an array or a faulty value is not an offset.
+    if (!isOffsetPastTiffHeader(pointerTag.value)) {
+        return tags;
+    }
 
     return objectAssign(
         tags,
@@ -78,4 +84,8 @@ function readSubIfd(subIfd, tags, dataView, tiffHeaderOffset, byteOrder, include
             valueBudget
         )
     );
+}
+
+function isOffsetPastTiffHeader(value) {
+    return (typeof value === 'number') && (value >= TIFF_HEADER_LENGTH) && (value % 1 === 0);
 }
