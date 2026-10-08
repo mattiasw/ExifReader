@@ -397,9 +397,10 @@ const tags = await ExifReader.load(url, {
 
 tags.metadataRange.end       // exact byte count needed for the metadata
 tags.metadataRange.buffer    // bytes [0, end), sliced from what we read.
-                             //   Same kind as the input (ArrayBuffer or
-                             //   Node Buffer). Save this to disk to keep
-                             //   only the metadata-bearing prefix.
+                             //   Same kind as the input (ArrayBuffer,
+                             //   SharedArrayBuffer or Node Buffer). Save
+                             //   this to disk to keep only the
+                             //   metadata-bearing prefix.
 tags.metadataRange.fetched   // bytes actually read. May be greater than
                              //   `end` because the loop reads in fixed-size
                              //   chunks and so may read a little past `end`.
@@ -419,10 +420,10 @@ Exif/XMP `iloc` entries point near the end of the file typically take two.
 - Local file path via Node `fs`
 - Browser `File` object via `File.slice`
 
-It is also accepted for in-memory inputs (`ArrayBuffer`, `Buffer`,
-`SharedArrayBuffer`, `DataView`) as a convenience. There is no IO loop to
-run in that case, but `metadataRange.buffer` is still attached as the
-trimmed slice of what you passed in.
+It is also accepted for in-memory inputs (`ArrayBuffer`, `SharedArrayBuffer`
+and Node.js `Buffer`) as a convenience. There is no IO loop to run in that
+case, but `metadataRange.buffer` is still attached as the trimmed slice of
+what you passed in.
 
 Requirements and caveats:
 

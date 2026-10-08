@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `onlyBuiltDependencies`), pnpm hardlinks the `dist/` files of the second and
   later projects to one copy in its store, and the build wrote through that
   link. The build now gives the project its own copy of the bundle first.
+- The README no longer lists `DataView` among the in-memory inputs that
+  `length: 'auto'` accepts. For in-memory data, `load()` takes an
+  `ArrayBuffer`, `SharedArrayBuffer` or Node.js `Buffer`, as its type
+  definitions already said.
 
 ### Security
 
