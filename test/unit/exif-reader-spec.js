@@ -2610,7 +2610,14 @@ describe('exif-reader', function () {
         });
 
         it('should count the values decoded before a failing Exif read against the MPF values', () => {
-            const image = getJpegWithFailingExifReadAndLargeMpfValues();
+            const image = getJpegWithLargeExifAndMpfValues();
+            const realRead = Tags.read;
+            swap(Tags, {
+                read(...args) {
+                    realRead(...args);
+                    throw new Error('Exif read failed after decoding its values.');
+                }
+            });
 
             const tags = ExifReader.loadView(getDataView(image), {expanded: true, includeUnknown: true});
 
@@ -3057,7 +3064,6 @@ function getMpEntry(attributes, imageSize, imageOffset) {
 const LARGE_VALUE_TAG_COUNT = 5;
 const LARGE_VALUE_SIZE = 8000;
 const IFD_TYPE_BYTE = 1;
-const IFD_TYPE_SLONG = 9;
 
 // An Exif IFD whose MakerNote comes first, then large BYTE values; a Pentax
 // maker note with large BYTE values; and an MPF block with large BYTE values
@@ -3087,20 +3093,15 @@ function getJpegWithLargeExifPentaxAndMpfValues() {
     return getJpegWithExifAndMpf(exifTiff, mpfTiff, bodyOffset);
 }
 
-// A 0th IFD whose large BYTE values use up the budget before an Exif IFD
-// pointer with a negative offset makes the Exif read throw, and an MPF block
-// with large BYTE values followed by the body that all of them point at.
-function getJpegWithFailingExifReadAndLargeMpfValues() {
+// A 0th IFD and an MPF block, each with large BYTE values, followed by the
+// body that all of them point at.
+function getJpegWithLargeExifAndMpfValues() {
     const EXIF_TIFF_OFFSET = 12; // SOI + APP1 marker and length + 'Exif\0\0'.
-    const exifTiffLength = 8 + 2 + (LARGE_VALUE_TAG_COUNT + 1) * 12 + 4;
+    const exifTiffLength = 8 + 2 + LARGE_VALUE_TAG_COUNT * 12 + 4;
     const mpfTiffOffset = EXIF_TIFF_OFFSET + exifTiffLength + 8; // APP2 marker and length + 'MPF\0'.
     const bodyOffset = mpfTiffOffset + 8 + 2 + LARGE_VALUE_TAG_COUNT * 12 + 4;
 
-    const exifTiff = 'MM\x00\x2a' + getByteStringFromNumber(8, 4)
-        + getByteStringFromNumber(LARGE_VALUE_TAG_COUNT + 1, 2)
-        + getLargeValueEntries(0x7100, bodyOffset - EXIF_TIFF_OFFSET)
-        + getIfdEntry(0x8769, IFD_TYPE_SLONG, 1, getByteStringFromNumber(-4096 >>> 0, 4))
-        + getByteStringFromNumber(0, 4);
+    const exifTiff = 'MM\x00\x2a' + getByteStringFromNumber(8, 4) + getLargeValueIfd(0x7100, bodyOffset - EXIF_TIFF_OFFSET);
     const mpfTiff = 'MM\x00\x2a' + getByteStringFromNumber(8, 4) + getLargeValueIfd(0x7200, bodyOffset - mpfTiffOffset);
 
     return getJpegWithExifAndMpf(exifTiff, mpfTiff, bodyOffset);

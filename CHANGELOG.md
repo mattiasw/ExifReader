@@ -68,6 +68,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A Canon maker note or a Pentax K-3 III `LevelInfo` value of 4 bytes or
   fewer, which the IFD entry stores in place of an offset, is now parsed from
   where it is stored instead of from a position further into the file.
+- An Exif, GPS or Interoperability IFD pointer that is negative, has no value
+  or points into the 8-byte TIFF header is now skipped, and the other Exif
+  tags are kept. A negative pointer made ExifReader drop all Exif tags, or
+  read that sub-IFD from bytes before the TIFF header. The other two made it
+  read the TIFF header as that sub-IFD, which could give made-up tags.
 
 ### Security
 
