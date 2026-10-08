@@ -76,6 +76,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - XMP elements and attributes without a namespace prefix, such as properties
   in a default namespace, are now read under their own name. They were all
   read under the name `undefined`, so only the last one was kept.
+- Composite tags are no longer computed from non-numeric XMP or PNG text
+  values, which gave `NaN` or the raw text. Numeric XMP strings and `n/d`
+  rationals are now converted, so `FocalLength35efl.value` is always a number
+  and an XMP `FocalLength` such as `850/10` no longer gives a wrong
+  `ScaleFactorTo35mmEquivalent`. An input of zero, a zero denominator, or a
+  result that overflows or underflows the number range no longer gives a
+  `FocalLength35efl`, `ScaleFactorTo35mmEquivalent` or `FieldOfView` of 0,
+  `Infinity` or a meaningless value: the tag is left out instead.
+- `FocalLength35efl` computed from the focal plane resolution, for images
+  without `FocalLengthIn35mmFilm`, is now correct when the resolution unit is
+  inches or centimeters. It was 645 or 100 times too large, which also made
+  `ScaleFactorTo35mmEquivalent` too large and `FieldOfView` too small.
 
 ### Security
 
