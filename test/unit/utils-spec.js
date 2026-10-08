@@ -19,6 +19,34 @@ describe('utils', () => {
         expect(Utils.getStringFromDataView(dataView, 2, 10)).to.equal('MyString');
     });
 
+    describe('getNullTerminatedStringFromDataView', () => {
+        it('should stop at the NUL', () => {
+            const dataView = getDataView('\x00\x00MyString\x00rest');
+            expect(Utils.getNullTerminatedStringFromDataView(dataView, 2, 16)).to.equal('MyString');
+        });
+
+        it('should stop at the end when no NUL comes before it', () => {
+            const dataView = getDataView('\x00\x00MyString\x00');
+            expect(Utils.getNullTerminatedStringFromDataView(dataView, 2, 4)).to.equal('My');
+        });
+
+        it('should clamp an end past the buffer to the buffer end', () => {
+            const dataView = getDataView('\x00\x00MyString');
+            expect(Utils.getNullTerminatedStringFromDataView(dataView, 2, 100)).to.equal('MyString');
+        });
+
+        it('should default to the buffer end when the end is omitted', () => {
+            const dataView = getDataView('\x00\x00MyString');
+            expect(Utils.getNullTerminatedStringFromDataView(dataView, 2)).to.equal('MyString');
+        });
+
+        it('should return an empty string when the end is at or before the offset', () => {
+            const dataView = getDataView('\x00\x00MyString');
+            expect(Utils.getNullTerminatedStringFromDataView(dataView, 2, 2)).to.equal('');
+            expect(Utils.getNullTerminatedStringFromDataView(dataView, 4, 2)).to.equal('');
+        });
+    });
+
     it('should decode a byte string as UTF-8', () => {
         expect(Utils.decodeUtf8ByteString('A\xc3\xbaC \xe5\x85\xac\xe5\x9b\xad')).to.equal('AúC 公园');
     });

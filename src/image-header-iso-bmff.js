@@ -39,6 +39,10 @@ export const ITEM_INFO_TYPE_EXIF = 0x45786966;
 export const ITEM_INFO_TYPE_MIME = 0x6d696d65;
 const ITEM_INFO_TYPE_URI = 0x75726920;
 
+// The spec sets no maximum for the infe strings; the cap bounds the memory one
+// malformed string can take, far above any real name, MIME type or URI.
+const MAX_INFE_STRING_LENGTH = 65536;
+
 export const BOX_TYPE_OFFSET = 4;
 export const BOX_MIN_LENGTH = 8;
 
@@ -103,7 +107,7 @@ export function parseBox(dataView, offset, containerEnd = dataView.byteLength) {
             return parseItemInformationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length, containerEnd);
         }
         if (type === TYPE_INFE) {
-            return parseItemInformationEntryBox(dataView, offset, version, contentOffset + VERSION_SIZE, length);
+            return parseItemInformationEntryBox(dataView, offset, version, contentOffset + VERSION_SIZE, length, containerEnd);
         }
 
         return {
@@ -586,18 +590,19 @@ function parseItemInformationBox(dataView, startOffset, version, contentOffset, 
     };
 }
 
-function parseItemInformationEntryBox(dataView, startOffset, version, contentOffset, length) {
+function parseItemInformationEntryBox(dataView, startOffset, version, contentOffset, length, containerEnd) {
     const FLAGS_SIZE = 3;
 
     contentOffset += FLAGS_SIZE;
     const entry = {type: 'infe', length};
+    const entryEnd = Math.min(startOffset + length, containerEnd);
 
     if (version === 0 || version === 1) {
         entry.itemId = dataView.getUint16(contentOffset);
         contentOffset += 2;
         entry.itemProtectionIndex = dataView.getUint16(contentOffset);
         contentOffset += 2;
-        entry.itemName = getNullTerminatedStringFromDataView(dataView, contentOffset);
+        entry.itemName = readEntryString(dataView, contentOffset, entryEnd).value;
         contentOffset += entry.itemName.length + 1;
         // entry.contentType = getNullTerminatedStringFromDataView(dataView, offset);
         // offset += entry.contentType.length + 1;
@@ -640,19 +645,35 @@ function parseItemInformationEntryBox(dataView, startOffset, version, contentOff
         contentOffset += 2;
         entry.itemType = dataView.getUint32(contentOffset);
         contentOffset += 4;
-        entry.itemName = getNullTerminatedStringFromDataView(dataView, contentOffset);
+        const itemName = readEntryString(dataView, contentOffset, entryEnd);
+        entry.itemName = itemName.value;
+        if (!itemName.isTerminated) {
+            return entry;
+        }
         contentOffset += entry.itemName.length + 1;
         if (entry.itemType === ITEM_INFO_TYPE_MIME) {
-            entry.contentType = getNullTerminatedStringFromDataView(dataView, contentOffset);
+            const contentType = readEntryString(dataView, contentOffset, entryEnd);
+            entry.contentType = contentType.value;
+            if (!contentType.isTerminated) {
+                return entry;
+            }
             contentOffset += entry.contentType.length + 1;
-            if (startOffset + length > contentOffset) {
-                entry.contentEncoding = getNullTerminatedStringFromDataView(dataView, contentOffset);
-                contentOffset += entry.contentEncoding.length + 1;
+            if (entryEnd > contentOffset) {
+                entry.contentEncoding = readEntryString(dataView, contentOffset, entryEnd).value;
             }
         } else if (entry.itemType === ITEM_INFO_TYPE_URI) {
-            entry.itemUri = getNullTerminatedStringFromDataView(dataView, contentOffset);
-            contentOffset += entry.itemUri.length + 1;
+            entry.itemUri = readEntryString(dataView, contentOffset, entryEnd).value;
         }
     }
     return entry;
+}
+
+/**
+ * Reads one string of an infe box, bounded by the box end and the length cap.
+ * isTerminated is false when the string ran into either bound instead of a NUL.
+ */
+function readEntryString(dataView, offset, entryEnd) {
+    const limit = Math.min(entryEnd, offset + MAX_INFE_STRING_LENGTH);
+    const value = getNullTerminatedStringFromDataView(dataView, offset, limit);
+    return {value, isTerminated: offset + value.length < limit};
 }

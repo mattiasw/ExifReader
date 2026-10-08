@@ -1394,6 +1394,196 @@ describe('image-header-iso-bmff', () => {
             expect(result.tiffHeaderOffset).to.equal(PLAIN_BOX_HEADER_SIZE + 4 + 'Exif\x00\x00'.length);
         });
 
+        describe('infe string bounds', () => {
+            const ITEM_ID = getByteStringFromNumber(2, 2);
+            const ITEM_PROTECTION_INDEX = getByteStringFromNumber(0, 2);
+            const EXIF_TYPE = getByteStringFromNumber(ITEM_INFO_TYPE_EXIF, 4);
+            const MIME_TYPE = getByteStringFromNumber(ITEM_INFO_TYPE_MIME, 4);
+            const URI_TYPE = 'uri ';
+            const XMP_CONTENT_TYPE = 'application/rdf+xml';
+
+            it('should stop a version 2 item name without NUL at the box end', () => {
+                const box = getFullBox('infe', 2, ITEM_ID + ITEM_PROTECTION_INDEX + EXIF_TYPE + 'A name');
+                const dataView = getDataView(box + NON_NUL_TRAILING_BYTES);
+
+                expect(parseBox(dataView, 0)).to.deep.equal({
+                    type: 'infe',
+                    itemId: 2,
+                    itemProtectionIndex: 0,
+                    itemType: ITEM_INFO_TYPE_EXIF,
+                    itemName: 'A name',
+                    length: box.length
+                });
+            });
+
+            it('should stop a version 0 item name without NUL at the box end', () => {
+                const box = getFullBox('infe', 0, ITEM_ID + ITEM_PROTECTION_INDEX + 'A name');
+                const dataView = getDataView(box + NON_NUL_TRAILING_BYTES);
+
+                expect(parseBox(dataView, 0)).to.deep.equal({
+                    type: 'infe',
+                    itemId: 2,
+                    itemProtectionIndex: 0,
+                    itemName: 'A name',
+                    length: box.length
+                });
+            });
+
+            it('should stop a content type without NUL at the box end and read no content encoding', () => {
+                const box = getFullBox(
+                    'infe',
+                    2,
+                    ITEM_ID + ITEM_PROTECTION_INDEX + MIME_TYPE + '\x00' + XMP_CONTENT_TYPE
+                );
+                const dataView = getDataView(box + NON_NUL_TRAILING_BYTES);
+
+                expect(parseBox(dataView, 0)).to.deep.equal({
+                    type: 'infe',
+                    itemId: 2,
+                    itemProtectionIndex: 0,
+                    itemType: ITEM_INFO_TYPE_MIME,
+                    itemName: '',
+                    contentType: XMP_CONTENT_TYPE,
+                    length: box.length
+                });
+            });
+
+            it('should stop a content encoding without NUL at the box end', () => {
+                const box = getFullBox(
+                    'infe',
+                    2,
+                    ITEM_ID + ITEM_PROTECTION_INDEX + MIME_TYPE + '\x00' + XMP_CONTENT_TYPE + '\x00' + 'gzip'
+                );
+                const dataView = getDataView(box + NON_NUL_TRAILING_BYTES);
+
+                expect(parseBox(dataView, 0).contentEncoding).to.equal('gzip');
+            });
+
+            it('should stop an item URI without NUL at the box end', () => {
+                const box = getFullBox(
+                    'infe',
+                    2,
+                    ITEM_ID + ITEM_PROTECTION_INDEX + URI_TYPE + '\x00' + 'urn:example'
+                );
+                const dataView = getDataView(box + NON_NUL_TRAILING_BYTES);
+
+                expect(parseBox(dataView, 0).itemUri).to.equal('urn:example');
+            });
+
+            it('should stop the item name of an over-declaring infe at the end of its iinf', () => {
+                const entryCount = getByteStringFromNumber(1, 2);
+                const infe = withDeclaredLength(
+                    getFullBox('infe', 2, ITEM_ID + ITEM_PROTECTION_INDEX + EXIF_TYPE + 'A name'),
+                    OVER_DECLARED_BOX_LENGTH
+                );
+                const dataView = getDataView(getFullBox('iinf', 0, entryCount + infe) + NON_NUL_TRAILING_BYTES);
+
+                expect(parseBox(dataView, 0).itemInfos[0].itemName).to.equal('A name');
+            });
+
+            it('should read no content encoding past the end of the iinf of an over-declaring infe', () => {
+                const entryCount = getByteStringFromNumber(1, 2);
+                const infe = withDeclaredLength(
+                    getFullBox('infe', 2, ITEM_ID + ITEM_PROTECTION_INDEX + MIME_TYPE + '\x00' + XMP_CONTENT_TYPE + '\x00'),
+                    OVER_DECLARED_BOX_LENGTH
+                );
+                const dataView = getDataView(getFullBox('iinf', 0, entryCount + infe) + 'gzip\x00');
+
+                const entry = parseBox(dataView, 0).itemInfos[0];
+
+                expect(entry.contentType).to.equal(XMP_CONTENT_TYPE);
+                expect(entry).to.not.have.property('contentEncoding');
+            });
+
+            it('should cut an item name at the length cap and read no further strings', () => {
+                const longName = 'a'.repeat(MAX_INFE_STRING_LENGTH + 10);
+                const box = getFullBox(
+                    'infe',
+                    2,
+                    ITEM_ID + ITEM_PROTECTION_INDEX + MIME_TYPE + longName + '\x00' + XMP_CONTENT_TYPE + '\x00'
+                );
+
+                const entry = parseBox(getDataView(box), 0);
+
+                expect(entry.itemName).to.equal('a'.repeat(MAX_INFE_STRING_LENGTH));
+                expect(entry).to.not.have.property('contentType');
+            });
+
+            it('should cut a content type at the length cap and read no content encoding', () => {
+                const longContentType = 'a'.repeat(MAX_INFE_STRING_LENGTH + 10);
+                const box = getFullBox(
+                    'infe',
+                    2,
+                    ITEM_ID + ITEM_PROTECTION_INDEX + MIME_TYPE + '\x00' + longContentType + '\x00' + 'gzip\x00'
+                );
+
+                const entry = parseBox(getDataView(box), 0);
+
+                expect(entry.contentType).to.equal('a'.repeat(MAX_INFE_STRING_LENGTH));
+                expect(entry).to.not.have.property('contentEncoding');
+            });
+
+            it('should read the strings after an item name one byte shorter than the length cap', () => {
+                const longName = 'a'.repeat(MAX_INFE_STRING_LENGTH - 1);
+                const box = getFullBox(
+                    'infe',
+                    2,
+                    ITEM_ID + ITEM_PROTECTION_INDEX + MIME_TYPE + longName + '\x00' + XMP_CONTENT_TYPE + '\x00'
+                );
+
+                const entry = parseBox(getDataView(box), 0);
+
+                expect(entry.itemName).to.equal(longName);
+                expect(entry.contentType).to.equal(XMP_CONTENT_TYPE);
+            });
+
+            it('should still parse the next infe after an item name without NUL', () => {
+                const entryCount = getByteStringFromNumber(2, 2);
+                const unterminatedInfe = getFullBox('infe', 2, ITEM_ID + ITEM_PROTECTION_INDEX + EXIF_TYPE + 'A name');
+                const xmpInfe = getFullBox(
+                    'infe',
+                    2,
+                    buildInfeEntry({itemId: 3, itemType: ITEM_INFO_TYPE_MIME, contentType: XMP_CONTENT_TYPE})
+                );
+                const dataView = getDataView(getFullBox('iinf', 0, entryCount + unterminatedInfe + xmpInfe));
+
+                const {itemInfos} = parseBox(dataView, 0);
+
+                expect(itemInfos).to.have.lengthOf(2);
+                expect(itemInfos[0].itemName).to.equal('A name');
+                expect(itemInfos[1]).to.include({itemId: 3, contentType: XMP_CONTENT_TYPE});
+            });
+
+            it('should find the Exif offset when the Exif item name has no NUL', () => {
+                const EXIF_ITEM_ID = 2;
+                const exifBlock = buildExifBlock('<TIFF data>');
+                const payloadBox = getBox('mdat', exifBlock);
+                const entryCount = getByteStringFromNumber(1, 2);
+                const iinfBox = getFullBox(
+                    'iinf',
+                    0,
+                    entryCount + getFullBox(
+                        'infe',
+                        2,
+                        getByteStringFromNumber(EXIF_ITEM_ID, 2) + ITEM_PROTECTION_INDEX + EXIF_TYPE + 'A name'
+                    )
+                );
+                const ilocBox = buildIlocBox({
+                    version: 0,
+                    items: [{
+                        itemId: EXIF_ITEM_ID,
+                        baseOffset: 0,
+                        extents: [{extentOffset: PLAIN_BOX_HEADER_SIZE, extentLength: exifBlock.length}]
+                    }]
+                });
+                const dataView = getDataView(payloadBox + getFullBox('meta', 0, iinfBox + ilocBox));
+
+                const result = findOffsets(dataView);
+
+                expect(result.tiffHeaderOffset).to.equal(PLAIN_BOX_HEADER_SIZE + 4 + 'Exif\x00\x00'.length);
+            });
+        });
+
         describe('parseBox header guards', () => {
             it('should return undefined for a full box whose version byte is missing', () => {
                 // 8-byte box: the header is present but the version byte is not.
@@ -1465,6 +1655,12 @@ function withDeclaredLength(box, declaredLength) {
 // A length no test buffer comes near, for boxes that claim far more than they
 // or their container actually hold.
 const OVER_DECLARED_BOX_LENGTH = 0x00ffffff;
+
+// Bytes after a box that an unbounded string read would run into.
+const NON_NUL_TRAILING_BYTES = 'TRAILING';
+
+// Kept separate from the source value so that a change to the cap there fails a test.
+const MAX_INFE_STRING_LENGTH = 65536;
 
 // Just the 16-byte header of an iloc, declaring a length that reaches well past
 // whatever container it is put in. Its item list would start exactly where the

@@ -162,6 +162,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   number of IFD entries read from one file is now limited in proportion to its
   size, and the tags past the limit are left out, so the same file now takes
   about 2.4 seconds and 155 MB.
+- In HEIC and AVIF files, a string in an item information entry (`infe` box)
+  with no terminating NUL byte was read past the end of its box, up to the
+  next NUL byte or the end of the file, and used memory far above the file
+  size: an 8 MiB file whose item name has no terminator raised peak memory to
+  about 276 MB. Each such string (item name, content type, content encoding
+  and item URI) now stops at the end of its box and after at most 64 KiB, so
+  the same file peaks at about 76 MB, against about 73 MB for one whose item
+  name is terminated.
 
 ## [4.47.0] - 2026-10-08
 
