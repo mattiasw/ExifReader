@@ -577,6 +577,27 @@ describe('utils', () => {
                 (rejection) => expect(rejection).to.equal(error)
             );
         });
+
+        for (const compressionMethod of [1, 255]) {
+            it(`should reject numeric compression method ${compressionMethod} without calling a custom function`, async () => {
+                const calledTypes = [];
+                const getRecorder = (decompressType) => (data) => {
+                    calledTypes.push(decompressType);
+                    return data;
+                };
+
+                const error = await Utils.decompress(
+                    new DataView(new ArrayBuffer(1)),
+                    compressionMethod,
+                    'latin1',
+                    'string',
+                    {brotli: getRecorder('brotli'), deflate: getRecorder('deflate'), undefined: getRecorder('undefined')}
+                ).then(() => expect.fail('resolved'), (rejection) => rejection);
+
+                expect(error).to.equal(`Unknown compression method ${compressionMethod}.`);
+                expect(calledTypes).to.deep.equal([]);
+            });
+        }
     });
 
     describe('decompression bounds', () => {

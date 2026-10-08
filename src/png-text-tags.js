@@ -77,10 +77,11 @@ function parseTextChunk(dataView, offset, length, type) {
     let parsingState = STATE_KEYWORD;
     let compressionMethod = COMPRESSION_METHOD_NONE;
     const byteOffset = dataView.byteOffset || 0;
+    const chunkEnd = Math.min(offset + length, dataView.byteLength);
 
     for (let i = 0; i < length && offset + i < dataView.byteLength; i++) {
         if (parsingState === STATE_COMPRESSION) {
-            compressionMethod = getCompressionMethod({type, dataView, offset: offset + i});
+            compressionMethod = getCompressionMethod({type, dataView, offset: offset + i, chunkEnd});
             if (type === TYPE_ITXT) {
                 i += COMPRESSION_SECTION_ITXT_EXTRA_BYTE;
             }
@@ -118,9 +119,16 @@ function getUncompressedTag({type, keywordChars, langChars, valueChars}) {
 }
 
 function decompressTextChunk({type, keywordChars, langChars, compressionMethod, valueChars}, decompressConfig) {
+    if (valueChars === undefined) {
+        return Promise.resolve(constructPlaceholderTag(type, langChars, keywordChars));
+    }
     return decompress(valueChars, compressionMethod, getEncodingFromType(type), 'string', decompressConfig)
         .then((decompressedValueChars) => constructTag(decompressedValueChars, type, langChars, keywordChars))
-        .catch(() => constructTag('<text using unknown compression>', type, langChars, keywordChars));
+        .catch(() => constructPlaceholderTag(type, langChars, keywordChars));
+}
+
+function constructPlaceholderTag(type, langChars, keywordChars) {
+    return constructTag('<text using unknown compression>', type, langChars, keywordChars);
 }
 
 function getTagsFromDecompressedTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget) {
@@ -192,9 +200,9 @@ function runTasksInOrder(tasks, limit) {
     }
 }
 
-function getCompressionMethod({type, dataView, offset}) {
+function getCompressionMethod({type, dataView, offset, chunkEnd}) {
     if (type === TYPE_ITXT) {
-        if (offset + 1 < dataView.byteLength && dataView.getUint8(offset) === COMPRESSION_FLAG_COMPRESSED) {
+        if (offset + 1 < chunkEnd && dataView.getUint8(offset) === COMPRESSION_FLAG_COMPRESSED) {
             return dataView.getUint8(offset + 1);
         }
     } else if (type === TYPE_ZTXT) {

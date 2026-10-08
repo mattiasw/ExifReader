@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `load()` with a URL and `length: 0` no longer sends the malformed header
   `Range: bytes=0--1`. It now makes no request and rejects with
   `Invalid image format`, since zero bytes hold no metadata.
+- A custom `decompress.brotli` function is no longer called for a PNG zTXt or
+  iTXt chunk whose compression method is not 0, the only method PNG defines.
+  Such a chunk now gives the `<text using unknown compression>` placeholder.
+- A compressed PNG iTXt chunk that ends right after its compression flag no
+  longer takes its compression method from the byte after the chunk. It now
+  gives an empty text value, whatever follows it.
 
 ### Security
 
