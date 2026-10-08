@@ -184,6 +184,18 @@ describe('pentax-tags', () => {
             expect(tags['PitchAngle'].description).to.equal('-21');
         });
 
+        it('should read CameraOrientation from a LevelInfo stored in its value slot', function () {
+            const dataView = getPentaxDataView([
+                getLongField(PENTAX_MODEL_ID_TAG_ID, PentaxTags.MODEL_ID.K3_III),
+                getUndefinedField(LEVEL_INFO_TAG_ID, [0, 3, 0, 0])
+            ]);
+
+            const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false);
+
+            expect(tags['CameraOrientation'].value).to.equal(3);
+            expect(tags['CameraOrientation'].description).to.equal('Rotate 90 CW');
+        });
+
         function getLevelInfoDataView(levelInfoTags, littleEndian = false) {
             const levelInfoBytes = Array(7).fill(0);
 

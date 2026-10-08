@@ -110,6 +110,33 @@ describe('tags-helpers', () => {
         expect(tags['MakerNote'].__offset).to.equal(0xa);
     });
 
+    it('should pass on an in-slot MakerNote offset relative to the offset origin', () => {
+        // Origin padding + field count + field + offset to next IFD.
+        const dataView = getDataView('\x00\x00\x00\x00' + '\x00\x01' + '\x92\x7c\x00\x07\x00\x00\x00\x02\x42\x43\x00\x00' + '\x00\x00\x00\x00');
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x927c: 'MakerNote'}});
+        const tags = readIfd(dataView, '0th', 4, 4, ByteOrder.BIG_ENDIAN);
+        expect(tags['MakerNote'].__offset).to.equal(0xa);
+        expect(tags['MakerNote'].value).to.deep.equal([0x42, 0x43]);
+    });
+
+    it('should pass on an out-of-slot MakerNote offset relative to the offset origin', () => {
+        // Origin padding + field count + field + offset to next IFD + value.
+        const dataView = getDataView('\x00\x00\x00\x00' + '\x00\x01' + '\x92\x7c\x00\x07\x00\x00\x00\x06\x00\x00\x00\x12' + '\x00\x00\x00\x00' + 'ABCDEF');
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x927c: 'MakerNote'}});
+        const tags = readIfd(dataView, '0th', 4, 4, ByteOrder.BIG_ENDIAN);
+        expect(tags['MakerNote'].__offset).to.equal(0x12);
+        expect(tags['MakerNote'].value).to.deep.equal([65, 66, 67, 68, 69, 70]);
+    });
+
+    it('should pass on an in-slot Pentax LevelInfo offset relative to the offset origin', () => {
+        // Origin padding + field count + field + offset to next IFD.
+        const dataView = getDataView('\x00\x00\x00\x00' + '\x00\x01' + '\x02\x2b\x00\x07\x00\x00\x00\x04\x00\x03\x00\x00' + '\x00\x00\x00\x00');
+        restoreTagNames = swapProperties(TagNames, {pentax: {0x022b: 'LevelInfo'}});
+        const tags = readIfd(dataView, 'pentax', 4, 4, ByteOrder.BIG_ENDIAN);
+        expect(tags['LevelInfo'].__offset).to.equal(0xa);
+        expect(tags['LevelInfo'].value).to.deep.equal([0, 3, 0, 0]);
+    });
+
     it('should be able to read a multi-field IFD', () => {
         // Field count + 1st field + 2nd field + offset to next IFD.
         const dataView = getDataView('\x00\x02' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x47\x12\x00\x01\x00\x00\x00\x01\x43\x00\x00\x00' + '\x00\x00\x00\x00');
