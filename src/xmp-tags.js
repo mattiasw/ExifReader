@@ -7,6 +7,7 @@ import XmpTagNames from './xmp-tag-names.js';
 import DOMParser from './dom-parser.js';
 import TextDecoder from './text-decoder.js';
 import {isMissingNamespaceError, addMissingNamespaces} from './xmp-namespaces.js';
+import {exceedsElementDepth} from './xmp-element-depth.js';
 
 export default {
     read
@@ -26,6 +27,10 @@ const PACKET_TRAILER_END = '"?>';
 // Each level repeats the descriptions of everything below it, so any part of
 // the packet's text is copied into at most twice this many descriptions.
 const MAX_NESTING_DEPTH = 16;
+
+// xmldom 0.9.12 walks one link per enclosing declaring element on every prefix
+// lookup, and the DOM conversion here recurses once per level.
+const MAX_ELEMENT_DEPTH = 256;
 
 // Parsing is synchronous and oneLevelDeeper always restores the counter, so
 // one counter serves every read.
@@ -205,6 +210,9 @@ function trimAfterPacketTrailer(xmlSource) {
 }
 
 function parseFromString(domParser, xmlString, isRetry = false) {
+    if (exceedsElementDepth(xmlString, MAX_ELEMENT_DEPTH)) {
+        throw new ParseError(`XMP elements nested deeper than ${MAX_ELEMENT_DEPTH} levels.`);
+    }
     try {
         const doc = domParser.parseFromString(xmlString, 'application/xml');
         const errors = doc.getElementsByTagName('parsererror');
