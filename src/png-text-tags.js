@@ -120,7 +120,7 @@ function getUncompressedTag({type, keywordChars, langChars, valueChars}) {
 function decompressTextChunk({type, keywordChars, langChars, compressionMethod, valueChars}, decompressConfig) {
     return decompress(valueChars, compressionMethod, getEncodingFromType(type), 'string', decompressConfig)
         .then((decompressedValueChars) => constructTag(decompressedValueChars, type, langChars, keywordChars))
-        .catch(() => constructTag('<text using unknown compression>'.split(''), type, langChars, keywordChars));
+        .catch(() => constructTag('<text using unknown compression>', type, langChars, keywordChars));
 }
 
 function getTagsFromDecompressedTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget) {

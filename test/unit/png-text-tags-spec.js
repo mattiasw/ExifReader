@@ -515,7 +515,7 @@ describe('png-text-tags', () => {
                 Array.from({length: 3}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)))
             );
 
-            const unknownCompressionValue = '<text using unknown compression>'.split('');
+            const unknownCompressionValue = '<text using unknown compression>';
 
             const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
@@ -523,6 +523,52 @@ describe('png-text-tags', () => {
                 {readTags: {k0: {value: 'v0', description: 'v0'}}},
                 {readTags: {k1: {value: unknownCompressionValue, description: unknownCompressionValue}}},
                 {readTags: {k2: {value: 'v2', description: 'v2'}}}
+            ]);
+        });
+
+        it('should give the placeholder for a zTXt chunk with an unknown compression method and keep the good chunk', async () => {
+            const {dataView, chunks} = buildTextChunks([
+                {type: TYPE_ZTXT, bytes: concatBytes(toBytes('bad\x00\x05'), toBytes('whatever'))},
+                getTextChunk('good', 'fine')
+            ]);
+            const unknownCompressionValue = '<text using unknown compression>';
+
+            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+
+            expect(readTags).to.deep.equal({good: {value: 'fine', description: 'fine'}});
+            expect(await readTagsPromise).to.deep.equal([
+                {readTags: {bad: {value: unknownCompressionValue, description: unknownCompressionValue}}}
+            ]);
+        });
+
+        it('should give the placeholder for a compressed iTXt chunk with an unknown compression method and keep the good chunk', async () => {
+            const {dataView, chunks} = buildTextChunks([
+                {type: TYPE_ITXT, bytes: concatBytes(toBytes('bad\x00\x01\x05\x00\x00'), toBytes('whatever'))},
+                getUncompressedItxtChunk('good', 'fine')
+            ]);
+            const unknownCompressionValue = '<text using unknown compression>';
+
+            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+
+            expect(readTags).to.deep.equal({good: {value: 'fine', description: 'fine'}});
+            expect(await readTagsPromise).to.deep.equal([
+                {readTags: {bad: {value: unknownCompressionValue, description: unknownCompressionValue}}}
+            ]);
+        });
+
+        it('should give the placeholder for raw profile chunks with an unknown compression method', async () => {
+            const {dataView, chunks} = buildTextChunks([
+                {type: TYPE_ZTXT, bytes: toBytes('Raw profile type exif\x00\x05whatever')},
+                {type: TYPE_ITXT, bytes: toBytes('Raw profile type iptc\x00\x01\x05\x00\x00whatever')}
+            ]);
+            const unknownCompressionValue = '<text using unknown compression>';
+            const placeholderTag = {value: unknownCompressionValue, description: unknownCompressionValue};
+
+            const tags = await PngTextTags.read(dataView, chunks, true).readTagsPromise;
+
+            expect(tags).to.deep.equal([
+                {readTags: {'Raw profile type exif': placeholderTag}},
+                {readTags: {'Raw profile type iptc': placeholderTag}}
             ]);
         });
 
@@ -562,7 +608,7 @@ describe('png-text-tags', () => {
                 const {dataView, chunks} = buildTextChunks(
                     Array.from({length: 6}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)))
                 );
-                const unknownCompressionValue = '<text using unknown compression>'.split('');
+                const unknownCompressionValue = '<text using unknown compression>';
 
                 const {readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
 
@@ -592,7 +638,7 @@ describe('png-text-tags', () => {
                 Array.from({length: 8}, (_, index) => getZtxtChunk('k' + index, compressedValue))
             );
             const decompressConfig = withDecompressBudget({maxDecompressedSize: MAX_DECOMPRESSED_SIZE});
-            const unknownCompressionValue = '<text using unknown compression>'.split('');
+            const unknownCompressionValue = '<text using unknown compression>';
 
             const restoreWarn = swapProperties(console, {warn: () => undefined});
             let tags;
@@ -626,7 +672,7 @@ describe('png-text-tags', () => {
     });
 
     describe('truncated compressed text chunks', () => {
-        const unknownCompressionValue = '<text using unknown compression>'.split('');
+        const unknownCompressionValue = '<text using unknown compression>';
 
         it('should give the placeholder without calling a custom deflate function for a zTXt chunk that ends after its compression method', async () => {
             const {decompressConfig, calledValues} = getRecordingDecompressConfig('deflate');
@@ -660,20 +706,19 @@ describe('png-text-tags', () => {
             expect(calledValues).to.deep.equal(['fine']);
         });
 
-        it('should give the fallback tag without calling a custom deflate function for a compressed iTXt chunk that ends after its compression method', async () => {
-            const truncatedChunk = {type: TYPE_ITXT, bytes: toBytes('k\x00\x01\x00')};
-            const truncatedOnly = buildTextChunks([truncatedChunk]);
-            const [fallbackTag] = await PngTextTags.read(truncatedOnly.dataView, truncatedOnly.chunks, true).readTagsPromise;
+        it('should give the placeholder without calling a custom deflate function for a compressed iTXt chunk that ends after its compression method', async () => {
             const {decompressConfig, calledValues} = getRecordingDecompressConfig('deflate');
             const {dataView, chunks} = buildTextChunks([
-                truncatedChunk,
+                {type: TYPE_ITXT, bytes: toBytes('k\x00\x01\x00')},
                 getCompressedItxtChunk('good', toBytes('fine'))
             ]);
 
             const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
-            expect(tags).to.deep.equal([fallbackTag, {readTags: {good: {value: 'fine', description: 'fine'}}}]);
-            expect(tags[0].readTags.k.value).to.deep.equal(unknownCompressionValue);
+            expect(tags).to.deep.equal([
+                {readTags: {k: {value: unknownCompressionValue, description: unknownCompressionValue}}},
+                {readTags: {good: {value: 'fine', description: 'fine'}}}
+            ]);
             expect(calledValues).to.deep.equal(['fine']);
         });
 
