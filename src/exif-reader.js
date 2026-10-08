@@ -779,7 +779,15 @@ function getBrobDataView(dataView, brobChunk) {
     // than its header, so bound the view by the bytes present. The JXL header
     // parser never reports a dataOffset past the end of the view.
     const length = Math.max(0, Math.min(brobChunk.length, dataView.byteLength - brobChunk.dataOffset));
-    return new DataView(dataView.buffer, dataView.byteOffset + brobChunk.dataOffset, length);
+    if (isDataViewLike(dataView)) {
+        return new DataView(dataView.buffer, dataView.byteOffset + brobChunk.dataOffset, length);
+    }
+    // The Node Buffer wrapper has no ArrayBuffer to view, so copy the bytes out.
+    const bytes = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+        bytes[i] = dataView.getUint8(brobChunk.dataOffset + i);
+    }
+    return new DataView(bytes.buffer);
 }
 
 function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter) {

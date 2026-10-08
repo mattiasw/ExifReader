@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `length: 'auto'` accepts. For in-memory data, `load()` takes an
   `ArrayBuffer`, `SharedArrayBuffer` or Node.js `Buffer`, as its type
   definitions already said.
+- `load()` no longer throws synchronously in async mode for a JPEG XL file with
+  a `brob` box when the input is a Buffer that ExifReader does not detect as a
+  Node.js Buffer, such as one from the `buffer` package or a Node.js Buffer
+  from another vm context. Its `brob` Exif and XMP data is now read as for any
+  other input.
 
 ### Security
 
