@@ -672,11 +672,11 @@ describe('tags-helpers', () => {
         expect(tags['Thumbnail']['Huge1stTag'].value).to.deep.equal([]);
     });
 
-    it('should give a buffer a budget that is larger than the buffer itself', () => {
+    it('should give a buffer a budget of 4 times its size', () => {
         // Tags may legitimately point at overlapping parts of a buffer, so the
         // values may add up to more than there are bytes to decode them from.
         const dataView = getDataView('\x00'.repeat(64));
-        expect(getValueBudget(dataView).remaining).to.be.above(dataView.byteLength);
+        expect(getValueBudget(dataView).remaining).to.equal(4 * dataView.byteLength);
     });
 
     it('should give each caller that omits the budget a fresh one', () => {

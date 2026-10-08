@@ -9,13 +9,16 @@ import {IFD_ENTRY_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
 import {decodeUtf8ByteString, getByteString} from './utils.js';
 
-// Measured across the test corpus, the most demanding parse decodes tag
-// values totalling 1.2241 times the size of the buffer they are read from
-// (deliberately faulty files parsed with includeUnknown; real images peak
-// near 0.81x, as some tags legitimately read overlapping bytes), so a budget
-// of 4x is 3.27 times that worst case. The multiple is expensive here: a
-// decoded byte was measured to cost about 16 bytes of heap, mostly as an
-// array element plus its share of the joined description string.
+// Across the test corpus, for whole files and for the 128 KiB and
+// length: 'auto' reads, out-of-slot values decode at most 1.2241 times the
+// buffer (faulty files parsed with includeUnknown). The multiple stays at 4
+// for Exif compressed in a small PNG or JPEG XL, as the budget is sized from
+// the file: a camera's Exif decodes up to 3.3 times a PNG of a few KB, and
+// 3.6 to 5.1 times a JPEG XL under 5 KB, so 4 already truncates the largest.
+// Description text is not charged, as real TIFFs whose large BYTE tags get
+// joined descriptions would need 4.48 times. A decoded byte costs about 15
+// bytes of heap, mostly as an array element and its share of the joined
+// description.
 const MAX_VALUE_SIZE_PER_BUFFER_SIZE = 4;
 
 const getTagValueAt = {
@@ -279,7 +282,7 @@ function tagValueFitsInDataView(dataView, offsetOrigin, tagValueOffset, tagType,
 
 // Draws each out-of-slot value from the shared budget, so a crafted file
 // cannot have thousands of tags decode the same bytes over and over. Real
-// files, including ones whose tags read overlapping bytes, stay far below it.
+// files stay below it unless their Exif is compressed into a very small file.
 function getBoundedTagCount(remainingBudget, tagType, tagCount) {
     const boundedCount = Math.min(tagCount, Math.floor(remainingBudget / Types.typeSizes[tagType]));
     if (boundedCount === 1 && tagCount > 1) {
