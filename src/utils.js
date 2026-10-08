@@ -20,10 +20,20 @@ export function getStringFromDataView(dataView, offset, length) {
     return getStringValueFromArray(chars);
 }
 
-export function getNullTerminatedStringFromDataView(dataView, offset) {
+/**
+ * Reads a one-byte-per-character string up to its NUL terminator.
+ * @param {DataView} dataView
+ * @param {number} offset - Where the string starts.
+ * @param {number} [end] - Exclusive end of the read, clamped to the buffer
+ *     end. Defaults to the buffer end.
+ * @returns {string} The bytes before the first NUL or before the end,
+ *     whichever comes first.
+ */
+export function getNullTerminatedStringFromDataView(dataView, offset, end = dataView.byteLength) {
+    const readEnd = Math.min(end, dataView.byteLength);
     const chars = [];
     let i = 0;
-    while (offset + i < dataView.byteLength) {
+    while (offset + i < readEnd) {
         const char = dataView.getUint8(offset + i);
         if (char === 0) {
             break;
