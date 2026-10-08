@@ -355,6 +355,27 @@ describe('utils', () => {
             expect(result).to.equal('Deflated text');
         });
 
+        it('should call a custom function before returning, since its input is a view onto the caller\'s buffer', async () => {
+            const dataView = new DataView(new Uint8Array([1, 2, 3, 4]).buffer);
+            let receivedBytes;
+            const deflateFn = (bytes) => {
+                receivedBytes = Array.from(bytes);
+                return bytes;
+            };
+
+            const promise = Utils.decompress(
+                dataView,
+                Utils.COMPRESSION_METHOD_DEFLATE,
+                'latin1',
+                'string',
+                {deflate: deflateFn}
+            );
+            new Uint8Array(dataView.buffer).fill(0);
+
+            expect(receivedBytes).to.deep.equal([1, 2, 3, 4]);
+            await promise;
+        });
+
         it('should handle DataView with non-zero byteOffset for custom function', async () => {
             const buffer = new ArrayBuffer(10);
             const fullView = new Uint8Array(buffer);

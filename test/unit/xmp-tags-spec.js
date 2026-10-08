@@ -277,6 +277,35 @@ describe('xmp-tags', function () {
                     expectMyXMPTagValue(`<xmp:MyXMPTag>${text}</xmp:MyXMPTag>`, text);
                 });
 
+                it('should not enumerate the characters of a text value', () => {
+                    const keysArguments = [];
+                    const originalKeys = Object.keys;
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag0>abc</xmp:MyXMPTag0>
+                            <xmp:MyXMPTag1><rdf:Bag><rdf:li>def</rdf:li></rdf:Bag></xmp:MyXMPTag1>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const restore = swapProperties(Object, {
+                        keys(object) {
+                            if (typeof object === 'string') {
+                                keysArguments.push(object);
+                            }
+                            return originalKeys(object);
+                        }
+                    });
+                    let tags;
+                    try {
+                        tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    } finally {
+                        restore();
+                    }
+                    expect(keysArguments).to.deep.equal([]);
+                    expect(tags.MyXMPTag0).to.deep.equal({value: 'abc', attributes: {}, description: 'abc'});
+                    expect(tags.MyXMPTag1.value).to.deep.equal([{value: 'def', attributes: {}, description: 'def'}]);
+                });
+
                 it('should read a long text value in a list item in linear time', () => {
                     const text = 'A'.repeat(8 * 1024 * 1024);
                     expectMyXMPTag(
@@ -319,6 +348,44 @@ describe('xmp-tags', function () {
                     expect(tags).to.deep.equal({
                         _raw: xmlString,
                         MyXMPTag0: {value: '4711', attributes: {}, description: '4711'}
+                    });
+                });
+
+                it('should not read the characters of text inside an rdf:Description or a structure as child names', () => {
+                    // Enumerating a string gives its character indexes, and every child name is
+                    // split at the colon, so a split of an index shows a per-character walk.
+                    const splitReceivers = [];
+                    const originalSplit = String.prototype.split;
+                    const xmlString = getXmlString(`
+                        <rdf:Description>abc</rdf:Description>
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyXMPTag0>4711</xmp:MyXMPTag0>
+                            <xmp:MyXMPTag1 rdf:parseType="Resource">abc</xmp:MyXMPTag1>
+                            <xmp:MyXMPTag2><rdf:Description>abc</rdf:Description></xmp:MyXMPTag2>
+                            <xmp:MyXMPTag3 rdf:parseType="Resource"><rdf:value>x</rdf:value><rdf:Description>abc</rdf:Description></xmp:MyXMPTag3>
+                            <xmp:MyXMPTag4><xmp:Child>abc</xmp:Child></xmp:MyXMPTag4>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const restore = swapProperties(String.prototype, {
+                        split(...args) {
+                            splitReceivers.push(String(this));
+                            return originalSplit.apply(this, args);
+                        }
+                    });
+                    let tags;
+                    try {
+                        tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    } finally {
+                        restore();
+                    }
+                    expect(splitReceivers.filter((receiver) => /^\d+$/.test(receiver))).to.deep.equal([]);
+                    expect(tags).to.deep.equal({
+                        _raw: xmlString,
+                        MyXMPTag0: {value: '4711', attributes: {}, description: '4711'},
+                        MyXMPTag1: {value: {}, attributes: {}, description: ''},
+                        MyXMPTag2: {value: {}, attributes: {}, description: ''},
+                        MyXMPTag4: {value: {}, attributes: {}, description: ''}
                     });
                 });
 

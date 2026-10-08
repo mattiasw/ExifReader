@@ -297,6 +297,7 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
         const decompressType = compressionMethod === COMPRESSION_METHOD_DEFLATE ? 'deflate' : 'brotli';
         const customFn = decompressConfig[decompressType];
         if (typeof customFn === 'function') {
+            // Called now, not deferred: the input can view the caller's buffer, which may be reused once load() returns.
             return new Promise((resolve) => resolve(customFn(getUint8View(dataView)))).then((result) => {
                 budget.remaining -= getResultByteLength(result);
                 if (budget.remaining < 0) {
