@@ -30,10 +30,9 @@ function get(tags, expanded) {
     const focalPlaneXResolution = getPositiveRational(getTagValue(tags, 'exif', 'FocalPlaneXResolution', expanded));
     const focalPlaneYResolution = getPositiveRational(getTagValue(tags, 'exif', 'FocalPlaneYResolution', expanded));
     const focalPlaneResolutionUnit = getPositiveNumber(getTagValue(tags, 'exif', 'FocalPlaneResolutionUnit', expanded));
-    const imageWidth = getPositiveNumber(getTagValue(tags, 'file', 'Image Width', expanded));
-    const imageHeight = getPositiveNumber(getTagValue(tags, 'file', 'Image Height', expanded));
+    const pixelDimensions = getPixelDimensions(tags, expanded);
     const focalLengthIn35mmFilm = getPositiveNumber(getTagValue(tags, 'exif', 'FocalLengthIn35mmFilm', expanded))
-        || getFocalLengthIn35mmFilmValue(focalPlaneXResolution, focalPlaneYResolution, focalPlaneResolutionUnit, imageWidth, imageHeight, focalLength);
+        || getFocalLengthIn35mmFilmValue(focalPlaneXResolution, focalPlaneYResolution, focalPlaneResolutionUnit, pixelDimensions.width, pixelDimensions.height, focalLength);
 
     if (focalLengthIn35mmFilm) {
         compositeTags.FocalLength35efl = {
@@ -115,14 +114,27 @@ function getPositiveQuotient(parts) {
     return getPositiveNumber(getPositiveNumber(parts[0]) / getPositiveNumber(parts[1]));
 }
 
+function getPixelDimensions(tags, expanded) {
+    const pixelXDimension = getPositiveNumber(getTagValue(tags, 'exif', 'PixelXDimension', expanded));
+    const pixelYDimension = getPositiveNumber(getTagValue(tags, 'exif', 'PixelYDimension', expanded));
+    if (pixelXDimension && pixelYDimension) {
+        return {width: pixelXDimension, height: pixelYDimension};
+    }
+    return {
+        width: getPositiveNumber(getTagValue(tags, 'file', 'Image Width', expanded)),
+        height: getPositiveNumber(getTagValue(tags, 'file', 'Image Height', expanded))
+    };
+}
+
 /**
  * Calculates the 35mm equivalent focal length from camera sensor data.
  *
  * This function determines how the field of view of a camera's sensor compares to a
  * standard 35mm film frame (36mm × 24mm). The conversion involves:
  *
- * 1. **Sensor dimensions**: Calculated from image pixel count and focal plane
- *    resolution (pixels per unit area)
+ * 1. **Sensor dimensions**: The original image size in pixels (PixelXDimension and
+ *    PixelYDimension, or the file's size when absent) divided by the focal plane
+ *    resolution (pixels per unit length)
  * 2. **Crop factor**: The ratio between the sensor diagonal and the standard
  *    35mm diagonal (43.27mm)
  * 3. **Equivalent focal length**: Actual focal length multiplied by the crop factor
@@ -131,11 +143,11 @@ function getPositiveQuotient(parts) {
  * field of view of a 75mm lens on a 35mm camera. This doesn't change the actual
  * focal length or depth of field characteristics, only the angle of view.
  */
-function getFocalLengthIn35mmFilmValue(focalPlaneXResolution, focalPlaneYResolution, focalPlaneResolutionUnit, imageWidth, imageHeight, focalLength) {
+function getFocalLengthIn35mmFilmValue(focalPlaneXResolution, focalPlaneYResolution, focalPlaneResolutionUnit, pixelWidth, pixelHeight, focalLength) {
     // Standard 35mm film diagonal is 43.27mm (calculated from 36mm x 24mm frame)
     const DIAGONAL_35mm = 43.27;
 
-    if (focalPlaneXResolution && focalPlaneYResolution && focalPlaneResolutionUnit && imageWidth && imageHeight && focalLength) {
+    if (focalPlaneXResolution && focalPlaneYResolution && focalPlaneResolutionUnit && pixelWidth && pixelHeight && focalLength) {
         let resolutionUnitFactor;
         switch (focalPlaneResolutionUnit) {
             case FOCAL_PLANE_RESOLUTION_UNIT.INCHES:
@@ -154,8 +166,8 @@ function getFocalLengthIn35mmFilmValue(focalPlaneXResolution, focalPlaneYResolut
         const focalPlaneXResolutionMm = focalPlaneXResolution / resolutionUnitFactor;
         const focalPlaneYResolutionMm = focalPlaneYResolution / resolutionUnitFactor;
 
-        const sensorWidthMm = imageWidth / focalPlaneXResolutionMm;
-        const sensorHeightMm = imageHeight / focalPlaneYResolutionMm;
+        const sensorWidthMm = pixelWidth / focalPlaneXResolutionMm;
+        const sensorHeightMm = pixelHeight / focalPlaneYResolutionMm;
 
         const sensorDiagonal = Math.sqrt(sensorWidthMm ** 2 + sensorHeightMm ** 2);
         const focalLength35mm = focalLength * (DIAGONAL_35mm / sensorDiagonal);
