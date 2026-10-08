@@ -1348,6 +1348,30 @@ describe('xmp-tags', function () {
                 });
             });
 
+            it('should keep the raw packets as _raw when the standard packet has an element named _raw', function () {
+                const xmlString0 = getXmlString(`
+                    <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                        <xmp:_raw>x</xmp:_raw>
+                    </rdf:Description>
+                `);
+                const extendedXmlString = getXmlString(`
+                    <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag1="42">
+                    </rdf:Description>
+                `);
+                const xmlString1 = extendedXmlString.substr(0, 40);
+                const xmlString2 = extendedXmlString.substr(40);
+                const dataView = getDataView(xmlString0 + xmlString1 + xmlString2);
+
+                const tags = XmpTags.read(dataView, [
+                    {dataOffset: 0, length: xmlString0.length},
+                    {dataOffset: xmlString0.length, length: xmlString1.length},
+                    {dataOffset: xmlString0.length + xmlString1.length, length: xmlString2.length}
+                ], domParser);
+
+                expect(tags._raw).to.equal(xmlString0 + xmlString1 + xmlString2);
+                expect(tags['MyXMPTag1'].value).to.equal('42');
+            });
+
             // This is non-spec but there are files in the wild using this format.
             it('should be able to handle multiple chunks where they are all part of a single XMP metadata tree', function () {
                 const xmlString = getXmlString(`
@@ -1925,6 +1949,33 @@ describe('xmp-tags', function () {
                     });
                     expect(tags['MyOtherTag'].value).to.equal('4812');
                     expect(tags.value).to.be.undefined;
+                });
+
+                it('should keep the raw packet as _raw when there is an element named _raw', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:_raw>x</xmp:_raw>
+                            <xmp:MyOtherTag>4812</xmp:MyOtherTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags._raw).to.equal(xmlString);
+                    expect(tags['MyOtherTag']).to.deep.equal({
+                        value: '4812',
+                        attributes: {},
+                        description: '4812'
+                    });
+                });
+
+                it('should keep the raw packet as _raw when there is an attribute named _raw', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:_raw="y" xmp:MyOtherTag="4812"/>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags._raw).to.equal(xmlString);
+                    expect(tags['MyOtherTag'].value).to.equal('4812');
                 });
 
                 // An unprefixed name always lands in a tag named "undefined",

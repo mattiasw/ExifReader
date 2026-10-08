@@ -2579,6 +2579,83 @@ describe('exif-reader', function () {
             return length;
         }
     });
+
+    describe('keys the library computes itself', () => {
+        it('should not return a PNG text tag named Thumbnail as the thumbnail', () => {
+            const png = getPngWithChunks(
+                getPngChunk('tEXt', 'Thumbnail\x00fake-thumbnail'),
+                getPngChunk('tEXt', 'Other\x00fake-other')
+            );
+
+            const tags = ExifReader.loadView(getDataView(png));
+
+            expect(tags).to.not.have.property('Thumbnail');
+            expect(tags.Other.value).to.equal('fake-other');
+        });
+
+        it('should not return a compressed PNG text tag named Thumbnail as the thumbnail when loading asynchronously', async () => {
+            const COMPRESSION_METHOD_DEFLATE = '\x00';
+            const deflate = (text) => deflateSync(Buffer.from(text, 'latin1')).toString('latin1');
+            const png = getPngWithChunks(
+                getPngChunk('zTXt', 'Thumbnail\x00' + COMPRESSION_METHOD_DEFLATE + deflate('fake-thumbnail')),
+                getPngChunk('zTXt', 'Other\x00' + COMPRESSION_METHOD_DEFLATE + deflate('fake-other'))
+            );
+
+            const tags = await ExifReader.loadView(getDataView(png), {async: true});
+
+            expect(tags).to.not.have.property('Thumbnail');
+            expect(tags.Other.value).to.equal('fake-other');
+        });
+
+        it('should not return an XMP tag named Thumbnail as the thumbnail when there is no thumbnail IFD', () => {
+            swapImageHeader({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]});
+            swapXmpTagsRead({
+                Thumbnail: {value: 'fake-thumbnail', attributes: {}, description: 'fake-thumbnail'},
+                MyXmpTag: {value: 42}
+            });
+
+            const tags = ExifReader.loadView();
+
+            expect(tags).to.not.have.property('Thumbnail');
+            expect(tags.MyXmpTag.value).to.equal(42);
+        });
+
+        it('should not return a PNG text tag named FileType when the file type is excluded', () => {
+            const png = getPngWithChunks(
+                getPngChunk('tEXt', 'FileType\x00fake-filetype'),
+                getPngChunk('tEXt', 'Other\x00fake-other')
+            );
+
+            const tags = ExifReader.loadView(getDataView(png), {excludeTags: {file: ['FileType']}});
+
+            expect(tags).to.not.have.property('FileType');
+            expect(tags.Other.value).to.equal('fake-other');
+        });
+
+        it('should return the library file type over a PNG text tag named FileType', () => {
+            const png = getPngWithChunks(getPngChunk('tEXt', 'FileType\x00fake-filetype'));
+
+            const tags = ExifReader.loadView(getDataView(png));
+
+            expect(tags.FileType.value).to.equal('png');
+        });
+
+        it('should not return an XMP tag named FileType when only XMP tags are included', () => {
+            swapImageHeader({
+                fileType: {value: 'jpeg', description: 'JPEG'},
+                xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]
+            });
+            swapXmpTagsRead({
+                FileType: {value: 'fake-filetype', attributes: {}, description: 'fake-filetype'},
+                MyXmpTag: {value: 42}
+            });
+
+            const tags = ExifReader.loadView(undefined, {includeTags: {xmp: true}});
+
+            expect(tags).to.not.have.property('FileType');
+            expect(tags.MyXmpTag.value).to.equal(42);
+        });
+    });
 });
 
 // Shaped like a Buffer from the `buffer` package: a Uint8Array subclass with
@@ -2972,6 +3049,14 @@ function getPngWithCompressedLargeValueExif() {
     return PNG_SIGNATURE
         + getPngChunk('IHDR', getByteStringFromNumber(1, 4) + getByteStringFromNumber(1, 4) + '\x08\x02\x00\x00\x00')
         + getPngChunk('zTXt', 'Raw profile type exif\x00' + COMPRESSION_METHOD_DEFLATE + compressedProfile)
+        + getPngChunk('IEND', '');
+}
+
+function getPngWithChunks(...chunks) {
+    const PNG_SIGNATURE = '\x89PNG\r\n\x1a\n';
+    return PNG_SIGNATURE
+        + getPngChunk('IHDR', getByteStringFromNumber(1, 4) + getByteStringFromNumber(1, 4) + '\x08\x02\x00\x00\x00')
+        + chunks.join('')
         + getPngChunk('IEND', '');
 }
 

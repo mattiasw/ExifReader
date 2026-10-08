@@ -274,12 +274,13 @@ export function applyMergeStep({
     }
 
     if (step.type === 'thumbnail') {
+        // Flat output can already hold an XMP or PNG text tag named Thumbnail.
+        delete tags.Thumbnail;
+
         if (
             !tagFilter.shouldReturnGroup('thumbnail')
             || !tagFilter.shouldReturnTag('thumbnail', 'Thumbnail')
         ) {
-            delete tags.Thumbnail;
-
             return tags;
         }
 
@@ -298,8 +299,6 @@ export function applyMergeStep({
             && deps.Thumbnail.get(exifDataView || dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
         if (thumbnail) {
             tags.Thumbnail = thumbnail;
-        } else {
-            delete tags.Thumbnail;
         }
 
         return tags;
@@ -322,6 +321,9 @@ export function applyMergeStep({
     }
 
     if (step.type === 'fileType') {
+        // Flat output can already hold an XMP or PNG text tag named FileType.
+        delete tags.FileType;
+
         if (
             fileType
             && tagFilter.shouldReturnGroup('file')

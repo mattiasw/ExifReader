@@ -116,6 +116,8 @@ function readTags(tags, chunkDataView, domParser) {
 
         const xmpTags = {};
         parseXMPObject(convertToObject(rdf, true, decodeValue), xmpTags, Object.create(null));
+        // A parsed tag named _raw must not replace the packet string.
+        delete xmpTags._raw;
         objectAssign(tags, xmpTags);
         return true;
     } catch (error) {
