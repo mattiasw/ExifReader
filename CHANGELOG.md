@@ -65,6 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cannot be decoded, such as one with invalid base64 or a malformed percent
   escape. A data URI is now treated as base64 only when `;base64` is in its
   header, not when it appears in a URL-encoded payload.
+- A Canon maker note or a Pentax K-3 III `LevelInfo` value of 4 bytes or
+  fewer, which the IFD entry stores in place of an offset, is now parsed from
+  where it is stored instead of from a position further into the file.
 
 ### Security
 

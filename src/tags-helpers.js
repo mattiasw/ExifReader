@@ -185,8 +185,8 @@ function readTag(
     }
 
     if (tagValueFitsInOffsetSlot(tagType, tagCount)) {
-        tagValueOffset = offset + TAG_VALUE_OFFSET;
-        tagValue = getTagValue(dataView, tagValueOffset, tagType, tagCount, byteOrder);
+        tagValueOffset = offset + TAG_VALUE_OFFSET - offsetOrigin;
+        tagValue = getTagValue(dataView, offsetOrigin + tagValueOffset, tagType, tagCount, byteOrder);
     } else {
         tagValueOffset = Types.getLongAt(dataView, offset + TAG_VALUE_OFFSET, byteOrder);
         if (tagValueFitsInDataView(dataView, offsetOrigin, tagValueOffset, tagType, tagCount)) {
