@@ -5,7 +5,7 @@
 import Constants from './constants.js';
 import Types from './types.js';
 import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './tag-names.js';
-import {IFD_ENTRY_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
+import {IFD_ENTRY_LENGTH, TIFF_HEADER_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
 import {decodeUtf8ByteString, getByteString} from './utils.js';
 
@@ -48,13 +48,21 @@ const getTagValueAt = {
     13: Types.getIfdPointerAt
 };
 
+/**
+ * @returns {number|undefined} The absolute offset of the 0th IFD, or undefined
+ * when the header is truncated or the offset points into it.
+ */
 export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
     const offset = tiffHeaderOffset + TIFF_IFD_OFFSET_OFFSET;
     if (offset + Types.getTypeSize('LONG') > dataView.byteLength) {
         return undefined;
     }
-    return tiffHeaderOffset
-        + Types.getLongAt(dataView, offset, byteOrder);
+    const ifdOffset = Types.getLongAt(dataView, offset, byteOrder);
+    // An IFD starts past the TIFF header.
+    if (ifdOffset < TIFF_HEADER_LENGTH) {
+        return undefined;
+    }
+    return tiffHeaderOffset + ifdOffset;
 }
 
 /**
@@ -66,7 +74,8 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
  * read, see getValueBudget. Pass the same object to several calls to bound them
  * together; omit it to give this call its own budget. Once the entry count runs
  * out, later entries and IFDs are not read, so their tags are absent rather than
- * empty, and an IFD cut short does not follow its next-IFD offset.
+ * empty, and an IFD cut short does not follow its next-IFD offset. Nor does one
+ * whose next-IFD offset points into the TIFF header.
  * @returns {Object} The read tags, keyed by tag name.
  */
 export function readIfd(
@@ -129,7 +138,7 @@ export function readIfd(
 
     if (Constants.USE_THUMBNAIL && !ranOutOfIfdEntries && (offset + Types.getTypeSize('LONG') <= dataView.byteLength)) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
-        if (nextIfdOffset !== 0 && ifdType === IFD_TYPE_0TH) {
+        if (nextIfdOffset >= TIFF_HEADER_LENGTH && ifdType === IFD_TYPE_0TH) {
             if (tagFilter.shouldParseGroup('thumbnail')) {
                 tags['Thumbnail'] = readIfd(
                     dataView,

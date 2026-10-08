@@ -241,6 +241,35 @@ describe('tags', () => {
         expect(tags['MyExifTag'].value).to.equal(0x42);
     });
 
+    it('should not read the TIFF header as the 0th IFD', () => {
+        // Read as an IFD at offset 0, the header gives a field count of 0x4d4d,
+        // and the entry at offset 14 parses as an ASCII Make tag.
+        const dataView = getDataView(
+            '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x00'
+            + '\x00'.repeat(6) + '\x01\x0f\x00\x02\x00\x00\x00\x04XYZ\x00'
+        );
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x010f: 'Make'}});
+
+        const {tags} = Tags.read(dataView, 0, false);
+
+        expect(tags).to.deep.equal({});
+    });
+
+    it('should not read the TIFF header as the thumbnail IFD', () => {
+        // Read as an IFD at offset 2, the header gives a field count of 0x002a,
+        // and the entry at offset 16 parses as an ASCII Make tag.
+        const dataView = getDataView(
+            '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x08'
+            + '\x00\x00' + '\x00\x00\x00\x02'
+            + '\x00\x00' + '\x01\x0f\x00\x02\x00\x00\x00\x04QRS\x00' + '\x00'.repeat(20)
+        );
+        restoreTagNames = swapProperties(TagNames, {'1st': {0x010f: 'Make'}});
+
+        const {tags} = Tags.read(dataView, 0, false);
+
+        expect(tags).to.not.have.property('Thumbnail');
+    });
+
     it('should share one decoded-value budget across the 0th and Exif IFDs', () => {
         // The 0th IFD uses up the budget before the Exif IFD pointer is
         // followed, so the Exif IFD's tag decodes to nothing while the in-slot
