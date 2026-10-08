@@ -3,10 +3,20 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils.js';
+import {getDataView, swapProperties} from './test-utils.js';
 import Xml from '../../src/xml.js';
+import DataViewWrapper from '../../src/dataview.js';
 
 describe('xml', () => {
+    let restoreFromCharCode;
+
+    afterEach(() => {
+        if (restoreFromCharCode) {
+            restoreFromCharCode();
+            restoreFromCharCode = undefined;
+        }
+    });
+
     it('should recognize xmp file', () => {
         expect(Xml.isXMLFile(getDataView('<?xpacket begin'))).to.be.true;
     });
@@ -64,6 +74,81 @@ describe('xml', () => {
             const metadataBlocks = [];
             Xml.findOffsets(getDataView(xml), metadataBlocks);
             expect(metadataBlocks.truncated).to.equal(false);
+        });
+
+        it('should find the closing marker without reading or converting the whole buffer', () => {
+            const head = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"></x:xmpmeta><?xpacket end="w"?>';
+            const dataView = getDataView(head + ' '.repeat(64 * 1024));
+            let reads = 0;
+            const countingView = {
+                byteLength: dataView.byteLength,
+                getUint8(offset) {
+                    reads++;
+                    return dataView.getUint8(offset);
+                }
+            };
+            const originalFromCharCode = String.fromCharCode;
+            let fromCharCodeCalls = 0;
+            restoreFromCharCode = swapProperties(String, {
+                fromCharCode(...charCodes) {
+                    fromCharCodeCalls++;
+                    return originalFromCharCode.apply(String, charCodes);
+                }
+            });
+            const metadataBlocks = [];
+            Xml.findOffsets(countingView, metadataBlocks);
+            restoreFromCharCode();
+            restoreFromCharCode = undefined;
+            expect(fromCharCodeCalls).to.be.at.most(2);
+            expect(reads).to.be.below(200);
+            expect(metadataBlocks.truncated).to.equal(false);
+        });
+
+        it('should find a closing marker that follows a partial one', () => {
+            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><?xpacket en<?xpacket end="w"?>';
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView(xml), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(false);
+        });
+
+        it('should find an xpacket end marker that ends at the last byte', () => {
+            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><?xpacket end=';
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView(xml), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(false);
+        });
+
+        it('should mark truncated when the closing marker is cut one byte short', () => {
+            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><?xpacket end';
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView(xml), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(true);
+        });
+
+        it('should mark truncated for a buffer shorter than the closing markers', () => {
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView('<?xpa'), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(true);
+        });
+
+        it('should mark truncated for an empty buffer', () => {
+            const metadataBlocks = [];
+            Xml.findOffsets(getDataView(''), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(true);
+        });
+
+        it('should find the closing marker in a Node.js Buffer wrapper', () => {
+            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"></x:xmpmeta><?xpacket end="w"?>';
+            const metadataBlocks = [];
+            Xml.findOffsets(new DataViewWrapper(Buffer.from(xml)), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(false);
+        });
+
+        it('should mark truncated for a cut-short Node.js Buffer wrapper without throwing', () => {
+            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><?xpacket end';
+            const metadataBlocks = [];
+            Xml.findOffsets(new DataViewWrapper(Buffer.from(xml)), metadataBlocks);
+            expect(metadataBlocks.truncated).to.equal(true);
         });
     });
 });

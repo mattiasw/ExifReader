@@ -75,6 +75,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stray byte, took about 35 times its size in memory to read: a 16 MiB packet
   took about 630 MB and one second. The same packet now takes about 150 MB
   and a quarter of a second.
+- Reading a standalone XMP file with `includeOffsets`, which `length: 'auto'`
+  needs, took memory far above the file size: an 8 MiB file took about 310 MB
+  and almost half a second, against about 96 MB without `includeOffsets`. The
+  check for the closing XMP marker now scans the bytes directly, so the file
+  takes about as much memory as without `includeOffsets`.
 
 ## [4.47.0] - 2026-10-08
 
