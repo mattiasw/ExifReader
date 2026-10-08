@@ -34,7 +34,8 @@ function read(
     includeUnknown,
     computed = false,
     tagFilter = NOOP_TAG_FILTER,
-    decompressConfig
+    decompressConfig,
+    valueBudget
 ) {
     const tags = {};
     const decompressionTasks = [];
@@ -52,7 +53,7 @@ function read(
             }
         } else if (async && decompressionTasks.length < MAX_COMPRESSED_TEXT_CHUNKS) {
             decompressionTasks.push(() => decompressTextChunk(textChunk, decompressConfig)
-                .then((tag) => getTagsFromDecompressedTag(tag, includeUnknown, computed, tagFilter)));
+                .then((tag) => getTagsFromDecompressedTag(tag, includeUnknown, computed, tagFilter, valueBudget)));
         }
     }
 
@@ -112,7 +113,7 @@ function decompressTextChunk({type, keywordChars, langChars, compressionMethod, 
         .catch(() => constructTag('<text using unknown compression>'.split(''), type, langChars, keywordChars));
 }
 
-function getTagsFromDecompressedTag({name, value, description}, includeUnknown, computed, tagFilter) {
+function getTagsFromDecompressedTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget) {
     try {
         if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
             if (!tagFilter.shouldParseGroup('exif')) {
@@ -124,7 +125,8 @@ function getTagsFromDecompressedTag({name, value, description}, includeUnknown, 
                     EXIF_OFFSET,
                     includeUnknown,
                     computed,
-                    tagFilter
+                    tagFilter,
+                    valueBudget
                 ).tags
             };
         } else if (Constants.USE_IPTC && isIptcGroupTag(name, value)) {

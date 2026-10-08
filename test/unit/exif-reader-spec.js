@@ -545,6 +545,24 @@ describe('exif-reader', function () {
         expect(capturedBudgets.makerNotes).to.equal(capturedBudgets.exif);
     });
 
+    it('should pass the decoded-value budget of the Exif read on to PngTextTags.read', () => {
+        const capturedBudgets = capturePngTextValueBudgets({tiffHeaderOffset: OFFSET_TEST_VALUE});
+
+        ExifReader.loadView(getDataView('\x00'.repeat(16)));
+
+        expect(capturedBudgets.exif).to.be.an('object');
+        expect(capturedBudgets.pngText).to.equal(capturedBudgets.exif);
+    });
+
+    it('should give PngTextTags.read a decoded-value budget sized from the file when there is no Exif', () => {
+        const capturedBudgets = capturePngTextValueBudgets({});
+
+        ExifReader.loadView(getDataView('\x00'.repeat(16)));
+
+        expect(capturedBudgets.exif).to.be.undefined;
+        expect(capturedBudgets.pngText).to.deep.equal({remaining: 4 * 16});
+    });
+
     it('should pass exifDataView from BMFF multi-extent items to Thumbnail.get instead of the source dataView', () => {
         const SYNTHETIC = {synthetic: true};
         const myThumbnail = {type: 'image/jpeg'};
@@ -763,6 +781,32 @@ describe('exif-reader', function () {
         );
 
         expect(result.MyBrobExifTag).to.equal(42);
+    });
+
+    it('should size the decoded-value budget of brob Exif data from the file, not the decompressed data', async () => {
+        const decompressedBuffer = new ArrayBuffer(OFFSET_TEST_VALUE + 100);
+        new DataView(decompressedBuffer).setUint32(0, OFFSET_TEST_VALUE - 4);
+        swapImageHeader({
+            fileType: {value: 'jxl', description: 'JPEG XL'},
+            brobExifChunk: {dataOffset: 0, length: 10}
+        });
+        let capturedBudget;
+        swap(Tags, {
+            read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
+                capturedBudget = valueBudget;
+                return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
+            }
+        });
+
+        await ExifReader.loadView(
+            new DataView(new ArrayBuffer(10)),
+            {
+                async: true,
+                decompress: {brotli: () => Promise.resolve(decompressedBuffer)}
+            }
+        );
+
+        expect(capturedBudget).to.deep.equal({remaining: 4 * 10});
     });
 
     it('should decompress and parse brob XMP data in JXL files', async () => {
@@ -2496,6 +2540,33 @@ describe('exif-reader', function () {
             }
         });
 
+        it('should bound the values decoded from the Exif of a compressed PNG text chunk by 4 times the input', async () => {
+            const png = getPngWithCompressedLargeValueExif();
+
+            const tags = await ExifReader.loadView(getDataView(png), {async: true, expanded: true, includeUnknown: true});
+
+            expect(tags.exif).to.be.an('object');
+            expect(getDecodedValueLength(tags, ['exif'])).to.be.at.most(4 * png.length);
+        });
+
+        it('should bound the values decoded from the Exif of a JPEG XL brob box by 4 times the input', async () => {
+            const jxl = getJxlWithBrobExif();
+            const decompressedExif = Uint8Array.from(
+                getByteStringFromNumber(0, 4) + getLargeValueTiff(DECOMPRESSED_EXIF_SIZE),
+                (character) => character.charCodeAt(0)
+            ).buffer;
+
+            const tags = await ExifReader.loadView(getDataView(jxl), {
+                async: true,
+                expanded: true,
+                includeUnknown: true,
+                decompress: {brotli: () => Promise.resolve(decompressedExif)}
+            });
+
+            expect(tags.exif).to.be.an('object');
+            expect(getDecodedValueLength(tags, ['exif'])).to.be.at.most(4 * jxl.length);
+        });
+
         function getDecodedValueLength(tags, groupKeys) {
             let length = 0;
             for (const groupKey of groupKeys) {
@@ -2612,6 +2683,24 @@ function captureDecodedValueBudgets(exifTags) {
         read(dataView, dataOffset, includeUnknown, computed, tagFilter, valueBudget) {
             capturedBudgets.mpf = valueBudget;
             return {};
+        }
+    });
+    return capturedBudgets;
+}
+
+function capturePngTextValueBudgets(appMarkers) {
+    const capturedBudgets = {};
+    swapImageHeader({...appMarkers, pngTextChunks: [{type: 'zTXt', offset: 0, length: 16}]});
+    swap(Tags, {
+        read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
+            capturedBudgets.exif = valueBudget;
+            return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
+        }
+    });
+    swap(PngTextTags, {
+        read(dataView, pngTextChunks, async, includeUnknown, computed, tagFilter, decompressConfig, valueBudget) {
+            capturedBudgets.pngText = valueBudget;
+            return {readTags: {}, readTagsPromise: undefined};
         }
     });
     return capturedBudgets;
@@ -2870,4 +2959,46 @@ function getJpegWithExifAndMpf(exifTiff, mpfTiff, bodyOffset) {
         throw new Error(`Body lands at ${actualBodyOffset}, not ${bodyOffset}.`);
     }
     return '\xff\xd8' + exifSegment + mpfSegment + '\xff\xd9';
+}
+
+// A tiny PNG with a zTXt "Raw profile type exif" chunk that decompresses to an
+// Exif block whose large BYTE values all start at its TIFF header.
+function getPngWithCompressedLargeValueExif() {
+    const PNG_SIGNATURE = '\x89PNG\r\n\x1a\n';
+    const COMPRESSION_METHOD_DEFLATE = '\x00';
+    const exif = 'Exif\x00\x00' + getLargeValueTiff(DECOMPRESSED_EXIF_SIZE - 6);
+    const rawProfile = `\nexif\n${String(exif.length).padStart(8, ' ')}\n${Buffer.from(exif, 'latin1').toString('hex')}`;
+    const compressedProfile = deflateSync(Buffer.from(rawProfile, 'latin1')).toString('latin1');
+    return PNG_SIGNATURE
+        + getPngChunk('IHDR', getByteStringFromNumber(1, 4) + getByteStringFromNumber(1, 4) + '\x08\x02\x00\x00\x00')
+        + getPngChunk('zTXt', 'Raw profile type exif\x00' + COMPRESSION_METHOD_DEFLATE + compressedProfile)
+        + getPngChunk('IEND', '');
+}
+
+const DECOMPRESSED_EXIF_SIZE = 64 * 1024;
+const DECOMPRESSED_EXIF_TAG_COUNT = 8;
+
+function getLargeValueTiff(length) {
+    let entries = '';
+    for (let i = 0; i < DECOMPRESSED_EXIF_TAG_COUNT; i++) {
+        entries += getIfdEntry(0x7000 + i, IFD_TYPE_BYTE, length, getByteStringFromNumber(0, 4));
+    }
+    const tiff = 'MM\x00\x2a' + getByteStringFromNumber(8, 4)
+        + getByteStringFromNumber(DECOMPRESSED_EXIF_TAG_COUNT, 2)
+        + entries
+        + getByteStringFromNumber(0, 4);
+    return tiff + '\x00'.repeat(length - tiff.length);
+}
+
+function getPngChunk(type, data) {
+    const UNCHECKED_CRC = getByteStringFromNumber(0, 4);
+    return getByteStringFromNumber(data.length, 4) + type + data + UNCHECKED_CRC;
+}
+
+// A JPEG XL container whose only metadata is a brob box holding Exif.
+function getJxlWithBrobExif() {
+    const JXL_SIGNATURE = '\x00\x00\x00\x0CJXL \x0D\x0A\x87\x0A';
+    const FTYP_BOX = '\x00\x00\x00\x14ftypjxl \x00\x00\x00\x00jxl ';
+    const brobContent = 'Exif' + 'BROTLI_EXIF_DATA';
+    return JXL_SIGNATURE + FTYP_BOX + getByteStringFromNumber(8 + brobContent.length, 4) + 'brob' + brobContent;
 }
