@@ -88,6 +88,8 @@ describe('custom configuration image outputs', () => {
 
             if (configuration.cli) {
                 describe('cli build', () => {
+                    const STOCK_FILE_NAMES = ['exif-reader.js', 'exif-reader.js.map'];
+                    const stockBytes = {};
                     let checkBeforeBuild;
 
                     before(() => {
@@ -97,6 +99,11 @@ describe('custom configuration image outputs', () => {
                         const binDir = path.join(TEMP_PROJECT_DIR, 'node_modules', '.bin');
                         expect(fs.existsSync(path.join(binDir, 'exifreader')) || fs.existsSync(path.join(binDir, 'exifreader.cmd'))).to.equal(true);
                         checkBeforeBuild = runCli(['build', '--check']);
+                        // The sibling link stands in for another project sharing the package manager's store copy.
+                        STOCK_FILE_NAMES.forEach((fileName) => {
+                            stockBytes[fileName] = fs.readFileSync(path.join(installedDistDir(), fileName));
+                            fs.linkSync(path.join(installedDistDir(), fileName), siblingPath(fileName));
+                        });
                         execSync('node node_modules/exifreader/bin/cli.js build', {cwd: TEMP_PROJECT_DIR, stdio: 'ignore'});
                     });
 
@@ -135,6 +142,15 @@ describe('custom configuration image outputs', () => {
                         expect(result.status).to.equal(0);
                         expect(result.stdout).to.contain('up to date');
                         expect(fs.statSync(bundlePath).mtimeMs).to.equal(modifiedBefore);
+                    });
+
+                    STOCK_FILE_NAMES.forEach((fileName) => {
+                        it(`leaves a hardlinked copy of the stock ${fileName} untouched`, () => {
+                            expect(fs.readFileSync(siblingPath(fileName)).equals(stockBytes[fileName])).to.equal(true);
+                            // BigInt, since Windows file IDs can exceed Number.MAX_SAFE_INTEGER.
+                            const builtInode = fs.statSync(path.join(installedDistDir(), fileName), {bigint: true}).ino;
+                            expect(builtInode).to.not.equal(fs.statSync(siblingPath(fileName), {bigint: true}).ino);
+                        });
                     });
 
                     fs.readdirSync(path.join(FIXTURES_PATH, 'images')).forEach((imageName) => {
@@ -181,6 +197,10 @@ describe('custom configuration image outputs', () => {
 
     function installedDistDir() {
         return path.join(TEMP_PROJECT_DIR, 'node_modules', 'exifreader', 'dist');
+    }
+
+    function siblingPath(fileName) {
+        return path.join(TEMP_PROJECT_DIR, `shared-${fileName}`);
     }
 
     function runCli(args, env) {
