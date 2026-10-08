@@ -24,6 +24,16 @@ const MINIMAL_ICC_SEGMENT = '\xff\xe2\x00\x10ICC_PROFILE\x00\x01\x01';
 // A larger APP2 ICC segment: a field length of 20 puts four bytes of profile data after
 // the two chunk bytes, so a scan that reuses another segment's length loses its place.
 const PADDED_ICC_SEGMENT = '\xff\xe2\x00\x14ICC_PROFILE\x00\x01\x01\x00\x00\x00\x00';
+const TIFF_HEADER_LITTLE_ENDIAN = '\x49\x49\x2a\x00\x08\x00\x00\x00';
+const ZEROTH_IFD_WITH_ONE_ENTRY = '\x01\x00'
+    + '\x0f\x01\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00'
+    + '\x00\x00\x00\x00';
+const ZEROTH_IFD_WITH_ZERO_ENTRIES = '\x00\x00' + '\x00\x00\x00\x00';
+const EXIF_SEGMENT_WITH_IFD_ENTRY = `${APP1_MARKER}\x00\x22Exif\x00\x00${TIFF_HEADER_LITTLE_ENDIAN}${ZEROTH_IFD_WITH_ONE_ENTRY}`;
+const EXIF_SEGMENT_WITHOUT_IFD_ENTRIES = `${APP1_MARKER}\x00\x16Exif\x00\x00${TIFF_HEADER_LITTLE_ENDIAN}${ZEROTH_IFD_WITH_ZERO_ENTRIES}`;
+// Longer than EXIF_SEGMENT_WITH_IFD_ENTRY, so preferring that one shows an empty 0th IFD loses whatever the segment size.
+const PADDED_EXIF_SEGMENT_WITHOUT_IFD_ENTRIES = `${APP1_MARKER}\x00\x26Exif\x00\x00${TIFF_HEADER_LITTLE_ENDIAN}${ZEROTH_IFD_WITH_ZERO_ENTRIES}`
+    + '\x00'.repeat(16);
 
 describe('image-header-jpeg', () => {
     it('should recognize a JPEG file', () => {
@@ -125,19 +135,21 @@ describe('image-header-jpeg', () => {
     });
 
     it('should prefer Exif segment with IFD entries when multiple Exif segments exist', () => {
-        const validTiffHeaderLittleEndian = '\x49\x49\x2a\x00\x08\x00\x00\x00';
-        const valid0thIfdWithOneEntry = '\x01\x00'
-            + '\x0f\x01\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00'
-            + '\x00\x00\x00\x00';
-        const validExifSegment = `${APP1_MARKER}\x00\x22Exif\x00\x00${validTiffHeaderLittleEndian}${valid0thIfdWithOneEntry}`;
-
-        const invalid0thIfdWithZeroEntries = '\x00\x00' + '\x00\x00\x00\x00';
-        const invalidExifSegment = `${APP1_MARKER}\x00\x16Exif\x00\x00${validTiffHeaderLittleEndian}${invalid0thIfdWithZeroEntries}`;
-
-        const dataView = getDataView(`\xff\xd8${validExifSegment}${invalidExifSegment}`);
+        const dataView = getDataView(`\xff\xd8${EXIF_SEGMENT_WITH_IFD_ENTRY}${EXIF_SEGMENT_WITHOUT_IFD_ENTRIES}`);
         const warnSpy = getConsoleWarnSpy();
         try {
             expect(ImageHeaderJpeg.findJpegOffsets(dataView).tiffHeaderOffset).to.equal(12);
+            expect(warnSpy.hasWarned).to.be.true;
+        } finally {
+            warnSpy.reset();
+        }
+    });
+
+    it('should prefer a later Exif segment with IFD entries over an earlier, larger empty one', () => {
+        const dataView = getDataView(`\xff\xd8${PADDED_EXIF_SEGMENT_WITHOUT_IFD_ENTRIES}${EXIF_SEGMENT_WITH_IFD_ENTRY}`);
+        const warnSpy = getConsoleWarnSpy();
+        try {
+            expect(ImageHeaderJpeg.findJpegOffsets(dataView).tiffHeaderOffset).to.equal(52);
             expect(warnSpy.hasWarned).to.be.true;
         } finally {
             warnSpy.reset();
