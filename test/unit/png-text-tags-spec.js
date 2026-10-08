@@ -661,10 +661,6 @@ describe('png-text-tags', () => {
             expect(elapsed).to.be.below(1000);
         });
 
-        function getRawProfileValue(type, data) {
-            return `\n${type}\n${String(data.length).padStart(8, ' ')}\n${stringToHex(data)}`;
-        }
-
         function getExifWithOneUnknownTag(tagId) {
             const tagIdBytes = String.fromCharCode(tagId >> 8, tagId & 0xff);
             return 'Exif\0\0'
@@ -673,6 +669,163 @@ describe('png-text-tags', () => {
                 + tagIdBytes + '\0\x03' + '\0\0\0\x01' + '\0\x01\0\0'
                 + '\0\0\0\0';
         }
+    });
+
+    describe('raw profile thumbnails', () => {
+        const EXIF_DATA = 'Exif\0\0MM\0\x2a\0\0\0\x08<thumbnail>';
+
+        function swapTagsReadWithThumbnail(readCount = {calls: 0}) {
+            restoreTagReaders = swapProperties(Tags, {
+                read: () => {
+                    readCount.calls++;
+                    return {
+                        tags: {
+                            Model: {value: 'abc'},
+                            Thumbnail: {JPEGInterchangeFormat: {value: 8}, JPEGInterchangeFormatLength: {value: 2}}
+                        }
+                    };
+                }
+            });
+            return readCount;
+        }
+
+        function getRecordingGetThumbnail(results) {
+            const calls = [];
+            function getThumbnail(dataView, thumbnailIfdTags, tiffHeaderOffset) {
+                calls.push({dataView, thumbnailIfdTags, tiffHeaderOffset});
+                return results.shift();
+            }
+            return {getThumbnail, calls};
+        }
+
+        it('should pass the decoded profile and its thumbnail IFD tags to getThumbnail and return the thumbnail with an image', () => {
+            swapTagsReadWithThumbnail();
+            const thumbnail = {image: 'image'};
+            const {getThumbnail, calls} = getRecordingGetThumbnail([thumbnail]);
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA))
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, getThumbnail);
+
+            expect(calls).to.have.lengthOf(1);
+            expect(calls[0].dataView.byteOffset).to.equal(0);
+            expect(calls[0].dataView.byteLength).to.equal(EXIF_DATA.length);
+            expect(getStringFromDataView(calls[0].dataView, 0, EXIF_DATA.length)).to.equal(EXIF_DATA);
+            expect(calls[0].thumbnailIfdTags).to.deep.equal({JPEGInterchangeFormat: {value: 8}, JPEGInterchangeFormatLength: {value: 2}});
+            expect(calls[0].tiffHeaderOffset).to.equal(6);
+            expect(result.embeddedExifThumbnail).to.equal(thumbnail);
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
+        });
+
+        it('should return no thumbnail when getThumbnail gives no image', () => {
+            swapTagsReadWithThumbnail();
+            const {getThumbnail} = getRecordingGetThumbnail([{type: 'image/jpeg'}]);
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA))
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, getThumbnail);
+
+            expect(result.embeddedExifThumbnail).to.be.undefined;
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
+        });
+
+        it('should return no thumbnail and drop the thumbnail IFD tags when no getThumbnail is passed', () => {
+            swapTagsReadWithThumbnail();
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA))
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks);
+
+            expect(result.embeddedExifThumbnail).to.be.undefined;
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
+        });
+
+        it('should keep the first tEXt thumbnail with an image and not look for one in later chunks', () => {
+            swapTagsReadWithThumbnail();
+            const firstWithImage = {image: 'first'};
+            const {getThumbnail, calls} = getRecordingGetThumbnail([{}, firstWithImage, {image: 'second'}]);
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA)),
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA)),
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA))
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, getThumbnail);
+
+            expect(calls).to.have.lengthOf(2);
+            expect(result.embeddedExifThumbnail).to.equal(firstWithImage);
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
+        });
+
+        it('should return the thumbnail of a zTXt raw profile with its entry', async () => {
+            swapTagsReadWithThumbnail();
+            const thumbnail = {image: 'image'};
+            const {getThumbnail, calls} = getRecordingGetThumbnail([thumbnail]);
+            const {dataView, chunks} = buildTextChunks([
+                getZtxtChunk('Raw profile type exif', toBytes(getRawProfileValue('exif', EXIF_DATA)))
+            ]);
+            const decompressConfig = {deflate: (bytes) => bytes};
+
+            const tagList = await PngTextTags.read(
+                dataView, chunks, true, false, false, undefined, decompressConfig, undefined, getThumbnail
+            ).readTagsPromise;
+
+            expect(calls).to.have.lengthOf(1);
+            expect(calls[0].dataView.byteLength).to.equal(EXIF_DATA.length);
+            expect(calls[0].tiffHeaderOffset).to.equal(6);
+            expect(tagList).to.deep.equal([{embeddedExifTags: {Model: {value: 'abc'}}, embeddedExifThumbnail: thumbnail}]);
+        });
+
+        it('should give a zTXt entry no thumbnail key when getThumbnail gives no image', async () => {
+            swapTagsReadWithThumbnail();
+            const {getThumbnail} = getRecordingGetThumbnail([{}]);
+            const {dataView, chunks} = buildTextChunks([
+                getZtxtChunk('Raw profile type exif', toBytes(getRawProfileValue('exif', EXIF_DATA)))
+            ]);
+            const decompressConfig = {deflate: (bytes) => bytes};
+
+            const tagList = await PngTextTags.read(
+                dataView, chunks, true, false, false, undefined, decompressConfig, undefined, getThumbnail
+            ).readTagsPromise;
+
+            expect(tagList).to.deep.equal([{embeddedExifTags: {Model: {value: 'abc'}}}]);
+        });
+
+        it('should not look for a zTXt thumbnail, even in an earlier chunk, when a tEXt chunk has one', async () => {
+            swapTagsReadWithThumbnail();
+            const textThumbnail = {image: 'text'};
+            const {getThumbnail, calls} = getRecordingGetThumbnail([textThumbnail, {image: 'compressed'}]);
+            const {dataView, chunks} = buildTextChunks([
+                getZtxtChunk('Raw profile type exif', toBytes(getRawProfileValue('exif', EXIF_DATA))),
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA))
+            ]);
+            const decompressConfig = {deflate: (bytes) => bytes};
+
+            const result = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, undefined, getThumbnail);
+            const tagList = await result.readTagsPromise;
+
+            expect(calls).to.have.lengthOf(1);
+            expect(result.embeddedExifThumbnail).to.equal(textThumbnail);
+            expect(tagList).to.deep.equal([{embeddedExifTags: {Model: {value: 'abc'}}}]);
+        });
+
+        it('should not call getThumbnail when the tag filter excludes the exif group', () => {
+            const readCount = swapTagsReadWithThumbnail();
+            const {getThumbnail, calls} = getRecordingGetThumbnail([{image: 'image'}]);
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA))
+            ]);
+            const tagFilter = {shouldParseGroup: (group) => group !== 'exif'};
+
+            const result = PngTextTags.read(dataView, chunks, false, false, false, tagFilter, undefined, undefined, getThumbnail);
+
+            expect(readCount.calls).to.equal(0);
+            expect(calls).to.have.lengthOf(0);
+            expect(result.embeddedExifThumbnail).to.be.undefined;
+        });
     });
 
     describe('many compressed text chunks', () => {
@@ -1244,6 +1397,10 @@ describe('png-text-tags', () => {
             offset += part.length;
         }
         return new DataView(bytes.buffer);
+    }
+
+    function getRawProfileValue(type, data) {
+        return `\n${type}\n${String(data.length).padStart(8, ' ')}\n${stringToHex(data)}`;
     }
 
     function stringToHex(text) {

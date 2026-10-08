@@ -563,7 +563,7 @@ export function loadView(
             || tagFilter.shouldParseGroup('iptc')
         )
     ) {
-        const {readTags, embeddedExifTags, embeddedIptcTags, readTagsPromise} = PngTextTags.read(
+        const {readTags, embeddedExifTags, embeddedIptcTags, embeddedExifThumbnail, readTagsPromise} = PngTextTags.read(
             dataView,
             pngTextChunks,
             async,
@@ -571,7 +571,8 @@ export function loadView(
             computed,
             tagFilter,
             decompressConfig,
-            valueBudget
+            valueBudget,
+            getPngTextThumbnailReader(tagFilter)
         );
         pngTextIsAsync = !!readTagsPromise;
 
@@ -580,6 +581,7 @@ export function loadView(
             readTags,
             embeddedExifTags,
             embeddedIptcTags,
+            embeddedExifThumbnail,
         });
 
         if (readTagsPromise) {
@@ -809,6 +811,21 @@ function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed
         // safely.
         return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN, valueBudget};
     }
+}
+
+function getPngTextThumbnailReader(tagFilter) {
+    if (
+        !Constants.USE_EXIF
+        || !Constants.USE_THUMBNAIL
+        || !tagFilter.shouldReturnTag('thumbnail', 'Thumbnail')
+    ) {
+        return undefined;
+    }
+    return (dataView, thumbnailIfdTags, tiffHeaderOffset) => Thumbnail.get(
+        dataView,
+        filterTagsForParse('thumbnail', thumbnailIfdTags, tagFilter),
+        tiffHeaderOffset
+    );
 }
 
 function filterTagsForParse(groupKey, readTags, tagFilter) {

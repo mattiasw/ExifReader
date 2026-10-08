@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The Exif thumbnail is now returned as `Thumbnail` for PNG files whose Exif
+  is stored in a `Raw profile type exif` text chunk, as ImageMagick writes it.
+  This works for tEXt and uncompressed iTXt chunks, and for zTXt and
+  compressed iTXt chunks with `async: true`. When the PNG also has an eXIf
+  chunk with a thumbnail, the eXIf thumbnail is returned.
+
 ### Changed
 
 - `load()` now rejects for a file path, URL or `File` object when `length` is

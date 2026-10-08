@@ -20,6 +20,7 @@ export function buildTagsFromMergeSteps({
     deps,
 }) {
     let tags = {};
+    const embeddedExifThumbnails = [];
 
     for (let i = 0; i < mergeSteps.length; i++) {
         tags = applyMergeStep({
@@ -33,6 +34,7 @@ export function buildTagsFromMergeSteps({
             exifDataView,
             fileType,
             thumbnailIfdTags,
+            embeddedExifThumbnails,
             tags,
             deps,
         });
@@ -73,6 +75,7 @@ export function applyMergeStep({
     exifDataView,
     fileType,
     thumbnailIfdTags,
+    embeddedExifThumbnails = [],
     tags,
     deps,
 }) {
@@ -195,6 +198,7 @@ export function applyMergeStep({
     }
 
     if (Constants.USE_PNG && step.type === 'processPngTextReadTags') {
+        addEmbeddedExifThumbnail(embeddedExifThumbnails, step.embeddedExifThumbnail);
         return addPngTextReadTagsToTagsAndGroups({
             readTags: step.readTags,
             embeddedExifTags: step.embeddedExifTags,
@@ -213,6 +217,7 @@ export function applyMergeStep({
 
         for (let i = 0; i < tagList.length; i++) {
             const entry = tagList[i];
+            addEmbeddedExifThumbnail(embeddedExifThumbnails, entry.embeddedExifThumbnail);
             tags = addPngTextReadTagsToTagsAndGroups({
                 readTags: entry.readTags || {},
                 embeddedExifTags: entry.embeddedExifTags,
@@ -286,19 +291,18 @@ export function applyMergeStep({
             return tags;
         }
 
-        if (!thumbnailIfdTags) {
-            return tags;
-        }
-
-        const parsedThumbnailIfdTags = deps.filterTagsForParse(
-            'thumbnail',
+        const mainThumbnail = getMainThumbnail({
             thumbnailIfdTags,
-            tagFilter
-        );
-
-        const thumbnail = Constants.USE_EXIF
-            && Constants.USE_THUMBNAIL
-            && deps.Thumbnail.get(exifDataView || dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
+            tagFilter,
+            dataView,
+            exifDataView,
+            tiffHeaderOffset,
+            deps,
+        });
+        let thumbnail = mainThumbnail;
+        if (!hasImage(mainThumbnail)) {
+            thumbnail = getFirstEmbeddedExifThumbnailWithImage(embeddedExifThumbnails) || mainThumbnail;
+        }
         if (thumbnail) {
             tags.Thumbnail = thumbnail;
         }
@@ -345,6 +349,39 @@ export function applyMergeStep({
     }
 
     return tags;
+}
+
+function addEmbeddedExifThumbnail(embeddedExifThumbnails, embeddedExifThumbnail) {
+    if (embeddedExifThumbnail) {
+        embeddedExifThumbnails.push(embeddedExifThumbnail);
+    }
+}
+
+function getMainThumbnail({thumbnailIfdTags, tagFilter, dataView, exifDataView, tiffHeaderOffset, deps}) {
+    if (!thumbnailIfdTags) {
+        return undefined;
+    }
+
+    const parsedThumbnailIfdTags = deps.filterTagsForParse(
+        'thumbnail',
+        thumbnailIfdTags,
+        tagFilter
+    );
+
+    return Constants.USE_EXIF
+        && Constants.USE_THUMBNAIL
+        && deps.Thumbnail.get(exifDataView || dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
+}
+
+function hasImage(thumbnail) {
+    return !!thumbnail && !!thumbnail.image;
+}
+
+function getFirstEmbeddedExifThumbnailWithImage(embeddedExifThumbnails) {
+    if (!(Constants.USE_PNG && Constants.USE_EXIF && Constants.USE_THUMBNAIL)) {
+        return undefined;
+    }
+    return embeddedExifThumbnails.filter(hasImage)[0];
 }
 
 export function mergeAssignGroup(tags, groupKey, returnedTags, expanded, deps) {
@@ -406,16 +443,10 @@ export function addPngTextReadTagsToTagsAndGroups({
                 parsedEmbeddedExifTags,
                 tagFilter
             );
-            // The thumbnail image is never read from a text chunk, so the
-            // thumbnail IFD tags would be returned with no image.
-            const returnedEmbeddedExifTagsWithoutThumbnail =
-                deps.objectAssign({}, returnedEmbeddedExifTags);
-            delete returnedEmbeddedExifTagsWithoutThumbnail.Thumbnail;
-
             if (expanded) {
-                merge.group(tags, 'exif', returnedEmbeddedExifTagsWithoutThumbnail);
+                merge.group(tags, 'exif', returnedEmbeddedExifTags);
             } else {
-                tags = merge.topLevel(tags, returnedEmbeddedExifTagsWithoutThumbnail);
+                tags = merge.topLevel(tags, returnedEmbeddedExifTags);
             }
         }
     }

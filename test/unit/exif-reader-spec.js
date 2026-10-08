@@ -2814,6 +2814,135 @@ describe('exif-reader', function () {
             expect(expandedTags.png).to.not.have.property('Raw profile type iptc');
         });
 
+        describe('thumbnails', () => {
+            const RAW_PROFILE_THUMBNAIL = '\xff\xd8raw-profile-thumbnail\xff\xd9';
+            const EXIF_CHUNK_THUMBNAIL = '\xff\xd8exif-chunk-thumbnail\xff\xd9';
+
+            it('should return the JPEG thumbnail of a tEXt raw profile', () => {
+                const png = getPngWithChunks(getRawProfileTextChunk(getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL)));
+
+                const tags = ExifReader.loadView(getDataView(png));
+
+                expect(tags.Thumbnail.type).to.equal('image/jpeg');
+                expect(Buffer.from(tags.Thumbnail.image).toString('latin1')).to.equal(RAW_PROFILE_THUMBNAIL);
+                expect(tags.Thumbnail.base64).to.equal(Buffer.from(RAW_PROFILE_THUMBNAIL, 'latin1').toString('base64'));
+                expect(tags.ImageWidth.value).to.equal(1);
+            });
+
+            it('should return the JPEG thumbnail of a tEXt raw profile top level and not in the exif group when expanded', () => {
+                const png = getPngWithChunks(getRawProfileTextChunk(getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL)));
+
+                const tags = ExifReader.loadView(getDataView(png), {expanded: true});
+
+                expect(Buffer.from(tags.Thumbnail.image).toString('latin1')).to.equal(RAW_PROFILE_THUMBNAIL);
+                expect(tags.exif.ImageWidth.value).to.equal(1);
+                expect(tags.exif).to.not.have.property('Thumbnail');
+            });
+
+            it('should return the JPEG thumbnail of a PNG eXIf chunk', () => {
+                const png = getPngWithChunks(getPngChunk('eXIf', getTiffWithThumbnail(EXIF_CHUNK_THUMBNAIL)));
+
+                const tags = ExifReader.loadView(getDataView(png));
+
+                expect(tags.Thumbnail.type).to.equal('image/jpeg');
+                expect(Buffer.from(tags.Thumbnail.image).toString('latin1')).to.equal(EXIF_CHUNK_THUMBNAIL);
+            });
+
+            it('should return the thumbnail of a PNG eXIf chunk over the one of a raw profile', () => {
+                const png = getPngWithChunks(
+                    getRawProfileTextChunk(getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL)),
+                    getPngChunk('eXIf', getTiffWithThumbnail(EXIF_CHUNK_THUMBNAIL))
+                );
+
+                const tags = ExifReader.loadView(getDataView(png));
+
+                expect(Buffer.from(tags.Thumbnail.image).toString('latin1')).to.equal(EXIF_CHUNK_THUMBNAIL);
+            });
+
+            it('should return the JPEG thumbnail of a zTXt raw profile when loading asynchronously', async () => {
+                const COMPRESSION_METHOD_DEFLATE = '\x00';
+                const rawProfile = getRawProfile(getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL));
+                const compressedProfile = deflateSync(Buffer.from(rawProfile, 'latin1')).toString('latin1');
+                const png = getPngWithChunks(getPngChunk('zTXt', 'Raw profile type exif\x00' + COMPRESSION_METHOD_DEFLATE + compressedProfile));
+
+                const tags = await ExifReader.loadView(getDataView(png), {async: true, expanded: true});
+
+                expect(tags.Thumbnail.type).to.equal('image/jpeg');
+                expect(Buffer.from(tags.Thumbnail.image).toString('latin1')).to.equal(RAW_PROFILE_THUMBNAIL);
+                expect(tags.exif).to.not.have.property('Thumbnail');
+            });
+
+            it('should return no thumbnail when it ends one byte past the decoded raw profile', () => {
+                const tiff = getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL, RAW_PROFILE_THUMBNAIL.length + 1);
+                const png = getPngWithChunks(getRawProfileTextChunk(tiff), getPngChunk('tEXt', 'Other\x00' + 'x'.repeat(100)));
+
+                const tags = ExifReader.loadView(getDataView(png));
+
+                expect(tags.ImageWidth.value).to.equal(1);
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+
+            it('should return no thumbnail of a raw profile when the thumbnail group is excluded', () => {
+                const png = getPngWithChunks(getRawProfileTextChunk(getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL)));
+
+                const tags = ExifReader.loadView(getDataView(png), {excludeTags: {thumbnail: true}});
+
+                expect(tags.ImageWidth.value).to.equal(1);
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+
+            it('should pass PngTextTags.read a thumbnail reader for the decoded raw profile', () => {
+                const getThumbnail = capturePngTextThumbnailReader({});
+
+                const thumbnailIfdTags = {JPEGInterchangeFormat: {value: 2}, JPEGInterchangeFormatLength: {value: 4}};
+                const thumbnail = getThumbnail(getDataView('Exif\x00\x00MM\xff\xd8\xff\xd9'), thumbnailIfdTags, 6);
+
+                expect(Buffer.from(thumbnail.image).toString('latin1')).to.equal('\xff\xd8\xff\xd9');
+            });
+
+            for (const [description, options] of [
+                ['the thumbnail group is excluded', {excludeTags: {thumbnail: true}}],
+                ['the Thumbnail tag is excluded', {excludeTags: {thumbnail: ['Thumbnail']}}],
+            ]) {
+                it(`should pass PngTextTags.read no thumbnail reader when ${description}`, () => {
+                    expect(capturePngTextThumbnailReader(options)).to.be.undefined;
+                });
+            }
+
+            for (const constant of ['USE_EXIF', 'USE_THUMBNAIL']) {
+                it(`should pass PngTextTags.read no thumbnail reader in a build without ${constant}`, () => {
+                    swap(Constants, {[constant]: false});
+
+                    expect(capturePngTextThumbnailReader({})).to.be.undefined;
+                });
+            }
+
+            function capturePngTextThumbnailReader(options) {
+                const originalRead = PngTextTags.read;
+                let getThumbnail = 'not called';
+                swap(PngTextTags, {
+                    read: (...args) => {
+                        getThumbnail = args[8];
+                        return originalRead(...args);
+                    }
+                });
+                const png = getPngWithChunks(getRawProfileTextChunk(getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL)));
+
+                ExifReader.loadView(getDataView(png), options);
+
+                return getThumbnail;
+            }
+
+            function getRawProfileTextChunk(tiff) {
+                return getPngChunk('tEXt', 'Raw profile type exif\x00' + getRawProfile(tiff));
+            }
+
+            function getRawProfile(tiff) {
+                const exif = 'Exif\x00\x00' + tiff;
+                return `\nexif\n${String(exif.length).padStart(8, ' ')}\n${Buffer.from(exif, 'latin1').toString('hex')}`;
+            }
+        });
+
         // IFD0 holds Model 'abc' and links to an IFD1 holding the thumbnail offset and length.
         function getExifRawProfileWithThumbnailIfd() {
             const IFD_TYPE_ASCII = 2;
@@ -3177,10 +3306,14 @@ const IFD_TYPE_LONG = 4;
 const IFD_TYPE_UNDEFINED = 7;
 
 function getExifJpegWithThumbnail(thumbnail, declaredThumbnailLength = thumbnail.length) {
+    return '\xff\xd8' + getAppSegment('\xff\xe1', 'Exif\x00\x00' + getTiffWithThumbnail(thumbnail, declaredThumbnailLength)) + '\xff\xd9';
+}
+
+function getTiffWithThumbnail(thumbnail, declaredThumbnailLength = thumbnail.length) {
     const IFD0_OFFSET = 8;
     const IFD1_OFFSET = 26;
     const THUMBNAIL_OFFSET = 68;
-    const tiffBlock = 'MM\x00\x2a' + getByteStringFromNumber(IFD0_OFFSET, 4)
+    return 'MM\x00\x2a' + getByteStringFromNumber(IFD0_OFFSET, 4)
         + getByteStringFromNumber(1, 2)
         + getIfdEntry(0x0100, IFD_TYPE_SHORT, 1, getByteStringFromNumber(1, 2) + '\x00\x00')
         + getByteStringFromNumber(IFD1_OFFSET, 4)
@@ -3190,7 +3323,6 @@ function getExifJpegWithThumbnail(thumbnail, declaredThumbnailLength = thumbnail
         + getIfdEntry(0x0202, IFD_TYPE_LONG, 1, getByteStringFromNumber(declaredThumbnailLength, 4))
         + getByteStringFromNumber(0, 4)
         + thumbnail;
-    return '\xff\xd8' + getAppSegment('\xff\xe1', 'Exif\x00\x00' + tiffBlock) + '\xff\xd9';
 }
 
 function getIfdEntry(tag, type, count, value) {
