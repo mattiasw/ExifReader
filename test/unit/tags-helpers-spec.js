@@ -55,6 +55,21 @@ describe('tags-helpers', () => {
         expect(get0thIfdOffset(dataView, tiffHeaderOffset, ByteOrder.BIG_ENDIAN)).to.equal(tiffHeaderOffset + 0x47114812);
     });
 
+    it('should return undefined when the 0th IFD offset is 0', () => {
+        const dataView = getDataView('\x4d\x4d\x00\x2a\x00\x00\x00\x00');
+        expect(get0thIfdOffset(dataView, 0, ByteOrder.BIG_ENDIAN)).to.be.undefined;
+    });
+
+    it('should return undefined when the 0th IFD offset points to the last byte of the TIFF header', () => {
+        const dataView = getDataView('\x49\x49\x2a\x00\x07\x00\x00\x00');
+        expect(get0thIfdOffset(dataView, 0, ByteOrder.LITTLE_ENDIAN)).to.be.undefined;
+    });
+
+    it('should bound the 0th IFD offset relative to the TIFF header, not the buffer', () => {
+        const dataView = getDataView('\x00'.repeat(8) + '\x4d\x4d\x00\x2a\x00\x00\x00\x00');
+        expect(get0thIfdOffset(dataView, 8, ByteOrder.BIG_ENDIAN)).to.be.undefined;
+    });
+
     it('should split null separated ASCII strings', () => {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
         // Field count + offsetted ASCII field + offset to next IFD + value "ab\0cd\0" at offset 0x12.
@@ -432,11 +447,12 @@ describe('tags-helpers', () => {
             '0th': {0x4711: 'MyTag0'},
             '1st': {0x4714: 'MyThumbnailTag'}
         });
-        // Padding so the offset to the 1st IFD is not 0, then the 1st IFD at
-        // 0x02, then the 0th IFD at 0x14 whose next-IFD offset is the last 4 bytes.
-        const dataView = getDataView('\x00\x00' + getInSlotIfd([0x4714]) + getInSlotIfd([0x4711], 0x02));
-        expect(dataView.byteLength).to.equal(0x14 + 18);
-        const tags = readIfd(dataView, '0th', 0, 0x14, ByteOrder.BIG_ENDIAN, false);
+        // Padding so the 1st IFD starts past the 8-byte TIFF header, then the
+        // 1st IFD at 0x08, then the 0th IFD at 0x1a whose next-IFD offset is the
+        // last 4 bytes.
+        const dataView = getDataView('\x00'.repeat(8) + getInSlotIfd([0x4714]) + getInSlotIfd([0x4711], 0x08));
+        expect(dataView.byteLength).to.equal(0x1a + 18);
+        const tags = readIfd(dataView, '0th', 0, 0x1a, ByteOrder.BIG_ENDIAN, false);
         expect(tags['MyTag0'].value).to.equal(0);
         expect(tags['Thumbnail']).to.deep.equal({
             MyThumbnailTag: {id: 0x4714, value: 0, description: 0}
@@ -449,8 +465,8 @@ describe('tags-helpers', () => {
             '1st': {0x4714: 'MyThumbnailTag'}
         });
         // Same layout as above with the last byte of the next-IFD offset missing.
-        const dataView = getDataView(('\x00\x00' + getInSlotIfd([0x4714]) + getInSlotIfd([0x4711], 0x02)).slice(0, -1));
-        const tags = readIfd(dataView, '0th', 0, 0x14, ByteOrder.BIG_ENDIAN, false);
+        const dataView = getDataView(('\x00'.repeat(8) + getInSlotIfd([0x4714]) + getInSlotIfd([0x4711], 0x08)).slice(0, -1));
+        const tags = readIfd(dataView, '0th', 0, 0x1a, ByteOrder.BIG_ENDIAN, false);
         expect(tags['MyTag0'].value).to.equal(0);
         expect(tags).to.not.have.property('Thumbnail');
     });
@@ -462,8 +478,34 @@ describe('tags-helpers', () => {
         });
         // Same layout as the exact-fit test, but the 0th IFD claims 2 fields,
         // so its last 4 bytes are the start of a cut-off second entry.
-        const dataView = getDataView('\x00\x00' + getInSlotIfd([0x4714]) + '\x00\x02' + getInSlotIfd([0x4711], 0x02).slice(2));
-        const tags = readIfd(dataView, '0th', 0, 0x14, ByteOrder.BIG_ENDIAN, false);
+        const dataView = getDataView('\x00'.repeat(8) + getInSlotIfd([0x4714]) + '\x00\x02' + getInSlotIfd([0x4711], 0x08).slice(2));
+        const tags = readIfd(dataView, '0th', 0, 0x1a, ByteOrder.BIG_ENDIAN, false);
+        expect(tags['MyTag0'].value).to.equal(0);
+        expect(tags).to.not.have.property('Thumbnail');
+    });
+
+    it('should not follow a next-IFD offset that points into the TIFF header', () => {
+        restoreTagNames = swapProperties(TagNames, {
+            '0th': {0x4711: 'MyTag0'},
+            '1st': {0x4714: 'MyThumbnailTag'}
+        });
+        // The 1st IFD at 0x07, the last byte of the TIFF header, then the 0th
+        // IFD at 0x19.
+        const dataView = getDataView('\x00'.repeat(7) + getInSlotIfd([0x4714]) + getInSlotIfd([0x4711], 0x07));
+        const tags = readIfd(dataView, '0th', 0, 0x19, ByteOrder.BIG_ENDIAN, false);
+        expect(tags['MyTag0'].value).to.equal(0);
+        expect(tags).to.not.have.property('Thumbnail');
+    });
+
+    it('should bound a next-IFD offset relative to the offset origin', () => {
+        restoreTagNames = swapProperties(TagNames, {
+            '0th': {0x4711: 'MyTag0'},
+            '1st': {0x4714: 'MyThumbnailTag'}
+        });
+        // Offset origin at 0x08, then the 1st IFD at origin + 0x02, inside the
+        // TIFF header, then the 0th IFD at 0x1c.
+        const dataView = getDataView('\x00'.repeat(8) + '\x00\x00' + getInSlotIfd([0x4714]) + getInSlotIfd([0x4711], 0x02));
+        const tags = readIfd(dataView, '0th', 8, 0x1c, ByteOrder.BIG_ENDIAN, false);
         expect(tags['MyTag0'].value).to.equal(0);
         expect(tags).to.not.have.property('Thumbnail');
     });
