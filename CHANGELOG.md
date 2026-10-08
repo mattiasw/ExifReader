@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `load()` now rejects for a file path, URL or `File` object when `length` is
+  not a finite non-negative number or `'auto'`, such as the string `'1024'`,
+  `NaN`, `Infinity` or a negative number. Such a value was ignored and the
+  whole file was read.
+
 ### Fixed
 
 - In the default flat output, an XMP or PNG text tag named `Thumbnail` no
@@ -43,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   characters, and for iTXt the description was a run of NUL characters. A
   `Raw profile type exif` or `Raw profile type iptc` chunk that fails this way
   now also gives the placeholder instead of being left out.
+- A fractional numeric `length`, such as a computed `size / 3`, is now rounded
+  down. It was ignored, so the whole file or URL was read with no size limit.
 
 ### Security
 

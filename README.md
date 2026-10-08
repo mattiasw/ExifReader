@@ -382,6 +382,11 @@ make sure the remote server is either on the same origin (domain) as your script
 or that the server is passing correct CORS headers, specifically allowing the
 `Range` header.
 
+For those inputs a fractional `length` is rounded down, and a `length` that is
+not a finite non-negative number or `'auto'` (such as the string `'1024'`,
+`NaN`, `Infinity` or a negative number) makes `load()` reject before anything
+is read.
+
 #### Read only the metadata bytes (`length: 'auto'`)
 
 When you want to download or store just enough of an image to extract its

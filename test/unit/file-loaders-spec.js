@@ -3,10 +3,20 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {EventEmitter} from 'node:events';
+import fs from 'node:fs';
 import http from 'node:http';
 import {createRequire} from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
 import {expect} from 'chai';
-import {fetchRange, loadFile, nodeGetRange, HTTP_STATUS_RANGE_NOT_SATISFIABLE} from '../../src/file-loaders.js';
+import {
+    fetchRange,
+    loadFile,
+    loadFileObject,
+    nodeGetRange,
+    HTTP_STATUS_RANGE_NOT_SATISFIABLE
+} from '../../src/file-loaders.js';
+import {swapProperties} from './test-utils.js';
 
 describe('file-loaders', () => {
     describe('nodeGetRange', () => {
@@ -584,6 +594,7 @@ describe('file-loaders', () => {
 
                 expect(buffer.byteLength).to.equal(LENGTH);
                 expect(Buffer.from(buffer).equals(patternBytes(0, LENGTH))).to.equal(true);
+                expect(transfer.rangeHeader).to.equal('bytes=0-1023');
                 await expectTransferStopped(transfer);
             });
 
@@ -687,6 +698,7 @@ describe('file-loaders', () => {
             });
 
             server = http.createServer((request, response) => {
+                transfer.rangeHeader = request.headers.range;
                 response.on('close', resolveClosed);
                 response.writeHead(status, {'content-type': 'application/octet-stream'});
                 writeChunks();
@@ -728,4 +740,215 @@ describe('file-loaders', () => {
             expect(transfer.bytesWritten).to.be.below(SAFETY_CAP);
         }
     });
+
+    describe('loadFile with a local file', () => {
+        const FILE_SIZE = 32;
+
+        let originalRequire;
+        let directory;
+        let filename;
+        let fileBytes;
+
+        beforeEach(() => {
+            originalRequire = global.__non_webpack_require__;
+            global.__non_webpack_require__ = createRequire(import.meta.url);
+            directory = fs.mkdtempSync(path.join(os.tmpdir(), 'exifreader-'));
+            filename = path.join(directory, 'image.jpg');
+            fileBytes = Buffer.from(Array.from({length: FILE_SIZE}, (_, index) => index));
+            fs.writeFileSync(filename, fileBytes);
+        });
+
+        afterEach(() => {
+            global.__non_webpack_require__ = originalRequire;
+            fs.rmSync(directory, {recursive: true, force: true});
+        });
+
+        it('should read the first bytes up to a fractional length rounded down', async () => {
+            const buffer = await loadFile(filename, {length: 10.7});
+
+            expect(buffer.equals(fileBytes.subarray(0, 10))).to.equal(true);
+        });
+
+        it('should read nothing for a length of 0', async () => {
+            const buffer = await loadFile(filename, {length: 0});
+
+            expect(buffer.length).to.equal(0);
+        });
+
+        for (const [description, options] of [
+            ['an undefined length', {length: undefined}],
+            ['a null length', {length: null}],
+            ['no options', undefined]
+        ]) {
+            it(`should read the whole file for ${description}`, async () => {
+                const buffer = await loadFile(filename, options);
+
+                expect(buffer.equals(fileBytes)).to.equal(true);
+            });
+        }
+    });
+
+    describe('loadFileObject', () => {
+        let restoreGlobals;
+        let readerCalls;
+        let sliceCalls;
+        let file;
+
+        beforeEach(() => {
+            ({readerCalls, restoreGlobals} = stubFileReader());
+            ({file, sliceCalls} = createStubFile());
+        });
+
+        afterEach(() => {
+            restoreGlobals();
+        });
+
+        it('should read a slice up to a fractional length rounded down', async () => {
+            const buffer = await loadFileObject(file, {length: 10.7});
+
+            expect(sliceCalls).to.deep.equal([[0, 10]]);
+            expect(readerCalls).to.deep.equal([file.sliceResult]);
+            expect(buffer.byteLength).to.equal(10);
+        });
+    });
+
+    describe('an invalid length', () => {
+        const INVALID_LENGTH_MESSAGE = 'The length option must be a finite non-negative number or "auto".';
+
+        let originalFetch;
+        let originalRequire;
+
+        beforeEach(() => {
+            originalFetch = global.fetch;
+            originalRequire = global.__non_webpack_require__;
+        });
+
+        afterEach(() => {
+            global.fetch = originalFetch;
+            global.__non_webpack_require__ = originalRequire;
+        });
+
+        for (const [description, length] of [
+            ['a numeric string', '1024'],
+            ['-1', -1],
+            ['-0.5', -0.5],
+            ['NaN', NaN],
+            ['Infinity', Infinity],
+            ['-Infinity', -Infinity],
+            ['a boolean', true],
+            ['an object', {}]
+        ]) {
+            it(`should reject a local file read for ${description} without opening the file`, async () => {
+                const openCalls = [];
+                global.__non_webpack_require__ = (moduleName) => {
+                    if (moduleName === 'fs') {
+                        return {
+                            open(filename, callback) {
+                                openCalls.push(filename);
+                                callback(new Error('open called'));
+                            }
+                        };
+                    }
+                    return undefined;
+                };
+
+                const promise = loadFile('/some/local/path.jpg', {length});
+
+                await expectInvalidLengthRejection(promise);
+                expect(openCalls).to.deep.equal([]);
+            });
+        }
+
+        it('should reject a fetch URL without fetching', async () => {
+            const fetchCalls = [];
+            global.fetch = (url) => {
+                fetchCalls.push(url);
+                return Promise.reject(new Error('fetch called'));
+            };
+
+            const promise = loadFile('http://example.invalid/image.jpg', {length: 'abc'});
+
+            await expectInvalidLengthRejection(promise);
+            expect(fetchCalls).to.deep.equal([]);
+        });
+
+        it('should reject a Node http URL without requesting it', async () => {
+            const getCalls = [];
+            delete global.fetch;
+            global.__non_webpack_require__ = (moduleName) => {
+                if (/^https?$/.test(moduleName)) {
+                    return {
+                        get(url) {
+                            getCalls.push(url);
+                            throw new Error('http.get called');
+                        }
+                    };
+                }
+                return undefined;
+            };
+
+            const promise = loadFile('http://example.invalid/image.jpg', {length: -1});
+
+            await expectInvalidLengthRejection(promise);
+            expect(getCalls).to.deep.equal([]);
+        });
+
+        it('should reject a data URI', async () => {
+            const promise = loadFile('data:image/jpeg;base64,/9j/', {length: -1});
+
+            await expectInvalidLengthRejection(promise);
+        });
+
+        it('should reject a File object without reading it', async () => {
+            const {readerCalls, restoreGlobals} = stubFileReader();
+            const {file, sliceCalls} = createStubFile();
+            try {
+                const promise = loadFileObject(file, {length: NaN});
+
+                await expectInvalidLengthRejection(promise);
+                expect(readerCalls).to.deep.equal([]);
+                expect(sliceCalls).to.deep.equal([]);
+            } finally {
+                restoreGlobals();
+            }
+        });
+
+        async function expectInvalidLengthRejection(promise) {
+            let error;
+            try {
+                await promise;
+            } catch (e) {
+                error = e;
+            }
+
+            expect(error).to.be.an.instanceOf(Error);
+            expect(error.message).to.equal(INVALID_LENGTH_MESSAGE);
+        }
+    });
+
+    function stubFileReader() {
+        const readerCalls = [];
+        class StubFileReader {
+            readAsArrayBuffer(blob) {
+                readerCalls.push(blob);
+                setTimeout(() => this.onload({target: {result: blob.buffer || new ArrayBuffer(0)}}), 0);
+            }
+        }
+        const restoreGlobals = swapProperties(globalThis, {FileReader: StubFileReader});
+        return {readerCalls, restoreGlobals};
+    }
+
+    function createStubFile() {
+        const sliceCalls = [];
+        const file = {
+            size: 32,
+            sliceResult: undefined,
+            slice(start, end) {
+                sliceCalls.push([start, end]);
+                file.sliceResult = {buffer: new ArrayBuffer(end - start)};
+                return file.sliceResult;
+            }
+        };
+        return {file, sliceCalls};
+    }
 });
