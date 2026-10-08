@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Node.js Buffer, such as one from the `buffer` package or a Node.js Buffer
   from another vm context. Its `brob` Exif and XMP data is now read as for any
   other input.
+- IPTC tags are no longer all lost when the last IPTC dataset in the image is
+  truncated. The datasets before it are now returned.
 
 ### Security
 

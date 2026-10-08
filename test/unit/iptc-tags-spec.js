@@ -189,6 +189,62 @@ describe('iptc-tags', function () {
         expect(Object.keys(tags).length).to.equal(1);
     });
 
+    it('should keep the parsed tags when the header of the last tag is truncated', () => {
+        restores.push(swapProperties(IptcTagNames.iptc, {
+            0x4711: 'MyIptcTag1',
+            0x4712: 'MyIptcTag2'
+        }));
+        for (const truncatedHeader of ['\x1c\x47', '\x1c\x47\x12\x00']) {
+            const dataView = getNaaBlockDataView('\x1c\x47\x11\x00\x02BC' + truncatedHeader);
+            const tags = IptcTags.read(dataView, 0);
+            expect(Object.keys(tags)).to.deep.equal(['MyIptcTag1']);
+            expect(tags['MyIptcTag1'].description).to.equal('BC');
+        }
+    });
+
+    it('should keep the parsed tags when the value of the last tag is truncated', () => {
+        restores.push(swapProperties(IptcTagNames.iptc, {
+            0x4711: 'MyIptcTag1',
+            0x4712: 'MyIptcTag2'
+        }));
+        for (const truncatedTag of ['\x1c\x47\x12\x00\x03DE', '\x1c\x47\x12\x00\xc8DE']) {
+            const dataView = getNaaBlockDataView('\x1c\x47\x11\x00\x02BC' + truncatedTag);
+            const tags = IptcTags.read(dataView, 0);
+            expect(Object.keys(tags)).to.deep.equal(['MyIptcTag1']);
+            expect(tags['MyIptcTag1'].description).to.equal('BC');
+        }
+    });
+
+    it('should keep the parsed tags when the value of the last tag in a naked IPTC block is truncated', () => {
+        restores.push(swapProperties(IptcTagNames.iptc, {
+            0x4711: 'MyIptcTag1',
+            0x4712: 'MyIptcTag2'
+        }));
+        const tags = IptcTags.read(getCharacterArray('\x1c\x47\x11\x00\x02BC' + '\x1c\x47\x12\x00\x03DE'), 0);
+        expect(Object.keys(tags)).to.deep.equal(['MyIptcTag1']);
+        expect(tags['MyIptcTag1'].description).to.equal('BC');
+    });
+
+    it('should read an empty last tag whose header ends at the end of the data', () => {
+        restores.push(swapProperties(IptcTagNames.iptc, {
+            0x4711: 'MyIptcTag1',
+            0x4712: 'MyIptcTag2'
+        }));
+        const dataView = getNaaBlockDataView('\x1c\x47\x11\x00\x02BC' + '\x1c\x47\x12\x00\x00');
+        const tags = IptcTags.read(dataView, 0);
+        expect(Object.keys(tags)).to.deep.equal(['MyIptcTag1', 'MyIptcTag2']);
+        expect(tags['MyIptcTag2'].value).to.deep.equal([]);
+    });
+
+    it('should keep the parsed tags when the truncated last tag is an excluded unknown tag', () => {
+        restores.push(swapProperties(IptcTagNames.iptc, {
+            0x4711: 'MyIptcTag1'
+        }));
+        const dataView = getNaaBlockDataView('\x1c\x47\x11\x00\x02BC' + '\x1c\x47\x99\x00\xc8DE');
+        const tags = IptcTags.read(dataView, 0, false);
+        expect(Object.keys(tags)).to.deep.equal(['MyIptcTag1']);
+    });
+
     it('should read IPTC tags', () => {
         restores.push(swapProperties(IptcTagNames.iptc, {
             0x4711: 'MyIptcTag1',

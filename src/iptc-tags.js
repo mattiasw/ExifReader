@@ -140,12 +140,16 @@ function readTag(
     const TAG_CODE_OFFSET = 1;
     const TAG_SIZE_OFFSET = 3;
 
-    if (leadByteIsMissing(dataView, dataOffset)) {
+    if (leadByteIsMissing(dataView, dataOffset) || headerIsTruncated(dataView, dataOffset)) {
         return {tag: null, tagSize: 0};
     }
 
     const tagCode = dataView.getUint16(dataOffset + TAG_CODE_OFFSET);
     const tagSize = dataView.getUint16(dataOffset + TAG_SIZE_OFFSET);
+
+    if (valueIsTruncated(dataView, dataOffset, tagSize)) {
+        return {tag: null, tagSize: 0};
+    }
 
     if (!includeUnknown && !IptcTagNames['iptc'][tagCode]) {
         return {tag: undefined, tagSize};
@@ -201,6 +205,14 @@ function getIptcTagNameForFiltering(tagCode, includeUnknown) {
 function leadByteIsMissing(dataView, dataOffset) {
     const TAG_LEAD_BYTE = 0x1c;
     return dataView.getUint8(dataOffset) !== TAG_LEAD_BYTE;
+}
+
+function headerIsTruncated(dataView, dataOffset) {
+    return dataOffset + TAG_HEADER_SIZE > dataView.byteLength;
+}
+
+function valueIsTruncated(dataView, dataOffset, tagSize) {
+    return dataOffset + TAG_HEADER_SIZE + tagSize > dataView.byteLength;
 }
 
 function getTagValue(dataView, offset, size) {
