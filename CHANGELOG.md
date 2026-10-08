@@ -36,6 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   other input.
 - IPTC tags are no longer all lost when the last IPTC dataset in the image is
   truncated. The datasets before it are now returned.
+- A PNG zTXt or compressed iTXt chunk whose text cannot be decompressed
+  (unknown compression method, truncated data, a failing custom decompress
+  function, or the decompressed-size limit reached) now gives the placeholder
+  `<text using unknown compression>` as a string. It was an array of
+  characters, and for iTXt the description was a run of NUL characters. A
+  `Raw profile type exif` or `Raw profile type iptc` chunk that fails this way
+  now also gives the placeholder instead of being left out.
 
 ### Security
 
