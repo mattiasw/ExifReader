@@ -965,6 +965,98 @@ describe('loadView pipeline module', function () {
             expect(parsedGroups.exif).to.deep.equal({Make: {value: 'make 1'}, Model: {value: 'model'}});
         });
 
+        it('should merge embedded Exif and IPTC tags from the synchronous step at the top level in flat mode', function () {
+            const {tags, parsedGroups} = buildPngTextTags({
+                steps: [getSyncStepWithEmbeddedTags()],
+                expanded: false,
+            });
+
+            expect(tags).to.deep.equal({
+                SyncTag: {value: 'sync'},
+                Model: {value: 'model'},
+                Headline: {value: 'headline'},
+            });
+            expect(parsedGroups.exif).to.deep.equal({Model: {value: 'model'}});
+            expect(parsedGroups.iptc).to.deep.equal({Headline: {value: 'headline'}});
+        });
+
+        it('should merge embedded Exif and IPTC tags from the synchronous step into their groups in expanded mode', function () {
+            const {tags, parsedGroups} = buildPngTextTags({
+                steps: [getSyncStepWithEmbeddedTags()],
+                expanded: true,
+            });
+
+            expect(tags.exif).to.deep.equal({Model: {value: 'model'}});
+            expect(tags.iptc).to.deep.equal({Headline: {value: 'headline'}});
+            expect(tags.png).to.deep.equal({SyncTag: {value: 'sync'}});
+            expect(tags).to.not.have.property('Model');
+            expect(tags).to.not.have.property('Headline');
+            expect(parsedGroups.exif).to.deep.equal({Model: {value: 'model'}});
+            expect(parsedGroups.iptc).to.deep.equal({Headline: {value: 'headline'}});
+        });
+
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
+
+            it(`should not return a Thumbnail tag for the thumbnail IFD of embedded Exif tags from the synchronous step in ${mode} mode`, function () {
+                const {tags, parsedGroups} = buildPngTextTags({
+                    steps: [{type: 'processPngTextReadTags', readTags: {}, embeddedExifTags: getExifTagsWithThumbnail()}],
+                    expanded,
+                });
+
+                expect(expanded ? tags.exif : tags).to.deep.equal({Model: {value: 'model'}});
+                expect(tags).to.not.have.property('Thumbnail');
+                expect(parsedGroups.exif).to.deep.equal(getExifTagsWithThumbnail());
+            });
+
+            it(`should not return a Thumbnail tag for the thumbnail IFD of embedded Exif tags from a deferred item in ${mode} mode`, function () {
+                const parsedGroups = {};
+
+                const {tags} = buildDeferredPngTextTags({
+                    items: [{embeddedExifTags: getExifTagsWithThumbnail()}],
+                    expanded,
+                    parsedGroups,
+                });
+
+                expect(expanded ? tags.exif : tags).to.deep.equal({Model: {value: 'model'}});
+                expect(tags).to.not.have.property('Thumbnail');
+                expect(parsedGroups.exif).to.deep.equal(getExifTagsWithThumbnail());
+            });
+
+            it(`should let a deferred Exif tag win over the synchronous step's and not mutate the synchronous tags in ${mode} mode`, function () {
+                const syncStep = getSyncStepWithEmbeddedTags();
+                const syncStepSnapshot = structuredClone(syncStep);
+
+                const {tags, parsedGroups} = buildDeferredPngTextTags({
+                    items: [{embeddedExifTags: {Model: {value: 'deferred model'}, Make: {value: 'make'}}}],
+                    expanded,
+                    stepsBefore: [syncStep],
+                });
+
+                const exifTags = expanded ? tags.exif : tags;
+                expect(syncStep).to.deep.equal(syncStepSnapshot);
+                expect(exifTags.Model).to.deep.equal({value: 'deferred model'});
+                expect(exifTags.Make).to.deep.equal({value: 'make'});
+                expect(parsedGroups.exif).to.deep.equal({Model: {value: 'deferred model'}, Make: {value: 'make'}});
+            });
+        }
+
+        function getSyncStepWithEmbeddedTags() {
+            return {
+                type: 'processPngTextReadTags',
+                readTags: {SyncTag: {value: 'sync'}},
+                embeddedExifTags: {Model: {value: 'model'}},
+                embeddedIptcTags: {Headline: {value: 'headline'}},
+            };
+        }
+
+        function getExifTagsWithThumbnail() {
+            return {
+                Model: {value: 'model'},
+                Thumbnail: {JPEGInterchangeFormat: {value: 272}, JPEGInterchangeFormatLength: {value: 0}},
+            };
+        }
+
         function getSingleTagItems(count) {
             return Array.from({length: count}, (_, index) => ({readTags: {[`k${index}`]: {value: index}}}));
         }

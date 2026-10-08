@@ -44,9 +44,10 @@ describe('analyze - real fixtures', function () {
         expect(include).to.not.have.property('photoshop');
     });
 
-    it('derives the thumbnail inside the exif group of test.png', async () => {
+    it('derives no thumbnail from a thumbnail IFD found only in a PNG text chunk of test.png', async () => {
         const include = await includeFor([path.join(FIXTURES, 'test.png')]);
-        expect(include).to.include({png: true, png_file: true, thumbnail: true});
+        expect(include).to.include({png: true, png_file: true});
+        expect(include).to.not.have.property('thumbnail');
         expect(include.exif).to.not.include.members(['Thumbnail']);
     });
 

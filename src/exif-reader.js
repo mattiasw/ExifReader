@@ -562,7 +562,7 @@ export function loadView(
             || tagFilter.shouldParseGroup('iptc')
         )
     ) {
-        const {readTags, readTagsPromise} = PngTextTags.read(
+        const {readTags, embeddedExifTags, embeddedIptcTags, readTagsPromise} = PngTextTags.read(
             dataView,
             pngTextChunks,
             async,
@@ -577,6 +577,8 @@ export function loadView(
         mergeSteps.push({
             type: 'processPngTextReadTags',
             readTags,
+            embeddedExifTags,
+            embeddedIptcTags,
         });
 
         if (readTagsPromise) {
