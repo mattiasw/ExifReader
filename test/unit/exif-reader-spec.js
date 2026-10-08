@@ -561,7 +561,11 @@ describe('exif-reader', function () {
         ExifReader.loadView(getDataView('\x00'.repeat(16)));
 
         expect(capturedBudgets.exif).to.be.undefined;
-        expect(capturedBudgets.pngText).to.deep.equal({remaining: 4 * 16, ifdEntriesRemaining: 4 * Math.floor(16 / 12)});
+        expect(capturedBudgets.pngText).to.deep.equal({
+            remaining: 4 * 16,
+            ifdEntriesRemaining: 4 * Math.floor(16 / 12),
+            decompressedAllowanceRemaining: 1024 * 1024
+        });
     });
 
     it('should pass exifDataView from BMFF multi-extent items to Thumbnail.get instead of the source dataView', () => {
@@ -784,8 +788,9 @@ describe('exif-reader', function () {
         expect(result.MyBrobExifTag).to.equal(42);
     });
 
-    it('should size the decoded-value budget of brob Exif data from the file, not the decompressed data', async () => {
-        const decompressedBuffer = new ArrayBuffer(OFFSET_TEST_VALUE + 100);
+    it('should size the decoded-value budget of brob Exif data from the file plus 4 times the decompressed data', async () => {
+        const decompressedLength = OFFSET_TEST_VALUE + 100;
+        const decompressedBuffer = new ArrayBuffer(decompressedLength);
         new DataView(decompressedBuffer).setUint32(0, OFFSET_TEST_VALUE - 4);
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
@@ -807,7 +812,11 @@ describe('exif-reader', function () {
             }
         );
 
-        expect(capturedBudget).to.deep.equal({remaining: 4 * 10, ifdEntriesRemaining: 4 * Math.floor(10 / 12)});
+        expect(capturedBudget).to.deep.equal({
+            remaining: 4 * 10 + 4 * decompressedLength,
+            ifdEntriesRemaining: 4 * Math.floor(10 / 12),
+            decompressedAllowanceRemaining: 1024 * 1024 - 4 * decompressedLength
+        });
     });
 
     it('should decompress and parse brob XMP data in JXL files', async () => {
@@ -2629,16 +2638,16 @@ describe('exif-reader', function () {
             }
         });
 
-        it('should bound the values decoded from the Exif of a compressed PNG text chunk by 4 times the input', async () => {
+        it('should bound the values decoded from the Exif of a compressed PNG text chunk by 4 times the input plus 1 MiB', async () => {
             const png = getPngWithCompressedLargeValueExif();
 
             const tags = await ExifReader.loadView(getDataView(png), {async: true, expanded: true, includeUnknown: true});
 
             expect(tags.exif).to.be.an('object');
-            expect(getDecodedValueLength(tags, ['exif'])).to.be.at.most(4 * png.length);
+            expect(getDecodedValueLength(tags, ['exif'])).to.equal(4 * png.length + MAX_DECOMPRESSED_VALUE_ALLOWANCE);
         });
 
-        it('should bound the values decoded from the Exif of a JPEG XL brob box by 4 times the input', async () => {
+        it('should bound the values decoded from the Exif of a JPEG XL brob box by 4 times the input plus 1 MiB', async () => {
             const jxl = getJxlWithBrobExif();
             const decompressedExif = Uint8Array.from(
                 getByteStringFromNumber(0, 4) + getLargeValueTiff(DECOMPRESSED_EXIF_SIZE),
@@ -2653,7 +2662,55 @@ describe('exif-reader', function () {
             });
 
             expect(tags.exif).to.be.an('object');
-            expect(getDecodedValueLength(tags, ['exif'])).to.be.at.most(4 * jxl.length);
+            expect(getDecodedValueLength(tags, ['exif'])).to.equal(4 * jxl.length + MAX_DECOMPRESSED_VALUE_ALLOWANCE);
+        });
+
+        it('should share the 1 MiB decompressed value allowance between the Exif of several compressed PNG text chunks', async () => {
+            const png = getPngWithCompressedExifChunks(3, getLargeValueTiff(128 * 1024 - 6));
+            const realRead = Tags.read;
+            const decodedLengths = [];
+            swap(Tags, {
+                read(...args) {
+                    const result = realRead(...args);
+                    decodedLengths.push(getDecodedValueLength({exif: result.tags}, ['exif']));
+                    return result;
+                }
+            });
+
+            await ExifReader.loadView(getDataView(png), {async: true, expanded: true, includeUnknown: true});
+
+            expect(decodedLengths).to.have.lengthOf(3);
+            const decodedLength = decodedLengths.reduce((total, length) => total + length, 0);
+            expect(decodedLength).to.be.above(4 * png.length + MAX_DECOMPRESSED_VALUE_ALLOWANCE / 2);
+            expect(decodedLength).to.be.at.most(4 * png.length + MAX_DECOMPRESSED_VALUE_ALLOWANCE);
+        });
+
+        it('should decode in full the Exif of a compressed PNG text chunk that needs more than 4 times the small input', async () => {
+            const png = getPngWithCompressedExifChunks(1, getApplicationNotesThenExposureTimeTiff());
+            expect(4 * png.length).to.be.below(APPLICATION_NOTES_LENGTH);
+
+            const tags = await ExifReader.loadView(getDataView(png), {async: true, expanded: true});
+
+            expect(tags.exif.ApplicationNotes.value).to.have.lengthOf(APPLICATION_NOTES_LENGTH);
+            expect(tags.exif.ExposureTime.value).to.deep.equal([1, 250]);
+        });
+
+        it('should decode in full the Exif of a JPEG XL brob box that needs more than 4 times the small input', async () => {
+            const jxl = getJxlWithBrobExif();
+            expect(4 * jxl.length).to.be.below(APPLICATION_NOTES_LENGTH);
+            const decompressedExif = Uint8Array.from(
+                getByteStringFromNumber(0, 4) + getApplicationNotesThenExposureTimeTiff(),
+                (character) => character.charCodeAt(0)
+            ).buffer;
+
+            const tags = await ExifReader.loadView(getDataView(jxl), {
+                async: true,
+                expanded: true,
+                decompress: {brotli: () => Promise.resolve(decompressedExif)}
+            });
+
+            expect(tags.exif.ApplicationNotes.value).to.have.lengthOf(APPLICATION_NOTES_LENGTH);
+            expect(tags.exif.ExposureTime.value).to.deep.equal([1, 250]);
         });
 
         it('should bound the IFD entries read from the Exif of compressed PNG text chunks by the input size', async () => {
@@ -3278,7 +3335,9 @@ function getPngWithChunks(...chunks) {
         + getPngChunk('IEND', '');
 }
 
-const DECOMPRESSED_EXIF_SIZE = 64 * 1024;
+// Large enough that 4 times it exceeds the 1 MiB decompressed value allowance.
+const DECOMPRESSED_EXIF_SIZE = 320 * 1024;
+const MAX_DECOMPRESSED_VALUE_ALLOWANCE = 1024 * 1024;
 const DECOMPRESSED_EXIF_TAG_COUNT = 8;
 
 function getLargeValueTiff(length) {
@@ -3291,6 +3350,28 @@ function getLargeValueTiff(length) {
         + entries
         + getByteStringFromNumber(0, 4);
     return tiff + '\x00'.repeat(length - tiff.length);
+}
+
+const APPLICATION_NOTES_LENGTH = 4000;
+const IFD_TYPE_RATIONAL = 5;
+
+// A TIFF block whose 0th IFD holds a zero-filled BYTE ApplicationNotes and a
+// pointer to an Exif IFD whose RATIONAL ExposureTime of 1/250 is stored after it.
+function getApplicationNotesThenExposureTimeTiff() {
+    const IFD0_OFFSET = 8;
+    const EXIF_IFD_OFFSET = IFD0_OFFSET + 2 + 2 * 12 + 4;
+    const APPLICATION_NOTES_OFFSET = EXIF_IFD_OFFSET + 2 + 12 + 4;
+    const EXPOSURE_TIME_OFFSET = APPLICATION_NOTES_OFFSET + APPLICATION_NOTES_LENGTH;
+    return 'MM\x00\x2a' + getByteStringFromNumber(IFD0_OFFSET, 4)
+        + getByteStringFromNumber(2, 2)
+        + getIfdEntry(0x02bc, IFD_TYPE_BYTE, APPLICATION_NOTES_LENGTH, getByteStringFromNumber(APPLICATION_NOTES_OFFSET, 4))
+        + getIfdEntry(0x8769, IFD_TYPE_LONG, 1, getByteStringFromNumber(EXIF_IFD_OFFSET, 4))
+        + getByteStringFromNumber(0, 4)
+        + getByteStringFromNumber(1, 2)
+        + getIfdEntry(0x829a, IFD_TYPE_RATIONAL, 1, getByteStringFromNumber(EXPOSURE_TIME_OFFSET, 4))
+        + getByteStringFromNumber(0, 4)
+        + '\x00'.repeat(APPLICATION_NOTES_LENGTH)
+        + getByteStringFromNumber(1, 4) + getByteStringFromNumber(250, 4);
 }
 
 function getPngChunk(type, data) {

@@ -196,13 +196,42 @@ describe('png-text-tags', () => {
             getZtxtChunk('Raw profile type exif', toBytes(exifValue))
         ]);
         const decompressConfig = {deflate: (bytes) => bytes};
-        const valueBudget = {remaining: 1000, ifdEntriesRemaining: 1000};
+        const valueBudget = {remaining: 1000, ifdEntriesRemaining: 1000, decompressedAllowanceRemaining: 1024 * 1024};
 
         await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
 
         expect(passedBudgets).to.have.lengthOf(2);
         expect(passedBudgets[0]).to.equal(valueBudget);
         expect(passedBudgets[1]).to.equal(valueBudget);
+    });
+
+    it('should add 4 times the decoded size of zTXt Exif to the decoded-value budget before reading it', async () => {
+        const seenAtRead = [];
+        restoreTagReaders = swapProperties(Tags, {
+            read: (...args) => {
+                seenAtRead.push({
+                    byteLength: args[0].byteLength,
+                    remaining: args[5].remaining,
+                    decompressedAllowanceRemaining: args[5].decompressedAllowanceRemaining
+                });
+                return {tags: {}};
+            }
+        });
+        const exifData = 'Exif\0\0' + '\0'.repeat(10);
+        const exifValue = `\nexif\n      ${exifData.length}\n${stringToHex(exifData)}`;
+        const {dataView, chunks} = buildTextChunks([
+            getZtxtChunk('Raw profile type exif', toBytes(exifValue))
+        ]);
+        const decompressConfig = {deflate: (bytes) => bytes};
+        const valueBudget = {remaining: 1000, ifdEntriesRemaining: 1000, decompressedAllowanceRemaining: 1024 * 1024};
+
+        await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
+
+        expect(seenAtRead).to.deep.equal([{
+            byteLength: exifData.length,
+            remaining: 1000 + 4 * exifData.length,
+            decompressedAllowanceRemaining: 1024 * 1024 - 4 * exifData.length
+        }]);
     });
 
     it('should read zTXt tags with IPTC data', async () => {
@@ -560,6 +589,27 @@ describe('png-text-tags', () => {
             expect(passedBudgets).to.have.lengthOf(2);
             expect(passedBudgets[0]).to.equal(valueBudget);
             expect(passedBudgets[1]).to.equal(valueBudget);
+        });
+
+        it('should not add to the decoded-value budget for tEXt Exif raw profiles', () => {
+            const seenAtRead = [];
+            restoreTagReaders = swapProperties(Tags, {
+                read: (...args) => {
+                    seenAtRead.push({
+                        remaining: args[5].remaining,
+                        decompressedAllowanceRemaining: args[5].decompressedAllowanceRemaining
+                    });
+                    return {tags: {}};
+                }
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0' + '\0'.repeat(10)))
+            ]);
+            const valueBudget = {remaining: 1000, ifdEntriesRemaining: 1000, decompressedAllowanceRemaining: 1024 * 1024};
+
+            PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, valueBudget);
+
+            expect(seenAtRead).to.deep.equal([{remaining: 1000, decompressedAllowanceRemaining: 1024 * 1024}]);
         });
 
         it('should drop tEXt Exif and IPTC raw profiles in a build without Exif and IPTC support', () => {

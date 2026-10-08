@@ -17,7 +17,7 @@ import ByteOrder from './byte-order.js';
 import {getTiffHeaderOffset} from './image-header-iso-bmff.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
-import {getValueBudget} from './tags-helpers.js';
+import {getValueBudget, addDecompressedValueAllowance} from './tags-helpers.js';
 import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
 import JxlFileTags from './jxl-file-tags.js';
@@ -428,6 +428,7 @@ export function loadView(
             decompress(compressedExifData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
                 .then((decompressedDataView) => {
                     const brobTiffHeaderOffset = getTiffHeaderOffset(decompressedDataView, 0);
+                    addDecompressedValueAllowance(valueBudget, decompressedDataView.byteLength);
                     const {tags: readTags} = Tags.read(
                         decompressedDataView,
                         brobTiffHeaderOffset,

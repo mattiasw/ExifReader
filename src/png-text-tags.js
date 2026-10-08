@@ -11,6 +11,7 @@ import Tags from './tags.js';
 import IptcTags from './iptc-tags.js';
 import Constants from './constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
+import {addDecompressedValueAllowance} from './tags-helpers.js';
 
 export default {
     read
@@ -77,7 +78,7 @@ function read(
             }
         } else if (async && decompressionTasks.length < MAX_COMPRESSED_TEXT_CHUNKS) {
             decompressionTasks.push(() => decompressTextChunk(textChunk, decompressConfig)
-                .then((tag) => getTagsFromTextTag(tag, includeUnknown, computed, tagFilter, valueBudget)));
+                .then((tag) => getTagsFromTextTag(tag, includeUnknown, computed, tagFilter, valueBudget, addDecompressedValueAllowance)));
         }
     }
 
@@ -141,15 +142,19 @@ function isRawProfileTag({name, value}) {
     return isExifGroupTag(name, value) || isIptcGroupTag(name, value);
 }
 
-function getTagsFromTextTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget) {
+function getTagsFromTextTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget, addValueAllowance) {
     try {
         if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
             if (!tagFilter.shouldParseGroup('exif')) {
                 return {};
             }
+            const exifDataView = decodeRawData(value);
+            if (addValueAllowance) {
+                addValueAllowance(valueBudget, exifDataView.byteLength);
+            }
             return {
                 embeddedExifTags: Tags.read(
-                    decodeRawData(value),
+                    exifDataView,
                     EXIF_OFFSET,
                     includeUnknown,
                     computed,

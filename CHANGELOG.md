@@ -97,6 +97,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - With `expanded: true`, Exif from a PNG text raw profile no longer gives an
   `exif.Thumbnail` holding the thumbnail IFD tags with no thumbnail image.
   Flat output already left them out.
+- Exif in compressed PNG text chunks (`Raw profile type exif`) and JPEG XL
+  `brob` boxes of small files could lose tag values, such as the exposure
+  time, f-number and lens model, because it shared the limit on decoded tag
+  values, which is sized from the file. Each such block now adds 4 times its
+  decompressed size to the limit, up to 1 MiB per file in total.
 
 ### Security
 
