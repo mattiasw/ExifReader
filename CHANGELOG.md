@@ -102,6 +102,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   time, f-number and lens model, because it shared the limit on decoded tag
   values, which is sized from the file. Each such block now adds 4 times its
   decompressed size to the limit, up to 1 MiB per file in total.
+- `Thumbnail` is no longer left out when IFD0 ends exactly at the end of the
+  file. When the file ends partway through an IFD0 entry, the bytes of that
+  entry are no longer read as the offset to the thumbnail IFD, which could
+  give made-up `Thumbnail` tags.
 
 ### Security
 
