@@ -148,6 +148,24 @@ describe('tags', () => {
         expect(tags['Huge0thTag'].value).to.have.lengthOf(BUFFER_SIZE);
         expect(tags['HugeSubIfdTag'].value).to.deep.equal([]);
     });
+
+    it('should draw out-of-slot values from a passed decoded-value budget', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyExifTag'}});
+        const valueBudget = {remaining: 100};
+
+        const {tags} = Tags.read(getTiffWithOneOutOfSlotValue(), 0, false, false, undefined, valueBudget);
+
+        expect(tags['MyExifTag'].value).to.have.lengthOf(OUT_OF_SLOT_VALUE_SIZE);
+        expect(valueBudget.remaining).to.equal(100 - OUT_OF_SLOT_VALUE_SIZE);
+    });
+
+    it('should decode an out-of-slot value empty when the passed budget is used up', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyExifTag'}});
+
+        const {tags} = Tags.read(getTiffWithOneOutOfSlotValue(), 0, false, false, undefined, {remaining: 0});
+
+        expect(tags['MyExifTag'].value).to.deep.equal([]);
+    });
 });
 
 const BUFFER_SIZE = 256;
@@ -183,5 +201,18 @@ function getTiffUsingUpTheBudgetBeforeSubIfd(pointerTagCode) {
 
     return getDataView(
         beforeSubIfd + subIfd + '\x00'.repeat(BUFFER_SIZE - beforeSubIfd.length - subIfd.length)
+    );
+}
+
+const OUT_OF_SLOT_VALUE_SIZE = 8;
+
+function getTiffWithOneOutOfSlotValue() {
+    const valueOffset = 8 + 2 + 12 + 4;
+    return getDataView(
+        '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x08'
+        + '\x00\x01'
+        + '\x47\x11\x00\x01' + getByteStringFromNumber(OUT_OF_SLOT_VALUE_SIZE, 4) + getByteStringFromNumber(valueOffset, 4)
+        + '\x00\x00\x00\x00'
+        + '\x42'.repeat(OUT_OF_SLOT_VALUE_SIZE)
     );
 }

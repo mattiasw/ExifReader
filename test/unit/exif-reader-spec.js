@@ -519,6 +519,32 @@ describe('exif-reader', function () {
         expect(capturedDataView).to.equal(SYNTHETIC);
     });
 
+    it('should pass the decoded-value budget of the Exif read on to CanonTags.read and MpfTags.read', () => {
+        const capturedBudgets = captureDecodedValueBudgets({
+            Make: {value: ['Canon']},
+            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+        });
+
+        ExifReader.loadView(getDataView('\x00'.repeat(16)));
+
+        expect(capturedBudgets.exif).to.be.an('object');
+        expect(capturedBudgets.exif.remaining).to.be.a('number');
+        expect(capturedBudgets.makerNotes).to.equal(capturedBudgets.exif);
+        expect(capturedBudgets.mpf).to.equal(capturedBudgets.exif);
+    });
+
+    it('should pass the decoded-value budget of the Exif read on to PentaxTags.read', () => {
+        const capturedBudgets = captureDecodedValueBudgets({
+            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE, value: getCharacterArray('PENTAX \x00\x00\x00')}
+        });
+
+        ExifReader.loadView(getDataView('\x00'.repeat(16)));
+
+        expect(capturedBudgets.exif).to.be.an('object');
+        expect(capturedBudgets.exif.remaining).to.be.a('number');
+        expect(capturedBudgets.makerNotes).to.equal(capturedBudgets.exif);
+    });
+
     it('should pass exifDataView from BMFF multi-extent items to Thumbnail.get instead of the source dataView', () => {
         const SYNTHETIC = {synthetic: true};
         const myThumbnail = {type: 'image/jpeg'};
@@ -2446,6 +2472,42 @@ describe('exif-reader', function () {
             return Array.from(new Uint8Array(buffer));
         }
     });
+
+    describe('one decoded-value budget per loadView', () => {
+        it('should bound the values decoded from Exif, a Pentax maker note and MPF together by 4 times the input', () => {
+            const image = getJpegWithLargeExifPentaxAndMpfValues();
+
+            const tags = ExifReader.loadView(getDataView(image), {expanded: true, includeUnknown: true});
+
+            expect(tags.makerNotes).to.be.an('object');
+            expect(tags.mpf).to.be.an('object');
+            expect(getDecodedValueLength(tags, ['exif', 'makerNotes', 'mpf'])).to.be.at.most(4 * image.length);
+        });
+
+        it('should count the values decoded before a failing Exif read against the MPF values', () => {
+            const image = getJpegWithFailingExifReadAndLargeMpfValues();
+
+            const tags = ExifReader.loadView(getDataView(image), {expanded: true, includeUnknown: true});
+
+            expect(Object.keys(tags.exif || {})).to.have.lengthOf(0);
+            expect(tags.mpf).to.be.an('object');
+            for (let i = 0; i < LARGE_VALUE_TAG_COUNT; i++) {
+                expect(tags.mpf[`undefined-${0x7200 + i}`].value).to.deep.equal([]);
+            }
+        });
+
+        function getDecodedValueLength(tags, groupKeys) {
+            let length = 0;
+            for (const groupKey of groupKeys) {
+                for (const tag of Object.values(tags[groupKey] || {})) {
+                    if (tag && Array.isArray(tag.value)) {
+                        length += tag.value.length;
+                    }
+                }
+            }
+            return length;
+        }
+    });
 });
 
 // Shaped like a Buffer from the `buffer` package: a Uint8Array subclass with
@@ -2523,6 +2585,36 @@ function swapMpfTagsRead(tagsValue) {
             return {};
         }
     });
+}
+
+function captureDecodedValueBudgets(exifTags) {
+    const capturedBudgets = {};
+    swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE, mpfDataOffset: OFFSET_TEST_VALUE});
+    swap(Tags, {
+        read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
+            capturedBudgets.exif = valueBudget;
+            return {tags: exifTags, byteOrder: ByteOrder.BIG_ENDIAN};
+        }
+    });
+    swap(CanonTags, {
+        read(dataView, tiffHeaderOffset, offset, byteOrder, includeUnknown, computed, tagFilter, valueBudget) {
+            capturedBudgets.makerNotes = valueBudget;
+            return {};
+        }
+    });
+    swap(PentaxTags, {
+        read(dataView, tiffHeaderOffset, offset, includeUnknown, computed, tagFilter, valueBudget) {
+            capturedBudgets.makerNotes = valueBudget;
+            return {};
+        }
+    });
+    swap(MpfTags, {
+        read(dataView, dataOffset, includeUnknown, computed, tagFilter, valueBudget) {
+            capturedBudgets.mpf = valueBudget;
+            return {};
+        }
+    });
+    return capturedBudgets;
 }
 
 function swapXmpTagsRead(tagsValue) {
@@ -2700,4 +2792,82 @@ function getMpEntry(attributes, imageSize, imageOffset) {
         + getByteStringFromNumber(imageOffset, 4)
         + getByteStringFromNumber(0, 2)
         + getByteStringFromNumber(0, 2);
+}
+
+// Each group gets enough tags claiming the whole body that it alone would use
+// up a budget of 4 times the whole file.
+const LARGE_VALUE_TAG_COUNT = 5;
+const LARGE_VALUE_SIZE = 8000;
+const IFD_TYPE_BYTE = 1;
+const IFD_TYPE_SLONG = 9;
+
+// An Exif IFD whose MakerNote comes first, then large BYTE values; a Pentax
+// maker note with large BYTE values; and an MPF block with large BYTE values
+// followed by the body that all of them point at.
+function getJpegWithLargeExifPentaxAndMpfValues() {
+    const EXIF_TIFF_OFFSET = 12; // SOI + APP1 marker and length + 'Exif\0\0'.
+    const EXIF_IFD_OFFSET = 26; // TIFF header + 0th IFD with one entry.
+    const exifIfdLength = 2 + (1 + LARGE_VALUE_TAG_COUNT) * 12 + 4;
+    const makerNoteOffset = EXIF_IFD_OFFSET + exifIfdLength;
+    const makerNoteLength = 'PENTAX \x00MM'.length + 2 + LARGE_VALUE_TAG_COUNT * 12 + 4;
+    const mpfTiffOffset = EXIF_TIFF_OFFSET + makerNoteOffset + makerNoteLength + 8; // APP2 marker and length + 'MPF\0'.
+    const bodyOffset = mpfTiffOffset + 8 + 2 + LARGE_VALUE_TAG_COUNT * 12 + 4;
+
+    const makerNote = 'PENTAX \x00MM'
+        + getLargeValueIfd(0x7000, bodyOffset - (EXIF_TIFF_OFFSET + makerNoteOffset));
+    const exifIfd = getByteStringFromNumber(1 + LARGE_VALUE_TAG_COUNT, 2)
+        + getIfdEntry(0x927c, IFD_TYPE_UNDEFINED, makerNoteLength, getByteStringFromNumber(makerNoteOffset, 4))
+        + getLargeValueIfd(0x7100, bodyOffset - EXIF_TIFF_OFFSET).slice(2);
+    const exifTiff = 'MM\x00\x2a' + getByteStringFromNumber(8, 4)
+        + getByteStringFromNumber(1, 2)
+        + getIfdEntry(0x8769, IFD_TYPE_LONG, 1, getByteStringFromNumber(EXIF_IFD_OFFSET, 4))
+        + getByteStringFromNumber(0, 4)
+        + exifIfd
+        + makerNote;
+    const mpfTiff = 'MM\x00\x2a' + getByteStringFromNumber(8, 4) + getLargeValueIfd(0x7200, bodyOffset - mpfTiffOffset);
+
+    return getJpegWithExifAndMpf(exifTiff, mpfTiff, bodyOffset);
+}
+
+// A 0th IFD whose large BYTE values use up the budget before an Exif IFD
+// pointer with a negative offset makes the Exif read throw, and an MPF block
+// with large BYTE values followed by the body that all of them point at.
+function getJpegWithFailingExifReadAndLargeMpfValues() {
+    const EXIF_TIFF_OFFSET = 12; // SOI + APP1 marker and length + 'Exif\0\0'.
+    const exifTiffLength = 8 + 2 + (LARGE_VALUE_TAG_COUNT + 1) * 12 + 4;
+    const mpfTiffOffset = EXIF_TIFF_OFFSET + exifTiffLength + 8; // APP2 marker and length + 'MPF\0'.
+    const bodyOffset = mpfTiffOffset + 8 + 2 + LARGE_VALUE_TAG_COUNT * 12 + 4;
+
+    const exifTiff = 'MM\x00\x2a' + getByteStringFromNumber(8, 4)
+        + getByteStringFromNumber(LARGE_VALUE_TAG_COUNT + 1, 2)
+        + getLargeValueEntries(0x7100, bodyOffset - EXIF_TIFF_OFFSET)
+        + getIfdEntry(0x8769, IFD_TYPE_SLONG, 1, getByteStringFromNumber(-4096 >>> 0, 4))
+        + getByteStringFromNumber(0, 4);
+    const mpfTiff = 'MM\x00\x2a' + getByteStringFromNumber(8, 4) + getLargeValueIfd(0x7200, bodyOffset - mpfTiffOffset);
+
+    return getJpegWithExifAndMpf(exifTiff, mpfTiff, bodyOffset);
+}
+
+function getLargeValueIfd(firstTag, valueOffset) {
+    return getByteStringFromNumber(LARGE_VALUE_TAG_COUNT, 2)
+        + getLargeValueEntries(firstTag, valueOffset)
+        + getByteStringFromNumber(0, 4);
+}
+
+function getLargeValueEntries(firstTag, valueOffset) {
+    let entries = '';
+    for (let i = 0; i < LARGE_VALUE_TAG_COUNT; i++) {
+        entries += getIfdEntry(firstTag + i, IFD_TYPE_BYTE, LARGE_VALUE_SIZE, getByteStringFromNumber(valueOffset, 4));
+    }
+    return entries;
+}
+
+function getJpegWithExifAndMpf(exifTiff, mpfTiff, bodyOffset) {
+    const exifSegment = getAppSegment('\xff\xe1', 'Exif\x00\x00' + exifTiff);
+    const mpfSegment = getAppSegment('\xff\xe2', 'MPF\x00' + mpfTiff + 'x'.repeat(LARGE_VALUE_SIZE));
+    const actualBodyOffset = 2 + exifSegment.length + 4 + 4 + mpfTiff.length;
+    if (actualBodyOffset !== bodyOffset) {
+        throw new Error(`Body lands at ${actualBodyOffset}, not ${bodyOffset}.`);
+    }
+    return '\xff\xd8' + exifSegment + mpfSegment + '\xff\xd9';
 }

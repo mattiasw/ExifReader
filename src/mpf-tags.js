@@ -25,7 +25,8 @@ function read(
     dataOffset,
     includeUnknown,
     computed = false,
-    tagFilter = undefined
+    tagFilter = undefined,
+    valueBudget = undefined
 ) {
     try {
         const byteOrder = ByteOrder.getByteOrder(dataView, dataOffset);
@@ -42,7 +43,8 @@ function read(
             includeUnknown,
             computed,
             tagFilter,
-            'mpf'
+            'mpf',
+            valueBudget
         );
         return addMpfImages(dataView, dataOffset, tags, byteOrder);
     } catch (error) {

@@ -125,6 +125,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   made `load()` use memory far above the file size: a 2 MB JPEG took about
   600 MB and one second. ASCII values are now decoded without per-character
   intermediate data. This affects every format that carries Exif.
+- The decoded tag values of the Canon and Pentax maker notes and of the MPF
+  block in a JPEG each had their own size limit, separate from the one for the
+  Exif data, so one crafted file could decode about 12 times its size in tag
+  values. They now share one limit with the Exif data.
 
 ## [4.46.0] - 2026-09-26
 

@@ -58,6 +58,25 @@ describe('pentax-tags', () => {
         expect(PentaxTags.read(dataView, 0, 0, false)).to.deep.equal({});
     });
 
+    it('should decode an out-of-slot value empty when the passed budget is used up', () => {
+        const dataView = getPentaxDataView([getUndefinedField(LEVEL_INFO_TAG_ID, [1, 2, 3, 4, 5, 6, 7])]);
+
+        const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false, false, undefined, {remaining: 0});
+
+        expect(tags['LevelInfo'].value).to.deep.equal([]);
+    });
+
+    it('should draw out-of-slot values from a passed decoded-value budget', () => {
+        const levelInfoBytes = [1, 2, 3, 4, 5, 6, 7];
+        const dataView = getPentaxDataView([getUndefinedField(LEVEL_INFO_TAG_ID, levelInfoBytes)]);
+        const valueBudget = {remaining: 100};
+
+        const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false, false, undefined, valueBudget);
+
+        expect(tags['LevelInfo'].value).to.deep.equal(levelInfoBytes);
+        expect(valueBudget.remaining).to.equal(100 - levelInfoBytes.length);
+    });
+
     describe('K3 III level info', function () {
         describe('CameraOrientation', function () {
             it('should read CameraOrientation=0', function () {
