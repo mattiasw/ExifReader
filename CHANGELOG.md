@@ -181,6 +181,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and item URI) now stops at the end of its box and after at most 64 KiB, so
   the same file peaks at about 76 MB, against about 73 MB for one whose item
   name is terminated.
+- An XMP packet whose elements were nested one inside the next, each
+  declaring a namespace prefix, took time quadratic in the nesting depth with
+  `@xmldom/xmldom` 0.9.12: a 1 MB packet blocked `load()` for about 8
+  seconds. XMP packets with elements nested deeper than 256 levels are now
+  left out without being parsed. Any packet nested about 2,000 levels deep
+  already lost all its XMP tags to a stack overflow in ExifReader's own code.
 
 ## [4.47.0] - 2026-10-08
 

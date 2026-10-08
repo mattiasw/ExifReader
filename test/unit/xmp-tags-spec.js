@@ -20,23 +20,26 @@ const META_ELEMENT_START = '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe X
 const META_ELEMENT_END = '</x:xmpmeta>';
 
 const MAX_NESTING_DEPTH = 16;
+const MAX_ELEMENT_DEPTH = 256;
+// getNestedXmlString adds rdf:RDF and rdf:Description above the nested values.
+const NESTED_XML_STRING_ELEMENT_DEPTH = 2;
 // The top-level properties are the first level, so the outermost nested tag's members are the second.
 const DEEPEST_ALLOWED_LEVEL = MAX_NESTING_DEPTH - 1;
 const NESTING_SHAPES = {
     'rdf:parseType="Resource"': {
         nest: (leaf, inner) => `<xmp:s rdf:parseType="Resource"><xmp:t>${leaf}</xmp:t>${inner}</xmp:s>`,
         getMembers: (tag) => tag.value,
-        regressionDepth: 1000
+        elementsPerLevel: 1
     },
     'rdf:Description': {
         nest: (leaf, inner) => `<xmp:s><rdf:Description><xmp:t>${leaf}</xmp:t>${inner}</rdf:Description></xmp:s>`,
         getMembers: (tag) => tag.value,
-        regressionDepth: 500
+        elementsPerLevel: 2
     },
     'rdf:Seq with rdf:parseType="Resource" items': {
         nest: (leaf, inner) => `<xmp:s><rdf:Seq><rdf:li rdf:parseType="Resource"><xmp:t>${leaf}</xmp:t>${inner}</rdf:li></rdf:Seq></xmp:s>`,
         getMembers: (tag) => tag.value[0],
-        regressionDepth: 333
+        elementsPerLevel: 3
     }
 };
 
@@ -2555,8 +2558,10 @@ describe('xmp-tags', function () {
                             expectNestedLevels(tags, shape, DEEPEST_ALLOWED_LEVEL);
                         });
 
-                        it('should read a value nested a thousand DOM elements deep fast and with bounded descriptions', () => {
-                            const xmlString = getNestedXmlString(getNestedStructures(shape, shape.regressionDepth, getLongLeaf));
+                        it('should read a value nested to the element depth bound fast and with bounded descriptions', () => {
+                            // The deepest level adds its xmp:t element.
+                            const levels = Math.floor((MAX_ELEMENT_DEPTH - NESTED_XML_STRING_ELEMENT_DEPTH - 1) / shape.elementsPerLevel);
+                            const xmlString = getNestedXmlString(getNestedStructures(shape, levels, getLongLeaf));
                             const {tags, milliseconds} = readTimed(xmlString, domParser);
                             expect(tags.s.value).to.exist;
                             expect(milliseconds).to.be.below(1000);
@@ -2578,8 +2583,11 @@ describe('xmp-tags', function () {
                         expect(tags.sibling.value).to.equal('ok');
                     });
 
-                    it('should read lists nested a thousand DOM elements deep fast and with bounded descriptions', () => {
-                        const xmlString = getNestedXmlString(getNestedRdfValueLists(333, getLongLeaf));
+                    it('should read lists nested to the element depth bound fast and with bounded descriptions', () => {
+                        // xmp:v and its rdf:Seq hold the levels, each an rdf:li, rdf:value and rdf:Seq,
+                        // and the innermost item adds an rdf:li and rdf:value.
+                        const levels = Math.floor((MAX_ELEMENT_DEPTH - NESTED_XML_STRING_ELEMENT_DEPTH - 2 - 2) / 3);
+                        const xmlString = getNestedXmlString(getNestedRdfValueLists(levels, getLongLeaf));
                         const {tags, milliseconds} = readTimed(xmlString, domParser);
                         expect(tags.v).to.be.undefined;
                         expect(tags.sibling.value).to.equal('ok');
@@ -2616,6 +2624,20 @@ describe('xmp-tags', function () {
                     // Joining every description once adds up to their summed length. Re-rendering the
                     // members of each level joins about six times as much at this depth.
                     expect(joinedLength).to.be.at.most(1.5 * summedDescriptionLength);
+                });
+            });
+
+            describe('element depth', () => {
+                it('should read a packet nested exactly to the element depth bound', () => {
+                    const xmlString = getXmlStringWithElementTower(MAX_ELEMENT_DEPTH - 1);
+                    const tags = XmpTags.read(getDataView(xmlString), [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags.title.value).to.equal('T');
+                });
+
+                it('should read a packet nested exactly to the element depth bound with a self-closing leaf', () => {
+                    const xmlString = getXmlStringWithElementTower(MAX_ELEMENT_DEPTH - 2, '<rdf:x/>');
+                    const tags = XmpTags.read(getDataView(xmlString), [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags.title.value).to.equal('T');
                 });
             });
         });
@@ -2735,6 +2757,53 @@ describe('xmp-tags', function () {
         });
     });
 
+    describe('element depth bound before parsing', () => {
+        it('should not parse a packet nested one element deeper than the bound', () => {
+            const {tags, received} = readWithRecordingParser(getXmlStringWithElementTower(MAX_ELEMENT_DEPTH));
+
+            expect(received).to.deep.equal([]);
+            expect(tags).to.deep.equal({});
+        });
+
+        it('should not parse a packet with a self-closing leaf one element deeper than the bound', () => {
+            const {tags, received} = readWithRecordingParser(getXmlStringWithElementTower(MAX_ELEMENT_DEPTH - 1, '<rdf:x/>'));
+
+            expect(received).to.deep.equal([]);
+            expect(tags).to.deep.equal({});
+        });
+
+        // xmldom 0.9.12 used to take 8.4 and 6.8 seconds for these.
+        for (const [name, getLevel] of [
+            ['the same prefix', () => ['<rdf:x xmlns:b="u">', '</rdf:x>']],
+            ['a distinct prefix', (level) => [`<p${level}:x xmlns:p${level}="u">`, `</p${level}:x>`]]
+        ]) {
+            it(`should not parse a megabyte packet whose elements each declare ${name} one inside the next`, () => {
+                const xmlString = getXmlString(getDeclaringElementTower(1024 * 1024, getLevel));
+
+                const start = Date.now();
+                const {tags, received} = readWithRecordingParser(xmlString);
+                const milliseconds = Date.now() - start;
+
+                expect(received).to.deep.equal([]);
+                expect(tags).to.deep.equal({});
+                expect(milliseconds).to.be.below(1000);
+            });
+        }
+
+        it('should not parse an over-deep packet combined from standard and extended XMP', () => {
+            const xmlString = getXmlStringWithElementTower(MAX_ELEMENT_DEPTH);
+            const splitIndex = xmlString.indexOf('</rdf:x>') - 20 * '<rdf:x xmlns:b="u">'.length;
+            const standardXmp = xmlString.slice(0, splitIndex);
+            const extendedXmp = xmlString.slice(splitIndex);
+
+            const {tags, received} = readChunksWithRecordingParser([standardXmp, extendedXmp]);
+
+            expect(received[0]).to.equal(standardXmp);
+            expect(received).to.not.include(xmlString);
+            expect(tags).to.deep.equal({});
+        });
+    });
+
     describe('bounded chunk allocation (GHSA-q53f-v5gx-7j78)', () => {
         it('does not allocate beyond the available data when a chunk declares a length larger than the buffer', () => {
             const xmlString = getXmlString('');
@@ -2833,7 +2902,11 @@ function toUtf8ByteString(text) {
 }
 
 function readWithRecordingParser(text) {
-    const bytes = toUtf8ByteString(text);
+    return readChunksWithRecordingParser([text]);
+}
+
+function readChunksWithRecordingParser(texts) {
+    const byteStrings = texts.map(toUtf8ByteString);
     const received = [];
     const realParser = new XmldomDomParser({onError: onErrorStopParsing});
     const domParser = {
@@ -2843,7 +2916,14 @@ function readWithRecordingParser(text) {
         }
     };
 
-    const tags = XmpTags.read(getDataView(bytes), [{dataOffset: 0, length: bytes.length}], domParser);
+    const chunks = [];
+    let dataOffset = 0;
+    for (const byteString of byteStrings) {
+        chunks.push({dataOffset, length: byteString.length});
+        dataOffset += byteString.length;
+    }
+
+    const tags = XmpTags.read(getDataView(byteStrings.join('')), chunks, domParser);
 
     return {tags, received};
 }
@@ -2899,6 +2979,29 @@ function getNestedXmlString(content) {
             ${content}
         </rdf:Description>
     `);
+}
+
+// rdf:RDF and the rdf:x elements nest depth + 1 elements deep, besides a dc:title sibling.
+function getXmlStringWithElementTower(depth, leaf = '') {
+    return getXmlString('<rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" dc:title="T"/>'
+        + getElementTower(depth, leaf));
+}
+
+function getElementTower(depth, leaf) {
+    return '<rdf:x xmlns:b="u">'.repeat(depth) + leaf + '</rdf:x>'.repeat(depth);
+}
+
+function getDeclaringElementTower(length, getLevel) {
+    const startTags = [];
+    const endTags = [];
+    let towerLength = 0;
+    for (let level = 0; towerLength < length; level++) {
+        const [startTag, endTag] = getLevel(level);
+        startTags.push(startTag);
+        endTags.push(endTag);
+        towerLength += startTag.length + endTag.length;
+    }
+    return startTags.join('') + endTags.reverse().join('');
 }
 
 function getNestedStructures(shape, depth, getLeaf) {
