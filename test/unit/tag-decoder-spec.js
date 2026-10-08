@@ -12,11 +12,16 @@ const TAG_VALUE_STRING = 'abcÅÄÖáéí';
 
 describe('tag-decoder', () => {
     let restoreTextDecoder;
+    let restoreDecodeUriComponent;
 
     afterEach(() => {
         if (restoreTextDecoder) {
             restoreTextDecoder();
             restoreTextDecoder = undefined;
+        }
+        if (restoreDecodeUriComponent) {
+            restoreDecodeUriComponent();
+            restoreDecodeUriComponent = undefined;
         }
     });
 
@@ -63,6 +68,37 @@ describe('tag-decoder', () => {
         const tagValue = getCharacterArray(TAG_VALUE_STRING);
 
         expect(TagDecoder.decode('UTF-8', tagValue)).to.equal(TAG_VALUE_STRING);
+    });
+
+    it('should decode bytes that are not valid UTF-8 as Windows-1252 without trying decodeURIComponent', () => {
+        restoreTextDecoder = swapProperties(TextDecoderModule, {
+            get() {
+                return undefined;
+            }
+        });
+        const originalDecodeUriComponent = globalThis.decodeURIComponent;
+        let decodeUriComponentCalls = 0;
+        restoreDecodeUriComponent = swapProperties(globalThis, {
+            decodeURIComponent(string) {
+                decodeUriComponentCalls++;
+                return originalDecodeUriComponent(string);
+            }
+        });
+
+        expect(TagDecoder.decode(undefined, [0x93, 0x61, 0x94])).to.equal('“a”');
+        expect(decodeUriComponentCalls).to.equal(0);
+    });
+
+    it('should decode valid UTF-8 bytes as UTF-8 when the text decoder fails', () => {
+        restoreTextDecoder = swapProperties(TextDecoderModule, {
+            get() {
+                return function () {
+                    throw new Error();
+                };
+            }
+        });
+
+        expect(TagDecoder.decode('UTF-8', getCharacterArray('A\xc3\xbaC'))).to.equal('AúC');
     });
 
     it('should decode UTF-8 when value is a string', () => {

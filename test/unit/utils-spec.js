@@ -6,6 +6,8 @@ import {expect} from 'chai';
 import {getDataView, getConsoleWarnSpy, swapProperties} from './test-utils.js';
 import * as Utils from '../../src/utils.js';
 
+const originalDecodeUriComponent = globalThis.decodeURIComponent;
+
 describe('utils', () => {
     it('should extract string from DataView', () => {
         const dataView = getDataView('\x00\x00MyString\x00');
@@ -28,6 +30,145 @@ describe('utils', () => {
     it('should decode a byte string as UTF-8 or give undefined when it is not valid UTF-8', () => {
         expect(Utils.tryDecodeUtf8ByteString('A\xc3\xbaC')).to.equal('AúC');
         expect(Utils.tryDecodeUtf8ByteString('abc\xc5\xc4\xd6')).to.equal(undefined);
+    });
+
+    describe('tryDecodeUtf8ByteString', () => {
+        const BOUNDARY_BYTES = [0x00, 0x7f, 0x80, 0x8f, 0x90, 0x9f, 0xa0, 0xbf, 0xc0, 0xff];
+        let restore;
+        let restoreStackTraceLimit;
+
+        afterEach(() => {
+            if (restore) {
+                restore();
+                restore = undefined;
+            }
+            if (restoreStackTraceLimit) {
+                restoreStackTraceLimit();
+                restoreStackTraceLimit = undefined;
+            }
+        });
+
+        it('should not call decodeURIComponent for ASCII or invalid input', () => {
+            const spy = swapDecodeUriComponentForSpy();
+
+            expect(Utils.tryDecodeUtf8ByteString('\xff')).to.equal(undefined);
+            expect(Utils.tryDecodeUtf8ByteString('abc\xc5\xc4\xd6')).to.equal(undefined);
+            expect(Utils.tryDecodeUtf8ByteString('abc%41\x00\x7f')).to.equal('abc%41\x00\x7f');
+            expect(spy.calls).to.equal(0);
+
+            expect(Utils.tryDecodeUtf8ByteString('A\xc3\xbaC')).to.equal('AúC');
+            expect(spy.calls).to.equal(1);
+        });
+
+        it('should reject overlong forms', () => {
+            expect(Utils.tryDecodeUtf8ByteString('\xc0\x80')).to.equal(undefined);
+            expect(Utils.tryDecodeUtf8ByteString('\xe0\x80\x80')).to.equal(undefined);
+            expect(Utils.tryDecodeUtf8ByteString('\xf0\x80\x80\x80')).to.equal(undefined);
+        });
+
+        it('should reject surrogates and code points above U+10FFFF', () => {
+            expect(Utils.tryDecodeUtf8ByteString('\xed\xa0\x80')).to.equal(undefined);
+            expect(Utils.tryDecodeUtf8ByteString('\xf4\x90\x80\x80')).to.equal(undefined);
+        });
+
+        it('should reject cut-off sequences and stray continuation bytes', () => {
+            expect(Utils.tryDecodeUtf8ByteString('\xe2\x82')).to.equal(undefined);
+            expect(Utils.tryDecodeUtf8ByteString('\xe2\x82a')).to.equal(undefined);
+            expect(Utils.tryDecodeUtf8ByteString('\xc3\xba\xba')).to.equal(undefined);
+        });
+
+        it('should decode the boundary code points that are valid', () => {
+            expect(Utils.tryDecodeUtf8ByteString('\xed\x9f\xbf')).to.equal('\ud7ff');
+            expect(Utils.tryDecodeUtf8ByteString('\xee\x80\x80')).to.equal('\ue000');
+            expect(Utils.tryDecodeUtf8ByteString('\xef\xbf\xbf')).to.equal('\uffff');
+            expect(Utils.tryDecodeUtf8ByteString('\xf4\x8f\xbf\xbf')).to.equal('\udbff\udfff');
+        });
+
+        it('should decode an empty string to an empty string', () => {
+            expect(Utils.tryDecodeUtf8ByteString('')).to.equal('');
+        });
+
+        it('should match decodeURIComponent(escape()) and only call it for valid non-ASCII input', () => {
+            const spy = swapDecodeUriComponentForSpy();
+            // Capturing the stack of each URIError the reference throws is most of its cost.
+            restoreStackTraceLimit = swapProperties(Error, {stackTraceLimit: 0});
+            const mismatches = [];
+
+            for (const input of getEquivalenceInputs()) {
+                const expected = decodeWithUriFunctions(input);
+                spy.calls = 0;
+                const actual = Utils.tryDecodeUtf8ByteString(input);
+                const mayCallDecode = expected !== undefined && !isAscii(input);
+                if (actual !== expected || (spy.calls > 0 && !mayCallDecode)) {
+                    if (mismatches.length < 20) {
+                        mismatches.push(input.split('').map((character) => character.charCodeAt(0)));
+                    }
+                }
+            }
+            restoreStackTraceLimit();
+            restoreStackTraceLimit = undefined;
+
+            expect(mismatches).to.deep.equal([]);
+        });
+
+        function swapDecodeUriComponentForSpy() {
+            const spy = {calls: 0};
+            restore = swapProperties(globalThis, {
+                decodeURIComponent(string) {
+                    spy.calls++;
+                    return originalDecodeUriComponent(string);
+                }
+            });
+            return spy;
+        }
+
+        function getEquivalenceInputs() {
+            const inputs = ['\u0100', '\u20ac', '\ufffd', '\ud800'];
+            for (let first = 0; first <= 0xff; first++) {
+                inputs.push(String.fromCharCode(first));
+                for (let second = 0; second <= 0xff; second++) {
+                    inputs.push(String.fromCharCode(first, second));
+                }
+            }
+            for (let lead = 0xe0; lead <= 0xef; lead++) {
+                for (let second = 0; second <= 0xff; second++) {
+                    for (const third of BOUNDARY_BYTES) {
+                        inputs.push(String.fromCharCode(lead, second, third));
+                    }
+                }
+            }
+            for (let lead = 0xf0; lead <= 0xf7; lead++) {
+                for (const second of BOUNDARY_BYTES) {
+                    for (const third of BOUNDARY_BYTES) {
+                        for (const fourth of BOUNDARY_BYTES) {
+                            inputs.push(String.fromCharCode(lead, second, third, fourth));
+                        }
+                    }
+                }
+            }
+            for (const sequence of ['\xe2\x82\xac', '\xed\x9f\xbf', '\xf0\x9f\x98\x80', '\xf4\x8f\xbf\xbf']) {
+                for (let cutLength = 1; cutLength < sequence.length; cutLength++) {
+                    const cut = sequence.slice(0, cutLength);
+                    inputs.push('a' + cut, cut + 'a');
+                }
+            }
+            for (const byte of BOUNDARY_BYTES) {
+                inputs.push('\xc3\xba' + String.fromCharCode(byte), '\xc3\xba' + String.fromCharCode(byte) + 'a');
+            }
+            return inputs;
+        }
+
+        function decodeWithUriFunctions(string) {
+            try {
+                return originalDecodeUriComponent(escape(string));
+            } catch (error) {
+                return undefined;
+            }
+        }
+
+        function isAscii(string) {
+            return string.split('').every((character) => character.charCodeAt(0) < 0x80);
+        }
     });
 
     it('should parse unicode UTF16BE strings', () => {

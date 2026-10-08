@@ -79,11 +79,68 @@ export function decodeUtf8ByteString(byteString) {
  * is not valid UTF-8.
  */
 export function tryDecodeUtf8ByteString(byteString) {
-    try {
-        return decodeURIComponent(escape(byteString));
-    } catch (error) {
-        return undefined;
+    let isAscii = true;
+    for (let index = 0; index < byteString.length;) {
+        const sequenceLength = getWellFormedUtf8SequenceLength(byteString, index);
+        if (sequenceLength === 0) {
+            return undefined;
+        }
+        if (sequenceLength > 1) {
+            isAscii = false;
+        }
+        index += sequenceLength;
     }
+    if (isAscii) {
+        return byteString;
+    }
+    return decodeURIComponent(escape(byteString));
+}
+
+// Well-formed byte sequences per Unicode Table 3-7, which ECMAScript's Decode
+// (decodeURIComponent) enforces. Returns 0 for an ill-formed or cut-off one.
+function getWellFormedUtf8SequenceLength(byteString, index) {
+    const lead = byteString.charCodeAt(index);
+    if (lead < 0x80) {
+        return 1;
+    }
+
+    let length;
+    let secondMin = 0x80;
+    let secondMax = 0xbf;
+    if (lead >= 0xc2 && lead <= 0xdf) {
+        length = 2;
+    } else if (lead >= 0xe0 && lead <= 0xef) {
+        length = 3;
+        if (lead === 0xe0) {
+            secondMin = 0xa0;
+        } else if (lead === 0xed) {
+            secondMax = 0x9f;
+        }
+    } else if (lead >= 0xf0 && lead <= 0xf4) {
+        length = 4;
+        if (lead === 0xf0) {
+            secondMin = 0x90;
+        } else if (lead === 0xf4) {
+            secondMax = 0x8f;
+        }
+    } else {
+        return 0;
+    }
+
+    if (index + length > byteString.length) {
+        return 0;
+    }
+    const second = byteString.charCodeAt(index + 1);
+    if (!(second >= secondMin && second <= secondMax)) {
+        return 0;
+    }
+    for (let offset = 2; offset < length; offset++) {
+        const continuation = byteString.charCodeAt(index + offset);
+        if (!(continuation >= 0x80 && continuation <= 0xbf)) {
+            return 0;
+        }
+    }
+    return length;
 }
 
 export function getCharacterArray(string) {
