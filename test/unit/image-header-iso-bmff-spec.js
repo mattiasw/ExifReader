@@ -647,6 +647,38 @@ describe('image-header-iso-bmff', () => {
             ]);
         });
 
+        it('should cap the extents of one iloc box at 1024 * 1024 in total', () => {
+            // Guards the absolute backstop of GHSA-pj96-35fp-cfcc. Every item
+            // fits in the box, so only the cap can stop the walk. 17 items of
+            // 0xffff extents (1,114,095) exceed it, so the walk has to end
+            // inside the 17th item and never reach the 18th. Two-byte extents
+            // (lengthSize 2) tell a cap on extents from a cap on bytes.
+            const MAX_TOTAL_EXTENTS = 1024 * 1024;
+            const ITEM_COUNT = 18;
+            const ITEMS_REACHED = 17;
+            const EXTENTS_PER_ITEM = 0xffff;
+            const EXTENT_SIZE = 2;
+            const sizesByte = getByteStringFromNumber(EXTENT_SIZE, 1);
+            const baseOffsetAndIndexByte = getByteStringFromNumber(0x00, 1);
+            const itemCount = getByteStringFromNumber(ITEM_COUNT, 2);
+            let items = '';
+            for (let itemId = 1; itemId <= ITEM_COUNT; itemId++) {
+                items += getByteStringFromNumber(itemId, 2)
+                    + getByteStringFromNumber(0, 2)
+                    + getByteStringFromNumber(EXTENTS_PER_ITEM, 2)
+                    + '\x00'.repeat(EXTENTS_PER_ITEM * EXTENT_SIZE);
+            }
+            const dataView = getDataView(
+                getFullBox('iloc', 0, sizesByte + baseOffsetAndIndexByte + itemCount + items)
+            );
+
+            const parsedItems = parseBox(dataView, 0).items;
+
+            const totalExtents = parsedItems.reduce((total, item) => total + item.extents.length, 0);
+            expect(parsedItems).to.have.lengthOf(ITEMS_REACHED);
+            expect(totalExtents).to.equal(MAX_TOTAL_EXTENTS);
+        });
+
         it('should read no items from the tiny iloc boxes a packed meta box holds', () => {
             // Each iloc declares only the 16 bytes of its own header, so its
             // item list would start exactly where the box ends and no item
