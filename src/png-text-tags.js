@@ -33,11 +33,18 @@ const MAX_KEYWORD_LENGTH = 79;
 const MAX_LANGUAGE_TAG_LENGTH = 79;
 
 /**
- * @returns {{readTags: object, embeddedExifTags: object|undefined, embeddedIptcTags: object|undefined, readTagsPromise: Promise<object[]>|undefined}}
- *     `readTags` and the two embedded groups come from uncompressed chunks and are
- *     ready at once; the embedded groups are undefined when no uncompressed raw
- *     profile was parsed. `readTagsPromise` resolves to one result per compressed
- *     chunk, in chunk order, and is undefined when none is read.
+ * @param {function(DataView, object, number): object} [getThumbnail] Called with a
+ *     decoded Exif raw profile, its thumbnail IFD tags and the TIFF header offset;
+ *     returns the thumbnail tags, with `image` set when the thumbnail was read.
+ *     No thumbnail is returned when it is not passed.
+ * @returns {{readTags: object, embeddedExifTags: object|undefined, embeddedIptcTags: object|undefined, embeddedExifThumbnail: object|undefined, readTagsPromise: Promise<object[]>|undefined}}
+ *     `readTags`, the two embedded groups and `embeddedExifThumbnail` come from
+ *     uncompressed chunks and are ready at once; the embedded groups are undefined
+ *     when no uncompressed raw profile was parsed, and `embeddedExifThumbnail` is
+ *     the first thumbnail with an image. `readTagsPromise` resolves to one result
+ *     per compressed chunk, in chunk order, each with its own
+ *     `embeddedExifThumbnail` when it has one and no uncompressed chunk had one,
+ *     and is undefined when none is read.
  */
 function read(
     dataView,
@@ -47,12 +54,14 @@ function read(
     computed = false,
     tagFilter = NOOP_TAG_FILTER,
     decompressConfig,
-    valueBudget
+    valueBudget,
+    getThumbnail
 ) {
     const tags = {};
     let embeddedExifTags;
     let embeddedIptcTags;
-    const decompressionTasks = [];
+    let embeddedExifThumbnail;
+    const compressedChunks = [];
 
     for (let i = 0; i < pngTextChunks.length; i++) {
         const {offset, length, type} = pngTextChunks[i];
@@ -63,9 +72,19 @@ function read(
         if (textChunk.compressionMethod === COMPRESSION_METHOD_NONE) {
             const tag = getUncompressedTag(textChunk);
             if (isRawProfileTag(tag)) {
-                const rawProfileTags = getTagsFromTextTag(tag, includeUnknown, computed, tagFilter, valueBudget);
+                const rawProfileTags = getTagsFromTextTag(
+                    tag,
+                    includeUnknown,
+                    computed,
+                    tagFilter,
+                    valueBudget,
+                    embeddedExifThumbnail ? undefined : getThumbnail
+                );
                 if (rawProfileTags.embeddedExifTags) {
                     embeddedExifTags = objectAssign(embeddedExifTags || {}, rawProfileTags.embeddedExifTags);
+                }
+                if (rawProfileTags.embeddedExifThumbnail) {
+                    embeddedExifThumbnail = rawProfileTags.embeddedExifThumbnail;
                 }
                 if (rawProfileTags.embeddedIptcTags) {
                     embeddedIptcTags = objectAssign(embeddedIptcTags || {}, rawProfileTags.embeddedIptcTags);
@@ -76,16 +95,28 @@ function read(
                     description: tag.description
                 });
             }
-        } else if (async && decompressionTasks.length < MAX_COMPRESSED_TEXT_CHUNKS) {
-            decompressionTasks.push(() => decompressTextChunk(textChunk, decompressConfig)
-                .then((tag) => getTagsFromTextTag(tag, includeUnknown, computed, tagFilter, valueBudget, addDecompressedValueAllowance)));
+        } else if (async && compressedChunks.length < MAX_COMPRESSED_TEXT_CHUNKS) {
+            compressedChunks.push(textChunk);
         }
     }
+
+    const compressedThumbnailReader = embeddedExifThumbnail ? undefined : getThumbnail;
+    const decompressionTasks = compressedChunks.map((textChunk) => () => decompressTextChunk(textChunk, decompressConfig)
+        .then((tag) => getTagsFromTextTag(
+            tag,
+            includeUnknown,
+            computed,
+            tagFilter,
+            valueBudget,
+            compressedThumbnailReader,
+            addDecompressedValueAllowance
+        )));
 
     return {
         readTags: tags,
         embeddedExifTags,
         embeddedIptcTags,
+        embeddedExifThumbnail,
         readTagsPromise: decompressionTasks.length > 0 ? runTasksInOrder(decompressionTasks, MAX_DECOMPRESSIONS_IN_FLIGHT) : undefined
     };
 }
@@ -142,7 +173,7 @@ function isRawProfileTag({name, value}) {
     return isExifGroupTag(name, value) || isIptcGroupTag(name, value);
 }
 
-function getTagsFromTextTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget, addValueAllowance) {
+function getTagsFromTextTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget, getThumbnail, addValueAllowance) {
     try {
         if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
             if (!tagFilter.shouldParseGroup('exif')) {
@@ -152,16 +183,15 @@ function getTagsFromTextTag({name, value, description}, includeUnknown, computed
             if (addValueAllowance) {
                 addValueAllowance(valueBudget, exifDataView.byteLength);
             }
-            return {
-                embeddedExifTags: Tags.read(
-                    exifDataView,
-                    EXIF_OFFSET,
-                    includeUnknown,
-                    computed,
-                    tagFilter,
-                    valueBudget
-                ).tags
-            };
+            const embeddedExifTags = Tags.read(
+                exifDataView,
+                EXIF_OFFSET,
+                includeUnknown,
+                computed,
+                tagFilter,
+                valueBudget
+            ).tags;
+            return withEmbeddedExifThumbnail({embeddedExifTags}, exifDataView, getThumbnail);
         } else if (Constants.USE_IPTC && isIptcGroupTag(name, value)) {
             if (!tagFilter.shouldParseGroup('iptc')) {
                 return {};
@@ -189,6 +219,22 @@ function getTagsFromTextTag({name, value, description}, includeUnknown, computed
         // Ignore the broken tag.
     }
     return {};
+}
+
+function withEmbeddedExifThumbnail(result, exifDataView, getThumbnail) {
+    const thumbnailIfdTags = result.embeddedExifTags.Thumbnail;
+    if (!thumbnailIfdTags) {
+        return result;
+    }
+    delete result.embeddedExifTags.Thumbnail;
+
+    if (getThumbnail) {
+        const thumbnail = getThumbnail(exifDataView, thumbnailIfdTags, EXIF_OFFSET);
+        if (thumbnail.image) {
+            result.embeddedExifThumbnail = thumbnail;
+        }
+    }
+    return result;
 }
 
 function decompressTextChunk({type, keywordChars, langChars, compressionMethod, valueChars}, decompressConfig) {

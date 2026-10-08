@@ -256,40 +256,6 @@ describe('loadView pipeline module', function () {
         expect(receivedThumbnailIfdTags).to.equal(filteredThumbnailIfdTags);
     });
 
-    it('should not return a Thumbnail tag for the thumbnail IFD of embedded PNG text Exif tags', function () {
-        const parsedGroups = {};
-
-        const tags = buildTagsFromMergeSteps({
-            mergeSteps: [
-                {type: 'processPngTextReadTagsDeferredList', deferredKey: 'pngText'},
-                {type: 'thumbnail'},
-            ],
-            deferredResults: {
-                pngText: [
-                    {
-                        embeddedExifTags: {
-                            MyExifTag: {value: 42},
-                            Thumbnail: {JPEGInterchangeFormat: {value: 272}},
-                        },
-                    },
-                ],
-            },
-            parsedGroups,
-            expanded: false,
-            tagFilter: createTagFilter({}),
-            dataView: {},
-            tiffHeaderOffset: undefined,
-            fileType: undefined,
-            pngTextIsAsync: false,
-            thumbnailIfdTags: undefined,
-            deps: createPipelineDeps(),
-        });
-
-        expect(tags.MyExifTag.value).to.equal(42);
-        expect(tags.Thumbnail).to.equal(undefined);
-        expect(parsedGroups.exif.Thumbnail).to.deep.equal({JPEGInterchangeFormat: {value: 272}});
-    });
-
     it('should not return a PNG text tag named Thumbnail when there is no thumbnail IFD', function () {
         const tags = buildTagsFromMergeSteps({
             mergeSteps: [
@@ -299,7 +265,7 @@ describe('loadView pipeline module', function () {
             deferredResults: {
                 pngText: [
                     {readTags: {Thumbnail: {value: 'my thumbnail note'}}},
-                    {embeddedExifTags: {Thumbnail: {JPEGInterchangeFormat: {value: 272}}}},
+                    {embeddedExifTags: {Model: {value: 'model'}}, embeddedExifThumbnail: {JPEGInterchangeFormat: {value: 272}}},
                 ],
             },
             parsedGroups: {},
@@ -314,6 +280,250 @@ describe('loadView pipeline module', function () {
         });
 
         expect(tags).to.not.have.property('Thumbnail');
+    });
+
+    describe('thumbnail step with raw profile thumbnails', function () {
+        const MAIN_WITH_IMAGE = {type: 'image/jpeg', image: 'main'};
+        const MAIN_WITHOUT_IMAGE = {Compression: {value: 1}};
+
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
+
+            it(`should return a raw profile thumbnail top level, not as an Exif tag, when there is no main thumbnail in ${mode} mode`, function () {
+                const rawThumbnail = getRawThumbnail('raw');
+                const parsedGroups = {};
+
+                const tags = buildThumbnailTags({
+                    steps: [getSyncStep({embeddedExifThumbnail: rawThumbnail})],
+                    expanded,
+                    parsedGroups,
+                });
+
+                expect(tags.Thumbnail).to.equal(rawThumbnail);
+                expect(expanded ? tags.exif : tags).to.have.property('Model');
+                if (expanded) {
+                    expect(tags.exif).to.not.have.property('Thumbnail');
+                }
+                expect(parsedGroups.exif).to.deep.equal({Model: {value: 'model'}});
+            });
+
+            it(`should return the raw profile thumbnail of a deferred item top level, not as an Exif tag, in ${mode} mode`, function () {
+                const rawThumbnail = getRawThumbnail('raw');
+                const parsedGroups = {};
+
+                const tags = buildThumbnailTags({
+                    steps: [getDeferredStep()],
+                    deferredResults: {pngText: [{embeddedExifTags: {Model: {value: 'model'}}, embeddedExifThumbnail: rawThumbnail}]},
+                    expanded,
+                    parsedGroups,
+                });
+
+                expect(tags.Thumbnail).to.equal(rawThumbnail);
+                if (expanded) {
+                    expect(tags.exif).to.deep.equal({Model: {value: 'model'}});
+                }
+                expect(parsedGroups.exif).to.deep.equal({Model: {value: 'model'}});
+            });
+        }
+
+        it('should return the main thumbnail when it has an image, over a raw profile thumbnail', function () {
+            const tags = buildThumbnailTags({
+                steps: [getSyncStep({embeddedExifThumbnail: getRawThumbnail('raw')})],
+                mainThumbnail: MAIN_WITH_IMAGE,
+            });
+
+            expect(tags.Thumbnail).to.equal(MAIN_WITH_IMAGE);
+        });
+
+        it('should return a raw profile thumbnail with an image over a main thumbnail without one', function () {
+            const rawThumbnail = getRawThumbnail('raw');
+
+            const tags = buildThumbnailTags({
+                steps: [getSyncStep({embeddedExifThumbnail: rawThumbnail})],
+                mainThumbnail: MAIN_WITHOUT_IMAGE,
+            });
+
+            expect(tags.Thumbnail).to.equal(rawThumbnail);
+        });
+
+        it('should return the main thumbnail without an image when no raw profile thumbnail has one', function () {
+            const tags = buildThumbnailTags({
+                steps: [getSyncStep({embeddedExifThumbnail: {type: 'image/jpeg'}}), getDeferredStep()],
+                deferredResults: {pngText: [{embeddedExifThumbnail: {Compression: {value: 6}}}]},
+                mainThumbnail: MAIN_WITHOUT_IMAGE,
+            });
+
+            expect(tags.Thumbnail).to.equal(MAIN_WITHOUT_IMAGE);
+        });
+
+        it('should never return a raw profile thumbnail without an image', function () {
+            const tags = buildThumbnailTags({
+                steps: [getSyncStep({embeddedExifThumbnail: {type: 'image/jpeg'}}), getDeferredStep()],
+                deferredResults: {pngText: [{embeddedExifThumbnail: {Compression: {value: 6}}}]},
+            });
+
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should return the raw profile thumbnail of the synchronous step over a deferred one', function () {
+            const syncThumbnail = getRawThumbnail('sync');
+
+            const tags = buildThumbnailTags({
+                steps: [getSyncStep({embeddedExifThumbnail: syncThumbnail}), getDeferredStep()],
+                deferredResults: {pngText: [{embeddedExifThumbnail: getRawThumbnail('deferred')}]},
+            });
+
+            expect(tags.Thumbnail).to.equal(syncThumbnail);
+        });
+
+        it('should return the first deferred raw profile thumbnail with an image', function () {
+            const firstWithImage = getRawThumbnail('first');
+
+            const tags = buildThumbnailTags({
+                steps: [getSyncStep({}), getDeferredStep()],
+                deferredResults: {
+                    pngText: [
+                        {embeddedExifThumbnail: {type: 'image/jpeg'}},
+                        {readTags: {MyTag: {value: 'my value'}}},
+                        {embeddedExifThumbnail: firstWithImage},
+                        {embeddedExifThumbnail: getRawThumbnail('second')},
+                    ],
+                },
+            });
+
+            expect(tags.Thumbnail).to.equal(firstWithImage);
+        });
+
+        it('should return no raw profile thumbnail when the thumbnail group is filtered out', function () {
+            const tags = buildThumbnailTags({
+                steps: [getSyncStep({embeddedExifThumbnail: getRawThumbnail('raw')})],
+                tagFilter: createTagFilter({returnGroups: {thumbnail: false}}),
+            });
+
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should return no raw profile thumbnail when the Thumbnail tag is filtered out', function () {
+            const tags = buildThumbnailTags({
+                steps: [getSyncStep({embeddedExifThumbnail: getRawThumbnail('raw')})],
+                tagFilter: createTagFilter({returnTags: {'thumbnail.Thumbnail': false}}),
+            });
+
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should not read a main thumbnail when there is no thumbnail IFD', function () {
+            const rawThumbnail = getRawThumbnail('raw');
+            const deps = createPipelineDeps();
+            let thumbnailGetCalls = 0;
+            deps.Thumbnail = {
+                get() {
+                    thumbnailGetCalls++;
+                    return MAIN_WITH_IMAGE;
+                },
+            };
+
+            const tags = buildTagsFromMergeSteps({
+                mergeSteps: [getSyncStep({embeddedExifThumbnail: rawThumbnail}), {type: 'thumbnail'}],
+                deferredResults: {},
+                parsedGroups: {},
+                expanded: false,
+                tagFilter: createTagFilter({}),
+                dataView: {},
+                tiffHeaderOffset: 0,
+                fileType: undefined,
+                pngTextChunks: [],
+                pngTextIsAsync: false,
+                thumbnailIfdTags: undefined,
+                deps,
+            });
+
+            expect(thumbnailGetCalls).to.equal(0);
+            expect(tags.Thumbnail).to.equal(rawThumbnail);
+        });
+
+        it('should return a collected raw profile thumbnail from the thumbnail step', function () {
+            const rawThumbnail = getRawThumbnail('raw');
+
+            const tags = applyThumbnailStepWithRawThumbnails([rawThumbnail]);
+
+            expect(tags.Thumbnail).to.equal(rawThumbnail);
+        });
+
+        for (const constant of ['USE_PNG', 'USE_EXIF', 'USE_THUMBNAIL']) {
+            it(`should return no raw profile thumbnail in a build without ${constant}`, function () {
+                swap(Constants, {[constant]: false});
+
+                const tags = applyThumbnailStepWithRawThumbnails([getRawThumbnail('raw')]);
+
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+        }
+
+        function getRawThumbnail(image) {
+            return {type: 'image/jpeg', image};
+        }
+
+        function getSyncStep({embeddedExifThumbnail}) {
+            return {
+                type: 'processPngTextReadTags',
+                readTags: {},
+                embeddedExifTags: {Model: {value: 'model'}},
+                embeddedExifThumbnail,
+            };
+        }
+
+        function getDeferredStep() {
+            return {type: 'processPngTextReadTagsDeferredList', deferredKey: 'pngText'};
+        }
+
+        function buildThumbnailTags({
+            steps,
+            deferredResults = {},
+            expanded = false,
+            parsedGroups = {},
+            tagFilter = createTagFilter({}),
+            mainThumbnail,
+        }) {
+            const deps = createPipelineDeps();
+            deps.Thumbnail = {
+                get() {
+                    return mainThumbnail;
+                },
+            };
+
+            return buildTagsFromMergeSteps({
+                mergeSteps: steps.concat([{type: 'thumbnail'}]),
+                deferredResults,
+                parsedGroups,
+                expanded,
+                tagFilter,
+                dataView: {},
+                tiffHeaderOffset: 0,
+                fileType: undefined,
+                pngTextChunks: [],
+                pngTextIsAsync: false,
+                thumbnailIfdTags: mainThumbnail ? {Compression: {value: 6}} : undefined,
+                deps,
+            });
+        }
+
+        function applyThumbnailStepWithRawThumbnails(embeddedExifThumbnails) {
+            return applyMergeStep({
+                step: {type: 'thumbnail'},
+                deferredResults: {},
+                parsedGroups: {},
+                expanded: false,
+                tagFilter: createTagFilter({}),
+                dataView: {},
+                tiffHeaderOffset: undefined,
+                fileType: undefined,
+                thumbnailIfdTags: undefined,
+                embeddedExifThumbnails,
+                tags: {},
+                deps: createPipelineDeps(),
+            });
+        }
     });
 
     it('should apply the gps step when Exif tags are included', function () {
@@ -829,7 +1039,6 @@ describe('loadView pipeline module', function () {
                 Software: {value: 'exif software'},
                 Make: {value: 'exif make 2'},
                 Model: {value: 'exif model'},
-                Thumbnail: {JPEGInterchangeFormat: {value: 272}},
             }));
             expect(JSON.stringify(parsedGroups.iptc)).to.equal(JSON.stringify({
                 Headline: {value: 'headline 2'},
@@ -998,31 +1207,6 @@ describe('loadView pipeline module', function () {
         for (const expanded of [false, true]) {
             const mode = expanded ? 'expanded' : 'flat';
 
-            it(`should not return a Thumbnail tag for the thumbnail IFD of embedded Exif tags from the synchronous step in ${mode} mode`, function () {
-                const {tags, parsedGroups} = buildPngTextTags({
-                    steps: [{type: 'processPngTextReadTags', readTags: {}, embeddedExifTags: getExifTagsWithThumbnail()}],
-                    expanded,
-                });
-
-                expect(expanded ? tags.exif : tags).to.deep.equal({Model: {value: 'model'}});
-                expect(tags).to.not.have.property('Thumbnail');
-                expect(parsedGroups.exif).to.deep.equal(getExifTagsWithThumbnail());
-            });
-
-            it(`should not return a Thumbnail tag for the thumbnail IFD of embedded Exif tags from a deferred item in ${mode} mode`, function () {
-                const parsedGroups = {};
-
-                const {tags} = buildDeferredPngTextTags({
-                    items: [{embeddedExifTags: getExifTagsWithThumbnail()}],
-                    expanded,
-                    parsedGroups,
-                });
-
-                expect(expanded ? tags.exif : tags).to.deep.equal({Model: {value: 'model'}});
-                expect(tags).to.not.have.property('Thumbnail');
-                expect(parsedGroups.exif).to.deep.equal(getExifTagsWithThumbnail());
-            });
-
             it(`should let a deferred Exif tag win over the synchronous step's and not mutate the synchronous tags in ${mode} mode`, function () {
                 const syncStep = getSyncStepWithEmbeddedTags();
                 const syncStepSnapshot = structuredClone(syncStep);
@@ -1050,13 +1234,6 @@ describe('loadView pipeline module', function () {
             };
         }
 
-        function getExifTagsWithThumbnail() {
-            return {
-                Model: {value: 'model'},
-                Thumbnail: {JPEGInterchangeFormat: {value: 272}, JPEGInterchangeFormatLength: {value: 0}},
-            };
-        }
-
         function getSingleTagItems(count) {
             return Array.from({length: count}, (_, index) => ({readTags: {[`k${index}`]: {value: index}}}));
         }
@@ -1068,7 +1245,7 @@ describe('loadView pipeline module', function () {
                 {embeddedIptcTags: {Headline: {value: 'headline 1'}}},
                 {},
                 {readTags: {Title: {value: 'title 2'}, Comment: {value: 'comment'}}},
-                {embeddedExifTags: {Make: {value: 'exif make 2'}, Model: {value: 'exif model'}, Thumbnail: {JPEGInterchangeFormat: {value: 272}}}},
+                {embeddedExifTags: {Make: {value: 'exif make 2'}, Model: {value: 'exif model'}}},
                 {readTags: {Make: {value: 'png make'}}},
                 {embeddedIptcTags: {Headline: {value: 'headline 2'}, Keywords: {value: 'keywords'}}},
             ];
