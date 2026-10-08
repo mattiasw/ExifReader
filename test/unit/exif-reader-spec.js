@@ -1047,6 +1047,69 @@ describe('exif-reader', function () {
         });
     });
 
+    describe('brob data from input only the DataView wrapper can read', () => {
+        it('should pass the brob Exif data to the decompress step', async () => {
+            const {promise, getCaptured} = loadBufferLikeBrob(getJxlWithBrobExif());
+
+            expect(promise).to.be.instanceOf(Promise);
+            await promise;
+            expect(getCaptured()).to.equal('BROTLI_EXIF_DATA');
+        });
+
+        it('should pass the brob XMP data to the decompress step', async () => {
+            const {promise, getCaptured} = loadBufferLikeBrob(getJxlWithBrob('xml ', 'BROTLI_XMP_DATA'));
+
+            expect(promise).to.be.instanceOf(Promise);
+            await promise;
+            expect(getCaptured()).to.equal('BROTLI_XMP_DATA');
+        });
+
+        it('should bound the brob data by the bytes present when the box declares a larger length', async () => {
+            const {promise, getCaptured} = loadBufferLikeBrob(getJxlWithBrob('Exif', 'TRUNCATED', 100));
+
+            expect(promise).to.be.instanceOf(Promise);
+            await promise;
+            expect(getCaptured()).to.equal('TRUNCATED');
+        });
+
+        function loadBufferLikeBrob(jxl) {
+            let captured;
+            let promise;
+            expect(() => {
+                promise = ExifReader.load(getBufferLikeData(jxl), {
+                    async: true,
+                    decompress: {
+                        brotli: (bytes) => {
+                            captured = String.fromCharCode(...bytes);
+                            return Promise.reject(new Error('fail'));
+                        }
+                    }
+                });
+            }).to.not.throw();
+            return {promise, getCaptured: () => captured};
+        }
+    });
+
+    it('should pass the brob data of a native DataView to the decompress step without copying it', async () => {
+        const jxl = getJxlWithBrobExif();
+        const dataView = getDataView(jxl);
+        let received;
+
+        await ExifReader.loadView(dataView, {
+            async: true,
+            decompress: {
+                brotli: (bytes) => {
+                    received = bytes;
+                    return Promise.reject(new Error('fail'));
+                }
+            }
+        });
+
+        expect(received.buffer).to.equal(dataView.buffer);
+        expect(received.byteOffset).to.equal(jxl.length - 'BROTLI_EXIF_DATA'.length);
+        expect(received.byteLength).to.equal('BROTLI_EXIF_DATA'.length);
+    });
+
     it('should expand brob Exif into exif group', async () => {
         const myTags = {MyBrobExifTag: 42};
 
@@ -3082,8 +3145,13 @@ function getPngChunk(type, data) {
 
 // A JPEG XL container whose only metadata is a brob box holding Exif.
 function getJxlWithBrobExif() {
+    return getJxlWithBrob('Exif', 'BROTLI_EXIF_DATA');
+}
+
+// A JPEG XL container whose only metadata is one brob box. The box header
+// declares boxLength, which can differ from the bytes that follow it.
+function getJxlWithBrob(originalType, compressedData, boxLength = 8 + originalType.length + compressedData.length) {
     const JXL_SIGNATURE = '\x00\x00\x00\x0CJXL \x0D\x0A\x87\x0A';
     const FTYP_BOX = '\x00\x00\x00\x14ftypjxl \x00\x00\x00\x00jxl ';
-    const brobContent = 'Exif' + 'BROTLI_EXIF_DATA';
-    return JXL_SIGNATURE + FTYP_BOX + getByteStringFromNumber(8 + brobContent.length, 4) + 'brob' + brobContent;
+    return JXL_SIGNATURE + FTYP_BOX + getByteStringFromNumber(boxLength, 4) + 'brob' + originalType + compressedData;
 }
