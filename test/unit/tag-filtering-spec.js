@@ -535,6 +535,24 @@ describe('tag filtering options', function () {
         expect(tags.gps.Longitude).to.equal(undefined);
     });
 
+    it('includeTags.iptc should include a repeated tag by id', function () {
+        const image = getIptcJpeg([
+            {dataset: 0x19, text: 'alpha'},
+            {dataset: 0x05, text: 'title'},
+            {dataset: 0x19, text: 'beta'},
+        ]);
+
+        const tags = ExifReader.loadView(getDataView(image), {
+            expanded: true,
+            includeTags: {
+                iptc: [0x0219],
+            },
+        });
+
+        expect(tags.iptc.Keywords.map(({description}) => description)).to.deep.equal(['alpha', 'beta']);
+        expect(tags.iptc['Object Name']).to.equal(undefined);
+    });
+
     it('includeTags.xmp: [] should skip XMP parsing', function () {
         fakeImageHeader({
             fileType: 'jpeg',
@@ -757,6 +775,21 @@ function getExifJpeg(exifTags, trailingSegments = '') {
         + getByteStringFromNumber(0, 4)
         + rationalValues.join('');
     return '\xff\xd8' + getSegment('\xff\xe1', 'Exif\x00\x00' + tiffBlock) + trailingSegments + '\xff\xd9';
+}
+
+/**
+ * Builds a JPEG whose APP13 Photoshop block holds the given IPTC record 2
+ * datasets, in order.
+ *
+ * @param {Array<{dataset: number, text: string}>} records
+ */
+function getIptcJpeg(records) {
+    const iptcData = records
+        .map(({dataset, text}) => '\x1c\x02' + getByteStringFromNumber(dataset, 1) + getByteStringFromNumber(text.length, 2) + text)
+        .join('');
+    const padding = iptcData.length % 2 === 0 ? '' : '\x00';
+    const naaBlock = '8BIM\x04\x04\x00\x00' + getByteStringFromNumber(iptcData.length, 4) + iptcData + padding;
+    return '\xff\xd8' + getSegment('\xff\xed', 'Photoshop 3.0\x00' + naaBlock) + '\xff\xd9';
 }
 
 function getSof0Segment(width, height) {
