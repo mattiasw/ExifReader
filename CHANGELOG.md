@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- A PNG text chunk with a long keyword, iTXt language tag or iTXt translated
+  keyword used memory far above the file size: an 8 MiB tEXt chunk with no
+  terminator raised peak memory to about 300 MB. A PNG text chunk whose
+  keyword or iTXt language tag is longer than 79 bytes is now skipped, and the
+  translated keyword, which is not part of the result, is no longer collected.
+
 ## [4.47.0] - 2026-10-08
 
 ### Added

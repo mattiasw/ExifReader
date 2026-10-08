@@ -26,6 +26,10 @@ const COMPRESSION_FLAG_COMPRESSED = 1;
 const EXIF_OFFSET = 6;
 const MAX_COMPRESSED_TEXT_CHUNKS = 255;
 const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;
+// PNG spec: a keyword is 1-79 bytes.
+const MAX_KEYWORD_LENGTH = 79;
+// Our own bound: BCP 47 sets no maximum, but real tags are far shorter.
+const MAX_LANGUAGE_TAG_LENGTH = 79;
 
 function read(
     dataView,
@@ -43,6 +47,9 @@ function read(
     for (let i = 0; i < pngTextChunks.length; i++) {
         const {offset, length, type} = pngTextChunks[i];
         const textChunk = parseTextChunk(dataView, offset, length, type);
+        if (!textChunk) {
+            continue;
+        }
         if (textChunk.compressionMethod === COMPRESSION_METHOD_NONE) {
             const {name, value, description} = getUncompressedTag(textChunk);
             if (name && tagFilter.shouldParseGroup('png')) {
@@ -66,7 +73,6 @@ function read(
 function parseTextChunk(dataView, offset, length, type) {
     const keywordChars = [];
     const langChars = [];
-    const translatedKeywordChars = [];
     let valueChars;
     let parsingState = STATE_KEYWORD;
     let compressionMethod = COMPRESSION_METHOD_NONE;
@@ -91,11 +97,15 @@ function parseTextChunk(dataView, offset, length, type) {
         if (byte === 0) {
             parsingState = moveToNextState(type, parsingState);
         } else if (parsingState === STATE_KEYWORD) {
+            if (keywordChars.length >= MAX_KEYWORD_LENGTH) {
+                return undefined;
+            }
             keywordChars.push(byte);
         } else if (parsingState === STATE_LANG) {
+            if (langChars.length >= MAX_LANGUAGE_TAG_LENGTH) {
+                return undefined;
+            }
             langChars.push(byte);
-        } else if (parsingState === STATE_TRANSLATED_KEYWORD) {
-            translatedKeywordChars.push(byte);
         }
     }
 
