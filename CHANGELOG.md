@@ -53,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pass your own `@xmldom/xmldom` parser in the `domParser` option, update
   that dependency to 0.9.12 or later (0.8.15 or later on the 0.8 line) as
   well.
+- An XMP packet that was not valid UTF-8, for example because of a single
+  stray byte, took about 35 times its size in memory to read: a 16 MiB packet
+  took about 630 MB and one second. The same packet now takes about 150 MB
+  and a quarter of a second.
 
 ## [4.47.0] - 2026-10-08
 

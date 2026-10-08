@@ -7,7 +7,7 @@ import Types from './types.js';
 import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './tag-names.js';
 import {IFD_ENTRY_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
-import {decodeUtf8ByteString} from './utils.js';
+import {decodeUtf8ByteString, getByteString} from './utils.js';
 
 // Measured across the test corpus, the most demanding parse decodes tag
 // values totalling 1.2241 times the size of the buffer they are read from
@@ -17,10 +17,6 @@ import {decodeUtf8ByteString} from './utils.js';
 // decoded byte was measured to cost about 16 bytes of heap, mostly as an
 // array element plus its share of the joined description string.
 const MAX_VALUE_SIZE_PER_BUFFER_SIZE = 4;
-
-// Engines cap the number of arguments Function.prototype.apply can pass, and
-// some older ones reject a typed array there, so bytes go in as plain chunks.
-const MAX_CHARS_PER_CALL = 8192;
 
 const getTagValueAt = {
     1: Types.getByteAt,
@@ -326,28 +322,6 @@ function getNullSeparatedStrings(bytes) {
     }
 
     return strings;
-}
-
-function getByteString(bytes, start, end, charCodes) {
-    if (end - start <= MAX_CHARS_PER_CALL) {
-        return getChunkString(bytes, start, end, charCodes);
-    }
-
-    const chunks = [];
-    for (let chunkStart = start; chunkStart < end; chunkStart += MAX_CHARS_PER_CALL) {
-        chunks.push(getChunkString(bytes, chunkStart, Math.min(chunkStart + MAX_CHARS_PER_CALL, end), charCodes));
-    }
-    return chunks.join('');
-}
-
-// Reuses the caller's array, so a value made of many short strings does not
-// allocate an array per string.
-function getChunkString(bytes, start, end, charCodes) {
-    for (let i = start; i < end; i++) {
-        charCodes[i - start] = bytes[i];
-    }
-    charCodes.length = end - start;
-    return String.fromCharCode.apply(null, charCodes);
 }
 
 function getDescriptionFromTagValue(tagValue) {

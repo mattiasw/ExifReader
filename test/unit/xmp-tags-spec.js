@@ -550,6 +550,14 @@ describe('xmp-tags', function () {
                     }
                 });
 
+                it('should convert a packet that is not valid UTF-8 to a string in chunks, not one call per byte', () => {
+                    expectNonUtf8PacketConvertedInChunks(domParser);
+                });
+
+                it('should keep every byte of a packet that is not valid UTF-8 across chunk boundaries', () => {
+                    expectNonUtf8PacketBytesKeptAcrossChunkBoundaries(domParser);
+                });
+
                 it('should decode a UTF-8 value when the input is a byte string', () => {
                     const xmlString = getXmlString(`
                         <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag0="${toUtf8ByteString(PARK)}"></rdf:Description>
@@ -602,6 +610,14 @@ describe('xmp-tags', function () {
                         expect(tags['MyXMPTag0'].value).to.equal('café');
                         expect(tags['MyXMPTag1'].value).to.equal('café');
                         expect(tags['MyXMPTag2'].value).to.equal('café');
+                    });
+
+                    it('should convert a packet that is not valid UTF-8 to a string in chunks, not one call per byte', () => {
+                        expectNonUtf8PacketConvertedInChunks(domParser);
+                    });
+
+                    it('should keep every byte of a packet that is not valid UTF-8 across chunk boundaries', () => {
+                        expectNonUtf8PacketBytesKeptAcrossChunkBoundaries(domParser);
                     });
                 });
             });
@@ -2683,6 +2699,50 @@ function getXmlString(content) {
     return `<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
         ${content}
     </rdf:RDF>`;
+}
+
+function expectNonUtf8PacketConvertedInChunks(domParser) {
+    const text = 'a'.repeat(100000);
+    const packet = getXmlString(`<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:Bad="\xFF"><xmp:T>${text}</xmp:T></rdf:Description>`);
+    const dataView = getDataView(packet);
+    const originalFromCharCode = String.fromCharCode;
+    let calls = 0;
+    let maxArgs = 0;
+    const restoreFromCharCode = swapProperties(String, {
+        fromCharCode(...charCodes) {
+            maxArgs = Math.max(maxArgs, charCodes.length);
+            calls++;
+            return originalFromCharCode.apply(String, charCodes);
+        }
+    });
+
+    let tags;
+    try {
+        tags = XmpTags.read(dataView, [{dataOffset: 0, length: packet.length}], domParser);
+    } finally {
+        restoreFromCharCode();
+    }
+
+    expect(calls).to.be.at.most(Math.ceil(packet.length / 8192) + 2);
+    expect(maxArgs).to.be.at.most(8192);
+    expect(tags['T'].value).to.equal(text);
+    expect(tags['Bad'].value).to.equal('\xFF');
+}
+
+// The first byte of the UTF-8 é is the last byte of the first 8192-byte chunk.
+function expectNonUtf8PacketBytesKeptAcrossChunkBoundaries(domParser) {
+    const prefix = '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+        + '<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:Controls="\x80\x85\x9F"><xmp:T>';
+    const padding = 'a'.repeat(8191 - prefix.length);
+    const packet = prefix + padding + '\xC3\xA9' + 'b' + '</xmp:T></rdf:Description></rdf:RDF>';
+    expect(packet.indexOf('\xC3')).to.equal(8191);
+    expect(packet.length).to.be.above(8192);
+    expect(packet.length % 8192).to.not.equal(0);
+
+    const tags = XmpTags.read(getDataView(packet), [{dataOffset: 0, length: packet.length}], domParser);
+
+    expect(tags._raw).to.equal(packet);
+    expect(tags['T'].value).to.equal(padding + 'é' + 'b');
 }
 
 // getDataView takes one byte per character, so text that goes into a packet

@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {decodeUtf8ByteString, getStringFromDataView, objectAssign, setProperty, tryDecodeUtf8ByteString} from './utils.js';
+import {decodeUtf8ByteString, getByteString, objectAssign, setProperty, tryDecodeUtf8ByteString} from './utils.js';
 import XmpTagNames from './xmp-tag-names.js';
 import DOMParser from './dom-parser.js';
 import TextDecoder from './text-decoder.js';
@@ -164,7 +164,8 @@ function decodeXmlSource(source) {
             // Not valid UTF-8.
         }
     }
-    return decodeByteString(getStringFromDataView(source, 0, source.byteLength));
+    const bytes = new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+    return decodeByteString(getByteString(bytes));
 }
 
 function decodeByteString(byteString) {
