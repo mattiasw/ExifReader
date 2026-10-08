@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one named `FileType` no longer takes the `FileType` key when `FileType` is
   filtered out. In expanded output, `xmp._raw` is always the raw XMP packet
   string, even when the XMP has an element or attribute named `_raw`.
+- A custom build no longer rewrites the bundle in other projects that share it
+  through a hardlink. When exifreader's postinstall is allowed to run (by
+  default in pnpm 9, and in pnpm 10 when exifreader is listed in
+  `onlyBuiltDependencies`), pnpm hardlinks the `dist/` files of the second and
+  later projects to one copy in its store, and the build wrote through that
+  link. The build now gives the project its own copy of the bundle first.
 
 ### Security
 

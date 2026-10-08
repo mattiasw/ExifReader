@@ -8,6 +8,7 @@ const os = require('os');
 const {execSync} = require('child_process');
 const dependentHasExifReaderConfig = require('./findDependentConfig');
 const {writeMarker, removeMarker} = require('./custom-build-marker');
+const {unshareFile} = require('./unshare-file');
 
 const EXIFREADER_ROOT_DIR = path.join(__dirname, '..');
 
@@ -44,6 +45,8 @@ function runBuild(options) {
     const config = env.EXIFREADER_CUSTOM_BUILD ? JSON.parse(env.EXIFREADER_CUSTOM_BUILD) : dependentHasExifReaderConfig();
     const distDir = path.join(EXIFREADER_ROOT_DIR, 'dist');
     removeMarker(distDir);
+    unshareFile(path.join(distDir, 'exif-reader.js'));
+    unshareFile(path.join(distDir, 'exif-reader.js.map'));
 
     let tmpDir;
     try {
