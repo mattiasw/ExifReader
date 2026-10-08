@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView, swapProperties} from './test-utils.js';
+import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import Constants from '../../src/constants.js';
 import ImageHeaderPng from '../../src/image-header-png.js';
 
@@ -179,6 +179,122 @@ describe('image-header-png', () => {
 
         expect(() => ImageHeaderPng.findPngOffsets(dataView, true)).to.not.throw();
         expect(ImageHeaderPng.findPngOffsets(dataView, true)).to.not.have.property('iccChunks');
+    });
+
+    describe('iCCP profile name bounds', () => {
+        const ICCP_CHUNK_TYPE = 'iCCP';
+        const CRC_CHECKSUM = '\x00\x00\x00\x00';
+        const ICC_DATA_OFFSET = PNG_IMAGE_START.length + 4 + ICCP_CHUNK_TYPE.length;
+
+        function getIccpChunk(chunkData, declaredLength = chunkData.length) {
+            return getByteStringFromNumber(declaredLength, 4) + ICCP_CHUNK_TYPE + chunkData;
+        }
+
+        it('should accept a profile name of 79 bytes', () => {
+            const profileName = 'A'.repeat(79);
+            const chunkDataHeader = `${profileName}\x00\x00`;
+            const compressedProfile = '<compressed profile>';
+            const dataView = getDataView(PNG_IMAGE_START + getIccpChunk(chunkDataHeader + compressedProfile) + CRC_CHECKSUM);
+
+            expect(ImageHeaderPng.findPngOffsets(dataView, true)).to.deep.equal({
+                hasAppMarkers: true,
+                iccChunks: [{
+                    offset: ICC_DATA_OFFSET + chunkDataHeader.length,
+                    length: compressedProfile.length,
+                    chunkNumber: 1,
+                    chunksTotal: 1,
+                    profileName,
+                    compressionMethod: 0
+                }]
+            });
+        });
+
+        it('should skip an iCCP chunk with a profile name of 80 bytes', () => {
+            const chunkData = `${'A'.repeat(80)}\x00\x00<compressed profile>`;
+            const dataView = getDataView(PNG_IMAGE_START + getIccpChunk(chunkData) + CRC_CHECKSUM);
+
+            expect(ImageHeaderPng.findPngOffsets(dataView, true)).to.deep.equal({hasAppMarkers: false});
+        });
+
+        it('should stop scanning an unterminated profile name after 80 bytes and continue the chunk walk', () => {
+            const iccChunkData = 'A'.repeat(4000);
+            const physChunkData = '\x01\x02\x03\x04\x02\x03\x04\x05\x01';
+            const physChunk = `\x00\x00\x00${String.fromCharCode(physChunkData.length)}pHYs${physChunkData}${CRC_CHECKSUM}`;
+            const bytes = getDataView(PNG_IMAGE_START + getIccpChunk(iccChunkData) + CRC_CHECKSUM + physChunk);
+            const reads = [];
+            class ReadRecordingDataView extends DataView {
+                getUint8(byteOffset) {
+                    reads.push(byteOffset);
+                    return super.getUint8(byteOffset);
+                }
+            }
+            const dataView = new ReadRecordingDataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            const iccDataEnd = ICC_DATA_OFFSET + iccChunkData.length;
+
+            const offsets = ImageHeaderPng.findPngOffsets(dataView, true);
+
+            expect(offsets).to.deep.equal({
+                hasAppMarkers: true,
+                pngChunkOffsets: [iccDataEnd + CRC_CHECKSUM.length]
+            });
+            expect(reads).to.include(ICC_DATA_OFFSET);
+            expect(reads.filter((byteOffset) => byteOffset >= ICC_DATA_OFFSET + 80 && byteOffset < iccDataEnd))
+                .to.deep.equal([]);
+        });
+
+        it('should skip an iCCP chunk whose declared length ends inside the profile name', () => {
+            const dataView = getDataView(PNG_IMAGE_START + getIccpChunk('Name') + '\x00\x00XXXX' + 'more bytes');
+
+            expect(ImageHeaderPng.findPngOffsets(dataView, true)).to.not.have.property('iccChunks');
+        });
+
+        it('should skip an iCCP chunk whose declared length ends before the compression method', () => {
+            const dataView = getDataView(PNG_IMAGE_START + getIccpChunk('Name\x00') + CRC_CHECKSUM + 'XXXX');
+
+            expect(ImageHeaderPng.findPngOffsets(dataView, true)).to.not.have.property('iccChunks');
+        });
+
+        it('should not throw on an unterminated profile name that runs to the end of the buffer', () => {
+            const dataView = getDataView(PNG_IMAGE_START + getIccpChunk('Name', 100));
+
+            expect(() => ImageHeaderPng.findPngOffsets(dataView, true)).to.not.throw();
+            expect(ImageHeaderPng.findPngOffsets(dataView, true)).to.not.have.property('iccChunks');
+        });
+
+        it('should accept an empty profile name', () => {
+            const chunkDataHeader = '\x00\x00';
+            const compressedProfile = '<compressed profile>';
+            const dataView = getDataView(PNG_IMAGE_START + getIccpChunk(chunkDataHeader + compressedProfile) + CRC_CHECKSUM);
+
+            expect(ImageHeaderPng.findPngOffsets(dataView, true)).to.deep.equal({
+                hasAppMarkers: true,
+                iccChunks: [{
+                    offset: ICC_DATA_OFFSET + chunkDataHeader.length,
+                    length: compressedProfile.length,
+                    chunkNumber: 1,
+                    chunksTotal: 1,
+                    profileName: '',
+                    compressionMethod: 0
+                }]
+            });
+        });
+
+        it('should keep an iCCP chunk that ends right after the compression method with length 0', () => {
+            const chunkData = 'Name\x00\x00';
+            const dataView = getDataView(PNG_IMAGE_START + getIccpChunk(chunkData) + CRC_CHECKSUM);
+
+            expect(ImageHeaderPng.findPngOffsets(dataView, true)).to.deep.equal({
+                hasAppMarkers: true,
+                iccChunks: [{
+                    offset: ICC_DATA_OFFSET + chunkData.length,
+                    length: 0,
+                    chunkNumber: 1,
+                    chunksTotal: 1,
+                    profileName: 'Name',
+                    compressionMethod: 0
+                }]
+            });
+        });
     });
 
     it('should find pHYs chunks', () => {
