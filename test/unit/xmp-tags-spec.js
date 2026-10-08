@@ -118,6 +118,21 @@ describe('xmp-tags', function () {
         expect(tags._raw).to.equal(xmlString);
     });
 
+    // xmldom rejects a name with an empty local part, but linkedom accepts it.
+    it('should keep names with an empty local part apart', () => {
+        const domParser = new LinkedomDomParser();
+        const xmlString = getXmlString(`
+            <rdf:Description xmlns:a="http://ns.example.com/a" a:="1" a::q="2"/>
+        `);
+        const dataView = getDataView(xmlString);
+
+        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+
+        expect(tags['a:'].value).to.equal('1');
+        expect(tags['a::q'].value).to.equal('2');
+        expect(tags).to.not.have.own.property('');
+    });
+
     const domParsers = {
         'auto-imported xmldom': undefined,
         'xmldom': new XmldomDomParser({onError: onErrorStopParsing}),
@@ -1662,7 +1677,7 @@ describe('xmp-tags', function () {
                     expect(tags['MyXMPTag'].description).to.equal('Orientation: 3');
                 });
 
-                it('should give an unprefixed child the undefined name, so two of them collapse into one', () => {
+                it('should keep unprefixed children of rdf:value apart, including one named __proto__', () => {
                     const xmlString = getXmlString(`
                         <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                             <xmp:MyXMPTag rdf:parseType="Resource">
@@ -1674,7 +1689,8 @@ describe('xmp-tags', function () {
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
                     expect(Object.getPrototypeOf(tags['MyXMPTag'].value)).to.equal(null);
                     expect(tags['MyXMPTag'].value).to.deep.equal({
-                        undefined: {value: '4812', attributes: {}, description: '4812'}
+                        ['__proto__']: {value: '4711', attributes: {}, description: '4711'},
+                        constructor: {value: '4812', attributes: {}, description: '4812'}
                     });
                 });
 
@@ -1929,6 +1945,60 @@ describe('xmp-tags', function () {
                 });
             });
 
+            describe('names without a namespace prefix', () => {
+                it('should read an element in a default namespace under its own name', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns="http://purl.org/dc/elements/1.1/">
+                            <title>t</title>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['title']).to.deep.equal({value: 't', attributes: {}, description: 't'});
+                    expect(tags).to.not.have.own.property('undefined');
+                    expect(tags).to.not.have.own.property('xmlns');
+                });
+
+                it('should keep an attribute and a child element of a description apart', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns="http://purl.org/dc/elements/1.1/" foo="bar">
+                            <title>t</title>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['foo'].value).to.equal('bar');
+                    expect(tags['title'].value).to.equal('t');
+                    expect(tags).to.not.have.own.property('undefined');
+                });
+
+                it('should read an attribute of a tag under its own name', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyTag xmlns="http://ns.example.com/default" foo="bar">v</xmp:MyTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyTag'].attributes).to.deep.equal({foo: 'bar'});
+                });
+
+                it('should read a qualifier of an rdf:value structure under its own name', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            <xmp:MyTag rdf:parseType="Resource">
+                                <rdf:value>v</rdf:value>
+                                <foo>bar</foo>
+                            </xmp:MyTag>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(tags['MyTag'].value).to.equal('v');
+                    expect(tags['MyTag'].attributes).to.deep.equal({foo: 'bar'});
+                });
+            });
+
             describe('names that are also object property names', () => {
                 it('should keep a tag named __proto__ and leave the tags around it alone', () => {
                     const xmlString = getXmlString(`
@@ -1994,12 +2064,10 @@ describe('xmp-tags', function () {
                     expect(tags['MyOtherTag'].value).to.equal('4812');
                 });
 
-                // An unprefixed name always lands in a tag named "undefined",
-                // since the tag name is what follows the colon. The point here
-                // is that the attribute is kept at all: assigning a string to
-                // __proto__ is a no-op, so it used to vanish. linkedom drops
-                // such an attribute while parsing, so nothing reaches the tag
-                // building and there is nothing to keep.
+                // The point here is that the attribute is kept at all: assigning
+                // a string to __proto__ is a no-op, so it used to vanish. linkedom
+                // drops such an attribute while parsing, so nothing reaches the
+                // tag building and there is nothing to keep.
                 it('should keep an unprefixed attribute named __proto__', () => {
                     const xmlString = getXmlString(`
                         <rdf:Description __proto__="4711"/>
@@ -2007,10 +2075,11 @@ describe('xmp-tags', function () {
                     const dataView = getDataView(xmlString);
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
                     if (domParserName === 'linkedom') {
-                        expect(tags['undefined']).to.be.undefined;
+                        expect(tags).to.not.have.own.property('__proto__');
                         return;
                     }
-                    expect(tags['undefined'].value).to.equal('4711');
+                    expect(Object.prototype.hasOwnProperty.call(tags, '__proto__')).to.be.true;
+                    expect(tags['__proto__'].value).to.equal('4711');
                 });
 
                 it('should keep a structure child named __proto__ and describe the structure correctly', () => {
@@ -2032,9 +2101,6 @@ describe('xmp-tags', function () {
                     expect(tags['MyXMPTag'].description).to.equal('__proto__: 4711');
                 });
 
-                // A name without a namespace prefix always ends up in a tag named
-                // "undefined", since the tag name is what follows the colon. That is
-                // a separate matter from the name being an object property name.
                 it('should not describe a value with an inherited property of the tag name table', () => {
                     const xmlString = getXmlString(`
                         <rdf:Description>
@@ -2043,11 +2109,12 @@ describe('xmp-tags', function () {
                     `);
                     const dataView = getDataView(xmlString);
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
-                    expect(tags['undefined'].value).to.equal('4711');
+                    expect(tags).to.have.own.property('constructor');
+                    expect(tags['constructor'].value).to.equal('4711');
                     // Without the fix this is a String object built by the
                     // inherited Object function, not a primitive.
-                    expect(typeof tags['undefined'].description).to.equal('string');
-                    expect(tags['undefined'].description).to.equal('4711');
+                    expect(typeof tags['constructor'].description).to.equal('string');
+                    expect(tags['constructor'].description).to.equal('4711');
                 });
 
                 it('should not describe an attribute value with an inherited property of the tag name table', () => {
@@ -2056,10 +2123,11 @@ describe('xmp-tags', function () {
                     `);
                     const dataView = getDataView(xmlString);
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
-                    expect(tags['undefined'].value).to.equal('4711');
+                    expect(tags).to.have.own.property('hasOwnProperty');
+                    expect(tags['hasOwnProperty'].value).to.equal('4711');
                     // Without the fix the inherited hasOwnProperty is called here,
                     // which makes the description false instead of a string.
-                    expect(tags['undefined'].description).to.equal('4711');
+                    expect(tags['hasOwnProperty'].description).to.equal('4711');
                 });
 
                 it('should parse a list in an element named after an object property like any other list', () => {
@@ -2075,11 +2143,12 @@ describe('xmp-tags', function () {
                     `);
                     const dataView = getDataView(xmlString);
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
-                    expect(tags['undefined'].value).to.deep.equal([
+                    expect(tags).to.have.own.property('constructor');
+                    expect(tags['constructor'].value).to.deep.equal([
                         {value: '4711', attributes: {}, description: '4711'},
                         {value: '4812', attributes: {}, description: '4812'}
                     ]);
-                    expect(tags['undefined'].description).to.equal('4711, 4812');
+                    expect(tags['constructor'].description).to.equal('4711, 4812');
                 });
 
                 it('should still describe a list with the description function of a real tag name', () => {
