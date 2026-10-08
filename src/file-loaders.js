@@ -32,23 +32,29 @@ export function isDataUri(filename) {
  * in `load()`.
  *
  * @param {string} filename URL, data URI, or local file path.
- * @param {{length?: number}} [options]
- * @returns {Promise<ArrayBuffer|Buffer>} The whole file, or its first `length` bytes if specified.
+ * @param {{length?: number}} [options] A fractional `length` is rounded down.
+ * @returns {Promise<ArrayBuffer|Buffer>} The whole file, or its first `length` bytes if specified. Rejects when
+ *          `length` is not `undefined`, `null` or a finite non-negative number.
  */
 export function loadFile(filename, options) {
+    const range = legacyRange(options);
+    if (!range) {
+        return rejectInvalidLength();
+    }
+
     if (/^\w+:\/\//.test(filename)) {
         if (typeof fetch !== 'undefined') {
-            return fetchRange(filename, legacyRange(options)).then((r) => r.buffer);
+            return fetchRange(filename, range).then((r) => r.buffer);
         }
 
-        return nodeGetRange(filename, legacyRange(options)).then((r) => r.buffer);
+        return nodeGetRange(filename, range).then((r) => r.buffer);
     }
 
     if (isDataUri(filename)) {
         return Promise.resolve(dataUriToBuffer(filename));
     }
 
-    return readLocalFileRange(filename, legacyRange(options)).then((r) => r.buffer);
+    return readLocalFileRange(filename, range).then((r) => r.buffer);
 }
 
 /**
@@ -56,18 +62,32 @@ export function loadFile(filename, options) {
  * code path in `load()`.
  *
  * @param {File} file
- * @param {{length?: number}} [options]
- * @returns {Promise<ArrayBuffer>}
+ * @param {{length?: number}} [options] A fractional `length` is rounded down.
+ * @returns {Promise<ArrayBuffer>} Rejects when `length` is not `undefined`, `null` or a finite non-negative number.
  */
 export function loadFileObject(file, options) {
-    return readFileObjectRange(file, legacyRange(options)).then((r) => r.buffer);
+    const range = legacyRange(options);
+    if (!range) {
+        return rejectInvalidLength();
+    }
+
+    return readFileObjectRange(file, range).then((r) => r.buffer);
 }
 
 function legacyRange(options) {
-    if (options && Number.isInteger(options.length) && options.length >= 0) {
-        return {start: 0, end: options.length, maxBytes: options.length};
+    const length = options ? options.length : undefined;
+    if (length === undefined || length === null) {
+        return {start: 0};
     }
-    return {start: 0};
+    if (Number.isFinite(length) && length >= 0) {
+        const end = Math.floor(length);
+        return {start: 0, end, maxBytes: end};
+    }
+    return undefined;
+}
+
+function rejectInvalidLength() {
+    return Promise.reject(new Error('The length option must be a finite non-negative number or "auto".'));
 }
 
 /**
