@@ -176,6 +176,59 @@ describe('file-loaders', () => {
             expect(error.message).to.equal('Could not fetch file: 500 Server Error');
             expect(destroyCalls).to.equal(1);
         });
+
+        it('should make no request and resolve with an empty buffer for an empty range', async () => {
+            const requests = stubRecordingHttp([]);
+
+            const result = await nodeGetRange('https://domain.com/image.jpg', {start: 0, end: 0, maxBytes: 0});
+
+            expect(requests).to.have.length(0);
+            expect(Buffer.isBuffer(result.buffer)).to.equal(true);
+            expect(result.buffer.length).to.equal(0);
+            expect(result.totalSize).to.equal(undefined);
+            expect(result.status).to.equal(undefined);
+        });
+
+        it('should make no request for a range that ends before it starts', async () => {
+            const requests = stubRecordingHttp([]);
+
+            const result = await nodeGetRange('https://domain.com/image.jpg', {start: 10, end: 5});
+
+            expect(requests).to.have.length(0);
+            expect(result.buffer.length).to.equal(0);
+        });
+
+        it('should send the range header for a one-byte range', async () => {
+            const requests = stubRecordingHttp([Buffer.from([7])]);
+
+            const result = await nodeGetRange('https://domain.com/image.jpg', {start: 0, end: 1});
+
+            expect(requests).to.have.length(1);
+            expect(requests[0].headers.range).to.equal('bytes=0-0');
+            expect(Array.from(result.buffer)).to.deep.equal([7]);
+        });
+
+        function stubRecordingHttp(chunks) {
+            const requests = [];
+            global.__non_webpack_require__ = (moduleName) => {
+                if (/^https?$/.test(moduleName)) {
+                    return {
+                        get(url, options, callback) {
+                            requests.push(options);
+                            const response = createStreamingResponse();
+                            setTimeout(() => {
+                                callback(response);
+                                chunks.forEach((chunk) => response.emit('data', chunk));
+                                response.emit('end');
+                            }, 0);
+                            return {on: () => undefined};
+                        }
+                    };
+                }
+                return undefined;
+            };
+            return requests;
+        }
     });
 
     describe('fetchRange', () => {
@@ -192,6 +245,46 @@ describe('file-loaders', () => {
         function stubFetch(response) {
             global.fetch = () => Promise.resolve(response);
         }
+
+        function stubRecordingFetch(response) {
+            const requests = [];
+            global.fetch = (url, options) => {
+                requests.push(options);
+                return Promise.resolve(response);
+            };
+            return requests;
+        }
+
+        it('should make no request and resolve with an empty buffer for an empty range', async () => {
+            const requests = stubRecordingFetch({status: 200, headers: {get: () => null}, arrayBuffer: () => new ArrayBuffer(8)});
+
+            const result = await fetchRange('https://domain.com/image.jpg', {start: 0, end: 0, maxBytes: 0});
+
+            expect(requests).to.have.length(0);
+            expect(result.buffer).to.be.an.instanceOf(ArrayBuffer);
+            expect(result.buffer.byteLength).to.equal(0);
+            expect(result.totalSize).to.equal(undefined);
+            expect(result.status).to.equal(undefined);
+        });
+
+        it('should make no request for a range that ends before it starts', async () => {
+            const requests = stubRecordingFetch({status: 200, headers: {get: () => null}, arrayBuffer: () => new ArrayBuffer(8)});
+
+            const result = await fetchRange('https://domain.com/image.jpg', {start: 10, end: 5});
+
+            expect(requests).to.have.length(0);
+            expect(result.buffer.byteLength).to.equal(0);
+        });
+
+        it('should send the range header for a one-byte range', async () => {
+            const requests = stubRecordingFetch({status: 206, headers: {get: () => null}, arrayBuffer: () => new Uint8Array([7]).buffer});
+
+            const result = await fetchRange('https://domain.com/image.jpg', {start: 0, end: 1});
+
+            expect(requests).to.have.length(1);
+            expect(requests[0].headers.range).to.equal('bytes=0-0');
+            expect(Array.from(new Uint8Array(result.buffer))).to.deep.equal([7]);
+        });
 
         it('should reject with an Error containing the status on a 404 response and cancel the body', async () => {
             const stream = stubStreamBody([bytesFrom(0, 8)]);
@@ -689,15 +782,51 @@ describe('file-loaders', () => {
             });
         });
 
+        describe('a numeric length that selects an empty range', () => {
+            it('should make no fetch request for length 0', async () => {
+                const transfer = await startServer(SAFETY_CAP);
+
+                const buffer = await loadFile(transfer.url, {length: 0});
+
+                expect(buffer).to.be.an.instanceOf(ArrayBuffer);
+                expect(buffer.byteLength).to.equal(0);
+                expect(transfer.requestCount).to.equal(0);
+            });
+
+            it('should make no Node http request for length 0', async () => {
+                delete global.fetch;
+                global.__non_webpack_require__ = createRequire(import.meta.url);
+                const transfer = await startServer(SAFETY_CAP);
+
+                const buffer = await loadFile(transfer.url, {length: 0});
+
+                expect(Buffer.isBuffer(buffer)).to.equal(true);
+                expect(buffer.length).to.equal(0);
+                expect(transfer.requestCount).to.equal(0);
+            });
+
+            it('should still send a one-byte range header for length 1', async () => {
+                const transfer = await startServer(SAFETY_CAP);
+
+                const buffer = await loadFile(transfer.url, {length: 1});
+
+                expect(buffer.byteLength).to.equal(1);
+                expect(transfer.requestCount).to.equal(1);
+                expect(transfer.rangeHeader).to.equal('bytes=0-0');
+                await expectTransferStopped(transfer);
+            });
+        });
+
         async function startServer(bodySize, status = 200) {
             const source = patternBytes(0, CHUNK_SIZE + PATTERN_PERIOD);
-            const transfer = {bytesWritten: 0, reachedEnd: false};
+            const transfer = {bytesWritten: 0, reachedEnd: false, requestCount: 0};
             let resolveClosed;
             transfer.closed = new Promise((resolve) => {
                 resolveClosed = resolve;
             });
 
             server = http.createServer((request, response) => {
+                transfer.requestCount++;
                 transfer.rangeHeader = request.headers.range;
                 response.on('close', resolveClosed);
                 response.writeHead(status, {'content-type': 'application/octet-stream'});

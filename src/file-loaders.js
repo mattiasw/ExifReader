@@ -104,9 +104,13 @@ function rejectInvalidLength() {
  *          Rejects with `Could not fetch file: <status>` on non-2xx responses, except 416 which the
  *          `length: 'auto'` loop consumes as a fall-back signal and which resolves with an empty buffer.
  *          The body of a 416 or a rejected status is never read; a `ReadableStream` body is cancelled.
+ *          An empty range (`end <= start`) resolves with an empty buffer without a request.
  *          Mirrors `nodeGetRange`.
  */
 export function fetchRange(url, {start = 0, end, maxBytes} = {}) {
+    if (isEmptyRange(start, end)) {
+        return Promise.resolve({buffer: new ArrayBuffer(0), totalSize: undefined, status: undefined});
+    }
     const options = {method: 'GET'};
     if (start > 0 || (end !== undefined && end !== Infinity)) {
         options.headers = {range: buildRangeHeader(start, end)};
@@ -216,6 +220,10 @@ function createByteCollector(maxBytes) {
     }
 }
 
+function isEmptyRange(start, end) {
+    return end !== undefined && end !== Infinity && end <= start;
+}
+
 function buildRangeHeader(start, end) {
     if (end === undefined || end === Infinity) {
         return `bytes=${start}-`;
@@ -252,6 +260,9 @@ function isAcceptableFetchStatus(status) {
  * @returns {Promise<{buffer: Buffer, totalSize: number|undefined, status: number|undefined}>}
  */
 export function nodeGetRange(url, {start = 0, end, maxBytes} = {}) {
+    if (isEmptyRange(start, end)) {
+        return Promise.resolve({buffer: Buffer.alloc(0), totalSize: undefined, status: undefined});
+    }
     return new Promise((resolve, reject) => {
         const options = {};
         if (start > 0 || (end !== undefined && end !== Infinity)) {
