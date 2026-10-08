@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.47.0] - 2026-10-08
+
 ### Added
 
 - `npx exifreader build --check` exits with an error when the installed bundle
@@ -1712,7 +1714,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.46.0...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.47.0...HEAD
+[4.47.0]: https://github.com/mattiasw/ExifReader/compare/v4.46.0...v4.47.0
 [4.46.0]: https://github.com/mattiasw/ExifReader/compare/v4.45.2...v4.46.0
 [4.45.2]: https://github.com/mattiasw/ExifReader/compare/v4.45.1...v4.45.2
 [4.45.1]: https://github.com/mattiasw/ExifReader/compare/v4.45.0...v4.45.1
