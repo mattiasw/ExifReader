@@ -19,7 +19,8 @@ export default {
 
 // One decoded-value budget is shared by the 0th, sub-, and thumbnail IFD reads
 // so their combined decoded values stay proportional to the input. A caller
-// passes its own to share it with later reads (loadView: maker note and MPF).
+// passes its own to share it with later reads (loadView: maker note, MPF
+// and decompressed Exif).
 function read(
     dataView,
     tiffHeaderOffset,

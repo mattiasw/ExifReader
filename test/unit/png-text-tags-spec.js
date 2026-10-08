@@ -181,6 +181,29 @@ describe('png-text-tags', () => {
         expect(tags[0].embeddedExifTags).to.equal(EXIF_DATA.substring(6));
     });
 
+    it('should pass the same decoded-value budget to the Exif read of every zTXt Exif chunk', async () => {
+        const passedBudgets = [];
+        restoreTagReaders = swapProperties(Tags, {
+            read: (...args) => {
+                passedBudgets.push(args[5]);
+                return {tags: {}};
+            }
+        });
+        const exifValue = `\nexif\n       6\n${stringToHex('Exif\0\0')}`;
+        const {dataView, chunks} = buildTextChunks([
+            getZtxtChunk('Raw profile type exif', toBytes(exifValue)),
+            getZtxtChunk('Raw profile type exif', toBytes(exifValue))
+        ]);
+        const decompressConfig = {deflate: (bytes) => bytes};
+        const valueBudget = {remaining: 1000};
+
+        await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
+
+        expect(passedBudgets).to.have.lengthOf(2);
+        expect(passedBudgets[0]).to.equal(valueBudget);
+        expect(passedBudgets[1]).to.equal(valueBudget);
+    });
+
     it('should read zTXt tags with IPTC data', async () => {
         restoreTagReaders = swapProperties(IptcTags, {
             read: (data, offset) => getStringFromDataView(data, offset, data.byteLength)

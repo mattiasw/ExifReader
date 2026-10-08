@@ -136,8 +136,9 @@ export function readIfd(
  * tags decode the same bytes over and over.
  *
  * loadView shares one budget across the Exif IFDs, then the maker note, then
- * MPF. Once it is used up, later out-of-slot values decode empty, Make
- * included, and an empty Make or MakerNote turns maker note detection off.
+ * MPF, then the Exif decompressed from PNG text chunks and JPEG XL brob boxes.
+ * Once it is used up, later out-of-slot values decode empty, Make included,
+ * and an empty Make or MakerNote turns maker note detection off.
  *
  * @param {DataView} dataView - The buffer the values are decoded from.
  * @returns {{remaining: number}} The budget, in bytes left to decode.

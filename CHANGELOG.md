@@ -135,6 +135,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it spent throwing and catching an error for each string. Such strings are
   now recognized without trying to decode them. The same applies to IPTC
   values and to XMP values read from a packet that is not valid UTF-8.
+- The Exif data in a compressed PNG text chunk ("Raw profile type exif") and
+  in a JPEG XL `brob` box had a decoded tag value limit sized from the
+  decompressed data instead of the file, so a crafted 2 KB PNG could decode
+  about 4 MB of tag values. They now share the file's limit with the rest of
+  the Exif data.
 
 ## [4.46.0] - 2026-09-26
 

@@ -375,6 +375,10 @@ export function loadView(
         }
     }
 
+    if (valueBudget === undefined && dataView !== undefined) {
+        valueBudget = getValueBudget(dataView);
+    }
+
     if (
         Constants.USE_JPEG
         && Constants.USE_IPTC
@@ -429,7 +433,8 @@ export function loadView(
                         brobTiffHeaderOffset,
                         includeUnknown,
                         computed,
-                        tagFilter
+                        tagFilter,
+                        valueBudget
                     );
                     if (readTags.Thumbnail) {
                         delete readTags.Thumbnail;
@@ -564,7 +569,8 @@ export function loadView(
             includeUnknown,
             computed,
             tagFilter,
-            decompressConfig
+            decompressConfig,
+            valueBudget
         );
         pngTextIsAsync = !!readTagsPromise;
 
