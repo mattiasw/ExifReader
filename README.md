@@ -53,18 +53,6 @@ You can try it out on the
 If you're missing something that you think should be supported, file an issue
 with an attached example image and I'll see what I can do.
 
-**Notes for exif-js users**
-
-If you come here from the popular but now dead exif-js package, please let me
-know if you're missing anything from it and I will try to help you. Some notes:
-
--   ExifReader has a different API, hopefully better. :-)
--   XMP support in exif-js does not seem perfect. ExifReader should be a bit
-    better on that part.
--   ExifReader works with strict mode.
--   I've been maintaining this package since 2012 and I have no plans to stop
-    doing that anytime soon.
-
 Table of Contents
 -----------------
 
