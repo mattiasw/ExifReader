@@ -61,6 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A compressed PNG iTXt chunk that ends right after its compression flag no
   longer takes its compression method from the byte after the chunk. It now
   gives an empty text value, whatever follows it.
+- `load()` now returns a rejected promise instead of throwing when a data URI
+  cannot be decoded, such as one with invalid base64 or a malformed percent
+  escape. A data URI is now treated as base64 only when `;base64` is in its
+  header, not when it appears in a URL-encoded payload.
 
 ### Security
 

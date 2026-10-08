@@ -1975,6 +1975,24 @@ describe('exif-reader', function () {
             });
         });
 
+        describe('data URIs', () => {
+            it('should reject instead of throwing when the base64 payload cannot be decoded', async () => {
+                const error = await loadExpectingRejection('data:image/jpeg;base64,!!!!', AUTO_OPTIONS);
+
+                expect(error.name).to.equal('InvalidCharacterError');
+            });
+
+            it('should load a decodable data URI', async () => {
+                swapForAutoTest({end: 4});
+
+                const tags = await ExifReader.load('data:,abcdefgh', AUTO_OPTIONS);
+
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.buffer.byteLength).to.equal(4);
+                expect(tags.metadataRange.requests).to.equal(0);
+            });
+        });
+
         describe('URL via browser fetch', () => {
             const URL = 'https://example.com/image.jpg';
             let originalFetch;
@@ -2938,6 +2956,17 @@ function swapForCustomBuild(appMarkersValue, useFlags) {
 
 function swap(target, replacement) {
     restoreFunctions.push(swapProperties(target, replacement));
+}
+
+function loadExpectingRejection(data, options) {
+    let result;
+    expect(() => {
+        result = ExifReader.load(data, options);
+    }).to.not.throw();
+    expect(result).to.be.a('promise');
+    return result.then(() => {
+        throw new Error('Expected load() to reject.');
+    }, (error) => error);
 }
 
 function getAsciiPrefix(dataView, length) {

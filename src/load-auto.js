@@ -67,7 +67,9 @@ export function makeLoadAuto(loadFromData) {
             });
         }
         if (isDataUri(filename)) {
-            return loadAdaptiveFromMemory(dataUriToBuffer(filename), options);
+            return Promise.resolve()
+                .then(() => dataUriToBuffer(filename))
+                .then((buffer) => loadAdaptiveFromMemory(buffer, options));
         }
         return adaptiveLoop({
             readRange: (start, end, ctx) => readLocalFileRange(filename, {

@@ -917,6 +917,29 @@ describe('file-loaders', () => {
         }
     });
 
+    describe('loadFile with a data URI', () => {
+        it('should resolve with the decoded bytes', async () => {
+            const buffer = await loadFile('data:,abc');
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal([0x61, 0x62, 0x63]);
+        });
+
+        it('should reject instead of throwing when the data URI cannot be decoded', async () => {
+            let promise;
+            expect(() => {
+                promise = loadFile('data:,%E0%A4%A');
+            }).to.not.throw();
+
+            let error;
+            try {
+                await promise;
+            } catch (rejection) {
+                error = rejection;
+            }
+            expect(error).to.be.instanceOf(URIError);
+        });
+    });
+
     describe('loadFileObject', () => {
         let restoreGlobals;
         let readerCalls;

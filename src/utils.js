@@ -259,9 +259,11 @@ export function getBase64Image(image) {
 }
 
 export function dataUriToBuffer(dataUri) {
-    const data = dataUri.substring(dataUri.indexOf(',') + 1);
+    const commaIndex = dataUri.indexOf(',');
+    const header = dataUri.substring(0, commaIndex);
+    const data = dataUri.substring(commaIndex + 1);
 
-    if (dataUri.indexOf(';base64') !== -1) {
+    if (header.indexOf(';base64') !== -1) {
         if (typeof atob !== 'undefined') {
             return Uint8Array.from(atob(data), (char) => char.charCodeAt(0)).buffer;
         }
