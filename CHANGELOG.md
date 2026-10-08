@@ -129,6 +129,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   block in a JPEG each had their own size limit, separate from the one for the
   Exif data, so one crafted file could decode about 12 times its size in tag
   values. They now share one limit with the Exif data.
+- An Exif text value made of many short strings that are not valid UTF-8 took
+  about 2.5 microseconds per string to read, so a crafted 2 MB file in any
+  format that carries Exif could block `load()` for about 11 seconds, most of
+  it spent throwing and catching an error for each string. Such strings are
+  now recognized without trying to decode them. The same applies to IPTC
+  values and to XMP values read from a packet that is not valid UTF-8.
 
 ## [4.46.0] - 2026-09-26
 

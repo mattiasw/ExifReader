@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import TextDecoder from './text-decoder.js';
-import {decodeUtf8ByteString} from './utils.js';
+import {decodeUtf8ByteString, tryDecodeUtf8ByteString} from './utils.js';
 
 const TAG_HEADER_SIZE = 5;
 
@@ -43,16 +43,16 @@ function decode(encoding, tagValue) {
     }
 
     const stringValue = tagValue.map((charCode) => String.fromCharCode(charCode)).join('');
-    try {
-        return decodeURIComponent(escape(stringValue));
-    } catch (error) {
-        // The bytes are not valid UTF-8. Many real-world IPTC blocks have no
-        // Coded Character Set tag but use Windows-1252 (en/em dashes,
-        // ellipsis, smart quotes, etc.). Remap the bytes through CP1252 so
-        // those characters render correctly instead of staying as C1 control
-        // characters.
-        return decodeWindows1252(tagValue);
+    const decoded = tryDecodeUtf8ByteString(stringValue);
+    if (decoded !== undefined) {
+        return decoded;
     }
+    // The bytes are not valid UTF-8. Many real-world IPTC blocks have no
+    // Coded Character Set tag but use Windows-1252 (en/em dashes,
+    // ellipsis, smart quotes, etc.). Remap the bytes through CP1252 so
+    // those characters render correctly instead of staying as C1 control
+    // characters.
+    return decodeWindows1252(tagValue);
 }
 
 function decodeWindows1252(tagValue) {
