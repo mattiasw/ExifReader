@@ -62,6 +62,8 @@ function read(
         if (hasLevelInfoK3III(tags)) {
             tags = objectAssign({}, tags, parseLevelInfoK3III(dataView, originOffset + tags['LevelInfo'].__offset, byteOrder));
             delete tags['LevelInfo'];
+        } else if (tags['LevelInfo']) {
+            delete tags['LevelInfo'].__offset;
         }
 
         return tags;

@@ -77,6 +77,28 @@ describe('pentax-tags', () => {
         expect(valueBudget.remaining).to.equal(100 - levelInfoBytes.length);
     });
 
+    it('should not return the internal offset on LevelInfo when there is no model ID', () => {
+        const dataView = getPentaxDataView([getUndefinedField(LEVEL_INFO_TAG_ID, [1, 2, 3, 4, 5, 6, 7])]);
+
+        const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET);
+
+        expect(tags['LevelInfo']).to.not.have.property('__offset');
+        expect(tags['LevelInfo'].value).to.deep.equal([1, 2, 3, 4, 5, 6, 7]);
+    });
+
+    it('should not return the internal offset on LevelInfo for a camera other than the K-3 III', () => {
+        const dataView = getPentaxDataView([
+            getLongField(PENTAX_MODEL_ID_TAG_ID, 42),
+            getUndefinedField(LEVEL_INFO_TAG_ID, [1, 2, 3, 4, 5, 6, 7])
+        ]);
+
+        const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET);
+
+        expect(tags['PentaxModelID'].value).to.equal(42);
+        expect(tags['LevelInfo']).to.not.have.property('__offset');
+        expect(tags['LevelInfo'].value).to.deep.equal([1, 2, 3, 4, 5, 6, 7]);
+    });
+
     describe('K3 III level info', function () {
         describe('CameraOrientation', function () {
             it('should read CameraOrientation=0', function () {

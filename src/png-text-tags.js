@@ -191,6 +191,9 @@ function getTagsFromTextTag({name, value, description}, includeUnknown, computed
                 tagFilter,
                 valueBudget
             ).tags;
+            if (embeddedExifTags['MakerNote']) {
+                delete embeddedExifTags['MakerNote'].__offset;
+            }
             return withEmbeddedExifThumbnail({embeddedExifTags}, exifDataView, getThumbnail);
         } else if (Constants.USE_IPTC && isIptcGroupTag(name, value)) {
             if (!tagFilter.shouldParseGroup('iptc')) {

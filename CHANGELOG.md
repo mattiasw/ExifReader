@@ -117,6 +117,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file. When the file ends partway through an IFD0 entry, the bytes of that
   entry are no longer read as the offset to the thumbnail IFD, which could
   give made-up `Thumbnail` tags.
+- `MakerNote` in Exif read from a JPEG XL `brob` box or a PNG raw profile text
+  chunk, and the Pentax `LevelInfo` maker note tag from cameras other than the
+  K-3 III, no longer carry an internal `__offset` property.
 
 ### Security
 

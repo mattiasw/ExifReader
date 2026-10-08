@@ -205,6 +205,21 @@ describe('png-text-tags', () => {
         expect(passedBudgets[1]).to.equal(valueBudget);
     });
 
+    it('should not return the internal offset on MakerNote in zTXt Exif', async () => {
+        restoreTagReaders = swapProperties(Tags, {
+            read: () => ({tags: {Model: {value: 'abc'}, MakerNote: {value: [1, 2, 3], __offset: 728}}})
+        });
+        const exifValue = `\nexif\n       6\n${stringToHex('Exif\0\0')}`;
+        const {dataView, chunks} = buildTextChunks([
+            getZtxtChunk('Raw profile type exif', toBytes(exifValue))
+        ]);
+        const decompressConfig = {deflate: (bytes) => bytes};
+
+        const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+
+        expect(tags[0].embeddedExifTags).to.deep.equal({Model: {value: 'abc'}, MakerNote: {value: [1, 2, 3]}});
+    });
+
     it('should add 4 times the decoded size of zTXt Exif to the decoded-value budget before reading it', async () => {
         const seenAtRead = [];
         restoreTagReaders = swapProperties(Tags, {
@@ -421,6 +436,19 @@ describe('png-text-tags', () => {
             expect(result.embeddedIptcTags).to.be.undefined;
             expect(result.readTags).to.deep.equal({});
             expect(result.readTagsPromise).to.be.undefined;
+        });
+
+        it('should not return the internal offset on MakerNote in a tEXt Exif raw profile', () => {
+            restoreTagReaders = swapProperties(Tags, {
+                read: () => ({tags: {Model: {value: 'abc'}, MakerNote: {value: [1, 2, 3], __offset: 728}}})
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM'))
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks);
+
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}, MakerNote: {value: [1, 2, 3]}});
         });
 
         it('should read a tEXt IPTC raw profile synchronously into embedded IPTC tags', () => {
