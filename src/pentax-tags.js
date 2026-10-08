@@ -37,7 +37,8 @@ function read(
     offset,
     includeUnknown,
     computed = false,
-    tagFilter = undefined
+    tagFilter = undefined,
+    valueBudget = undefined
 ) {
     try {
         // Pentax does not use the standard TIFF header offset as base for tag
@@ -54,7 +55,8 @@ function read(
             includeUnknown,
             computed,
             tagFilter,
-            'makerNotes'
+            'makerNotes',
+            valueBudget
         );
 
         if (hasLevelInfoK3III(tags)) {

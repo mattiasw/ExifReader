@@ -305,6 +305,26 @@ describe('mpf-tags', () => {
         expect(() => MpfTags.read(dataView, 0)).to.not.throw();
         expect(MpfTags.read(dataView, 0)).to.deep.equal({});
     });
+
+    it('should decode MPEntry empty and give no images when the passed budget is used up', () => {
+        const dataView = buildMpfDataView([{size: 8, offset: 0}, {size: 8, offset: 0}]);
+
+        const tags = MpfTags.read(dataView, 0, false, false, undefined, {remaining: 0});
+
+        expect(tags['MPEntry'].value).to.deep.equal([]);
+        expect(tags['Images']).to.deep.equal([]);
+    });
+
+    it('should draw MPEntry from a passed decoded-value budget', () => {
+        const dataView = buildMpfDataView([{size: 8, offset: 0}, {size: 8, offset: 0}]);
+        const valueBudget = {remaining: 100};
+
+        const tags = MpfTags.read(dataView, 0, false, false, undefined, valueBudget);
+
+        expect(tags['MPEntry'].value).to.have.lengthOf(2 * 16);
+        expect(tags['Images']).to.have.lengthOf(2);
+        expect(valueBudget.remaining).to.equal(100 - 2 * 16);
+    });
 });
 
 // A big-endian MPF block with a single MPEntry tag (0xb002, type UNDEFINED)

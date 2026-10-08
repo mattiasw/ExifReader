@@ -134,6 +134,25 @@ describe('canon-tags', () => {
         expect(secondTags['LensModel'].value).to.deep.equal([lensModel]);
     });
 
+    it('should decode an out-of-slot value empty when the passed budget is used up', () => {
+        const dataView = getCanonDataView([getLensModelField('RF24-105mm F4 L IS USM')]);
+
+        const tags = CanonTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, ByteOrder.LITTLE_ENDIAN, false, false, undefined, {remaining: 0});
+
+        expect(tags['LensModel'].value).to.deep.equal([]);
+    });
+
+    it('should draw out-of-slot values from a passed decoded-value budget', () => {
+        const lensModel = 'RF24-105mm F4 L IS USM';
+        const dataView = getCanonDataView([getLensModelField(lensModel)]);
+        const valueBudget = {remaining: 100};
+
+        const tags = CanonTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, ByteOrder.LITTLE_ENDIAN, false, false, undefined, valueBudget);
+
+        expect(tags['LensModel'].value).to.deep.equal([lensModel]);
+        expect(valueBudget.remaining).to.equal(100 - (lensModel.length + 1));
+    });
+
     it('should keep LensType shape in computed mode', () => {
         const dataView = getCanonDataView([
             getCameraSettingsField({[CanonTags.CAMERA_SETTINGS_LENS_TYPE]: 61182})

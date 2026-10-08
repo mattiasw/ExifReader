@@ -17,11 +17,18 @@ export default {
     read,
 };
 
-function read(dataView, tiffHeaderOffset, includeUnknown, computed = false, tagFilter = undefined) {
+// One decoded-value budget is shared by the 0th, sub-, and thumbnail IFD reads
+// so their combined decoded values stay proportional to the input. A caller
+// passes its own to share it with later reads (loadView: maker note and MPF).
+function read(
+    dataView,
+    tiffHeaderOffset,
+    includeUnknown,
+    computed = false,
+    tagFilter = undefined,
+    valueBudget = getValueBudget(dataView)
+) {
     const byteOrder = ByteOrder.getByteOrder(dataView, tiffHeaderOffset);
-    // One decoded-value budget shared by the 0th, sub-, and thumbnail IFD
-    // reads so their combined decoded values stay proportional to the input.
-    const valueBudget = getValueBudget(dataView);
     let tags = read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget);
     for (let i = 0; i < SUB_IFDS.length; i++) {
         tags = readSubIfd(SUB_IFDS[i], tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget);
