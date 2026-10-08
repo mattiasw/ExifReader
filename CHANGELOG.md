@@ -138,6 +138,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decoded tag values, so such a file now peaks at about 320 MB, below the
   file of plain bytes. A text value that reaches the limit keeps the strings
   read before it. This affects every format that carries Exif.
+- Exif in compressed PNG text chunks (`Raw profile type exif`) and JPEG XL
+  `brob` boxes could make ExifReader read IFD entries in proportion to the
+  decompressed size rather than the file size: a crafted 315 KB PNG blocked
+  `load()` for about 6 seconds and raised peak memory to about 330 MB. The
+  number of IFD entries read from one file is now limited in proportion to its
+  size, and the tags past the limit are left out, so the same file now takes
+  about 2.4 seconds and 155 MB.
 
 ## [4.47.0] - 2026-10-08
 

@@ -309,7 +309,7 @@ describe('mpf-tags', () => {
     it('should decode MPEntry empty and give no images when the passed budget is used up', () => {
         const dataView = buildMpfDataView([{size: 8, offset: 0}, {size: 8, offset: 0}]);
 
-        const tags = MpfTags.read(dataView, 0, false, false, undefined, {remaining: 0});
+        const tags = MpfTags.read(dataView, 0, false, false, undefined, {remaining: 0, ifdEntriesRemaining: 1000});
 
         expect(tags['MPEntry'].value).to.deep.equal([]);
         expect(tags['Images']).to.deep.equal([]);
@@ -317,7 +317,7 @@ describe('mpf-tags', () => {
 
     it('should draw MPEntry from a passed decoded-value budget', () => {
         const dataView = buildMpfDataView([{size: 8, offset: 0}, {size: 8, offset: 0}]);
-        const valueBudget = {remaining: 100};
+        const valueBudget = {remaining: 100, ifdEntriesRemaining: 1000};
 
         const tags = MpfTags.read(dataView, 0, false, false, undefined, valueBudget);
 

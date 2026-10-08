@@ -283,7 +283,7 @@ describe('tags', () => {
 
     it('should draw out-of-slot values from a passed decoded-value budget', () => {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyExifTag'}});
-        const valueBudget = {remaining: 100};
+        const valueBudget = {remaining: 100, ifdEntriesRemaining: 1000};
 
         const {tags} = Tags.read(getTiffWithOneOutOfSlotValue(), 0, false, false, undefined, valueBudget);
 
@@ -294,11 +294,55 @@ describe('tags', () => {
     it('should decode an out-of-slot value empty when the passed budget is used up', () => {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyExifTag'}});
 
-        const {tags} = Tags.read(getTiffWithOneOutOfSlotValue(), 0, false, false, undefined, {remaining: 0});
+        const {tags} = Tags.read(getTiffWithOneOutOfSlotValue(), 0, false, false, undefined, {remaining: 0, ifdEntriesRemaining: 1000});
 
         expect(tags['MyExifTag'].value).to.deep.equal([]);
     });
+
+    it('should share one IFD entry count across the 0th IFD and the sub-IFDs it points to', () => {
+        let calls = 0;
+        const countedTag = {name: 'CountedTag', description: (value) => {
+            calls++;
+            return value;
+        }};
+        restoreTagNames = swapProperties(TagNames, {
+            '0th': {
+                0x4711: countedTag,
+                0x8769: 'Exif IFD Pointer',
+                0x8825: 'GPS Info IFD Pointer'
+            },
+            'exif': {0x4711: countedTag},
+            'gps': {0x4711: countedTag}
+        });
+        const numberOfFields = 10;
+        const valueBudget = {remaining: 1000, ifdEntriesRemaining: 15};
+
+        Tags.read(getTiffWithSubIfdPointersToItself(numberOfFields), 0, false, false, undefined, valueBudget);
+
+        // The 0th IFD alone reads numberOfFields - 2 counted tags, so more
+        // calls than that show the Exif IFD read drew from the same count.
+        expect(calls).to.be.above(numberOfFields - 2);
+        expect(calls).to.be.at.most(15);
+        expect(valueBudget.ifdEntriesRemaining).to.equal(0);
+    });
 });
+
+// A TIFF whose 0th IFD starts with Exif and GPS IFD pointers back at itself,
+// followed by in-slot SHORT fields of tag 0x4711.
+function getTiffWithSubIfdPointersToItself(numberOfFields) {
+    const IFD0_OFFSET = 8;
+    let fields = '\x87\x69\x00\x04\x00\x00\x00\x01' + getByteStringFromNumber(IFD0_OFFSET, 4)
+        + '\x88\x25\x00\x04\x00\x00\x00\x01' + getByteStringFromNumber(IFD0_OFFSET, 4);
+    for (let i = 2; i < numberOfFields; i++) {
+        fields += '\x47\x11\x00\x03\x00\x00\x00\x01\x00\x2a\x00\x00';
+    }
+    return getDataView(
+        '\x4d\x4d\x00\x2a' + getByteStringFromNumber(IFD0_OFFSET, 4)
+        + getByteStringFromNumber(numberOfFields, 2)
+        + fields
+        + '\x00\x00\x00\x00'
+    );
+}
 
 const BUFFER_SIZE = 256;
 // Enough extra fields, each claiming the whole buffer for its value, to use up

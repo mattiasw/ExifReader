@@ -196,7 +196,7 @@ describe('png-text-tags', () => {
             getZtxtChunk('Raw profile type exif', toBytes(exifValue))
         ]);
         const decompressConfig = {deflate: (bytes) => bytes};
-        const valueBudget = {remaining: 1000};
+        const valueBudget = {remaining: 1000, ifdEntriesRemaining: 1000};
 
         await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
 

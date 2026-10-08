@@ -137,7 +137,7 @@ describe('canon-tags', () => {
     it('should decode an out-of-slot value empty when the passed budget is used up', () => {
         const dataView = getCanonDataView([getLensModelField('RF24-105mm F4 L IS USM')]);
 
-        const tags = CanonTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, ByteOrder.LITTLE_ENDIAN, false, false, undefined, {remaining: 0});
+        const tags = CanonTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, ByteOrder.LITTLE_ENDIAN, false, false, undefined, {remaining: 0, ifdEntriesRemaining: 1000});
 
         expect(tags['LensModel'].value).to.deep.equal([]);
     });
@@ -145,7 +145,7 @@ describe('canon-tags', () => {
     it('should draw out-of-slot values from a passed decoded-value budget', () => {
         const lensModel = 'RF24-105mm F4 L IS USM';
         const dataView = getCanonDataView([getLensModelField(lensModel)]);
-        const valueBudget = {remaining: 100};
+        const valueBudget = {remaining: 100, ifdEntriesRemaining: 1000};
 
         const tags = CanonTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, ByteOrder.LITTLE_ENDIAN, false, false, undefined, valueBudget);
 
