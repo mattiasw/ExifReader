@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- In the default flat output, an XMP or PNG text tag named `Thumbnail` no
+  longer takes the `Thumbnail` key when the image has no Exif thumbnail, and
+  one named `FileType` no longer takes the `FileType` key when `FileType` is
+  filtered out. In expanded output, `xmp._raw` is always the raw XMP packet
+  string, even when the XMP has an element or attribute named `_raw`.
+
 ### Security
 
 - A PNG text chunk with a long keyword, iTXt language tag or iTXt translated

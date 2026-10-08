@@ -148,7 +148,7 @@ describe('loadView pipeline module', function () {
         };
     }
 
-    it('should not delete an existing Thumbnail tag if thumbnailIfdTags is missing', function () {
+    it('should remove an existing Thumbnail tag if thumbnailIfdTags is missing', function () {
         const tagFilter = createTagFilter({
             returnGroups: {thumbnail: true},
             returnTags: {'thumbnail.Thumbnail': true},
@@ -168,7 +168,25 @@ describe('loadView pipeline module', function () {
             deps: createPipelineDeps(),
         });
 
-        expect(tags.Thumbnail.value).to.equal('existing');
+        expect(tags).to.not.have.property('Thumbnail');
+    });
+
+    it('should remove an existing Thumbnail tag if Thumbnail.get returns nothing for the thumbnail IFD tags', function () {
+        const tags = applyMergeStep({
+            step: {type: 'thumbnail'},
+            deferredResults: {},
+            parsedGroups: {},
+            expanded: false,
+            tagFilter: createTagFilter({}),
+            dataView: {},
+            tiffHeaderOffset: 0,
+            fileType: undefined,
+            thumbnailIfdTags: {Compression: {value: 1}},
+            tags: {Thumbnail: {value: 'from file data'}},
+            deps: createPipelineDeps(),
+        });
+
+        expect(tags).to.not.have.property('Thumbnail');
     });
 
     it('should keep a Thumbnail tag without an image if there are thumbnail IFD tags', function () {
@@ -272,7 +290,7 @@ describe('loadView pipeline module', function () {
         expect(parsedGroups.exif.Thumbnail).to.deep.equal({JPEGInterchangeFormat: {value: 272}});
     });
 
-    it('should keep a PNG text tag named Thumbnail when the thumbnail group is returned', function () {
+    it('should not return a PNG text tag named Thumbnail when there is no thumbnail IFD', function () {
         const tags = buildTagsFromMergeSteps({
             mergeSteps: [
                 {type: 'processPngTextReadTagsDeferredList', deferredKey: 'pngText'},
@@ -295,7 +313,7 @@ describe('loadView pipeline module', function () {
             deps: createPipelineDeps(),
         });
 
-        expect(tags.Thumbnail.value).to.equal('my thumbnail note');
+        expect(tags).to.not.have.property('Thumbnail');
     });
 
     it('should apply the gps step when Exif tags are included', function () {
@@ -362,6 +380,82 @@ describe('loadView pipeline module', function () {
 
         expect(tags.Collision.value).to.equal(1);
         expect(tags._raw).to.equal(undefined);
+    });
+
+    describe('fileType step', function () {
+        const LIBRARY_FILE_TYPE = {value: 'png', description: 'PNG'};
+
+        it('should remove a FileType tag from file data when the file FileType tag is filtered out', function () {
+            const tags = applyFileTypeStep({
+                tagFilter: createTagFilter({returnTags: {'file.FileType': false}}),
+                fileType: LIBRARY_FILE_TYPE,
+            });
+
+            expect(tags).to.not.have.property('FileType');
+            expect(tags.Other.value).to.equal(1);
+        });
+
+        it('should remove a FileType tag from file data when the file group is filtered out', function () {
+            const tags = applyFileTypeStep({
+                tagFilter: createTagFilter({returnGroups: {file: false}}),
+                fileType: LIBRARY_FILE_TYPE,
+            });
+
+            expect(tags).to.not.have.property('FileType');
+        });
+
+        it('should remove a FileType tag from file data when the library found no file type', function () {
+            const tags = applyFileTypeStep({
+                tagFilter: createTagFilter({}),
+                fileType: undefined,
+            });
+
+            expect(tags).to.not.have.property('FileType');
+        });
+
+        it('should replace a FileType tag from file data with the library file type', function () {
+            const tags = applyFileTypeStep({
+                tagFilter: createTagFilter({}),
+                fileType: LIBRARY_FILE_TYPE,
+            });
+
+            expect(tags.FileType).to.deep.equal(LIBRARY_FILE_TYPE);
+        });
+
+        it('should keep a group FileType tag in expanded mode when the file FileType tag is filtered out', function () {
+            const tags = applyMergeStep({
+                step: {type: 'fileType'},
+                deferredResults: {},
+                parsedGroups: {},
+                expanded: true,
+                tagFilter: createTagFilter({returnTags: {'file.FileType': false}}),
+                dataView: {},
+                tiffHeaderOffset: undefined,
+                fileType: LIBRARY_FILE_TYPE,
+                thumbnailIfdTags: undefined,
+                tags: {xmp: {FileType: {value: 'from file data'}}},
+                deps: createPipelineDeps(),
+            });
+
+            expect(tags.xmp.FileType.value).to.equal('from file data');
+            expect(tags.file).to.equal(undefined);
+        });
+
+        function applyFileTypeStep({tagFilter, fileType}) {
+            return applyMergeStep({
+                step: {type: 'fileType'},
+                deferredResults: {},
+                parsedGroups: {},
+                expanded: false,
+                tagFilter,
+                dataView: {},
+                tiffHeaderOffset: undefined,
+                fileType,
+                thumbnailIfdTags: undefined,
+                tags: {FileType: {value: 'from file data'}, Other: {value: 1}},
+                deps: createPipelineDeps(),
+            });
+        }
     });
 
     describe('metadataRange step', function () {
