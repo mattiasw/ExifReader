@@ -690,7 +690,7 @@ describe('png-text-tags', () => {
             expect(calledValues).to.deep.equal(['fine']);
         });
 
-        it('should give the placeholder without calling a custom brotli function for a zTXt chunk that ends after its compression method', async () => {
+        it('should give the placeholder without calling a custom brotli function for zTXt chunks with compression method 1', async () => {
             const {decompressConfig, calledValues} = getRecordingDecompressConfig('brotli');
             const {dataView, chunks} = buildTextChunks([
                 {type: TYPE_ZTXT, bytes: toBytes('k\x00\x01')},
@@ -701,9 +701,23 @@ describe('png-text-tags', () => {
 
             expect(tags).to.deep.equal([
                 {readTags: {k: {value: unknownCompressionValue, description: unknownCompressionValue}}},
-                {readTags: {good: {value: 'fine', description: 'fine'}}}
+                {readTags: {good: {value: unknownCompressionValue, description: unknownCompressionValue}}}
             ]);
-            expect(calledValues).to.deep.equal(['fine']);
+            expect(calledValues).to.deep.equal([]);
+        });
+
+        it('should give the placeholder without calling a custom brotli function for a compressed iTXt chunk with compression method 1', async () => {
+            const {decompressConfig, calledValues} = getRecordingDecompressConfig('brotli');
+            const {dataView, chunks} = buildTextChunks([
+                {type: TYPE_ITXT, bytes: concatBytes(toBytes('keyword\x00\x01\x01\x00\x00'), toBytes('fine'))}
+            ]);
+
+            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+
+            expect(tags).to.deep.equal([
+                {readTags: {keyword: {value: unknownCompressionValue, description: unknownCompressionValue}}}
+            ]);
+            expect(calledValues).to.deep.equal([]);
         });
 
         it('should give the placeholder without calling a custom deflate function for a compressed iTXt chunk that ends after its compression method', async () => {
@@ -720,6 +734,49 @@ describe('png-text-tags', () => {
                 {readTags: {good: {value: 'fine', description: 'fine'}}}
             ]);
             expect(calledValues).to.deep.equal(['fine']);
+        });
+
+        it('should give a compressed iTXt chunk that ends after its compression flag the same tag whether or not a chunk follows it', () => {
+            const truncatedItxtChunk = {type: TYPE_ITXT, bytes: toBytes('k\x00\x01')};
+            const isolatedChunks = buildTextChunks([truncatedItxtChunk]);
+            const followedChunks = buildTextChunks([truncatedItxtChunk, getTextChunk('good', 'fine')]);
+
+            const isolated = PngTextTags.read(isolatedChunks.dataView, isolatedChunks.chunks, true, false);
+            const followed = PngTextTags.read(followedChunks.dataView, followedChunks.chunks, true, false);
+
+            expect(isolated.readTags.k).to.deep.equal({value: '', description: ''});
+            expect(followed.readTags.k).to.deep.equal(isolated.readTags.k);
+            expect(isolated.readTagsPromise).to.equal(undefined);
+            expect(followed.readTagsPromise).to.equal(undefined);
+        });
+
+        it('should give the placeholder without constructing a DecompressionStream for a zTXt chunk that ends after its compression method', async () => {
+            const {dataView, chunks} = buildTextChunks([
+                getZtxtChunk('k', new Uint8Array(0)),
+                getZtxtChunk('good', new Uint8Array((await compress(toBytes('fine'))).buffer))
+            ]);
+            const OriginalDecompressionStream = globalThis.DecompressionStream;
+            let constructed = 0;
+            const restore = swapProperties(globalThis, {
+                DecompressionStream: class extends OriginalDecompressionStream {
+                    constructor(format) {
+                        super(format);
+                        constructed++;
+                    }
+                }
+            });
+
+            try {
+                const tags = await PngTextTags.read(dataView, chunks, true, false).readTagsPromise;
+
+                expect(tags).to.deep.equal([
+                    {readTags: {k: {value: unknownCompressionValue, description: unknownCompressionValue}}},
+                    {readTags: {good: {value: 'fine', description: 'fine'}}}
+                ]);
+                expect(constructed).to.equal(1);
+            } finally {
+                restore();
+            }
         });
 
         function getRecordingDecompressConfig(decompressType) {

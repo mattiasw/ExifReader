@@ -327,8 +327,8 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
         return rejectExceedsMax(budget, maxDecompressedSize);
     }
 
-    if (decompressConfig && compressionMethod !== COMPRESSION_METHOD_NONE) {
-        const decompressType = compressionMethod === COMPRESSION_METHOD_DEFLATE ? 'deflate' : 'brotli';
+    const decompressType = getDecompressType(compressionMethod);
+    if (decompressConfig && decompressType) {
         const customFn = decompressConfig[decompressType];
         if (typeof customFn === 'function') {
             // Called now, not deferred: the input can view the caller's buffer, which may be reused once load() returns.
@@ -387,6 +387,16 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
         }
     }
     return dataView;
+}
+
+function getDecompressType(compressionMethod) {
+    if (compressionMethod === COMPRESSION_METHOD_DEFLATE) {
+        return 'deflate';
+    }
+    if (compressionMethod === COMPRESSION_METHOD_BROTLI) {
+        return 'brotli';
+    }
+    return undefined;
 }
 
 function getMaxDecompressedSize(decompressConfig) {
