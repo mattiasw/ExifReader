@@ -21,6 +21,12 @@ import {decodeUtf8ByteString, getByteString} from './utils.js';
 // description.
 const MAX_VALUE_SIZE_PER_BUFFER_SIZE = 4;
 
+// Each string after the first of an out-of-slot ASCII value costs this much
+// budget. 4 MiB files whose tags use the budget up on short strings peaked at
+// up to 107 times their size in RSS without it, 88 with 1 and 76 with 2,
+// against 87 for BYTE values.
+export const BUDGET_BYTES_PER_EXTRA_ASCII_STRING = 2;
+
 const getTagValueAt = {
     1: Types.getByteAt,
     3: Types.getShortAt,
@@ -137,10 +143,13 @@ export function readIfd(
  * loadView shares one budget across the Exif IFDs, then the maker note, then
  * MPF, then the Exif decompressed from PNG text chunks and JPEG XL brob boxes.
  * Once it is used up, later out-of-slot values decode empty, Make included,
- * and an empty Make or MakerNote turns maker note detection off.
+ * and an empty Make or MakerNote turns maker note detection off. An ASCII
+ * value also draws for each string after its first, and keeps only the
+ * strings the budget covers.
  *
  * @param {DataView} dataView - The buffer the values are decoded from.
- * @returns {{remaining: number}} The budget, in bytes left to decode.
+ * @returns {{remaining: number}} The budget, in bytes left to decode, with
+ * each extra ASCII string counted as BUDGET_BYTES_PER_EXTRA_ASCII_STRING bytes.
  */
 export function getValueBudget(dataView) {
     return {remaining: dataView.byteLength * MAX_VALUE_SIZE_PER_BUFFER_SIZE};
@@ -174,6 +183,7 @@ function readTag(
     const tagCount = Types.getLongAt(dataView, offset + TAG_COUNT_OFFSET, byteOrder);
     let tagValue;
     let tagValueOffset;
+    let stringBudget;
 
     if (Types.typeSizes[tagType] === undefined || (!includeUnknown && TagNames[ifdType][tagCode] === undefined)) {
         return undefined;
@@ -193,6 +203,7 @@ function readTag(
             const forceByteType = tagCode === TAG_CODE_IPTC_NAA;
             const boundedTagCount = getBoundedTagCount(valueBudget.remaining, tagType, tagCount);
             valueBudget.remaining -= boundedTagCount * Types.typeSizes[tagType];
+            stringBudget = valueBudget;
             tagValue = getTagValue(dataView, offsetOrigin + tagValueOffset, tagType, boundedTagCount, byteOrder, forceByteType);
         } else {
             tagValue = '<faulty value>';
@@ -200,7 +211,7 @@ function readTag(
     }
 
     if (tagType === Types.tagTypes['ASCII']) {
-        tagValue = getAsciiTagValue(tagValue);
+        tagValue = getAsciiTagValue(tagValue, stringBudget);
     }
 
     let tagDescription = tagValue;
@@ -294,9 +305,9 @@ function getBoundedTagCount(remainingBudget, tagType, tagCount) {
     return boundedCount;
 }
 
-function getAsciiTagValue(tagValue) {
+function getAsciiTagValue(tagValue, stringBudget) {
     if (tagValue instanceof Uint8Array) {
-        return getNullSeparatedStrings(tagValue);
+        return getNullSeparatedStrings(tagValue, stringBudget);
     }
     if (typeof tagValue === 'string') {
         return [tagValue];
@@ -307,17 +318,23 @@ function getAsciiTagValue(tagValue) {
 }
 
 // Empty strings are left as holes in the array, so each string keeps the
-// index given by the number of NULs before it.
-function getNullSeparatedStrings(bytes) {
+// index given by the number of NULs before it. With a string budget, each
+// string after the first draws from it, and the value stops when it runs out.
+function getNullSeparatedStrings(bytes, stringBudget) {
     const strings = [];
     const charCodes = [];
+    let hasString = false;
     let stringIndex = 0;
     let stringStart = 0;
 
     for (let i = 0; i <= bytes.length; i++) {
         if (i === bytes.length || bytes[i] === 0) {
             if (i > stringStart) {
+                if (hasString && !drawExtraString(stringBudget)) {
+                    break;
+                }
                 strings[stringIndex] = decodeUtf8ByteString(getByteString(bytes, stringStart, i, charCodes));
+                hasString = true;
             }
             stringIndex++;
             stringStart = i + 1;
@@ -325,6 +342,17 @@ function getNullSeparatedStrings(bytes) {
     }
 
     return strings;
+}
+
+function drawExtraString(stringBudget) {
+    if (stringBudget === undefined) {
+        return true;
+    }
+    if (stringBudget.remaining < BUDGET_BYTES_PER_EXTRA_ASCII_STRING) {
+        return false;
+    }
+    stringBudget.remaining -= BUDGET_BYTES_PER_EXTRA_ASCII_STRING;
+    return true;
 }
 
 function getDescriptionFromTagValue(tagValue) {

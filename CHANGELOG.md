@@ -109,6 +109,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so this halves the description text a crafted packet with deeply nested
   values can produce. An 8 MiB value at the deepest allowed level could raise
   peak memory to about 600 MB, and now to about 340 MB.
+- An Exif text value made of many short strings separated by NUL bytes took
+  more memory per byte of the file than any other kind of tag value: a
+  crafted 4 MiB file of such values raised peak memory to about 450 MB,
+  against about 365 MB for one whose values are plain bytes. Each string
+  after the first in an Exif text value now counts against the limit on
+  decoded tag values, so such a file now peaks at about 320 MB, below the
+  file of plain bytes. A text value that reaches the limit keeps the strings
+  read before it. This affects every format that carries Exif.
 
 ## [4.47.0] - 2026-10-08
 

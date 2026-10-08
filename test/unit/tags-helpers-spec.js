@@ -11,7 +11,7 @@
 import {expect} from 'chai';
 import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import TagNames from '../../src/tag-names.js';
-import {readIfd, get0thIfdOffset, getValueBudget} from '../../src/tags-helpers.js';
+import {readIfd, get0thIfdOffset, getValueBudget, BUDGET_BYTES_PER_EXTRA_ASCII_STRING} from '../../src/tags-helpers.js';
 import ByteOrder from '../../src/byte-order.js';
 import DataViewWrapper from '../../src/dataview.js';
 
@@ -792,4 +792,117 @@ describe('tags-helpers', () => {
         expect(tags['undefined-18193']).to.be.undefined;
         expect(tags['MyByteTag'].value).to.have.lengthOf(34);
     });
+
+    describe('multi-string ASCII values', () => {
+        const ASCII_THEN_BYTE_TAG_NAMES = {
+            '0th': {
+                0x4711: 'MyAsciiTag',
+                0x4712: 'MyByteTag'
+            }
+        };
+
+        it('should draw from the budget for each string after the first, so later values come out shorter', () => {
+            restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
+            const asciiBytes = 'ab\x00'.repeat(4);
+            const byteCount = 6;
+            const dataView = getAsciiThenByteIfd(asciiBytes, byteCount);
+            const budget = {remaining: asciiBytes.length + 3 * BUDGET_BYTES_PER_EXTRA_ASCII_STRING + byteCount - 1};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyAsciiTag'].value).to.deep.equal(['ab', 'ab', 'ab', 'ab']);
+            expect(tags['MyAsciiTag'].description).to.equal('ab, ab, ab, ab');
+            expect(tags['MyByteTag'].value).to.have.lengthOf(byteCount - 1);
+            expect(budget.remaining).to.equal(0);
+        });
+
+        it('should charge a single-string value exactly its byte count', () => {
+            restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
+            const asciiBytes = 'ABCDEFG\x00';
+            const dataView = getAsciiThenByteIfd(asciiBytes, 0);
+            const budget = {remaining: 100};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyAsciiTag'].value).to.deep.equal(['ABCDEFG']);
+            expect(budget.remaining).to.equal(100 - asciiBytes.length);
+        });
+
+        it('should charge strings rather than the holes empty runs leave in the array', () => {
+            restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
+            const asciiBytes = 'ab\x00\x00\x00ab\x00';
+            const dataView = getAsciiThenByteIfd(asciiBytes, 0);
+            const budget = {remaining: 100};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyAsciiTag'].value).to.have.lengthOf(4);
+            expect(tags['MyAsciiTag'].value[0]).to.equal('ab');
+            expect(tags['MyAsciiTag'].value[3]).to.equal('ab');
+            expect(budget.remaining).to.equal(100 - asciiBytes.length - BUDGET_BYTES_PER_EXTRA_ASCII_STRING);
+        });
+
+        it('should keep only the strings the budget covers and leave nothing for later values', () => {
+            restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
+            const asciiBytes = 'ab\x00'.repeat(5);
+            const dataView = getAsciiThenByteIfd(asciiBytes, 6);
+            const budget = {remaining: asciiBytes.length + 2 * BUDGET_BYTES_PER_EXTRA_ASCII_STRING};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyAsciiTag'].value).to.deep.equal(['ab', 'ab', 'ab']);
+            expect(tags['MyByteTag'].value).to.deep.equal([]);
+            expect(budget.remaining).to.equal(0);
+        });
+
+        it('should keep a value whose bytes use up the budget to its first string', () => {
+            restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
+            const asciiBytes = 'ab\x00'.repeat(5);
+            const dataView = getAsciiThenByteIfd(asciiBytes, 0);
+            const budget = {remaining: asciiBytes.length};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyAsciiTag'].value).to.deep.equal(['ab']);
+            expect(budget.remaining).to.equal(0);
+        });
+
+        it('should leave less than one string\'s charge in the budget after stopping a value', () => {
+            restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
+            const asciiBytes = 'ab\x00'.repeat(5);
+            const dataView = getAsciiThenByteIfd(asciiBytes, 0);
+            const leftOver = BUDGET_BYTES_PER_EXTRA_ASCII_STRING - 1;
+            const budget = {remaining: asciiBytes.length + BUDGET_BYTES_PER_EXTRA_ASCII_STRING + leftOver};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyAsciiTag'].value).to.deep.equal(['ab', 'ab']);
+            expect(budget.remaining).to.equal(leftOver);
+        });
+
+        it('should charge a value without strings exactly its byte count', () => {
+            restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
+            const asciiBytes = '\x00'.repeat(8);
+            const dataView = getAsciiThenByteIfd(asciiBytes, 0);
+            const budget = {remaining: 100};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyAsciiTag'].value).to.deep.equal([]);
+            expect(budget.remaining).to.equal(100 - asciiBytes.length);
+        });
+
+        it('should not charge the strings of an in-slot value', () => {
+            restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+            const dataView = getDataView(
+                '\x00\x01'
+                + '\x47\x11\x00\x02\x00\x00\x00\x04a\x00b\x00'
+                + '\x00\x00\x00\x00'
+            );
+            const budget = {remaining: 0};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyAsciiTag'].value).to.deep.equal(['a', 'b']);
+            expect(budget.remaining).to.equal(0);
+        });
+    });
 });
+
+// An IFD with an out-of-slot ASCII field holding asciiBytes, then an
+// out-of-slot BYTE field of byteCount bytes stored right after them.
+function getAsciiThenByteIfd(asciiBytes, byteCount) {
+    const ifdLength = 2 + 2 * 12 + 4;
+    return getDataView(
+        '\x00\x02'
+        + '\x47\x11\x00\x02' + getByteStringFromNumber(asciiBytes.length, 4) + getByteStringFromNumber(ifdLength, 4)
+        + '\x47\x12\x00\x01' + getByteStringFromNumber(byteCount, 4) + getByteStringFromNumber(ifdLength + asciiBytes.length, 4)
+        + '\x00\x00\x00\x00'
+        + asciiBytes
+        + '\x01'.repeat(byteCount)
+    );
+}
