@@ -2,24 +2,31 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-// The private helpers (readTag, getTagValue, splitNullSeparatedAsciiString)
-// are exercised through the exported readIfd by feeding it crafted IFD bytes
-// (field count + 12-byte fields + offset to next IFD). TagNames is injected
-// by swapping properties on the shared default-export object.
+// The private helpers (readTag, getTagValue, getAsciiTagValue and the byte
+// string helpers it calls) are exercised through the exported readIfd by
+// feeding it crafted IFD bytes (field count + 12-byte fields + offset to next
+// IFD). TagNames is injected by swapping properties on the shared
+// default-export object.
 
 import {expect} from 'chai';
 import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import TagNames from '../../src/tag-names.js';
 import {readIfd, get0thIfdOffset, getValueBudget} from '../../src/tags-helpers.js';
 import ByteOrder from '../../src/byte-order.js';
+import DataViewWrapper from '../../src/dataview.js';
 
 describe('tags-helpers', () => {
     let restoreTagNames;
+    let restoreFromCharCode;
 
     afterEach(() => {
         if (restoreTagNames) {
             restoreTagNames();
             restoreTagNames = undefined;
+        }
+        if (restoreFromCharCode) {
+            restoreFromCharCode();
+            restoreFromCharCode = undefined;
         }
     });
 
@@ -167,6 +174,129 @@ describe('tags-helpers', () => {
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyAsciiTag'].value).to.deep.equal(['AúC', 'caf\xe9']);
         expect(tags['MyAsciiTag'].description).to.equal('AúC, caf\xe9');
+    });
+
+    it('should convert a long ASCII value to a string in a few large chunks', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        // Field count + offsetted ASCII field + offset to next IFD + N 'a's and a NUL at offset 0x12.
+        const length = 100000;
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x02' + getByteStringFromNumber(length + 1, 4) + '\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + 'a'.repeat(length) + '\x00'
+        );
+        const originalFromCharCode = String.fromCharCode;
+        let fromCharCodeCalls = 0;
+        restoreFromCharCode = swapProperties(String, {
+            fromCharCode(...charCodes) {
+                fromCharCodeCalls++;
+                return originalFromCharCode.apply(String, charCodes);
+            }
+        });
+
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        restoreFromCharCode();
+        restoreFromCharCode = undefined;
+
+        expect(fromCharCodeCalls).to.be.at.most(Math.ceil(length / 8192) + 2);
+        expect(tags['MyAsciiTag'].value).to.deep.equal(['a'.repeat(length)]);
+    });
+
+    it('should leave holes for empty strings in a multi-string ASCII tag', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        // Field count + offsetted ASCII field + offset to next IFD + "\0ab\0\0cd\0\0" at offset 0x12.
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x02\x00\x00\x00\x09\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + '\x00ab\x00\x00cd\x00\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        const value = tags['MyAsciiTag'].value;
+        expect(Object.keys(value)).to.deep.equal(['1', '3']);
+        expect(value).to.have.lengthOf(4);
+        expect(value[1]).to.equal('ab');
+        expect(value[3]).to.equal('cd');
+        expect(tags['MyAsciiTag'].description).to.equal(', ab, , cd');
+    });
+
+    it('should not carry characters of a longer string over to a shorter one', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        // Field count + offsetted ASCII field + offset to next IFD + "abcde\0xy\0" at offset 0x12.
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x02\x00\x00\x00\x09\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + 'abcde\x00xy\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyAsciiTag'].value).to.deep.equal(['abcde', 'xy']);
+    });
+
+    it('should decode a UTF-8 sequence that straddles a conversion chunk boundary', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        // The two bytes of "ú" are at indices 8191 and 8192 of the value.
+        const string = 'a'.repeat(8191) + '\xc3\xba' + 'aaa';
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x02' + getByteStringFromNumber(string.length + 1, 4) + '\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + string + '\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyAsciiTag'].value).to.deep.equal(['a'.repeat(8191) + 'ú' + 'aaa']);
+    });
+
+    it('should read an ASCII value from a data view that starts inside its buffer', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        const junk = 'XYZW';
+        const ifd = '\x00\x01'
+            + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + 'ABCDE\x00';
+        const buffer = getDataView(junk + ifd + 'junk').buffer;
+        const dataView = new DataView(buffer, junk.length, ifd.length);
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyAsciiTag'].value).to.deep.equal(['ABCDE']);
+    });
+
+    it('should read an ASCII value through the Node Buffer data view wrapper', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
+        const dataView = new DataViewWrapper(Buffer.from(
+            '\x00\x01'
+            + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + 'ABCDE\x00',
+            'latin1'
+        ));
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyAsciiTag'].value).to.deep.equal(['ABCDE']);
+    });
+
+    it('should join the byte values of an ASCII typed IPTC-NAA tag into one string', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x83bb: 'IPTC-NAA'}});
+        // Field count + offsetted ASCII typed IPTC-NAA field + offset to next IFD + "AB\0CD" at offset 0x12.
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x83\xbb\x00\x02\x00\x00\x00\x05\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + 'AB\x00CD'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['IPTC-NAA'].value).to.deep.equal(['656606768']);
+    });
+
+    it('should give an ASCII typed IPTC-NAA tag an empty value when the budget is exhausted', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x83bb: 'IPTC-NAA'}});
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x83\xbb\x00\x02\x00\x00\x00\x05\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + 'AB\x00CD'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: 0});
+        expect(tags['IPTC-NAA'].value).to.deep.equal([]);
     });
 
     it('should be able to read RATIONAL tag', () => {
