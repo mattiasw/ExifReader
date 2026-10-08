@@ -689,6 +689,120 @@ describe('png-text-tags', () => {
         }
     });
 
+    describe('text chunk field lengths', () => {
+        const KEYWORD_79 = 'K'.repeat(79);
+        const KEYWORD_80 = 'K'.repeat(80);
+        const LANG_79 = 'l'.repeat(79);
+        const LANG_80 = 'l'.repeat(80);
+        const ONE_MIB_OF_A = new Uint8Array(1024 * 1024).fill(0x41);
+
+        it('should read a tEXt chunk with a 79-byte keyword', () => {
+            const {dataView, chunks} = buildTextChunks([getTextChunk(KEYWORD_79, 'value')]);
+
+            const {readTags} = PngTextTags.read(dataView, chunks);
+
+            expect(readTags).to.deep.equal({[KEYWORD_79]: {value: 'value', description: 'value'}});
+        });
+
+        it('should read a tEXt chunk that ends after a 79-byte keyword with no terminator', () => {
+            const {dataView, chunks} = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(KEYWORD_79)}]);
+
+            const {readTags} = PngTextTags.read(dataView, chunks);
+
+            expect(readTags).to.deep.equal({[KEYWORD_79]: {value: '', description: ''}});
+        });
+
+        it('should skip a tEXt chunk with an 80-byte keyword and still read the next chunk', () => {
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk(KEYWORD_80, 'value'),
+                getTextChunk('good', 'fine')
+            ]);
+
+            const {readTags} = PngTextTags.read(dataView, chunks);
+
+            expect(readTags).to.deep.equal({good: {value: 'fine', description: 'fine'}});
+        });
+
+        it('should skip a tEXt chunk whose keyword has no terminator', () => {
+            const {dataView, chunks} = buildTextChunks([{type: TYPE_TEXT, bytes: ONE_MIB_OF_A}]);
+
+            const {readTags} = PngTextTags.read(dataView, chunks);
+
+            expect(readTags).to.deep.equal({});
+        });
+
+        it('should skip a zTXt chunk with an 80-byte keyword without decompressing it', () => {
+            const {decompressConfig, getCallCount} = getCountingDecompressConfig();
+            const {dataView, chunks} = buildTextChunks([getZtxtChunk(KEYWORD_80, toBytes('compressed'))]);
+
+            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+
+            expect(readTags).to.deep.equal({});
+            expect(readTagsPromise).to.be.undefined;
+            expect(getCallCount()).to.equal(0);
+        });
+
+        it('should skip a compressed iTXt chunk with an 80-byte keyword without decompressing it', () => {
+            const {decompressConfig, getCallCount} = getCountingDecompressConfig();
+            const {dataView, chunks} = buildTextChunks([getCompressedItxtChunk(KEYWORD_80, toBytes('compressed'))]);
+
+            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+
+            expect(readTags).to.deep.equal({});
+            expect(readTagsPromise).to.be.undefined;
+            expect(getCallCount()).to.equal(0);
+        });
+
+        it('should read an iTXt chunk with a 79-byte language tag', () => {
+            const {dataView, chunks} = buildTextChunks([getItxtChunkWithLang('k', LANG_79, 'tk', 'value')]);
+
+            const {readTags} = PngTextTags.read(dataView, chunks);
+
+            expect(readTags).to.deep.equal({[`k (${LANG_79})`]: {value: 'value', description: 'value'}});
+        });
+
+        it('should skip an iTXt chunk with an 80-byte language tag', () => {
+            const {dataView, chunks} = buildTextChunks([getItxtChunkWithLang('k', LANG_80, 'tk', 'value')]);
+
+            const {readTags} = PngTextTags.read(dataView, chunks);
+
+            expect(readTags).to.deep.equal({});
+        });
+
+        it('should skip an iTXt chunk whose language tag has no terminator', () => {
+            const {dataView, chunks} = buildTextChunks([
+                {type: TYPE_ITXT, bytes: concatBytes(toBytes('k\x00\x00\x00'), ONE_MIB_OF_A)}
+            ]);
+
+            const {readTags} = PngTextTags.read(dataView, chunks);
+
+            expect(readTags).to.deep.equal({});
+        });
+
+        it('should read an uncompressed iTXt chunk with a long translated keyword', () => {
+            const {dataView, chunks} = buildTextChunks([getItxtChunkWithLang('k', 'en', 'T'.repeat(1000), 'value')]);
+
+            const {readTags} = PngTextTags.read(dataView, chunks);
+
+            expect(readTags).to.deep.equal({'k (en)': {value: 'value', description: 'value'}});
+        });
+
+        function getCountingDecompressConfig() {
+            let callCount = 0;
+            const decompressConfig = {
+                deflate: (bytes) => {
+                    callCount++;
+                    return bytes;
+                }
+            };
+            return {decompressConfig, getCallCount: () => callCount};
+        }
+
+        function getItxtChunkWithLang(keyword, lang, translatedKeyword, text) {
+            return {type: TYPE_ITXT, bytes: toBytes(keyword + '\x00\x00\x00' + lang + '\x00' + translatedKeyword + '\x00' + text)};
+        }
+    });
+
     async function getCompressedTagData(type, name, value) {
         const COMPRESSION_FLAG = '\x01';
         const COMPRESSION_METHOD = '\x00';
