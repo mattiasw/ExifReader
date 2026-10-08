@@ -420,6 +420,26 @@ describe('tag filtering options', function () {
         expect(tags.FocalLength35efl.value).to.be.closeTo(50, 0.01);
     });
 
+    it('includeTags: { composite: true } should compute FocalLength35efl from the original pixel dimensions of a resized image', function () {
+        const tags = ExifReader.loadView(getDataView(getResizedFocalPlaneJpeg()), {
+            expanded: true,
+            includeTags: {composite: true},
+        });
+
+        expect(tags.composite.FocalLength35efl.value).to.be.closeTo(50, 0.01);
+        expect(tags.exif).to.equal(undefined);
+    });
+
+    it('includeTags: { composite: true } should compute FocalLength35efl from the original pixel dimensions of a resized image when flat', function () {
+        const tags = ExifReader.loadView(getDataView(getResizedFocalPlaneJpeg()), {
+            includeTags: {composite: true},
+        });
+
+        expect(tags.FocalLength35efl.value).to.be.closeTo(50, 0.01);
+        expect(tags.PixelXDimension).to.equal(undefined);
+        expect(tags.PixelYDimension).to.equal(undefined);
+    });
+
     it('excludeTags.file: [FileType] should remove FileType', function () {
         fakeImageHeader({
             fileType: 'jpeg',
@@ -740,6 +760,17 @@ function restoreAllFakes() {
     while (restoreFunctions.length > 0) {
         restoreFunctions.pop()();
     }
+}
+
+function getResizedFocalPlaneJpeg() {
+    return getExifJpeg([
+        {tag: 0x920a, rational: [50, 1]},
+        {tag: 0xa002, short: 3600},
+        {tag: 0xa003, short: 2400},
+        {tag: 0xa20e, rational: [100, 1]},
+        {tag: 0xa20f, rational: [100, 1]},
+        {tag: 0xa210, short: FOCAL_PLANE_RESOLUTION_UNIT_MILLIMETERS},
+    ], getSof0Segment(360, 240));
 }
 
 /**

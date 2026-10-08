@@ -389,6 +389,76 @@ describe('composite', () => {
             }
         });
 
+        describe('original pixel dimensions', () => {
+            const DOWNSCALED_FILE_TAGS = {'Image Width': {value: 3120}, 'Image Height': {value: 2084}};
+
+            function getPixelDimensionTags(pixelXDimension, pixelYDimension) {
+                return {PixelXDimension: {value: pixelXDimension}, PixelYDimension: {value: pixelYDimension}};
+            }
+
+            function getFileSizeOnlyValue() {
+                const values = getWithFocalPlaneInputs(DOWNSCALED_FILE_TAGS, {})
+                    .map((result) => result.FocalLength35efl.value);
+                expect(values[0]).to.not.equal(CALCULATED_FOCAL_LENGTH_35EFL);
+                expect(values[1]).to.equal(values[0]);
+                return values[0];
+            }
+
+            it('should calculate FocalLength35efl from PixelXDimension and PixelYDimension instead of the file size', () => {
+                for (const result of getWithFocalPlaneInputs(DOWNSCALED_FILE_TAGS, getPixelDimensionTags(6240, 4168))) {
+                    expect(result.FocalLength35efl.value).to.equal(CALCULATED_FOCAL_LENGTH_35EFL);
+                }
+            });
+
+            it('should fall back to the file size when only one pixel dimension is present', () => {
+                const fileSizeOnlyValue = getFileSizeOnlyValue();
+                for (const exifOverrides of [{PixelXDimension: {value: 6240}}, {PixelYDimension: {value: 4168}}]) {
+                    for (const result of getWithFocalPlaneInputs(DOWNSCALED_FILE_TAGS, exifOverrides)) {
+                        expect(result.FocalLength35efl.value, inspect(exifOverrides)).to.equal(fileSizeOnlyValue);
+                    }
+                }
+            });
+
+            for (const value of [0, -6240, NaN, Infinity, '', 'abc', null, [6240]]) {
+                it(`should fall back to the file size when PixelXDimension is ${describeValue(value)}`, () => {
+                    const fileSizeOnlyValue = getFileSizeOnlyValue();
+                    for (const result of getWithFocalPlaneInputs(DOWNSCALED_FILE_TAGS, getPixelDimensionTags(value, 4168))) {
+                        expect(result.FocalLength35efl.value).to.equal(fileSizeOnlyValue);
+                    }
+                });
+
+                it(`should fall back to the file size when PixelYDimension is ${describeValue(value)}`, () => {
+                    const fileSizeOnlyValue = getFileSizeOnlyValue();
+                    for (const result of getWithFocalPlaneInputs(DOWNSCALED_FILE_TAGS, getPixelDimensionTags(6240, value))) {
+                        expect(result.FocalLength35efl.value).to.equal(fileSizeOnlyValue);
+                    }
+                });
+            }
+
+            it('should convert numeric string pixel dimensions', () => {
+                for (const result of getWithFocalPlaneInputs(DOWNSCALED_FILE_TAGS, getPixelDimensionTags('6240', '4168'))) {
+                    expect(result.FocalLength35efl.value).to.equal(CALCULATED_FOCAL_LENGTH_35EFL);
+                }
+            });
+
+            it('should pair PixelXDimension with FocalPlaneXResolution and PixelYDimension with FocalPlaneYResolution', () => {
+                const unequalResolutions = {FocalPlaneYResolution: {value: [5210, 39]}};
+                const [expected] = getWithFocalPlaneInputs({}, unequalResolutions);
+                expect(expected.FocalLength35efl.value).to.equal(27.756346748775123);
+                const exifOverrides = {...unequalResolutions, ...getPixelDimensionTags(6240, 4168)};
+                for (const result of getWithFocalPlaneInputs(DOWNSCALED_FILE_TAGS, exifOverrides)) {
+                    expect(result.FocalLength35efl.value).to.equal(expected.FocalLength35efl.value);
+                }
+            });
+
+            it('should calculate FocalLength35efl from the pixel dimensions without a file size', () => {
+                const exifTags = {...getFocalPlaneExifTags(), ...getPixelDimensionTags(6240, 4168)};
+                for (const result of getFlatAndExpanded({}, exifTags)) {
+                    expect(result.FocalLength35efl.value).to.equal(CALCULATED_FOCAL_LENGTH_35EFL);
+                }
+            });
+        });
+
         describe('string splitting', () => {
             let restore;
 

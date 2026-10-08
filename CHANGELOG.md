@@ -99,6 +99,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without `FocalLengthIn35mmFilm`, is now correct when the resolution unit is
   inches or centimeters. It was 645 or 100 times too large, which also made
   `ScaleFactorTo35mmEquivalent` too large and `FieldOfView` too small.
+- `FocalLength35efl` computed from the focal plane resolution now uses the
+  original pixel dimensions (`PixelXDimension` and `PixelYDimension`) instead
+  of the image's stored width and height. For an image downscaled after
+  capture it was far too large, which also made `ScaleFactorTo35mmEquivalent`
+  too large and `FieldOfView` too small. It is now also computed for TIFF,
+  HEIC and WebP images with those tags, and for PNG in expanded output, where
+  it was missing. Images without those tags are unchanged.
 - An ImageMagick `Raw profile type exif` or `Raw profile type iptc` profile in
   an uncompressed PNG text chunk (tEXt, or iTXt without compression) is now
   parsed into Exif or IPTC tags in every mode, as one in a compressed chunk
