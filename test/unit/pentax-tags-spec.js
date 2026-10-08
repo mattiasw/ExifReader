@@ -61,7 +61,7 @@ describe('pentax-tags', () => {
     it('should decode an out-of-slot value empty when the passed budget is used up', () => {
         const dataView = getPentaxDataView([getUndefinedField(LEVEL_INFO_TAG_ID, [1, 2, 3, 4, 5, 6, 7])]);
 
-        const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false, false, undefined, {remaining: 0});
+        const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false, false, undefined, {remaining: 0, ifdEntriesRemaining: 1000});
 
         expect(tags['LevelInfo'].value).to.deep.equal([]);
     });
@@ -69,7 +69,7 @@ describe('pentax-tags', () => {
     it('should draw out-of-slot values from a passed decoded-value budget', () => {
         const levelInfoBytes = [1, 2, 3, 4, 5, 6, 7];
         const dataView = getPentaxDataView([getUndefinedField(LEVEL_INFO_TAG_ID, levelInfoBytes)]);
-        const valueBudget = {remaining: 100};
+        const valueBudget = {remaining: 100, ifdEntriesRemaining: 1000};
 
         const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false, false, undefined, valueBudget);
 

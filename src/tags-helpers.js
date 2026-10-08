@@ -21,6 +21,12 @@ import {decodeUtf8ByteString, getByteString} from './utils.js';
 // description.
 const MAX_VALUE_SIZE_PER_BUFFER_SIZE = 4;
 
+// A buffer holds at most byteLength / 12 IFD entries and a real file reads each
+// once. The multiple leaves room for an IFD reached through more than one
+// pointer. In the test corpus, whole files and 128 KiB and length: 'auto' reads
+// visit at most about as many entries as the buffer holds.
+const MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY = 4;
+
 // Each string after the first of an out-of-slot ASCII value costs this much
 // budget. 4 MiB files whose tags use the budget up on short strings peaked at
 // up to 107 times their size in RSS without it, 88 with 1 and 76 with 2,
@@ -51,9 +57,12 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
  * Reads the tags of an IFD, and for a 0th IFD also those of the thumbnail IFD
  * it points to.
  *
- * @param {{remaining: number}} [valueBudget] - Caps the total size of the
- * decoded tag values, see getValueBudget. Pass the same object to several
- * calls to bound them together; omit it to give this call its own budget.
+ * @param {{remaining: number, ifdEntriesRemaining: number}} [valueBudget] -
+ * Caps the total size of the decoded tag values and the number of IFD entries
+ * read, see getValueBudget. Pass the same object to several calls to bound them
+ * together; omit it to give this call its own budget. Once the entry count runs
+ * out, later entries and IFDs are not read, so their tags are absent rather than
+ * empty, and an IFD cut short does not follow its next-IFD offset.
  * @returns {Object} The read tags, keyed by tag name.
  */
 export function readIfd(
@@ -73,10 +82,15 @@ export function readIfd(
 
     const tags = {};
     const numberOfFields = getNumberOfFields(dataView, offset, byteOrder);
+    let ranOutOfIfdEntries = false;
 
     offset += FIELD_COUNT_SIZE;
     for (let fieldIndex = 0; fieldIndex < numberOfFields; fieldIndex++) {
         if (offset + FIELD_SIZE > dataView.byteLength) {
+            break;
+        }
+        if (!takeIfdEntry(valueBudget)) {
+            ranOutOfIfdEntries = true;
             break;
         }
 
@@ -108,7 +122,7 @@ export function readIfd(
         offset += FIELD_SIZE;
     }
 
-    if (Constants.USE_THUMBNAIL && (offset < dataView.byteLength - Types.getTypeSize('LONG'))) {
+    if (Constants.USE_THUMBNAIL && !ranOutOfIfdEntries && (offset < dataView.byteLength - Types.getTypeSize('LONG'))) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
         if (nextIfdOffset !== 0 && ifdType === IFD_TYPE_0TH) {
             if (tagFilter.shouldParseGroup('thumbnail')) {
@@ -131,6 +145,14 @@ export function readIfd(
     return tags;
 }
 
+function takeIfdEntry(valueBudget) {
+    if (valueBudget.ifdEntriesRemaining > 0) {
+        valueBudget.ifdEntriesRemaining--;
+        return true;
+    }
+    return false;
+}
+
 /**
  * Creates a budget for the total size of the tag values decoded from a buffer.
  *
@@ -147,12 +169,22 @@ export function readIfd(
  * value also draws for each string after its first, and keeps only the
  * strings the budget covers.
  *
+ * The budget also counts the IFD entries read, shared the same way, so that
+ * Exif decompressed from a small file cannot have its entries read in
+ * proportion to the decompressed size.
+ *
  * @param {DataView} dataView - The buffer the values are decoded from.
- * @returns {{remaining: number}} The budget, in bytes left to decode, with
- * each extra ASCII string counted as BUDGET_BYTES_PER_EXTRA_ASCII_STRING bytes.
+ * @returns {{remaining: number, ifdEntriesRemaining: number}} The budget:
+ * remaining is the bytes left to decode, with each extra ASCII string counted
+ * as BUDGET_BYTES_PER_EXTRA_ASCII_STRING bytes; ifdEntriesRemaining is the IFD
+ * entries left to read, MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY times the
+ * byteLength / 12 entries the buffer can hold.
  */
 export function getValueBudget(dataView) {
-    return {remaining: dataView.byteLength * MAX_VALUE_SIZE_PER_BUFFER_SIZE};
+    return {
+        remaining: dataView.byteLength * MAX_VALUE_SIZE_PER_BUFFER_SIZE,
+        ifdEntriesRemaining: Math.floor(dataView.byteLength / IFD_ENTRY_LENGTH) * MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY
+    };
 }
 
 function getNumberOfFields(dataView, offset, byteOrder) {

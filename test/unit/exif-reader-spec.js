@@ -13,6 +13,7 @@ import {getArrayBuffer, getDataView, getByteStringFromNumber, swapProperties} fr
 import Constants from '../../src/constants.js';
 import ImageHeader from '../../src/image-header.js';
 import Tags from '../../src/tags.js';
+import TagNames from '../../src/tag-names.js';
 import MpfTags from '../../src/mpf-tags.js';
 import FileTags from '../../src/file-tags.js';
 import JxlFileTags from '../../src/jxl-file-tags.js';
@@ -560,7 +561,7 @@ describe('exif-reader', function () {
         ExifReader.loadView(getDataView('\x00'.repeat(16)));
 
         expect(capturedBudgets.exif).to.be.undefined;
-        expect(capturedBudgets.pngText).to.deep.equal({remaining: 4 * 16});
+        expect(capturedBudgets.pngText).to.deep.equal({remaining: 4 * 16, ifdEntriesRemaining: 4 * Math.floor(16 / 12)});
     });
 
     it('should pass exifDataView from BMFF multi-extent items to Thumbnail.get instead of the source dataView', () => {
@@ -806,7 +807,7 @@ describe('exif-reader', function () {
             }
         );
 
-        expect(capturedBudget).to.deep.equal({remaining: 4 * 10});
+        expect(capturedBudget).to.deep.equal({remaining: 4 * 10, ifdEntriesRemaining: 4 * Math.floor(10 / 12)});
     });
 
     it('should decompress and parse brob XMP data in JXL files', async () => {
@@ -2655,6 +2656,24 @@ describe('exif-reader', function () {
             expect(getDecodedValueLength(tags, ['exif'])).to.be.at.most(4 * jxl.length);
         });
 
+        it('should bound the IFD entries read from the Exif of compressed PNG text chunks by the input size', async () => {
+            let calls = 0;
+            swap(TagNames, {'0th': {0x4711: {name: 'CountedTag', description: (value) => {
+                calls++;
+                return value;
+            }}}});
+            const chunkCount = 4;
+            const entryCount = 8000;
+            const png = getPngWithCompressedExifChunks(chunkCount, getInSlotEntriesTiff(entryCount));
+            const maxEntries = 4 * Math.floor(png.length / 12);
+            expect(chunkCount * entryCount).to.be.above(maxEntries);
+
+            await ExifReader.loadView(getDataView(png), {async: true, expanded: true});
+
+            expect(calls).to.be.above(0);
+            expect(calls).to.be.at.most(maxEntries);
+        });
+
         function getDecodedValueLength(tags, groupKeys) {
             let length = 0;
             for (const groupKey of groupKeys) {
@@ -3229,15 +3248,26 @@ function getJpegWithExifAndMpf(exifTiff, mpfTiff, bodyOffset) {
 // A tiny PNG with a zTXt "Raw profile type exif" chunk that decompresses to an
 // Exif block whose large BYTE values all start at its TIFF header.
 function getPngWithCompressedLargeValueExif() {
-    const PNG_SIGNATURE = '\x89PNG\r\n\x1a\n';
+    return getPngWithCompressedExifChunks(1, getLargeValueTiff(DECOMPRESSED_EXIF_SIZE - 6));
+}
+
+// A PNG with chunkCount zTXt "Raw profile type exif" chunks, each holding the
+// same TIFF block.
+function getPngWithCompressedExifChunks(chunkCount, tiff) {
     const COMPRESSION_METHOD_DEFLATE = '\x00';
-    const exif = 'Exif\x00\x00' + getLargeValueTiff(DECOMPRESSED_EXIF_SIZE - 6);
+    const exif = 'Exif\x00\x00' + tiff;
     const rawProfile = `\nexif\n${String(exif.length).padStart(8, ' ')}\n${Buffer.from(exif, 'latin1').toString('hex')}`;
     const compressedProfile = deflateSync(Buffer.from(rawProfile, 'latin1')).toString('latin1');
-    return PNG_SIGNATURE
-        + getPngChunk('IHDR', getByteStringFromNumber(1, 4) + getByteStringFromNumber(1, 4) + '\x08\x02\x00\x00\x00')
-        + getPngChunk('zTXt', 'Raw profile type exif\x00' + COMPRESSION_METHOD_DEFLATE + compressedProfile)
-        + getPngChunk('IEND', '');
+    const exifChunk = getPngChunk('zTXt', 'Raw profile type exif\x00' + COMPRESSION_METHOD_DEFLATE + compressedProfile);
+    return getPngWithChunks(...new Array(chunkCount).fill(exifChunk));
+}
+
+// A TIFF block whose 0th IFD holds entryCount in-slot SHORT fields of tag 0x4711.
+function getInSlotEntriesTiff(entryCount) {
+    return 'MM\x00\x2a' + getByteStringFromNumber(8, 4)
+        + getByteStringFromNumber(entryCount, 2)
+        + getIfdEntry(0x4711, IFD_TYPE_SHORT, 1, getByteStringFromNumber(42, 2) + '\x00\x00').repeat(entryCount)
+        + getByteStringFromNumber(0, 4);
 }
 
 function getPngWithChunks(...chunks) {

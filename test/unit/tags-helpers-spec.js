@@ -322,7 +322,7 @@ describe('tags-helpers', () => {
             + '\x00\x00\x00\x00'
             + 'AB\x00CD'
         );
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: 0});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: 0, ifdEntriesRemaining: 1000});
         expect(tags['IPTC-NAA'].value).to.deep.equal([]);
     });
 
@@ -614,7 +614,7 @@ describe('tags-helpers', () => {
             + '\x00'.repeat(10)
         );
         expect(dataView.byteLength).to.equal(byteLength);
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength, ifdEntriesRemaining: 1000});
         // The fields are all of BYTE type, so one decoded element is one byte.
         const totalDecodedBytes = ['HugeTag0', 'HugeTag1', 'HugeTag2', 'HugeTag3']
             .map((name) => (Array.isArray(tags[name].value) ? tags[name].value.length : 1))
@@ -646,7 +646,7 @@ describe('tags-helpers', () => {
             + '\x00'.repeat(34)
         );
         expect(dataView.byteLength).to.equal(byteLength);
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength, ifdEntriesRemaining: 1000});
         expect(tags['HugeTagA'].value).to.have.lengthOf(byteLength - 1);
         expect(tags['HugeTagB'].value).to.deep.equal([]);
     });
@@ -670,7 +670,7 @@ describe('tags-helpers', () => {
             + '\x00'.repeat(34)
         );
         expect(dataView.byteLength).to.equal(byteLength);
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength, ifdEntriesRemaining: 1000});
         expect(tags['HugeTag'].value).to.have.lengthOf(byteLength);
         expect(tags['Exif IFD Pointer'].value).to.equal(0x42);
     });
@@ -694,7 +694,7 @@ describe('tags-helpers', () => {
             + '\x00'.repeat(28)
         );
         expect(dataView.byteLength).to.equal(byteLength);
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength, ifdEntriesRemaining: 1000});
         expect(tags['Huge0thTag'].value).to.have.lengthOf(byteLength);
         expect(tags['Thumbnail']['Huge1stTag'].value).to.deep.equal([]);
     });
@@ -718,7 +718,7 @@ describe('tags-helpers', () => {
             + '\x00'.repeat(46)
         );
         expect(dataView.byteLength).to.equal(byteLength);
-        const budget = {remaining: byteLength};
+        const budget = {remaining: byteLength, ifdEntriesRemaining: 1000};
         const firstTags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
         const sharedBudgetTags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
         const ownBudgetTags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
@@ -746,7 +746,7 @@ describe('tags-helpers', () => {
             + '\x00'.repeat(34)
         );
         expect(dataView.byteLength).to.equal(byteLength);
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength, ifdEntriesRemaining: 1000});
         expect(tags['FaultyTag'].value).to.equal('<faulty value>');
         expect(tags['MyByteTag'].value).to.have.lengthOf(34);
     });
@@ -769,7 +769,7 @@ describe('tags-helpers', () => {
             + '\x00'.repeat(34)
         );
         expect(dataView.byteLength).to.equal(byteLength);
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength, ifdEntriesRemaining: 1000});
         expect(tags['MyByteTag'].value).to.have.lengthOf(byteLength - 20);
         expect(tags['PartiallyDecodedTag'].value).to.have.lengthOf(20);
     });
@@ -788,9 +788,75 @@ describe('tags-helpers', () => {
             + '\x00'.repeat(34)
         );
         expect(dataView.byteLength).to.equal(byteLength);
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', {remaining: byteLength, ifdEntriesRemaining: 1000});
         expect(tags['undefined-18193']).to.be.undefined;
         expect(tags['MyByteTag'].value).to.have.lengthOf(34);
+    });
+
+    describe('IFD entry count', () => {
+        const THREE_TAG_NAMES = {
+            '0th': {
+                0x4711: 'MyTag0',
+                0x4712: 'MyTag1',
+                0x4713: 'MyTag2'
+            },
+            '1st': {0x4714: 'MyThumbnailTag'}
+        };
+
+        it('should give a buffer 4 times as many IFD entries as it can hold', () => {
+            const dataView = getDataView('\x00'.repeat(64));
+            // 64 bytes hold floor(64 / 12) = 5 entries.
+            expect(getValueBudget(dataView).ifdEntriesRemaining).to.equal(20);
+        });
+
+        it('should give a buffer holding one IFD at least as many entries as the IFD has', () => {
+            // The smallest buffer that holds an IFD of 7 entries: the field
+            // count and the entries.
+            const numberOfFields = 7;
+            const dataView = getDataView('\x00'.repeat(2 + numberOfFields * 12));
+            expect(getValueBudget(dataView).ifdEntriesRemaining).to.be.at.least(numberOfFields);
+        });
+
+        it('should read only as many IFD entries as the budget has left', () => {
+            restoreTagNames = swapProperties(TagNames, THREE_TAG_NAMES);
+            const dataView = getDataView(getInSlotIfd([0x4711, 0x4712, 0x4713]));
+            const budget = {remaining: 100, ifdEntriesRemaining: 2};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyTag0'].value).to.equal(0);
+            expect(tags['MyTag1'].value).to.equal(1);
+            expect(tags['MyTag2']).to.be.undefined;
+            expect(budget.ifdEntriesRemaining).to.equal(0);
+        });
+
+        it('should share the IFD entry count with the thumbnail IFD', () => {
+            restoreTagNames = swapProperties(TagNames, THREE_TAG_NAMES);
+            const dataView = getDataView(getIfdWithThumbnailIfd());
+            const budget = {remaining: 100, ifdEntriesRemaining: 2};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyTag0'].value).to.equal(0);
+            expect(tags['MyTag1'].value).to.equal(1);
+            expect(tags['Thumbnail']).to.deep.equal({});
+            expect(budget.ifdEntriesRemaining).to.equal(0);
+        });
+
+        it('should not follow the next-IFD offset of an IFD cut short by the entry count', () => {
+            restoreTagNames = swapProperties(TagNames, THREE_TAG_NAMES);
+            const dataView = getDataView(getIfdWithThumbnailIfd());
+            const budget = {remaining: 100, ifdEntriesRemaining: 1};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyTag0'].value).to.equal(0);
+            expect(tags['MyTag1']).to.be.undefined;
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should count the IFD entries it skips', () => {
+            restoreTagNames = swapProperties(TagNames, {'0th': {0x4712: 'MyTag1'}});
+            const dataView = getDataView(getInSlotIfd([0x4711, 0x4712]));
+            const budget = {remaining: 100, ifdEntriesRemaining: 1};
+            const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+            expect(tags['MyTag1']).to.be.undefined;
+            expect(budget.ifdEntriesRemaining).to.equal(0);
+        });
     });
 
     describe('multi-string ASCII values', () => {
@@ -806,7 +872,7 @@ describe('tags-helpers', () => {
             const asciiBytes = 'ab\x00'.repeat(4);
             const byteCount = 6;
             const dataView = getAsciiThenByteIfd(asciiBytes, byteCount);
-            const budget = {remaining: asciiBytes.length + 3 * BUDGET_BYTES_PER_EXTRA_ASCII_STRING + byteCount - 1};
+            const budget = {remaining: asciiBytes.length + 3 * BUDGET_BYTES_PER_EXTRA_ASCII_STRING + byteCount - 1, ifdEntriesRemaining: 1000};
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyAsciiTag'].value).to.deep.equal(['ab', 'ab', 'ab', 'ab']);
             expect(tags['MyAsciiTag'].description).to.equal('ab, ab, ab, ab');
@@ -818,7 +884,7 @@ describe('tags-helpers', () => {
             restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
             const asciiBytes = 'ABCDEFG\x00';
             const dataView = getAsciiThenByteIfd(asciiBytes, 0);
-            const budget = {remaining: 100};
+            const budget = {remaining: 100, ifdEntriesRemaining: 1000};
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyAsciiTag'].value).to.deep.equal(['ABCDEFG']);
             expect(budget.remaining).to.equal(100 - asciiBytes.length);
@@ -828,7 +894,7 @@ describe('tags-helpers', () => {
             restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
             const asciiBytes = 'ab\x00\x00\x00ab\x00';
             const dataView = getAsciiThenByteIfd(asciiBytes, 0);
-            const budget = {remaining: 100};
+            const budget = {remaining: 100, ifdEntriesRemaining: 1000};
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyAsciiTag'].value).to.have.lengthOf(4);
             expect(tags['MyAsciiTag'].value[0]).to.equal('ab');
@@ -840,7 +906,7 @@ describe('tags-helpers', () => {
             restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
             const asciiBytes = 'ab\x00'.repeat(5);
             const dataView = getAsciiThenByteIfd(asciiBytes, 6);
-            const budget = {remaining: asciiBytes.length + 2 * BUDGET_BYTES_PER_EXTRA_ASCII_STRING};
+            const budget = {remaining: asciiBytes.length + 2 * BUDGET_BYTES_PER_EXTRA_ASCII_STRING, ifdEntriesRemaining: 1000};
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyAsciiTag'].value).to.deep.equal(['ab', 'ab', 'ab']);
             expect(tags['MyByteTag'].value).to.deep.equal([]);
@@ -851,7 +917,7 @@ describe('tags-helpers', () => {
             restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
             const asciiBytes = 'ab\x00'.repeat(5);
             const dataView = getAsciiThenByteIfd(asciiBytes, 0);
-            const budget = {remaining: asciiBytes.length};
+            const budget = {remaining: asciiBytes.length, ifdEntriesRemaining: 1000};
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyAsciiTag'].value).to.deep.equal(['ab']);
             expect(budget.remaining).to.equal(0);
@@ -862,7 +928,7 @@ describe('tags-helpers', () => {
             const asciiBytes = 'ab\x00'.repeat(5);
             const dataView = getAsciiThenByteIfd(asciiBytes, 0);
             const leftOver = BUDGET_BYTES_PER_EXTRA_ASCII_STRING - 1;
-            const budget = {remaining: asciiBytes.length + BUDGET_BYTES_PER_EXTRA_ASCII_STRING + leftOver};
+            const budget = {remaining: asciiBytes.length + BUDGET_BYTES_PER_EXTRA_ASCII_STRING + leftOver, ifdEntriesRemaining: 1000};
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyAsciiTag'].value).to.deep.equal(['ab', 'ab']);
             expect(budget.remaining).to.equal(leftOver);
@@ -872,7 +938,7 @@ describe('tags-helpers', () => {
             restoreTagNames = swapProperties(TagNames, ASCII_THEN_BYTE_TAG_NAMES);
             const asciiBytes = '\x00'.repeat(8);
             const dataView = getAsciiThenByteIfd(asciiBytes, 0);
-            const budget = {remaining: 100};
+            const budget = {remaining: 100, ifdEntriesRemaining: 1000};
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyAsciiTag'].value).to.deep.equal([]);
             expect(budget.remaining).to.equal(100 - asciiBytes.length);
@@ -885,7 +951,7 @@ describe('tags-helpers', () => {
                 + '\x47\x11\x00\x02\x00\x00\x00\x04a\x00b\x00'
                 + '\x00\x00\x00\x00'
             );
-            const budget = {remaining: 0};
+            const budget = {remaining: 0, ifdEntriesRemaining: 1000};
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyAsciiTag'].value).to.deep.equal(['a', 'b']);
             expect(budget.remaining).to.equal(0);
@@ -905,4 +971,18 @@ function getAsciiThenByteIfd(asciiBytes, byteCount) {
         + asciiBytes
         + '\x01'.repeat(byteCount)
     );
+}
+
+// An IFD of in-slot SHORT fields with the given tag codes, each holding its
+// index as its value, then the offset to the next IFD.
+function getInSlotIfd(tagCodes, nextIfdOffset = 0) {
+    return getByteStringFromNumber(tagCodes.length, 2)
+        + tagCodes.map((tagCode, index) => getByteStringFromNumber(tagCode, 2) + '\x00\x03\x00\x00\x00\x01' + getByteStringFromNumber(index, 2) + '\x00\x00').join('')
+        + getByteStringFromNumber(nextIfdOffset, 4);
+}
+
+// A 0th IFD of two fields pointing at a 1st IFD of one field right after it.
+function getIfdWithThumbnailIfd() {
+    const ifd1Offset = 2 + 2 * 12 + 4;
+    return getInSlotIfd([0x4711, 0x4712], ifd1Offset) + getInSlotIfd([0x4714]);
 }
