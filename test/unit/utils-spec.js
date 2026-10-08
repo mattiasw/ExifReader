@@ -57,6 +57,20 @@ describe('utils', () => {
         });
     });
 
+    describe('dataUriToBuffer', () => {
+        it('should decode the payload as base64 when the header says so', () => {
+            const buffer = Utils.dataUriToBuffer('data:image/jpeg;base64,YWJj');
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal([0x61, 0x62, 0x63]);
+        });
+
+        it('should URL-decode a payload that contains ";base64" after the header', () => {
+            const buffer = Utils.dataUriToBuffer('data:,foo;base64,bar');
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from('foo;base64,bar', (char) => char.charCodeAt(0)));
+        });
+    });
+
     describe('tryDecodeUtf8ByteString', () => {
         const BOUNDARY_BYTES = [0x00, 0x7f, 0x80, 0x8f, 0x90, 0x9f, 0xa0, 0xbf, 0xc0, 0xff];
         let restore;

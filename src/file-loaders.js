@@ -34,7 +34,8 @@ export function isDataUri(filename) {
  * @param {string} filename URL, data URI, or local file path.
  * @param {{length?: number}} [options] A fractional `length` is rounded down.
  * @returns {Promise<ArrayBuffer|Buffer>} The whole file, or its first `length` bytes if specified. Rejects when
- *          `length` is not `undefined`, `null` or a finite non-negative number.
+ *          `length` is not `undefined`, `null` or a finite non-negative number, and with the decoder's error when a
+ *          data URI cannot be decoded.
  */
 export function loadFile(filename, options) {
     const range = legacyRange(options);
@@ -51,7 +52,7 @@ export function loadFile(filename, options) {
     }
 
     if (isDataUri(filename)) {
-        return Promise.resolve(dataUriToBuffer(filename));
+        return Promise.resolve().then(() => dataUriToBuffer(filename));
     }
 
     return readLocalFileRange(filename, range).then((r) => r.buffer);
