@@ -120,6 +120,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It is now kept under its own name. A PNG text chunk with the keyword
   `__exif` or `__iptc` is now read as a PNG text tag instead of being merged
   into the Exif or IPTC group.
+- Reading an Exif ASCII tag value built several intermediate values per
+  character, so a crafted file with long ASCII tags pointing into its own data
+  made `load()` use memory far above the file size: a 2 MB JPEG took about
+  600 MB and one second. ASCII values are now decoded without per-character
+  intermediate data. This affects every format that carries Exif.
 
 ## [4.46.0] - 2026-09-26
 

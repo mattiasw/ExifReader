@@ -95,12 +95,6 @@ describe('types', () => {
         expect(Types.getIfdPointerAt(dataView, 0, byteOrder)).to.equal(0x42434445);
     });
 
-    it('should be able to get ASCII value', () => {
-        const string = 'String\x00';
-        const stringValues = string.split('').map((character) => character.charCodeAt(0));
-        expect(Types.getAsciiValue(stringValues).join('')).to.equal(string);
-    });
-
     it('should throw when trying to get unknown type size', () => {
         expect(() => Types.getTypeSize('UNKNOWN_TYPE')).to.throw(/No such type found./);
     });

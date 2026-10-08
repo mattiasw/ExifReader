@@ -18,9 +18,12 @@ import {decodeUtf8ByteString} from './utils.js';
 // array element plus its share of the joined description string.
 const MAX_VALUE_SIZE_PER_BUFFER_SIZE = 4;
 
+// Engines cap the number of arguments Function.prototype.apply can pass, and
+// some older ones reject a typed array there, so bytes go in as plain chunks.
+const MAX_CHARS_PER_CALL = 8192;
+
 const getTagValueAt = {
     1: Types.getByteAt,
-    2: Types.getAsciiAt,
     3: Types.getShortAt,
     4: Types.getLongAt,
     5: Types.getRationalAt,
@@ -193,8 +196,7 @@ function readTag(
     }
 
     if (tagType === Types.tagTypes['ASCII']) {
-        tagValue = splitNullSeparatedAsciiString(tagValue);
-        tagValue = decodeAsciiValue(tagValue);
+        tagValue = getAsciiTagValue(tagValue);
     }
 
     let tagDescription = tagValue;
@@ -241,24 +243,33 @@ function tagValueFitsInOffsetSlot(tagType, tagCount) {
 }
 
 function getTagValue(dataView, offset, type, count, byteOrder, forceByteType = false) {
-    let value = [];
+    const value = [];
 
     if (forceByteType) {
         count = count * Types.typeSizes[type];
         type = Types.tagTypes['BYTE'];
+    }
+    if (type === Types.tagTypes['ASCII']) {
+        return getAsciiBytes(dataView, offset, count);
     }
     for (let valueIndex = 0; valueIndex < count; valueIndex++) {
         value.push(getTagValueAt[type](dataView, offset, byteOrder));
         offset += Types.typeSizes[type];
     }
 
-    if (type === Types.tagTypes['ASCII']) {
-        value = Types.getAsciiValue(value);
-    } else if (value.length === 1) {
-        value = value[0];
+    if (value.length === 1) {
+        return value[0];
     }
 
     return value;
+}
+
+function getAsciiBytes(dataView, offset, count) {
+    const bytes = new Uint8Array(count);
+    for (let i = 0; i < count; i++) {
+        bytes[i] = Types.getAsciiAt(dataView, offset + i);
+    }
+    return bytes;
 }
 
 function tagValueFitsInDataView(dataView, offsetOrigin, tagValueOffset, tagType, tagCount) {
@@ -279,26 +290,59 @@ function getBoundedTagCount(remainingBudget, tagType, tagCount) {
     return boundedCount;
 }
 
-function splitNullSeparatedAsciiString(string) {
-    const tagValue = [];
-    let i = 0;
-
-    for (let j = 0; j < string.length; j++) {
-        if (string[j] === '\x00') {
-            i++;
-            continue;
-        }
-        if (tagValue[i] === undefined) {
-            tagValue[i] = '';
-        }
-        tagValue[i] += string[j];
+function getAsciiTagValue(tagValue) {
+    if (tagValue instanceof Uint8Array) {
+        return getNullSeparatedStrings(tagValue);
     }
-
-    return tagValue;
+    if (typeof tagValue === 'string') {
+        return [tagValue];
+    }
+    // An IPTC-NAA value read as bytes: its numbers have always been joined
+    // into one string of decimal digits.
+    return tagValue.length > 0 ? [decodeUtf8ByteString(tagValue.join(''))] : [];
 }
 
-function decodeAsciiValue(asciiValue) {
-    return asciiValue.map((value) => decodeUtf8ByteString(value));
+// Empty strings are left as holes in the array, so each string keeps the
+// index given by the number of NULs before it.
+function getNullSeparatedStrings(bytes) {
+    const strings = [];
+    const charCodes = [];
+    let stringIndex = 0;
+    let stringStart = 0;
+
+    for (let i = 0; i <= bytes.length; i++) {
+        if (i === bytes.length || bytes[i] === 0) {
+            if (i > stringStart) {
+                strings[stringIndex] = decodeUtf8ByteString(getByteString(bytes, stringStart, i, charCodes));
+            }
+            stringIndex++;
+            stringStart = i + 1;
+        }
+    }
+
+    return strings;
+}
+
+function getByteString(bytes, start, end, charCodes) {
+    if (end - start <= MAX_CHARS_PER_CALL) {
+        return getChunkString(bytes, start, end, charCodes);
+    }
+
+    const chunks = [];
+    for (let chunkStart = start; chunkStart < end; chunkStart += MAX_CHARS_PER_CALL) {
+        chunks.push(getChunkString(bytes, chunkStart, Math.min(chunkStart + MAX_CHARS_PER_CALL, end), charCodes));
+    }
+    return chunks.join('');
+}
+
+// Reuses the caller's array, so a value made of many short strings does not
+// allocate an array per string.
+function getChunkString(bytes, start, end, charCodes) {
+    for (let i = start; i < end; i++) {
+        charCodes[i - start] = bytes[i];
+    }
+    charCodes.length = end - start;
+    return String.fromCharCode.apply(null, charCodes);
 }
 
 function getDescriptionFromTagValue(tagValue) {
