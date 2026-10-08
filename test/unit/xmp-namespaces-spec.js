@@ -11,6 +11,10 @@ describe('xmp-namespaces', function () {
             expect(isMissingNamespaceError({message: 'prefix is non-null and namespace is null'})).to.be.true;
         });
 
+        it('should detect the parse error that @xmldom/xmldom 0.9.12 wraps in a DOM construction error', function () {
+            expect(isMissingNamespaceError({message: 'Error constructing the DOM: NamespaceError: prefix is non-null and namespace is null'})).to.be.true;
+        });
+
         it('should not detect parse error if the error is not a parse error', function () {
             expect(isMissingNamespaceError({message: 'some other error message'})).to.be.false;
         });

@@ -37,6 +37,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   terminator raised peak memory to about 300 MB. A PNG text chunk whose
   keyword or iTXt language tag is longer than 79 bytes is now skipped, and the
   translated keyword, which is not part of the result, is no longer collected.
+- The minimum version of `@xmldom/xmldom` is now 0.9.12. With 0.9.10 or
+  0.9.11, reading an XMP packet whose elements carry many attributes took
+  time quadratic in their number: a 509 KB packet blocked `load()` for about
+  3 seconds. A packet with many undeclared namespace prefixes took quadratic
+  time as well, because ExifReader declares them on the root element before
+  it retries the parse. This affects Node.js with `@xmldom/xmldom` installed
+  as the default `optionalDependency`. If your lockfile pins an older 0.9.x
+  version, update it, for example with `npm update @xmldom/xmldom`. If you
+  pass your own `@xmldom/xmldom` parser in the `domParser` option, update
+  that dependency to 0.9.12 or later (0.8.15 or later on the 0.8 line) as
+  well.
 
 ## [4.47.0] - 2026-10-08
 
