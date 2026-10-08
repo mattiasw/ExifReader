@@ -19,7 +19,7 @@ const PACKET_WRAPPER_END = '<?xpacket end="w"?>';
 const META_ELEMENT_START = '<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.5-c002 1.000000, 0000/00/00-00:00:00        ">';
 const META_ELEMENT_END = '</x:xmpmeta>';
 
-const MAX_NESTING_DEPTH = 32;
+const MAX_NESTING_DEPTH = 16;
 // The top-level properties are the first level, so the outermost nested tag's members are the second.
 const DEEPEST_ALLOWED_LEVEL = MAX_NESTING_DEPTH - 1;
 const NESTING_SHAPES = {
@@ -2519,6 +2519,18 @@ describe('xmp-tags', function () {
                     });
                 });
 
+                it('should bound the descriptions of lists nested directly in list items at twice the cap', () => {
+                    const leaf = 'x'.repeat(100000);
+                    for (let pairs = 1; pairs <= 4 * MAX_NESTING_DEPTH; pairs++) {
+                        const xmlString = getNestedXmlString(getDirectlyNestedLists(pairs, leaf));
+                        const {tags, milliseconds} = readTimed(xmlString, domParser);
+                        expect(getSummedDescriptionLength(tags), `pairs ${pairs}`).to.be.at.most(2 * MAX_NESTING_DEPTH * xmlString.length);
+                        expect(tags.s.description.includes(leaf), `pairs ${pairs}`).to.equal(pairs < 2 * MAX_NESTING_DEPTH);
+                        expect(tags.sibling.value, `pairs ${pairs}`).to.equal('ok');
+                        expect(milliseconds, `pairs ${pairs}`).to.be.below(1000);
+                    }
+                });
+
                 it('should start every read at the top level', () => {
                     const shape = NESTING_SHAPES['rdf:parseType="Resource"'];
                     readNestedXmp(getNestedStructures(shape, DEEPEST_ALLOWED_LEVEL + 10, getShortLeaf), domParser);
@@ -2533,7 +2545,7 @@ describe('xmp-tags', function () {
                     const summedDescriptionLength = getSummedDescriptionLength(tags);
                     expectNestedLevels(tags, shape, DEEPEST_ALLOWED_LEVEL, getLongLeaf);
                     // Joining every description once adds up to their summed length. Re-rendering the
-                    // members of each level joins about ten times as much at this depth.
+                    // members of each level joins about six times as much at this depth.
                     expect(joinedLength).to.be.at.most(1.5 * summedDescriptionLength);
                 });
             });
@@ -2909,6 +2921,16 @@ function getNestedRdfValueListDescription(depth) {
         itemDescriptions.push(getShortLeaf(level));
     }
     return [...itemDescriptions, 'end'].join(', ');
+}
+
+// Every list holds one item, which holds the next list directly. Each pair of
+// elements is half a level: the list tag and the item tag both carry the subtree.
+function getDirectlyNestedLists(pairs, leaf) {
+    let content = leaf;
+    for (let pair = 1; pair <= pairs; pair++) {
+        content = `<rdf:Seq><rdf:li>${content}</rdf:li></rdf:Seq>`;
+    }
+    return `<xmp:s>${content}</xmp:s><xmp:sibling>ok</xmp:sibling>`;
 }
 
 // The document is parsed before Array.prototype.join is counted so that only the reading of the
