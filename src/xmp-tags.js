@@ -23,9 +23,9 @@ const COMMENT_NODE = 8;
 const PACKET_TRAILER_START = '<?xpacket end="';
 const PACKET_TRAILER_END = '"?>';
 
-// Each nested value repeats the descriptions of everything below it, so the
-// description text grows with the square of the nesting depth.
-const MAX_NESTING_DEPTH = 32;
+// Each level repeats the descriptions of everything below it, so any part of
+// the packet's text is copied into at most twice this many descriptions.
+const MAX_NESTING_DEPTH = 16;
 
 // Parsing is synchronous and oneLevelDeeper always restores the counter, so
 // one counter serves every read.

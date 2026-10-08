@@ -89,6 +89,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and almost half a second, against about 96 MB without `includeOffsets`. The
   check for the closing XMP marker now scans the bytes directly, so the file
   takes about as much memory as without `includeOffsets`.
+- XMP values nested deeper than 16 levels are now left out, where the limit
+  was 32 levels. Each level repeats the description of everything below it,
+  so this halves the description text a crafted packet with deeply nested
+  values can produce. An 8 MiB value at the deepest allowed level could raise
+  peak memory to about 600 MB, and now to about 340 MB.
 
 ## [4.47.0] - 2026-10-08
 
