@@ -91,6 +91,7 @@ export function readIfd(
     offset += FIELD_COUNT_SIZE;
     for (let fieldIndex = 0; fieldIndex < numberOfFields; fieldIndex++) {
         if (offset + FIELD_SIZE > dataView.byteLength) {
+            ranOutOfIfdEntries = true;
             break;
         }
         if (!takeIfdEntry(valueBudget)) {
@@ -126,7 +127,7 @@ export function readIfd(
         offset += FIELD_SIZE;
     }
 
-    if (Constants.USE_THUMBNAIL && !ranOutOfIfdEntries && (offset < dataView.byteLength - Types.getTypeSize('LONG'))) {
+    if (Constants.USE_THUMBNAIL && !ranOutOfIfdEntries && (offset + Types.getTypeSize('LONG') <= dataView.byteLength)) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
         if (nextIfdOffset !== 0 && ifdType === IFD_TYPE_0TH) {
             if (tagFilter.shouldParseGroup('thumbnail')) {

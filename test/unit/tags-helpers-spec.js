@@ -427,6 +427,47 @@ describe('tags-helpers', () => {
         expect(readIfd(dataView, '0th', 0, 4, ByteOrder.BIG_ENDIAN)).to.deep.equal({});
     });
 
+    it('should read a next-IFD offset that ends at the end of the buffer', () => {
+        restoreTagNames = swapProperties(TagNames, {
+            '0th': {0x4711: 'MyTag0'},
+            '1st': {0x4714: 'MyThumbnailTag'}
+        });
+        // Padding so the offset to the 1st IFD is not 0, then the 1st IFD at
+        // 0x02, then the 0th IFD at 0x14 whose next-IFD offset is the last 4 bytes.
+        const dataView = getDataView('\x00\x00' + getInSlotIfd([0x4714]) + getInSlotIfd([0x4711], 0x02));
+        expect(dataView.byteLength).to.equal(0x14 + 18);
+        const tags = readIfd(dataView, '0th', 0, 0x14, ByteOrder.BIG_ENDIAN, false);
+        expect(tags['MyTag0'].value).to.equal(0);
+        expect(tags['Thumbnail']).to.deep.equal({
+            MyThumbnailTag: {id: 0x4714, value: 0, description: 0}
+        });
+    });
+
+    it('should not read a next-IFD offset cut short by the end of the buffer', () => {
+        restoreTagNames = swapProperties(TagNames, {
+            '0th': {0x4711: 'MyTag0'},
+            '1st': {0x4714: 'MyThumbnailTag'}
+        });
+        // Same layout as above with the last byte of the next-IFD offset missing.
+        const dataView = getDataView(('\x00\x00' + getInSlotIfd([0x4714]) + getInSlotIfd([0x4711], 0x02)).slice(0, -1));
+        const tags = readIfd(dataView, '0th', 0, 0x14, ByteOrder.BIG_ENDIAN, false);
+        expect(tags['MyTag0'].value).to.equal(0);
+        expect(tags).to.not.have.property('Thumbnail');
+    });
+
+    it('should not read a next-IFD offset after an IFD entry cut short by the end of the buffer', () => {
+        restoreTagNames = swapProperties(TagNames, {
+            '0th': {0x4711: 'MyTag0'},
+            '1st': {0x4714: 'MyThumbnailTag'}
+        });
+        // Same layout as the exact-fit test, but the 0th IFD claims 2 fields,
+        // so its last 4 bytes are the start of a cut-off second entry.
+        const dataView = getDataView('\x00\x00' + getInSlotIfd([0x4714]) + '\x00\x02' + getInSlotIfd([0x4711], 0x02).slice(2));
+        const tags = readIfd(dataView, '0th', 0, 0x14, ByteOrder.BIG_ENDIAN, false);
+        expect(tags['MyTag0'].value).to.equal(0);
+        expect(tags).to.not.have.property('Thumbnail');
+    });
+
     it('should be able to handle description function that throws, e.g. because it receives a faulty tag value', () => {
         const dataView = getDataView(
             '\x00\x00\x4d\x4d' // Byte order
