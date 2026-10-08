@@ -20,6 +20,17 @@ const CDATA_SECTION_NODE = 4;
 const PROCESSING_INSTRUCTION_NODE = 7;
 const COMMENT_NODE = 8;
 
+const PACKET_TRAILER_START = '<?xpacket end="';
+const PACKET_TRAILER_END = '"?>';
+
+// Each nested value repeats the descriptions of everything below it, so the
+// description text grows with the square of the nesting depth.
+const MAX_NESTING_DEPTH = 32;
+
+// Parsing is synchronous and oneLevelDeeper always restores the counter, so
+// one counter serves every read.
+let nestingDepth = 0;
+
 class ParseError extends Error {
     constructor(message) {
         super(message);
@@ -103,7 +114,9 @@ function readTags(tags, chunkDataView, domParser) {
         tags._raw = (tags._raw || '') + raw;
         const rdf = getRDF(doc);
 
-        objectAssign(tags, parseXMPObject(convertToObject(rdf, true, decodeValue)));
+        const xmpTags = {};
+        parseXMPObject(convertToObject(rdf, true, decodeValue), xmpTags, Object.create(null));
+        objectAssign(tags, xmpTags);
         return true;
     } catch (error) {
         return false;
@@ -165,7 +178,27 @@ function keepValue(value) {
 }
 
 function trimXmlSource(xmlSource) {
-    return xmlSource.replace(/^.+(<\?xpacket begin)/, '$1').replace(/(<\?xpacket end=".*"\?>).+$/, '$1');
+    return trimAfterPacketTrailer(xmlSource.replace(/^.+(<\?xpacket begin)/, '$1'));
+}
+
+// Gives the same result as the former /(<\?xpacket end=".*"\?>).+$/ in linear
+// time: only text after a trailer on the last line is cut off.
+function trimAfterPacketTrailer(xmlSource) {
+    const lastLineStart = Math.max(
+        xmlSource.lastIndexOf('\n'),
+        xmlSource.lastIndexOf('\r'),
+        xmlSource.lastIndexOf('\u2028'),
+        xmlSource.lastIndexOf('\u2029')
+    ) + 1;
+    const trailerStart = xmlSource.indexOf(PACKET_TRAILER_START, lastLineStart);
+    if (trailerStart === -1) {
+        return xmlSource;
+    }
+    const trailerEnd = xmlSource.lastIndexOf(PACKET_TRAILER_END, xmlSource.length - PACKET_TRAILER_END.length - 1);
+    if (trailerEnd < trailerStart + PACKET_TRAILER_START.length) {
+        return xmlSource;
+    }
+    return xmlSource.slice(0, trailerEnd + PACKET_TRAILER_END.length);
 }
 
 function parseFromString(domParser, xmlString, isRetry = false) {
@@ -290,13 +323,7 @@ function getAttributes(element, decodeValue) {
     return attributes;
 }
 
-function parseXMPObject(xmpObject) {
-    const tags = {};
-
-    if (typeof xmpObject === 'string') {
-        return xmpObject;
-    }
-
+function parseXMPObject(xmpObject, tags, plainDescriptions) {
     for (const nodeName in xmpObject) {
         let nodes = xmpObject[nodeName];
 
@@ -305,34 +332,24 @@ function parseXMPObject(xmpObject) {
         }
 
         nodes.forEach((node) => {
-            objectAssign(tags, parseNodeAttributesAsTags(node.attributes));
+            parseNodeAttributesAsTags(node.attributes, tags, plainDescriptions);
             if (typeof node.value === 'object') {
-                objectAssign(tags, parseNodeChildrenAsTags(node.value));
+                parseNodeChildrenAsTags(node.value, tags, plainDescriptions);
             }
         });
     }
-
-    return tags;
 }
 
-function parseNodeAttributesAsTags(attributes) {
-    const tags = {};
-
+function parseNodeAttributesAsTags(attributes, tags, plainDescriptions) {
     for (const name in attributes) {
         try {
             if (isTagAttribute(name)) {
-                setProperty(tags, getLocalName(name), {
-                    value: attributes[name],
-                    attributes: {},
-                    description: getDescription(attributes[name], name)
-                });
+                setParsedTag(tags, plainDescriptions, getLocalName(name), createParsedTag(attributes[name], attributes[name], {}, name));
             }
         } catch (error) {
             // Keep going and try to parse the rest of the tags.
         }
     }
-
-    return tags;
 }
 
 function isTagAttribute(name) {
@@ -343,6 +360,11 @@ function isNamespaceDefinition(name) {
     return name.split(':')[0] === 'xmlns';
 }
 
+function setParsedTag(tags, plainDescriptions, name, parsedTag) {
+    setProperty(tags, name, parsedTag.tag);
+    setProperty(plainDescriptions, name, parsedTag.plainDescription);
+}
+
 function getLocalName(name) {
     if (/^MicrosoftPhoto(_\d+_)?:Rating$/i.test(name)) {
         return 'RatingPercent';
@@ -350,45 +372,42 @@ function getLocalName(name) {
     return name.split(':')[1];
 }
 
-function getDescription(value, name = undefined) {
-    if (Array.isArray(value)) {
-        const arrayDescription = getDescriptionOfArray(value);
-        if (hasTagNameFunction(name)) {
-            // A description is a string, so a description function written for
-            // a plain value is ignored when it throws on a list or returns
-            // something other than a string.
-            try {
-                const description = XmpTagNames[name](value, arrayDescription);
-                if (typeof description === 'string') {
-                    return description;
-                }
-            } catch (error) {
-                // Fall back to the descriptions of the items.
-            }
-        }
-        return arrayDescription;
-    }
-    if (typeof value === 'object') {
-        return getDescriptionOfObject(value);
-    }
-
-    if (hasTagNameFunction(name)) {
-        try {
-            return XmpTagNames[name](value);
-        } catch (error) {
-            return value;
-        }
-    }
-    return value;
+// A parent describes its members without their description functions, so
+// each parsed tag carries that plain description next to the tag itself.
+function createParsedTag(value, plainDescription, attributes, name) {
+    return {
+        tag: {
+            value,
+            attributes,
+            description: getDescription(value, plainDescription, name)
+        },
+        plainDescription
+    };
 }
 
-function getDescriptionOfArray(value) {
-    return value.map((item) => {
-        if (item.value !== undefined) {
-            return getDescription(item.value);
+function getDescription(value, plainDescription, name) {
+    if (!hasTagNameFunction(name) || isObject(value)) {
+        return plainDescription;
+    }
+    if (Array.isArray(value)) {
+        // A description is a string, so a description function written for
+        // a plain value is ignored when it throws on a list or returns
+        // something other than a string.
+        try {
+            const description = XmpTagNames[name](value, plainDescription);
+            if (typeof description === 'string') {
+                return description;
+            }
+        } catch (error) {
+            // Fall back to the descriptions of the items.
         }
-        return getDescription(item);
-    }).join(', ');
+        return plainDescription;
+    }
+    try {
+        return XmpTagNames[name](value);
+    } catch (error) {
+        return value;
+    }
 }
 
 // The name comes from the image, so an inherited property of the tag name table
@@ -397,56 +416,36 @@ function hasTagNameFunction(name) {
     return Object.prototype.hasOwnProperty.call(XmpTagNames, name) && (typeof XmpTagNames[name] === 'function');
 }
 
-function getDescriptionOfObject(value) {
-    const descriptions = [];
-
-    for (const key in value) {
-        descriptions.push(`${getClearTextKey(key)}: ${getDescription(value[key].value)}`);
-    }
-
-    return descriptions.join('; ');
+function isObject(value) {
+    return (typeof value === 'object') && !Array.isArray(value);
 }
 
-function getClearTextKey(key) {
-    if (key === 'CiAdrCity') {
-        return 'CreatorCity';
-    }
-    if (key === 'CiAdrCtry') {
-        return 'CreatorCountry';
-    }
-    if (key === 'CiAdrExtadr') {
-        return 'CreatorAddress';
-    }
-    if (key === 'CiAdrPcode') {
-        return 'CreatorPostalCode';
-    }
-    if (key === 'CiAdrRegion') {
-        return 'CreatorRegion';
-    }
-    if (key === 'CiEmailWork') {
-        return 'CreatorWorkEmail';
-    }
-    if (key === 'CiTelWork') {
-        return 'CreatorWorkPhone';
-    }
-    if (key === 'CiUrlWork') {
-        return 'CreatorWorkUrl';
-    }
-    return key;
-}
-
-function parseNodeChildrenAsTags(children, tags = {}) {
-    for (const name in children) {
-        try {
-            if (!isNamespaceDefinition(name)) {
-                setProperty(tags, getLocalName(name), parseNodeAsTag(children[name], name));
+function parseNodeChildrenAsTags(children, tags, plainDescriptions) {
+    oneLevelDeeper(() => {
+        for (const name in children) {
+            try {
+                if (!isNamespaceDefinition(name)) {
+                    setParsedTag(tags, plainDescriptions, getLocalName(name), parseNodeAsTag(children[name], name));
+                }
+            } catch (error) {
+                // Keep going and try to parse the rest of the tags.
             }
-        } catch (error) {
-            // Keep going and try to parse the rest of the tags.
         }
-    }
+    });
+}
 
-    return tags;
+function oneLevelDeeper(callback) {
+    nestingDepth++;
+    try {
+        if (nestingDepth > MAX_NESTING_DEPTH) {
+            // Lands in the catch of the nearest parseNodeChildrenAsTags, which
+            // drops the tag.
+            throw new ParseError(`XMP value nested deeper than ${MAX_NESTING_DEPTH} levels.`);
+        }
+        return callback();
+    } finally {
+        nestingDepth--;
+    }
 }
 
 function parseNodeAsTag(node, name) {
@@ -454,7 +453,7 @@ function parseNodeAsTag(node, name) {
         return parseNodeAsDuplicateTag(node, name);
     }
     if (isEmptyResourceTag(node)) {
-        return {value: '', attributes: {}, description: ''};
+        return {tag: {value: '', attributes: {}, description: ''}, plainDescription: ''};
     }
     if (hasNestedSimpleRdfDescription(node)) {
         return parseNodeAsSimpleRdfDescription(node, name);
@@ -499,13 +498,9 @@ function parseNodeAsSimpleRdfDescription(node, name) {
 
     objectAssign(attributes, parseNodeAttributes(node), parseNodeChildrenAsAttributes(node));
 
-    const value = parseRdfValue(node);
+    const {value, plainDescription} = parseRdfValue(node);
 
-    return {
-        value,
-        attributes,
-        description: getDescription(value, name)
-    };
+    return createParsedTag(value, plainDescription, attributes, name);
 }
 
 function parseNodeAttributes(node) {
@@ -523,6 +518,10 @@ function parseNodeAttributes(node) {
 function parseNodeChildrenAsAttributes(node) {
     const attributes = {};
 
+    if (typeof node.value !== 'object') {
+        return attributes;
+    }
+
     for (const name in node.value) {
         if ((name !== 'rdf:value') && (!isNamespaceDefinition(name))) {
             setProperty(attributes, getLocalName(name), node.value[name].value);
@@ -534,7 +533,11 @@ function parseNodeChildrenAsAttributes(node) {
 
 function parseRdfValue(node) {
     const rdfValueNode = getLastNode(node.value['rdf:value']);
-    return getURIValue(rdfValueNode) || parseRdfValueContent(rdfValueNode);
+    const uri = getURIValue(rdfValueNode);
+    if (uri) {
+        return {value: uri, plainDescription: uri};
+    }
+    return parseRdfValueContent(rdfValueNode);
 }
 
 // Repeated elements are collected into an array, and the last one wins, which
@@ -550,14 +553,56 @@ function getLastNode(node) {
 // the value of the tag rather than a tag of its own.
 function parseRdfValueContent(rdfValueNode) {
     if (isArray(rdfValueNode)) {
-        return parseNodeAsArray(rdfValueNode).value;
+        // Lists nested in rdf:value elements never pass parseNodeChildrenAsTags, so each one is a level.
+        return oneLevelDeeper(() => parseArrayItems(rdfValueNode));
     }
     if (typeof rdfValueNode.value === 'object') {
         // The child names come from the image, so a child named __proto__ must
         // not be able to replace this object's prototype.
-        return parseNodeChildrenAsTags(rdfValueNode.value, Object.create(null));
+        const tags = Object.create(null);
+        const plainDescriptions = Object.create(null);
+        parseNodeChildrenAsTags(rdfValueNode.value, tags, plainDescriptions);
+        return {value: tags, plainDescription: getDescriptionOfObject(tags, plainDescriptions)};
     }
-    return rdfValueNode.value;
+    return {value: rdfValueNode.value, plainDescription: rdfValueNode.value};
+}
+
+function getDescriptionOfObject(tags, plainDescriptions) {
+    const descriptions = [];
+
+    for (const key in tags) {
+        descriptions.push(`${getClearTextKey(key)}: ${plainDescriptions[key]}`);
+    }
+
+    return descriptions.join('; ');
+}
+
+function getClearTextKey(key) {
+    if (key === 'CiAdrCity') {
+        return 'CreatorCity';
+    }
+    if (key === 'CiAdrCtry') {
+        return 'CreatorCountry';
+    }
+    if (key === 'CiAdrExtadr') {
+        return 'CreatorAddress';
+    }
+    if (key === 'CiAdrPcode') {
+        return 'CreatorPostalCode';
+    }
+    if (key === 'CiAdrRegion') {
+        return 'CreatorRegion';
+    }
+    if (key === 'CiEmailWork') {
+        return 'CreatorWorkEmail';
+    }
+    if (key === 'CiTelWork') {
+        return 'CreatorWorkPhone';
+    }
+    if (key === 'CiUrlWork') {
+        return 'CreatorWorkUrl';
+    }
+    return key;
 }
 
 function hasNestedStructureRdfDescription(node) {
@@ -566,38 +611,44 @@ function hasNestedStructureRdfDescription(node) {
 }
 
 function parseNodeAsStructureRdfDescription(node, name) {
-    const tag = {
-        value: {},
-        attributes: {}
-    };
+    const value = {};
+    const plainDescriptions = Object.create(null);
+    const attributes = {};
 
     if (node.value['rdf:Description'] !== undefined) {
-        objectAssign(tag.value, parseNodeAttributesAsTags(node.value['rdf:Description'].attributes));
-        objectAssign(tag.attributes, parseNodeAttributes(node));
+        parseNodeAttributesAsTags(node.value['rdf:Description'].attributes, value, plainDescriptions);
+        objectAssign(attributes, parseNodeAttributes(node));
         node = node.value['rdf:Description'];
     }
 
-    objectAssign(tag.value, parseNodeChildrenAsTags(node.value));
+    if (typeof node.value === 'object') {
+        parseNodeChildrenAsTags(node.value, value, plainDescriptions);
+    }
 
-    tag.description = getDescription(tag.value, name);
-
-    return tag;
+    return createParsedTag(value, getDescriptionOfObject(value, plainDescriptions), attributes, name);
 }
 
 function isCompactStructure(node) {
-    return (Object.keys(node.value).length === 0)
+    return isEmptyValue(node.value)
         && (node.attributes['xml:lang'] === undefined)
         && (node.attributes['rdf:resource'] === undefined);
 }
 
-function parseNodeAsCompactStructure(node, name) {
-    const value = parseNodeAttributesAsTags(node.attributes);
+// A text-only element has a string value; enumerating it would visit every character.
+function isEmptyValue(value) {
+    if (typeof value === 'string') {
+        return value === '';
+    }
+    return Object.keys(value).length === 0;
+}
 
-    return {
-        value,
-        attributes: {},
-        description: getDescription(value, name)
-    };
+function parseNodeAsCompactStructure(node, name) {
+    const value = {};
+    const plainDescriptions = Object.create(null);
+
+    parseNodeAttributesAsTags(node.attributes, value, plainDescriptions);
+
+    return createParsedTag(value, getDescriptionOfObject(value, plainDescriptions), {}, name);
 }
 
 function isArray(node) {
@@ -609,9 +660,16 @@ function getArrayChild(value) {
 }
 
 function parseNodeAsArray(node, name) {
-    let items = getArrayChild(node.value).value['rdf:li'];
     const attributes = parseNodeAttributes(node);
+    const {value, plainDescription} = parseArrayItems(node);
+
+    return createParsedTag(value, plainDescription, attributes, name);
+}
+
+function parseArrayItems(node) {
+    let items = getArrayChild(node.value).value['rdf:li'];
     const value = [];
+    const itemDescriptions = [];
 
     if (items === undefined) {
         items = [];
@@ -620,38 +678,53 @@ function parseNodeAsArray(node, name) {
     }
 
     items.forEach((item) => {
-        value.push(parseArrayValue(item));
+        const parsedItem = parseArrayValue(item);
+        value.push(parsedItem.value);
+        itemDescriptions.push(parsedItem.plainDescription);
     });
 
-    return {
-        value,
-        attributes,
-        description: getDescription(value, name)
-    };
+    return {value, plainDescription: itemDescriptions.join(', ')};
 }
 
 function parseArrayValue(item) {
     if (hasNestedSimpleRdfDescription(item)) {
-        return parseNodeAsSimpleRdfDescription(item);
+        return getParsedTagAsItem(parseNodeAsSimpleRdfDescription(item));
     }
     if (hasNestedStructureRdfDescription(item)) {
-        return parseNodeAsStructureRdfDescription(item).value;
+        return getParsedStructureAsItem(parseNodeAsStructureRdfDescription(item));
     }
     if (isCompactStructure(item)) {
-        return parseNodeAsCompactStructure(item).value;
+        return getParsedStructureAsItem(parseNodeAsCompactStructure(item));
     }
 
-    return parseNodeAsSimpleValue(item);
+    return getParsedTagAsItem(parseNodeAsSimpleValue(item));
+}
+
+function getParsedTagAsItem(parsedTag) {
+    return {value: parsedTag.tag, plainDescription: parsedTag.plainDescription};
+}
+
+function getParsedStructureAsItem(parsedStructure) {
+    return {value: parsedStructure.tag.value, plainDescription: parsedStructure.plainDescription};
 }
 
 function parseNodeAsSimpleValue(node, name) {
-    const value = getURIValue(node) || parseXMPObject(node.value);
+    const {value, plainDescription} = parseSimpleValue(node);
+    return createParsedTag(value, plainDescription, parseNodeAttributes(node), name);
+}
 
-    return {
-        value,
-        attributes: parseNodeAttributes(node),
-        description: getDescription(value, name)
-    };
+function parseSimpleValue(node) {
+    const uri = getURIValue(node);
+    if (uri) {
+        return {value: uri, plainDescription: uri};
+    }
+    if (typeof node.value === 'string') {
+        return {value: node.value, plainDescription: node.value};
+    }
+    const tags = {};
+    const plainDescriptions = Object.create(null);
+    parseXMPObject(node.value, tags, plainDescriptions);
+    return {value: tags, plainDescription: getDescriptionOfObject(tags, plainDescriptions)};
 }
 
 function getURIValue(node) {

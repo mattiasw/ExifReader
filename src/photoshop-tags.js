@@ -4,7 +4,7 @@
 
 // Specification: https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/
 
-import {getDataView, getStringFromDataView, getPascalStringFromDataView} from './utils.js';
+import {getDataView, getStringFromDataView, getPascalStringFromDataView, setProperty} from './utils.js';
 import Types from './types.js';
 import TagNames from './photoshop-tag-names.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
@@ -62,7 +62,7 @@ function read(bytes, includeUnknown, tagFilter = NOOP_TAG_FILTER) {
                 } catch (error) {
                     tag.description = '<no description formatter>';
                 }
-                tags[tagName ? tagName : TagNames[tagId].name] = tag;
+                setProperty(tags, tagName ? tagName : TagNames[tagId].name, tag);
             } else if (includeUnknown) {
                 tags[`undefined-${tagId}`] = tag;
             }

@@ -29,7 +29,8 @@ function read(
     byteOrder,
     includeUnknown,
     computed = false,
-    tagFilter = undefined
+    tagFilter = undefined,
+    valueBudget = undefined
 ) {
     let tags = readIfd(
         dataView,
@@ -40,7 +41,8 @@ function read(
         includeUnknown,
         computed,
         tagFilter,
-        'makerNotes'
+        'makerNotes',
+        valueBudget
     );
 
     if (tags['ShotInfo']) {

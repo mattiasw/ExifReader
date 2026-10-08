@@ -65,7 +65,7 @@ export function loadFileObject(file, options) {
 
 function legacyRange(options) {
     if (options && Number.isInteger(options.length) && options.length >= 0) {
-        return {start: 0, end: options.length};
+        return {start: 0, end: options.length, maxBytes: options.length};
     }
     return {start: 0};
 }
@@ -75,13 +75,16 @@ function legacyRange(options) {
  * requested range is not the whole file.
  *
  * @param {string} url
- * @param {{start?: number, end?: number}} [range] `end` is exclusive. Omit (or pass `Infinity`) to read to EOF.
+ * @param {{start?: number, end?: number, maxBytes?: number}} [range] `end` is exclusive. Omit (or pass `Infinity`)
+ *        to read to EOF. With `maxBytes` (a non-negative integer) at most that many body bytes are kept, for a 2xx
+ *        status and for 416; where the response body is a `ReadableStream` the transfer is stopped once they have
+ *        arrived, otherwise the whole body is read and cut.
  * @returns {Promise<{buffer: ArrayBuffer, totalSize: number|undefined, status: number|undefined}>}
  *          `totalSize` is taken from the `Content-Range` or `Content-Length` response header when present.
  *          Rejects with `Could not fetch file: <status>` on non-2xx responses, except 416 which the
  *          `length: 'auto'` loop consumes as a fall-back signal. Mirrors `nodeGetRange`.
  */
-export function fetchRange(url, {start = 0, end} = {}) {
+export function fetchRange(url, {start = 0, end, maxBytes} = {}) {
     const options = {method: 'GET'};
     if (start > 0 || (end !== undefined && end !== Infinity)) {
         options.headers = {range: buildRangeHeader(start, end)};
@@ -93,8 +96,97 @@ export function fetchRange(url, {start = 0, end} = {}) {
             return Promise.reject(new Error(`Could not fetch file: ${status} ${statusText}`.trim()));
         }
         const totalSize = totalSizeFromFetchResponse(response);
-        return Promise.resolve(response.arrayBuffer()).then((buffer) => ({buffer, totalSize, status}));
+        return readFetchBody(response, maxBytes).then((buffer) => ({buffer, totalSize, status}));
     });
+}
+
+function readFetchBody(response, maxBytes) {
+    if (!isByteLimit(maxBytes)) {
+        return Promise.resolve(response.arrayBuffer());
+    }
+    if (response.body && typeof response.body.getReader === 'function') {
+        return readStreamUpTo(response.body.getReader(), maxBytes);
+    }
+    return Promise.resolve(response.arrayBuffer()).then((buffer) => buffer.slice(0, maxBytes));
+}
+
+function isByteLimit(maxBytes) {
+    return Number.isInteger(maxBytes) && maxBytes >= 0;
+}
+
+function readStreamUpTo(reader, maxBytes) {
+    return new Promise((resolve, reject) => {
+        const collector = createByteCollector(maxBytes);
+        readNextChunk();
+
+        // Not returning the inner promise keeps memory constant per chunk;
+        // a returned chain would retain every link until the stream ends.
+        function readNextChunk() {
+            if (collector.isFull()) {
+                resolve(collector.toArrayBuffer());
+                cancelQuietly(reader);
+                return;
+            }
+            reader.read().then(onChunk).then(undefined, onFailure);
+        }
+
+        function onChunk(result) {
+            if (result.done) {
+                resolve(collector.toArrayBuffer());
+                return;
+            }
+            collector.add(result.value);
+            readNextChunk();
+        }
+
+        function onFailure(error) {
+            reject(error);
+            cancelQuietly(reader);
+        }
+    });
+}
+
+function cancelQuietly(reader) {
+    Promise.resolve().then(() => reader.cancel()).then(undefined, () => undefined);
+}
+
+/**
+ * Collects the first `maxBytes` bytes of a sequence of chunks into one
+ * growable array, so memory stays O(maxBytes) however the body is chunked.
+ * Capacity grows with the data rather than being preallocated, since a
+ * caller may pass a large `length` for a small file.
+ */
+function createByteCollector(maxBytes) {
+    let bytes = new Uint8Array(0);
+    let count = 0;
+
+    return {
+        add(chunk) {
+            const size = Math.min(chunk.byteLength, maxBytes - count);
+            if (count + size > bytes.length) {
+                grow(count + size);
+            }
+            bytes.set(chunk.subarray(0, size), count);
+            count += size;
+        },
+        isFull() {
+            return count >= maxBytes;
+        },
+        toArrayBuffer() {
+            if (bytes.length === count) {
+                return bytes.buffer;
+            }
+            const exact = new Uint8Array(count);
+            exact.set(bytes.subarray(0, count));
+            return exact.buffer;
+        },
+    };
+
+    function grow(needed) {
+        const larger = new Uint8Array(Math.min(maxBytes, Math.max(needed, 2 * bytes.length)));
+        larger.set(bytes.subarray(0, count));
+        bytes = larger;
+    }
 }
 
 function buildRangeHeader(start, end) {
@@ -125,10 +217,12 @@ function isAcceptableFetchStatus(status) {
  * on non-2xx responses with the status line in the error message.
  *
  * @param {string} url
- * @param {{start?: number, end?: number}} [range] `end` is exclusive. Omit (or pass `Infinity`) to read to EOF.
+ * @param {{start?: number, end?: number, maxBytes?: number}} [range] `end` is exclusive. Omit (or pass `Infinity`)
+ *        to read to EOF. With `maxBytes` (a non-negative integer) at most that many body bytes are read on a 2xx
+ *        response, 200 or 206, and the transfer is stopped once they have arrived.
  * @returns {Promise<{buffer: Buffer, totalSize: number|undefined, status: number|undefined}>}
  */
-export function nodeGetRange(url, {start = 0, end} = {}) {
+export function nodeGetRange(url, {start = 0, end, maxBytes} = {}) {
     return new Promise((resolve, reject) => {
         const options = {};
         if (start > 0 || (end !== undefined && end !== Infinity)) {
@@ -139,14 +233,22 @@ export function nodeGetRange(url, {start = 0, end} = {}) {
         get(url, options, (response) => {
             if ((response.statusCode >= HTTP_STATUS_OK) && (response.statusCode <= HTTP_STATUS_SUCCESS_MAX)) {
                 const totalSize = totalSizeFromNodeResponse(response);
-                const data = [];
-                response.on('data', (chunk) => data.push(Buffer.from(chunk)));
-                response.on('error', (error) => reject(error));
-                response.on('end', () => resolve({
-                    buffer: Buffer.concat(data),
-                    totalSize,
-                    status: response.statusCode,
-                }));
+                if (isByteLimit(maxBytes)) {
+                    readNodeResponseUpTo(response, maxBytes, (buffer) => resolve({
+                        buffer,
+                        totalSize,
+                        status: response.statusCode,
+                    }), reject);
+                } else {
+                    const data = [];
+                    response.on('data', (chunk) => data.push(Buffer.from(chunk)));
+                    response.on('error', (error) => reject(error));
+                    response.on('end', () => resolve({
+                        buffer: Buffer.concat(data),
+                        totalSize,
+                        status: response.statusCode,
+                    }));
+                }
             } else if (response.statusCode === HTTP_STATUS_RANGE_NOT_SATISFIABLE) {
                 // Resolve (rather than reject) so the adaptive `length: 'auto'`
                 // loop can fall back to a full read, mirroring the fetch path.
@@ -158,6 +260,36 @@ export function nodeGetRange(url, {start = 0, end} = {}) {
             }
         }).on('error', (error) => reject(error));
     });
+}
+
+function readNodeResponseUpTo(response, maxBytes, onBuffer, onError) {
+    const collector = createByteCollector(maxBytes);
+    let finished = false;
+
+    response.on('error', onError);
+    if (collector.isFull()) {
+        finish();
+        response.destroy();
+    } else {
+        response.on('data', onData);
+        response.on('end', finish);
+    }
+
+    function onData(chunk) {
+        if (finished) {
+            return;
+        }
+        collector.add(chunk);
+        if (collector.isFull()) {
+            finish();
+            response.destroy();
+        }
+    }
+
+    function finish() {
+        finished = true;
+        onBuffer(Buffer.from(collector.toArrayBuffer()));
+    }
 }
 
 function totalSizeFromNodeResponse(response) {

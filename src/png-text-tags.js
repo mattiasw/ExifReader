@@ -4,7 +4,7 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringValueFromArray, getStringFromDataView, decompress, COMPRESSION_METHOD_NONE} from './utils.js';
+import {getStringValueFromArray, getStringFromDataView, decompress, setProperty, COMPRESSION_METHOD_NONE} from './utils.js';
 import TagDecoder from './tag-decoder.js';
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
 import Tags from './tags.js';
@@ -24,6 +24,8 @@ const STATE_TEXT = 'STATE_TEXT';
 const COMPRESSION_SECTION_ITXT_EXTRA_BYTE = 1;
 const COMPRESSION_FLAG_COMPRESSED = 1;
 const EXIF_OFFSET = 6;
+const MAX_COMPRESSED_TEXT_CHUNKS = 255;
+const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;
 
 function read(
     dataView,
@@ -32,76 +34,36 @@ function read(
     includeUnknown,
     computed = false,
     tagFilter = NOOP_TAG_FILTER,
-    decompressConfig
+    decompressConfig,
+    valueBudget
 ) {
     const tags = {};
-    const tagsPromises = [];
+    const decompressionTasks = [];
 
     for (let i = 0; i < pngTextChunks.length; i++) {
         const {offset, length, type} = pngTextChunks[i];
-        const nameAndValue = getNameAndValue(dataView, offset, length, type, async, decompressConfig);
-        if (nameAndValue instanceof Promise) {
-            tagsPromises.push(nameAndValue.then(({name, value, description}) => {
-                try {
-                    if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
-                        if (!tagFilter.shouldParseGroup('exif')) {
-                            return {};
-                        }
-                        return {
-                            __exif: Tags.read(
-                                decodeRawData(value),
-                                EXIF_OFFSET,
-                                includeUnknown,
-                                computed,
-                                tagFilter
-                            ).tags
-                        };
-                    } else if (Constants.USE_IPTC && isIptcGroupTag(name, value)) {
-                        if (!tagFilter.shouldParseGroup('iptc')) {
-                            return {};
-                        }
-                        return {
-                            __iptc: IptcTags.read(
-                                decodeRawData(value),
-                                0,
-                                includeUnknown,
-                                tagFilter
-                            )
-                        };
-                    } else if (name && !isExifGroupTag(name, value) && !isIptcGroupTag(name, value)) {
-                        if (!tagFilter.shouldParseGroup('png')) {
-                            return {};
-                        }
-                        return {
-                            [name]: {
-                                value,
-                                description
-                            }
-                        };
-                    }
-                } catch (error) {
-                    // Ignore the broken tag.
-                }
-                return {};
-            }));
-        } else {
-            const {name, value, description} = nameAndValue;
+        const textChunk = parseTextChunk(dataView, offset, length, type);
+        if (textChunk.compressionMethod === COMPRESSION_METHOD_NONE) {
+            const {name, value, description} = getUncompressedTag(textChunk);
             if (name && tagFilter.shouldParseGroup('png')) {
-                tags[name] = {
+                setProperty(tags, name, {
                     value,
                     description
-                };
+                });
             }
+        } else if (async && decompressionTasks.length < MAX_COMPRESSED_TEXT_CHUNKS) {
+            decompressionTasks.push(() => decompressTextChunk(textChunk, decompressConfig)
+                .then((tag) => getTagsFromDecompressedTag(tag, includeUnknown, computed, tagFilter, valueBudget)));
         }
     }
 
     return {
         readTags: tags,
-        readTagsPromise: tagsPromises.length > 0 ? Promise.all(tagsPromises) : undefined
+        readTagsPromise: decompressionTasks.length > 0 ? runTasksInOrder(decompressionTasks, MAX_DECOMPRESSIONS_IN_FLIGHT) : undefined
     };
 }
 
-function getNameAndValue(dataView, offset, length, type, async, decompressConfig) {
+function parseTextChunk(dataView, offset, length, type) {
     const keywordChars = [];
     const langChars = [];
     const translatedKeywordChars = [];
@@ -137,16 +99,87 @@ function getNameAndValue(dataView, offset, length, type, async, decompressConfig
         }
     }
 
-    if (compressionMethod !== COMPRESSION_METHOD_NONE && !async) {
-        return {};
+    return {type, keywordChars, langChars, compressionMethod, valueChars};
+}
+
+function getUncompressedTag({type, keywordChars, langChars, valueChars}) {
+    const decodedValueChars = decompress(valueChars, COMPRESSION_METHOD_NONE, getEncodingFromType(type), 'string');
+    return constructTag(decodedValueChars, type, langChars, keywordChars);
+}
+
+function decompressTextChunk({type, keywordChars, langChars, compressionMethod, valueChars}, decompressConfig) {
+    return decompress(valueChars, compressionMethod, getEncodingFromType(type), 'string', decompressConfig)
+        .then((decompressedValueChars) => constructTag(decompressedValueChars, type, langChars, keywordChars))
+        .catch(() => constructTag('<text using unknown compression>'.split(''), type, langChars, keywordChars));
+}
+
+function getTagsFromDecompressedTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget) {
+    try {
+        if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
+            if (!tagFilter.shouldParseGroup('exif')) {
+                return {};
+            }
+            return {
+                embeddedExifTags: Tags.read(
+                    decodeRawData(value),
+                    EXIF_OFFSET,
+                    includeUnknown,
+                    computed,
+                    tagFilter,
+                    valueBudget
+                ).tags
+            };
+        } else if (Constants.USE_IPTC && isIptcGroupTag(name, value)) {
+            if (!tagFilter.shouldParseGroup('iptc')) {
+                return {};
+            }
+            return {
+                embeddedIptcTags: IptcTags.read(
+                    decodeRawData(value),
+                    0,
+                    includeUnknown,
+                    tagFilter
+                )
+            };
+        } else if (name && !isExifGroupTag(name, value) && !isIptcGroupTag(name, value)) {
+            if (!tagFilter.shouldParseGroup('png')) {
+                return {};
+            }
+            const readTags = {};
+            setProperty(readTags, name, {
+                value,
+                description
+            });
+            return {readTags};
+        }
+    } catch (error) {
+        // Ignore the broken tag.
     }
-    const decompressedValueChars = decompress(valueChars, compressionMethod, getEncodingFromType(type), 'string', decompressConfig);
-    if (decompressedValueChars instanceof Promise) {
-        return decompressedValueChars
-            .then((_decompressedValueChars) => constructTag(_decompressedValueChars, type, langChars, keywordChars))
-            .catch(() => constructTag('<text using unknown compression>'.split(''), type, langChars, keywordChars));
+    return {};
+}
+
+function runTasksInOrder(tasks, limit) {
+    const results = [];
+    const workers = [];
+    let nextIndex = 0;
+
+    for (let i = 0; i < Math.min(limit, tasks.length); i++) {
+        workers.push(runNext());
     }
-    return constructTag(decompressedValueChars, type, langChars, keywordChars);
+    return Promise.all(workers).then(() => results);
+
+    function runNext() {
+        if (nextIndex >= tasks.length) {
+            return Promise.resolve();
+        }
+        const index = nextIndex++;
+        // The wrapper turns a synchronous throw from a task into a rejection
+        // that Promise.all observes, instead of an exception out of read().
+        return new Promise((resolve) => resolve(tasks[index]())).then((result) => {
+            results[index] = result;
+            return runNext();
+        });
+    }
 }
 
 function getCompressionMethod({type, dataView, offset}) {

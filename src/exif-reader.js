@@ -8,7 +8,7 @@
  */
 /* global Buffer */
 
-import {objectAssign, decompress, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray, assertPromiseSupport} from './utils.js';
+import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray, assertPromiseSupport, setProperty} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import Constants from './constants.js';
@@ -17,6 +17,7 @@ import ByteOrder from './byte-order.js';
 import {getTiffHeaderOffset} from './image-header-iso-bmff.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
+import {getValueBudget} from './tags-helpers.js';
 import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
 import JxlFileTags from './jxl-file-tags.js';
@@ -93,6 +94,7 @@ export function loadView(
     } = {}
 ) {
     dataView = getSelfContainedDataView(dataView);
+    decompressConfig = withDecompressBudget(decompressConfig);
 
     const tagFilter = createTagFilter({includeTags, excludeTags});
     const parsedGroups = Object.create(null);
@@ -101,6 +103,7 @@ export function loadView(
     const deferredPromises = [];
     let pngTextIsAsync = false;
     let thumbnailIfdTags = undefined;
+    let valueBudget = undefined;
     let embeddedXmpStepForFlat = undefined;
 
     const {
@@ -187,13 +190,14 @@ export function loadView(
         && tiffHeaderOffset !== undefined
         && tagFilter.shouldParseGroup('exif')
     ) {
-        const {tags: readTags, byteOrder} = readExifTagsSafely(
+        const {tags: readTags, byteOrder, valueBudget: exifValueBudget} = readExifTagsSafely(
             exifDataView || dataView,
             tiffHeaderOffset,
             includeUnknown,
             computed,
             tagFilter
         );
+        valueBudget = exifValueBudget;
         if (readTags.Thumbnail) {
             thumbnailIfdTags = readTags.Thumbnail;
             delete readTags.Thumbnail;
@@ -321,7 +325,8 @@ export function loadView(
                     byteOrder,
                     includeUnknown,
                     computed,
-                    tagFilter
+                    tagFilter,
+                    valueBudget
                 );
                 parsedGroups.makerNotes = readCanonTags;
                 if (tagFilter.shouldReturnGroup('makerNotes')) {
@@ -338,7 +343,8 @@ export function loadView(
                     parsedExifTags['MakerNote'].__offset,
                     includeUnknown,
                     computed,
-                    tagFilter
+                    tagFilter,
+                    valueBudget
                 );
                 parsedGroups.makerNotes = readPentaxTags;
                 if (tagFilter.shouldReturnGroup('makerNotes')) {
@@ -367,6 +373,10 @@ export function loadView(
             mergeSteps.push(embeddedXmpStepForFlat);
             embeddedXmpStepForFlat = undefined;
         }
+    }
+
+    if (valueBudget === undefined && dataView !== undefined) {
+        valueBudget = getValueBudget(dataView);
     }
 
     if (
@@ -423,7 +433,8 @@ export function loadView(
                         brobTiffHeaderOffset,
                         includeUnknown,
                         computed,
-                        tagFilter
+                        tagFilter,
+                        valueBudget
                     );
                     if (readTags.Thumbnail) {
                         delete readTags.Thumbnail;
@@ -509,7 +520,8 @@ export function loadView(
             mpfDataOffset,
             includeUnknown,
             computed,
-            tagFilter
+            tagFilter,
+            valueBudget
         );
         const parsedMpfTags = filterTagsForParse('mpf', readMpfTags, tagFilter);
         parsedGroups.mpf = parsedMpfTags;
@@ -557,7 +569,8 @@ export function loadView(
             includeUnknown,
             computed,
             tagFilter,
-            decompressConfig
+            decompressConfig,
+            valueBudget
         );
         pngTextIsAsync = !!readTagsPromise;
 
@@ -770,14 +783,20 @@ function getBrobDataView(dataView, brobChunk) {
 }
 
 function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter) {
+    // Created outside the try so values decoded before a throw still count
+    // against the budget that the maker note and MPF reads draw from. The data
+    // view is only missing in unit tests that fake the tag readers.
+    const valueBudget = dataView === undefined ? undefined : getValueBudget(dataView);
     try {
-        return Tags.read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter);
+        const {tags, byteOrder} = Tags.read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget);
+        return {tags, byteOrder, valueBudget};
     } catch (error) {
         // A malformed TIFF header (an out-of-bounds offset or an invalid byte
         // order marker, e.g. from a HEIC/AVIF iloc that does not point at real
         // Exif) must not abort the whole parse. Skip Exif instead, but keep the
-        // same {tags, byteOrder} shape so callers can destructure safely.
-        return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
+        // same {tags, byteOrder, valueBudget} shape so callers can destructure
+        // safely.
+        return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN, valueBudget};
     }
 }
 
@@ -809,7 +828,7 @@ function filterTags(groupKey, readTags, matchesTag) {
         const tagId = getTagId(tagValue);
 
         if (matchesTag(groupKey, tagName, tagId)) {
-            filteredTags[tagName] = tagValue;
+            setProperty(filteredTags, tagName, tagValue);
         }
     }
 

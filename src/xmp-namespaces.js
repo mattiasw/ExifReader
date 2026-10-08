@@ -2,24 +2,39 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+const CHROME_MESSAGE_START = 'Namespace prefix ';
+const CHROME_MESSAGE_END = ' is not defined';
+
 export function isMissingNamespaceError(error) {
+    const message = String(error.message);
     const missingNamespaceStrings = [
         // @xmldom/xmldom
         'prefix is non-null and namespace is null',
         // Firefox
         'prefix not bound to a namespace', // en
-        'prefix inte bundet till en namnrymd', // sv
-        // Chrome
-        /Namespace prefix .+ is not defined/
+        'prefix inte bundet till en namnrymd' // sv
     ];
 
     for (let i = 0; i < missingNamespaceStrings.length; i++) {
-        const regexp = new RegExp(missingNamespaceStrings[i]);
-        if (regexp.test(error.message)) {
+        if (message.indexOf(missingNamespaceStrings[i]) !== -1) {
             return true;
         }
     }
 
+    return isChromeMissingNamespaceMessage(message);
+}
+
+// Same result as the former Chrome check /Namespace prefix .+ is not defined/,
+// in linear time.
+function isChromeMissingNamespaceMessage(message) {
+    const lines = message.split(/[\n\r\u2028\u2029]/);
+    for (let i = 0; i < lines.length; i++) {
+        const prefixIndex = lines[i].indexOf(CHROME_MESSAGE_START);
+        if (prefixIndex !== -1
+            && lines[i].lastIndexOf(CHROME_MESSAGE_END) > prefixIndex + CHROME_MESSAGE_START.length) {
+            return true;
+        }
+    }
     return false;
 }
 

@@ -207,15 +207,20 @@ export function applyMergeStep({
 
     if (Constants.USE_PNG && step.type === 'processPngTextReadTagsDeferredList') {
         const tagList = deferredResults[step.deferredKey] || [];
+        const merge = createInPlaceMerge(deps);
 
         for (let i = 0; i < tagList.length; i++) {
+            const entry = tagList[i];
             tags = addPngTextReadTagsToTagsAndGroups({
-                readTags: tagList[i],
+                readTags: entry.readTags || {},
+                embeddedExifTags: entry.embeddedExifTags,
+                embeddedIptcTags: entry.embeddedIptcTags,
                 parsedGroups,
                 expanded,
                 tagFilter,
                 tags,
                 deps,
+                merge,
             });
         }
 
@@ -377,25 +382,19 @@ export function mergeMergeGroup(tags, groupKey, returnedTags, expanded, deps) {
 
 export function addPngTextReadTagsToTagsAndGroups({
     readTags,
+    embeddedExifTags,
+    embeddedIptcTags,
     parsedGroups,
     expanded,
     tagFilter,
     tags,
     deps,
+    merge = createCopyingMerge(deps),
 }) {
-    const embeddedExifTags = readTags.__exif;
-    const embeddedIptcTags = readTags.__iptc;
-    delete readTags.__exif;
-    delete readTags.__iptc;
-
     if (embeddedExifTags) {
         const parsedEmbeddedExifTags =
             deps.filterTagsForParse('exif', embeddedExifTags, tagFilter);
-        parsedGroups.exif = !parsedGroups.exif ? parsedEmbeddedExifTags : deps.objectAssign(
-            {},
-            parsedGroups.exif,
-            parsedEmbeddedExifTags
-        );
+        merge.group(parsedGroups, 'exif', parsedEmbeddedExifTags);
 
         if (tagFilter.shouldReturnGroup('exif')) {
             const returnedEmbeddedExifTags = deps.filterTagsForReturn(
@@ -404,11 +403,7 @@ export function addPngTextReadTagsToTagsAndGroups({
                 tagFilter
             );
             if (expanded) {
-                tags.exif = !tags.exif ? returnedEmbeddedExifTags : deps.objectAssign(
-                    {},
-                    tags.exif,
-                    returnedEmbeddedExifTags
-                );
+                merge.group(tags, 'exif', returnedEmbeddedExifTags);
             } else {
                 // The thumbnail image is never read from a text chunk, so the
                 // thumbnail IFD would land at the top level with no image.
@@ -416,7 +411,7 @@ export function addPngTextReadTagsToTagsAndGroups({
                     deps.objectAssign({}, returnedEmbeddedExifTags);
                 delete returnedEmbeddedExifTagsForFlat.Thumbnail;
 
-                tags = deps.objectAssign({}, tags, returnedEmbeddedExifTagsForFlat);
+                tags = merge.topLevel(tags, returnedEmbeddedExifTagsForFlat);
             }
         }
     }
@@ -424,11 +419,7 @@ export function addPngTextReadTagsToTagsAndGroups({
     if (embeddedIptcTags) {
         const parsedEmbeddedIptcTags =
             deps.filterTagsForParse('iptc', embeddedIptcTags, tagFilter);
-        parsedGroups.iptc = !parsedGroups.iptc ? parsedEmbeddedIptcTags : deps.objectAssign(
-            {},
-            parsedGroups.iptc,
-            parsedEmbeddedIptcTags
-        );
+        merge.group(parsedGroups, 'iptc', parsedEmbeddedIptcTags);
 
         if (tagFilter.shouldReturnGroup('iptc')) {
             const returnedEmbeddedIptcTags = deps.filterTagsForReturn(
@@ -437,13 +428,9 @@ export function addPngTextReadTagsToTagsAndGroups({
                 tagFilter
             );
             if (expanded) {
-                tags.iptc = !tags.iptc ? returnedEmbeddedIptcTags : deps.objectAssign(
-                    {},
-                    tags.iptc,
-                    returnedEmbeddedIptcTags
-                );
+                merge.group(tags, 'iptc', returnedEmbeddedIptcTags);
             } else {
-                tags = deps.objectAssign({}, tags, returnedEmbeddedIptcTags);
+                tags = merge.topLevel(tags, returnedEmbeddedIptcTags);
             }
         }
     }
@@ -455,28 +442,56 @@ export function addPngTextReadTagsToTagsAndGroups({
         parsedGroups.pngText = parsedPngTextTags;
 
         if (expanded) {
-            tags.png = !tags.png ? returnedPngTextTags : deps.objectAssign(
-                {},
-                tags.png,
-                returnedPngTextTags
-            );
+            merge.group(tags, 'png', returnedPngTextTags);
             // Historical behavior in build fixtures:
             // - if PNG text chunks yield actual "png" tags, `pngText` should contain only those
             // - otherwise (e.g. only embedded Exif/IPTC), `pngText` should represent the full `png` group
             //   and will be filled in later as a fallback from `tags.png`
             if (returnedPngTextTags && Object.keys(returnedPngTextTags).length > 0) {
-                tags.pngText = !tags.pngText ? returnedPngTextTags : deps.objectAssign(
-                    {},
-                    tags.pngText,
-                    returnedPngTextTags
-                );
+                merge.group(tags, 'pngText', returnedPngTextTags);
             }
         } else {
-            tags = deps.objectAssign({}, tags, returnedPngTextTags);
+            tags = merge.topLevel(tags, returnedPngTextTags);
         }
     }
 
     return tags;
+}
+
+function createCopyingMerge(deps) {
+    return {
+        group(holder, key, source) {
+            holder[key] = !holder[key] ? source : deps.objectAssign({}, holder[key], source);
+        },
+        topLevel(tags, source) {
+            return deps.objectAssign({}, tags, source);
+        },
+    };
+}
+
+function createInPlaceMerge(deps) {
+    const ownedContainers = [];
+
+    return {
+        group(holder, key, source) {
+            holder[key] = own(holder[key]);
+            deps.objectAssign(holder[key], source);
+        },
+        topLevel(tags, source) {
+            return deps.objectAssign(own(tags), source);
+        },
+    };
+
+    // Earlier steps can share these containers (tags.png can be tags.pngFile or the
+    // synchronous text chunks' tags), so each is copied once before merging in place.
+    function own(container) {
+        if (ownedContainers.indexOf(container) !== -1) {
+            return container;
+        }
+        const copy = deps.objectAssign({}, container);
+        ownedContainers.push(copy);
+        return copy;
+    }
 }
 
 export function isThenable(value) {

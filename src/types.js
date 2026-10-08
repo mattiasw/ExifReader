@@ -29,7 +29,6 @@ const tagTypes = {
 };
 
 export default {
-    getAsciiValue,
     getByteAt,
     getAsciiAt,
     getShortAt,
@@ -43,10 +42,6 @@ export default {
     tagTypes,
     getTypeSize
 };
-
-function getAsciiValue(charArray) {
-    return charArray.map((charCode) => String.fromCharCode(charCode));
-}
 
 function getByteAt(dataView, offset) {
     return dataView.getUint8(offset);

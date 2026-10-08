@@ -6,6 +6,7 @@ import {
     FILTER_GROUPS,
     ID_CAPABLE_GROUPS,
     COMPOSITE_DEPENDENCY_TAGS,
+    EXIF_POINTER_TAGS,
     getExifTagDependenciesForInclude,
 } from './tag-filter-config.js';
 
@@ -181,6 +182,7 @@ function getExifIncludeDependencies(includeTags) {
 
     if (isGroupRequested(includeTags, 'composite')) {
         addRequiredTags(requiredTags, COMPOSITE_DEPENDENCY_TAGS.exif);
+        requiredTags[EXIF_POINTER_TAGS.exifIfdPointer] = true;
     }
 
     return requiredTags;
