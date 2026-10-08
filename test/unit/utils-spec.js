@@ -32,6 +32,31 @@ describe('utils', () => {
         expect(Utils.tryDecodeUtf8ByteString('abc\xc5\xc4\xd6')).to.equal(undefined);
     });
 
+    describe('getByteString', () => {
+        it('should convert a byte range to a string in chunks, not one call per byte', () => {
+            const bytes = new Uint8Array(8192 + 2);
+            for (let i = 0; i < bytes.length; i++) {
+                bytes[i] = 0x41 + (i % 26);
+            }
+            const expected = Array.from(bytes.subarray(1), (byte) => String.fromCharCode(byte)).join('');
+            const originalFromCharCode = String.fromCharCode;
+            let calls = 0;
+            const restore = swapProperties(String, {
+                fromCharCode(...charCodes) {
+                    calls++;
+                    return originalFromCharCode.apply(String, charCodes);
+                }
+            });
+
+            try {
+                expect(Utils.getByteString(bytes, 1, bytes.length)).to.equal(expected);
+            } finally {
+                restore();
+            }
+            expect(calls).to.equal(2);
+        });
+    });
+
     describe('tryDecodeUtf8ByteString', () => {
         const BOUNDARY_BYTES = [0x00, 0x7f, 0x80, 0x8f, 0x90, 0x9f, 0xa0, 0xbf, 0xc0, 0xff];
         let restore;

@@ -57,6 +57,40 @@ export function getStringValueFromArray(charArray) {
     return charArray.map((charCode) => String.fromCharCode(charCode)).join('');
 }
 
+// Engines cap the number of arguments Function.prototype.apply can pass, and
+// some older ones reject a typed array there, so bytes go in as plain chunks.
+const MAX_CHARS_PER_CALL = 8192;
+
+/**
+ * Converts bytes to a string with one character per byte.
+ * @param {Uint8Array|number[]} bytes
+ * @param {number} [start=0]
+ * @param {number} [end=bytes.length] Exclusive.
+ * @param {number[]} [charCodes=[]] Scratch array. A caller that converts many
+ *     short strings passes the same one so that each string does not allocate
+ *     its own.
+ * @returns {string}
+ */
+export function getByteString(bytes, start = 0, end = bytes.length, charCodes = []) {
+    if (end - start <= MAX_CHARS_PER_CALL) {
+        return getChunkString(bytes, start, end, charCodes);
+    }
+
+    const chunks = [];
+    for (let chunkStart = start; chunkStart < end; chunkStart += MAX_CHARS_PER_CALL) {
+        chunks.push(getChunkString(bytes, chunkStart, Math.min(chunkStart + MAX_CHARS_PER_CALL, end), charCodes));
+    }
+    return chunks.join('');
+}
+
+function getChunkString(bytes, start, end, charCodes) {
+    for (let i = start; i < end; i++) {
+        charCodes[i - start] = bytes[i];
+    }
+    charCodes.length = end - start;
+    return String.fromCharCode.apply(null, charCodes);
+}
+
 /**
  * Decodes a byte string (one byte per character) as UTF-8. A string that is
  * not valid UTF-8 is returned as it is, so single-byte encoded text stays
