@@ -73,6 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tags are kept. A negative pointer made ExifReader drop all Exif tags, or
   read that sub-IFD from bytes before the TIFF header. The other two made it
   read the TIFF header as that sub-IFD, which could give made-up tags.
+- XMP elements and attributes without a namespace prefix, such as properties
+  in a default namespace, are now read under their own name. They were all
+  read under the name `undefined`, so only the last one was kept.
 
 ### Security
 

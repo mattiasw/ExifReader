@@ -372,7 +372,9 @@ function getLocalName(name) {
     if (/^MicrosoftPhoto(_\d+_)?:Rating$/i.test(name)) {
         return 'RatingPercent';
     }
-    return name.split(':')[1];
+    const localName = name.split(':')[1];
+    // No prefix (the name can be in a default namespace) or an empty local part: keep the whole name.
+    return localName || name;
 }
 
 // A parent describes its members without their description functions, so
