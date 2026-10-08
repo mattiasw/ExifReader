@@ -52,6 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now also gives the placeholder instead of being left out.
 - A fractional numeric `length`, such as a computed `size / 3`, is now rounded
   down. It was ignored, so the whole file or URL was read with no size limit.
+- `load()` with a URL and `length: 0` no longer sends the malformed header
+  `Range: bytes=0--1`. It now makes no request and rejects with
+  `Invalid image format`, since zero bytes hold no metadata.
 
 ### Security
 
