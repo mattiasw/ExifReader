@@ -2668,6 +2668,101 @@ describe('exif-reader', function () {
         }
     });
 
+    describe('raw profiles in PNG text chunks', () => {
+        it('should read the Exif of a tEXt raw profile without returning it as a text tag or its thumbnail IFD', () => {
+            const png = getPngWithChunks(getPngChunk('tEXt', 'Raw profile type exif\x00' + getExifRawProfileWithThumbnailIfd()));
+
+            const tags = ExifReader.loadView(getDataView(png));
+
+            expect(tags.Model.description).to.equal('abc');
+            expect(tags).to.not.have.property('Raw profile type exif');
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should read the Exif of a tEXt raw profile when loading asynchronously', async () => {
+            const png = getPngWithChunks(getPngChunk('tEXt', 'Raw profile type exif\x00' + getExifRawProfileWithThumbnailIfd()));
+
+            const tags = await ExifReader.loadView(getDataView(png), {async: true});
+
+            expect(tags.Model.description).to.equal('abc');
+            expect(tags).to.not.have.property('Raw profile type exif');
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should read the Exif of a tEXt raw profile into the exif group without its thumbnail IFD when expanded', async () => {
+            const png = getPngWithChunks(getPngChunk('tEXt', 'Raw profile type exif\x00' + getExifRawProfileWithThumbnailIfd()));
+
+            const tags = await ExifReader.loadView(getDataView(png), {async: true, expanded: true});
+
+            expect(tags.exif.Model.description).to.equal('abc');
+            expect(tags.exif).to.not.have.property('Thumbnail');
+            expect(tags.png).to.not.have.property('Raw profile type exif');
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should not return the thumbnail IFD of a zTXt raw profile in the exif group when expanded', async () => {
+            const COMPRESSION_METHOD_DEFLATE = '\x00';
+            const compressedProfile = deflateSync(Buffer.from(getExifRawProfileWithThumbnailIfd(), 'latin1')).toString('latin1');
+            const png = getPngWithChunks(getPngChunk('zTXt', 'Raw profile type exif\x00' + COMPRESSION_METHOD_DEFLATE + compressedProfile));
+
+            const tags = await ExifReader.loadView(getDataView(png), {async: true, expanded: true});
+
+            expect(tags.exif.Model.description).to.equal('abc');
+            expect(tags.exif).to.not.have.property('Thumbnail');
+        });
+
+        it('should drop a malformed tEXt raw profile without throwing', async () => {
+            const png = getPngWithChunks(
+                getPngChunk('tEXt', 'Raw profile type exif\x00\nexif\nzz'),
+                getPngChunk('tEXt', 'Other\x00other')
+            );
+
+            const tags = ExifReader.loadView(getDataView(png));
+            const asyncTags = await ExifReader.loadView(getDataView(png), {async: true});
+
+            for (const readTags of [tags, asyncTags]) {
+                expect(readTags).to.not.have.property('Raw profile type exif');
+                expect(readTags.Other.value).to.equal('other');
+            }
+        });
+
+        it('should read the IPTC of a tEXt raw profile without returning it as a text tag', () => {
+            const png = getPngWithChunks(getPngChunk('tEXt', 'Raw profile type iptc\x00' + getIptcRawProfileWithHeadline()));
+
+            const tags = ExifReader.loadView(getDataView(png));
+            const expandedTags = ExifReader.loadView(getDataView(png), {expanded: true});
+
+            expect(tags.Headline.description).to.equal('abc');
+            expect(tags).to.not.have.property('Raw profile type iptc');
+            expect(expandedTags.iptc.Headline.description).to.equal('abc');
+            expect(expandedTags.png).to.not.have.property('Raw profile type iptc');
+        });
+
+        // IFD0 holds Model 'abc' and links to an IFD1 holding the thumbnail offset and length.
+        function getExifRawProfileWithThumbnailIfd() {
+            const IFD_TYPE_ASCII = 2;
+            const IFD1_OFFSET = 26;
+            const tiff = 'MM\x00\x2a' + getByteStringFromNumber(8, 4)
+                + getByteStringFromNumber(1, 2)
+                + getIfdEntry(0x0110, IFD_TYPE_ASCII, 4, 'abc\x00')
+                + getByteStringFromNumber(IFD1_OFFSET, 4)
+                + getByteStringFromNumber(2, 2)
+                + getIfdEntry(0x0201, IFD_TYPE_LONG, 1, getByteStringFromNumber(0, 4))
+                + getIfdEntry(0x0202, IFD_TYPE_LONG, 1, getByteStringFromNumber(0, 4))
+                + getByteStringFromNumber(0, 4);
+            const exif = 'Exif\x00\x00' + tiff;
+            return `\nexif\n${String(exif.length).padStart(8, ' ')}\n${Buffer.from(exif, 'latin1').toString('hex')}`;
+        }
+
+        // An IPTC-NAA resource block holding one IIM record, Headline 'abc'.
+        function getIptcRawProfileWithHeadline() {
+            const HEADLINE_RECORD = '\x1c\x02\x69';
+            const iim = HEADLINE_RECORD + getByteStringFromNumber(3, 2) + 'abc';
+            const iptc = '8BIM\x04\x04\x00\x00' + getByteStringFromNumber(iim.length, 4) + iim;
+            return `\niptc\n${String(iptc.length).padStart(8, ' ')}\n${Buffer.from(iptc, 'latin1').toString('hex')}`;
+        }
+    });
+
     describe('keys the library computes itself', () => {
         it('should not return a PNG text tag named Thumbnail as the thumbnail', () => {
             const png = getPngWithChunks(

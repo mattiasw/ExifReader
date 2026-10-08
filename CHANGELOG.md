@@ -88,6 +88,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without `FocalLengthIn35mmFilm`, is now correct when the resolution unit is
   inches or centimeters. It was 645 or 100 times too large, which also made
   `ScaleFactorTo35mmEquivalent` too large and `FieldOfView` too small.
+- An ImageMagick `Raw profile type exif` or `Raw profile type iptc` profile in
+  an uncompressed PNG text chunk (tEXt, or iTXt without compression) is now
+  parsed into Exif or IPTC tags in every mode, as one in a compressed chunk
+  already was with `async: true`. It was returned as a PNG text tag holding
+  the hex dump of the profile. As with a compressed chunk, a tag found both in
+  the profile and in an `eXIf` chunk now gets its value from the profile.
+- With `expanded: true`, Exif from a PNG text raw profile no longer gives an
+  `exif.Thumbnail` holding the thumbnail IFD tags with no thumbnail image.
+  Flat output already left them out.
 
 ### Security
 

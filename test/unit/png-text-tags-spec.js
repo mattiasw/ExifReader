@@ -8,6 +8,7 @@ import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../src/image-header-png.js';
 import PngTextTags from '../../src/png-text-tags.js';
 import Tags from '../../src/tags.js';
 import IptcTags from '../../src/iptc-tags.js';
+import Constants from '../../src/constants.js';
 import {getStringFromDataView, withDecompressBudget} from '../../src/utils.js';
 import DataViewWrapper from '../../src/dataview.js';
 
@@ -369,6 +370,259 @@ describe('png-text-tags', () => {
             {readTags: {__exif: {value: 'FROMFILE', description: 'FROMFILE'}}},
             {readTags: {__iptc: {value: 'FROMFILE', description: 'FROMFILE'}}}
         ]);
+    });
+
+    describe('uncompressed raw profiles', () => {
+        it('should read a tEXt Exif raw profile synchronously into embedded Exif tags', () => {
+            const readArgs = [];
+            restoreTagReaders = swapProperties(Tags, {
+                read: (data, offset) => {
+                    readArgs.push({data: getStringFromDataView(data, 0, data.byteLength), offset});
+                    return {tags: {Model: {value: 'abc'}}};
+                }
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM'))
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks);
+
+            expect(readArgs).to.deep.equal([{data: 'Exif\0\0MM', offset: 6}]);
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
+            expect(result.embeddedIptcTags).to.be.undefined;
+            expect(result.readTags).to.deep.equal({});
+            expect(result.readTagsPromise).to.be.undefined;
+        });
+
+        it('should read a tEXt IPTC raw profile synchronously into embedded IPTC tags', () => {
+            const readArgs = [];
+            restoreTagReaders = swapProperties(IptcTags, {
+                read: (data, offset) => {
+                    readArgs.push({data: getStringFromDataView(data, 0, data.byteLength), offset});
+                    return {Headline: {value: 'abc'}};
+                }
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', '<IPTC data>'))
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks);
+
+            expect(readArgs).to.deep.equal([{data: '<IPTC data>', offset: 0}]);
+            expect(result.embeddedIptcTags).to.deep.equal({Headline: {value: 'abc'}});
+            expect(result.embeddedExifTags).to.be.undefined;
+            expect(result.readTags).to.deep.equal({});
+            expect(result.readTagsPromise).to.be.undefined;
+        });
+
+        it('should read an uncompressed iTXt Exif raw profile', () => {
+            restoreTagReaders = swapProperties(Tags, {
+                read: () => ({tags: {Model: {value: 'abc'}}})
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getUncompressedItxtChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM'))
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks, true);
+
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
+            expect(result.readTags).to.deep.equal({});
+            expect(result.readTagsPromise).to.be.undefined;
+        });
+
+        it('should merge the tags of several tEXt Exif raw profiles with the later chunk winning', () => {
+            const results = [
+                {tags: {Model: {value: 'first'}, Make: {value: 'make'}}},
+                {tags: {Model: {value: 'second'}, Artist: {value: 'artist'}}}
+            ];
+            restoreTagReaders = swapProperties(Tags, {
+                read: () => results.shift()
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM')),
+                getTextChunk('MyTag', 'My value.'),
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM'))
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks);
+
+            expect(result.embeddedExifTags).to.deep.equal({
+                Model: {value: 'second'},
+                Make: {value: 'make'},
+                Artist: {value: 'artist'}
+            });
+            expect(result.readTags).to.deep.equal({MyTag: {value: 'My value.', description: 'My value.'}});
+        });
+
+        it('should merge the tags of several tEXt IPTC raw profiles with the later chunk winning', () => {
+            const results = [
+                {Headline: {value: 'first'}, Credit: {value: 'credit'}},
+                {Headline: {value: 'second'}}
+            ];
+            restoreTagReaders = swapProperties(IptcTags, {
+                read: () => results.shift()
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', 'I')),
+                getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', 'I'))
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks);
+
+            expect(result.embeddedIptcTags).to.deep.equal({
+                Headline: {value: 'second'},
+                Credit: {value: 'credit'}
+            });
+        });
+
+        it('should drop malformed tEXt raw profiles without throwing and still read the next chunk', () => {
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', '\nexif\nzz'),
+                getTextChunk('Raw profile type exif', `\nexif\n       6\n${stringToHex('Exif\0\0')}0`),
+                getTextChunk('Raw profile type exif', '\nexif\n0\n'),
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0')),
+                getTextChunk('Raw profile type iptc', '\niptc\nzz'),
+                getTextChunk('MyTag', 'My value.')
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks);
+
+            expect(result.embeddedExifTags).to.be.undefined;
+            expect(result.embeddedIptcTags).to.be.undefined;
+            expect(result.readTags).to.deep.equal({MyTag: {value: 'My value.', description: 'My value.'}});
+        });
+
+        it('should skip tEXt Exif and IPTC raw profiles when the tag filter excludes their groups', () => {
+            let readCalls = 0;
+            restoreTagReaders = swapProperties(Tags, {
+                read: () => {
+                    readCalls++;
+                    return {tags: {}};
+                }
+            });
+            const restoreIptcTags = swapProperties(IptcTags, {
+                read: () => {
+                    readCalls++;
+                    return {};
+                }
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0')),
+                getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', 'I')),
+                getTextChunk('MyTag', 'My value.')
+            ]);
+            const tagFilter = {shouldParseGroup: (group) => group === 'png'};
+
+            try {
+                const result = PngTextTags.read(dataView, chunks, false, false, false, tagFilter);
+
+                expect(readCalls).to.equal(0);
+                expect(result.embeddedExifTags).to.be.undefined;
+                expect(result.embeddedIptcTags).to.be.undefined;
+                expect(result.readTags).to.deep.equal({MyTag: {value: 'My value.', description: 'My value.'}});
+            } finally {
+                restoreIptcTags();
+            }
+        });
+
+        it('should read a tEXt Exif raw profile but skip plain tEXt tags when the tag filter excludes the png group', () => {
+            restoreTagReaders = swapProperties(Tags, {
+                read: () => ({tags: {Model: {value: 'abc'}}})
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM')),
+                getTextChunk('MyTag', 'My value.')
+            ]);
+            const tagFilter = {shouldParseGroup: (group) => group !== 'png'};
+
+            const result = PngTextTags.read(dataView, chunks, false, false, false, tagFilter);
+
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
+            expect(result.readTags).to.deep.equal({});
+        });
+
+        it('should pass the same decoded-value budget to the Exif read of every tEXt Exif raw profile', () => {
+            const passedBudgets = [];
+            restoreTagReaders = swapProperties(Tags, {
+                read: (...args) => {
+                    passedBudgets.push(args[5]);
+                    return {tags: {}};
+                }
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0')),
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0'))
+            ]);
+            const valueBudget = {remaining: 1000};
+
+            PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, valueBudget);
+
+            expect(passedBudgets).to.have.lengthOf(2);
+            expect(passedBudgets[0]).to.equal(valueBudget);
+            expect(passedBudgets[1]).to.equal(valueBudget);
+        });
+
+        it('should drop tEXt Exif and IPTC raw profiles in a build without Exif and IPTC support', () => {
+            let readCalls = 0;
+            restoreTagReaders = swapProperties(Tags, {
+                read: () => {
+                    readCalls++;
+                    return {tags: {}};
+                }
+            });
+            const restoreIptcTags = swapProperties(IptcTags, {
+                read: () => {
+                    readCalls++;
+                    return {};
+                }
+            });
+            const restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_IPTC: false});
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0')),
+                getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', 'I'))
+            ]);
+
+            try {
+                const result = PngTextTags.read(dataView, chunks);
+
+                expect(readCalls).to.equal(0);
+                expect(result.embeddedExifTags).to.be.undefined;
+                expect(result.embeddedIptcTags).to.be.undefined;
+                expect(result.readTags).to.deep.equal({});
+            } finally {
+                restoreConstants();
+                restoreIptcTags();
+            }
+        });
+
+        it('should merge the tags of 10000 tEXt Exif raw profiles well under a second', () => {
+            const NUMBER_OF_CHUNKS = 10000;
+            const textChunks = [];
+            for (let i = 0; i < NUMBER_OF_CHUNKS; i++) {
+                textChunks.push(getTextChunk('Raw profile type exif', getRawProfileValue('exif', getExifWithOneUnknownTag(0x5000 + i))));
+            }
+            const {dataView, chunks} = buildTextChunks(textChunks);
+
+            const start = performance.now();
+            const result = PngTextTags.read(dataView, chunks, false, true);
+            const elapsed = performance.now() - start;
+
+            expect(Object.keys(result.embeddedExifTags)).to.have.lengthOf(NUMBER_OF_CHUNKS);
+            expect(elapsed).to.be.below(1000);
+        });
+
+        function getRawProfileValue(type, data) {
+            return `\n${type}\n${String(data.length).padStart(8, ' ')}\n${stringToHex(data)}`;
+        }
+
+        function getExifWithOneUnknownTag(tagId) {
+            const tagIdBytes = String.fromCharCode(tagId >> 8, tagId & 0xff);
+            return 'Exif\0\0'
+                + 'MM\0\x2a\0\0\0\x08'
+                + '\0\x01'
+                + tagIdBytes + '\0\x03' + '\0\0\0\x01' + '\0\x01\0\0'
+                + '\0\0\0\0';
+        }
     });
 
     describe('many compressed text chunks', () => {

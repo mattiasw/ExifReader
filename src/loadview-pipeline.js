@@ -197,6 +197,8 @@ export function applyMergeStep({
     if (Constants.USE_PNG && step.type === 'processPngTextReadTags') {
         return addPngTextReadTagsToTagsAndGroups({
             readTags: step.readTags,
+            embeddedExifTags: step.embeddedExifTags,
+            embeddedIptcTags: step.embeddedIptcTags,
             parsedGroups,
             expanded,
             tagFilter,
@@ -404,16 +406,16 @@ export function addPngTextReadTagsToTagsAndGroups({
                 parsedEmbeddedExifTags,
                 tagFilter
             );
-            if (expanded) {
-                merge.group(tags, 'exif', returnedEmbeddedExifTags);
-            } else {
-                // The thumbnail image is never read from a text chunk, so the
-                // thumbnail IFD would land at the top level with no image.
-                const returnedEmbeddedExifTagsForFlat =
-                    deps.objectAssign({}, returnedEmbeddedExifTags);
-                delete returnedEmbeddedExifTagsForFlat.Thumbnail;
+            // The thumbnail image is never read from a text chunk, so the
+            // thumbnail IFD tags would be returned with no image.
+            const returnedEmbeddedExifTagsWithoutThumbnail =
+                deps.objectAssign({}, returnedEmbeddedExifTags);
+            delete returnedEmbeddedExifTagsWithoutThumbnail.Thumbnail;
 
-                tags = merge.topLevel(tags, returnedEmbeddedExifTagsForFlat);
+            if (expanded) {
+                merge.group(tags, 'exif', returnedEmbeddedExifTagsWithoutThumbnail);
+            } else {
+                tags = merge.topLevel(tags, returnedEmbeddedExifTagsWithoutThumbnail);
             }
         }
     }
