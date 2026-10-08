@@ -122,32 +122,37 @@ describe('file-loaders', () => {
             expect(error).to.equal(responseError);
         });
 
-        it('should resolve with status 416 so the adaptive loop can fall back instead of failing', async () => {
-            let resumed = false;
+        it('should resolve with status 416 and destroy the response without reading its body', async () => {
+            let destroyCalls = 0;
             stubHttp({
                 statusCode: HTTP_STATUS_RANGE_NOT_SATISFIABLE,
                 statusMessage: 'Range Not Satisfiable',
-                headers: {},
+                headers: {'content-range': 'bytes */5000'},
                 on: () => undefined,
-                resume: () => {
-                    resumed = true;
+                destroy: () => {
+                    destroyCalls++;
                 },
             });
 
             const result = await nodeGetRange('https://domain.com/image.jpg', {start: 100, end: 200});
 
             expect(result.status).to.equal(HTTP_STATUS_RANGE_NOT_SATISFIABLE);
+            expect(Buffer.isBuffer(result.buffer)).to.equal(true);
             expect(result.buffer.length).to.equal(0);
-            expect(resumed).to.equal(true);
+            expect(result.totalSize).to.equal(5000);
+            expect(destroyCalls).to.equal(1);
         });
 
-        it('should reject with an Error containing the status on other non-2xx responses', async () => {
+        it('should reject with an Error containing the status on other non-2xx responses and destroy the response', async () => {
+            let destroyCalls = 0;
             stubHttp({
                 statusCode: 500,
                 statusMessage: 'Server Error',
                 headers: {},
                 on: () => undefined,
-                resume: () => undefined,
+                destroy: () => {
+                    destroyCalls++;
+                },
             });
 
             let error;
@@ -159,6 +164,7 @@ describe('file-loaders', () => {
 
             expect(error).to.be.an('error');
             expect(error.message).to.equal('Could not fetch file: 500 Server Error');
+            expect(destroyCalls).to.equal(1);
         });
     });
 
@@ -177,43 +183,88 @@ describe('file-loaders', () => {
             global.fetch = () => Promise.resolve(response);
         }
 
-        it('should reject with an Error containing the status on a 404 response', async () => {
+        it('should reject with an Error containing the status on a 404 response and cancel the body', async () => {
+            const stream = stubStreamBody([bytesFrom(0, 8)]);
             stubFetch({
                 status: 404,
                 statusText: 'Not Found',
                 headers: {get: () => null},
-                arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+                body: stream.body,
             });
 
-            let error;
-            try {
-                await fetchRange('https://domain.com/missing.jpg');
-            } catch (e) {
-                error = e;
-            }
+            const error = await rejectionOf(fetchRange('https://domain.com/missing.jpg'));
+            await new Promise(setImmediate);
 
             expect(error).to.be.an('error');
-            expect(error.message).to.contain('404');
-            expect(error.message).to.contain('Not Found');
+            expect(error.message).to.equal('Could not fetch file: 404 Not Found');
+            expect(stream.state.cancelled).to.equal(true);
+            expect(stream.state.reads).to.equal(0);
         });
 
-        it('should reject on a 500 response, trimming an empty statusText', async () => {
+        it('should reject on a 500 response, trimming an empty statusText, and cancel the body', async () => {
+            const stream = stubStreamBody([bytesFrom(0, 8)]);
             stubFetch({
                 status: 500,
                 statusText: '',
                 headers: {get: () => null},
-                arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
+                body: stream.body,
             });
 
-            let error;
-            try {
-                await fetchRange('https://domain.com/image.jpg');
-            } catch (e) {
-                error = e;
-            }
+            const error = await rejectionOf(fetchRange('https://domain.com/image.jpg'));
+            await new Promise(setImmediate);
 
             expect(error).to.be.an('error');
             expect(error.message).to.equal('Could not fetch file: 500');
+            expect(stream.state.cancelled).to.equal(true);
+            expect(stream.state.reads).to.equal(0);
+        });
+
+        it('should reject with the status error when a rejected response has no body', async () => {
+            stubFetch({
+                status: 503,
+                statusText: 'Service Unavailable',
+                headers: {get: () => null},
+            });
+
+            const error = await rejectionOf(fetchRange('https://domain.com/image.jpg'));
+
+            expect(error.message).to.equal('Could not fetch file: 503 Service Unavailable');
+        });
+
+        it('should reject with the status error when cancelling the body throws', async () => {
+            const stream = stubStreamBody([bytesFrom(0, 8)], {
+                cancel: () => {
+                    throw new Error('cancel failed');
+                },
+            });
+            stubFetch({status: 500, statusText: 'Internal Server Error', headers: {get: () => null}, body: stream.body});
+
+            const error = await rejectionOf(fetchRange('https://domain.com/image.jpg'));
+            await new Promise(setImmediate);
+
+            expect(error.message).to.equal('Could not fetch file: 500 Internal Server Error');
+            expect(stream.state.cancelled).to.equal(true);
+        });
+
+        it('should reject with the status error when cancelling the body rejects', async () => {
+            const stream = stubStreamBody([bytesFrom(0, 8)], {cancel: () => Promise.reject(new Error('cancel failed'))});
+            stubFetch({status: 500, statusText: 'Internal Server Error', headers: {get: () => null}, body: stream.body});
+            let unhandled;
+            const onUnhandled = (reason) => {
+                unhandled = reason;
+            };
+            process.once('unhandledRejection', onUnhandled);
+
+            try {
+                const error = await rejectionOf(fetchRange('https://domain.com/image.jpg'));
+                await new Promise(setImmediate);
+
+                expect(error.message).to.equal('Could not fetch file: 500 Internal Server Error');
+                expect(stream.state.cancelled).to.equal(true);
+                expect(unhandled).to.equal(undefined);
+            } finally {
+                process.removeListener('unhandledRejection', onUnhandled);
+            }
         });
 
         it('should resolve with status 416 so the adaptive loop can fall back', async () => {
@@ -221,15 +272,16 @@ describe('file-loaders', () => {
                 status: HTTP_STATUS_RANGE_NOT_SATISFIABLE,
                 statusText: 'Range Not Satisfiable',
                 headers: {get: () => null},
-                arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+                arrayBuffer: () => Promise.resolve(new ArrayBuffer(8)),
             });
 
             const result = await fetchRange('https://domain.com/image.jpg', {start: 100, end: 200});
 
             // 416 must resolve (not reject) and surface the status so the
-            // adaptive loop's 416 handler can fall back to a full read. The
-            // body is passed through as-is; the loop discards it.
+            // adaptive loop can fall back to a full read. The body is not read.
             expect(result.status).to.equal(HTTP_STATUS_RANGE_NOT_SATISFIABLE);
+            expect(result.buffer).to.be.an.instanceOf(ArrayBuffer);
+            expect(result.buffer.byteLength).to.equal(0);
         });
 
         it('should resolve with the body on a 2xx response', async () => {
@@ -376,14 +428,54 @@ describe('file-loaders', () => {
             expect(stream.state.reads).to.equal(0);
         });
 
-        it('should cap the body of an accepted 416 when maxBytes is set', async () => {
+        it('should resolve a 416 empty and cancel its body without reading it when maxBytes is set', async () => {
             const stream = stubStreamBody([bytesFrom(0, 32)]);
-            stubFetch({status: HTTP_STATUS_RANGE_NOT_SATISFIABLE, headers: {get: () => null}, body: stream.body});
+            let arrayBufferCalls = 0;
+            stubFetch({
+                status: HTTP_STATUS_RANGE_NOT_SATISFIABLE,
+                headers: {get: (name) => (name.toLowerCase() === 'content-range' ? 'bytes */5000' : null)},
+                body: stream.body,
+                arrayBuffer: () => {
+                    arrayBufferCalls++;
+                    return Promise.resolve(bytesFrom(0, 32).buffer);
+                },
+            });
 
             const result = await fetchRange('https://domain.com/image.jpg', {start: 0, end: 4, maxBytes: 4});
+            await new Promise(setImmediate);
 
             expect(result.status).to.equal(HTTP_STATUS_RANGE_NOT_SATISFIABLE);
-            expect(result.buffer.byteLength).to.equal(4);
+            expect(result.buffer).to.be.an.instanceOf(ArrayBuffer);
+            expect(result.buffer.byteLength).to.equal(0);
+            expect(result.totalSize).to.equal(5000);
+            expect(stream.state.cancelled).to.equal(true);
+            expect(stream.state.reads).to.equal(0);
+            expect(arrayBufferCalls).to.equal(0);
+        });
+
+        it('should resolve a 416 empty and cancel its body without reading it when maxBytes is not set', async () => {
+            const stream = stubStreamBody([bytesFrom(0, 32)]);
+            let arrayBufferCalls = 0;
+            stubFetch({
+                status: HTTP_STATUS_RANGE_NOT_SATISFIABLE,
+                headers: {get: () => null},
+                body: stream.body,
+                arrayBuffer: () => {
+                    arrayBufferCalls++;
+                    return Promise.resolve(bytesFrom(0, 32).buffer);
+                },
+            });
+
+            const result = await fetchRange('https://domain.com/image.jpg', {start: 0, end: 4});
+            await new Promise(setImmediate);
+
+            expect(result.status).to.equal(HTTP_STATUS_RANGE_NOT_SATISFIABLE);
+            expect(result.buffer).to.be.an.instanceOf(ArrayBuffer);
+            expect(result.buffer.byteLength).to.equal(0);
+            expect(result.totalSize).to.equal(undefined);
+            expect(stream.state.cancelled).to.equal(true);
+            expect(stream.state.reads).to.equal(0);
+            expect(arrayBufferCalls).to.equal(0);
         });
 
         it('should read the whole body without maxBytes even when a stream is present', async () => {
@@ -436,7 +528,16 @@ describe('file-loaders', () => {
                     return cancel ? cancel() : Promise.resolve();
                 },
             };
-            return {state, body: {getReader: () => reader}};
+            return {state, body: {getReader: () => reader, cancel: () => reader.cancel()}};
+        }
+
+        async function rejectionOf(promise) {
+            try {
+                await promise;
+            } catch (error) {
+                return error;
+            }
+            throw new Error('Expected the promise to reject');
         }
 
         function bytesFrom(offset, length) {
@@ -448,7 +549,7 @@ describe('file-loaders', () => {
         }
     });
 
-    describe('a numeric length against a server that ignores Range', function () {
+    describe('against a local HTTP server', function () {
         const PATTERN_PERIOD = 251;
         const CHUNK_SIZE = 64 * 1024;
         const SAFETY_CAP = 64 * 1024 * 1024;
@@ -475,51 +576,109 @@ describe('file-loaders', () => {
             }
         });
 
-        it('should stop the fetch transfer after length bytes', async () => {
-            const transfer = await startServer(SAFETY_CAP);
+        describe('a numeric length against a server that ignores Range', () => {
+            it('should stop the fetch transfer after length bytes', async () => {
+                const transfer = await startServer(SAFETY_CAP);
 
-            const buffer = await loadFile(transfer.url, {length: LENGTH});
+                const buffer = await loadFile(transfer.url, {length: LENGTH});
 
-            expect(buffer.byteLength).to.equal(LENGTH);
-            expect(Buffer.from(buffer).equals(patternBytes(0, LENGTH))).to.equal(true);
-            await expectTransferStopped(transfer);
+                expect(buffer.byteLength).to.equal(LENGTH);
+                expect(Buffer.from(buffer).equals(patternBytes(0, LENGTH))).to.equal(true);
+                await expectTransferStopped(transfer);
+            });
+
+            it('should stop the Node http transfer after length bytes', async () => {
+                delete global.fetch;
+                global.__non_webpack_require__ = createRequire(import.meta.url);
+                const transfer = await startServer(SAFETY_CAP);
+
+                const buffer = await loadFile(transfer.url, {length: LENGTH});
+
+                expect(Buffer.isBuffer(buffer)).to.equal(true);
+                expect(buffer.equals(patternBytes(0, LENGTH))).to.equal(true);
+                await expectTransferStopped(transfer);
+            });
+
+            it('should resolve with the whole body over Node http when it is shorter than maxBytes', async () => {
+                global.__non_webpack_require__ = createRequire(import.meta.url);
+                const bodySize = 100;
+                const transfer = await startServer(bodySize);
+
+                const result = await nodeGetRange(transfer.url, {maxBytes: LENGTH});
+
+                expect(result.status).to.equal(200);
+                expect(result.buffer.equals(patternBytes(0, bodySize))).to.equal(true);
+            });
+
+            it('should stop the Node http transfer without reading when maxBytes is 0', async () => {
+                global.__non_webpack_require__ = createRequire(import.meta.url);
+                const transfer = await startServer(SAFETY_CAP);
+
+                const result = await nodeGetRange(transfer.url, {maxBytes: 0});
+
+                expect(Buffer.isBuffer(result.buffer)).to.equal(true);
+                expect(result.buffer.length).to.equal(0);
+                await expectTransferStopped(transfer);
+            });
         });
 
-        it('should stop the Node http transfer after length bytes', async () => {
-            delete global.fetch;
-            global.__non_webpack_require__ = createRequire(import.meta.url);
-            const transfer = await startServer(SAFETY_CAP);
+        describe('a 416 or other non-2xx response with an endless body', () => {
+            it('should resolve a Node http 416 empty and stop the transfer', async () => {
+                delete global.fetch;
+                global.__non_webpack_require__ = createRequire(import.meta.url);
+                const transfer = await startServer(SAFETY_CAP, HTTP_STATUS_RANGE_NOT_SATISFIABLE);
 
-            const buffer = await loadFile(transfer.url, {length: LENGTH});
+                const result = await nodeGetRange(transfer.url, {start: 0, end: LENGTH, maxBytes: LENGTH});
 
-            expect(Buffer.isBuffer(buffer)).to.equal(true);
-            expect(buffer.equals(patternBytes(0, LENGTH))).to.equal(true);
-            await expectTransferStopped(transfer);
+                expect(result.status).to.equal(HTTP_STATUS_RANGE_NOT_SATISFIABLE);
+                expect(Buffer.isBuffer(result.buffer)).to.equal(true);
+                expect(result.buffer.length).to.equal(0);
+                await expectTransferStopped(transfer);
+            });
+
+            it('should reject a Node http 500 and stop the transfer', async () => {
+                delete global.fetch;
+                global.__non_webpack_require__ = createRequire(import.meta.url);
+                const transfer = await startServer(SAFETY_CAP, 500);
+
+                let error;
+                try {
+                    await nodeGetRange(transfer.url, {start: 0, end: LENGTH, maxBytes: LENGTH});
+                } catch (e) {
+                    error = e;
+                }
+
+                expect(error.message).to.equal('Could not fetch file: 500 Internal Server Error');
+                await expectTransferStopped(transfer);
+            });
+
+            it('should resolve a fetch 416 empty without maxBytes and stop the transfer', async () => {
+                const transfer = await startServer(SAFETY_CAP, HTTP_STATUS_RANGE_NOT_SATISFIABLE);
+
+                const result = await fetchRange(transfer.url, {start: 0, end: LENGTH});
+
+                expect(result.status).to.equal(HTTP_STATUS_RANGE_NOT_SATISFIABLE);
+                expect(result.buffer).to.be.an.instanceOf(ArrayBuffer);
+                expect(result.buffer.byteLength).to.equal(0);
+                await expectTransferStopped(transfer);
+            });
+
+            it('should reject a fetch 500 and stop the transfer', async () => {
+                const transfer = await startServer(SAFETY_CAP, 500);
+
+                let error;
+                try {
+                    await fetchRange(transfer.url, {start: 0, end: LENGTH});
+                } catch (e) {
+                    error = e;
+                }
+
+                expect(error.message).to.equal('Could not fetch file: 500 Internal Server Error');
+                await expectTransferStopped(transfer);
+            });
         });
 
-        it('should resolve with the whole body over Node http when it is shorter than maxBytes', async () => {
-            global.__non_webpack_require__ = createRequire(import.meta.url);
-            const bodySize = 100;
-            const transfer = await startServer(bodySize);
-
-            const result = await nodeGetRange(transfer.url, {maxBytes: LENGTH});
-
-            expect(result.status).to.equal(200);
-            expect(result.buffer.equals(patternBytes(0, bodySize))).to.equal(true);
-        });
-
-        it('should stop the Node http transfer without reading when maxBytes is 0', async () => {
-            global.__non_webpack_require__ = createRequire(import.meta.url);
-            const transfer = await startServer(SAFETY_CAP);
-
-            const result = await nodeGetRange(transfer.url, {maxBytes: 0});
-
-            expect(Buffer.isBuffer(result.buffer)).to.equal(true);
-            expect(result.buffer.length).to.equal(0);
-            await expectTransferStopped(transfer);
-        });
-
-        async function startServer(bodySize) {
+        async function startServer(bodySize, status = 200) {
             const source = patternBytes(0, CHUNK_SIZE + PATTERN_PERIOD);
             const transfer = {bytesWritten: 0, reachedEnd: false};
             let resolveClosed;
@@ -529,7 +688,7 @@ describe('file-loaders', () => {
 
             server = http.createServer((request, response) => {
                 response.on('close', resolveClosed);
-                response.writeHead(200, {'content-type': 'application/octet-stream'});
+                response.writeHead(status, {'content-type': 'application/octet-stream'});
                 writeChunks();
 
                 function writeChunks() {

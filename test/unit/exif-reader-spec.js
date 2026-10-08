@@ -190,7 +190,7 @@ describe('exif-reader', function () {
                     on(eventName, responseCallback) {
                         setTimeout(() => getEvents[eventName] && getEvents[eventName](responseCallback), 0);
                     },
-                    resume: () => undefined
+                    destroy: () => undefined
                 };
                 this.originalNonWebpackRequire = global.__non_webpack_require__;
                 global.__non_webpack_require__ = function (moduleName) {

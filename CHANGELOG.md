@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `onlyBuiltDependencies`), pnpm hardlinks the `dist/` files of the second and
   later projects to one copy in its store, and the build wrote through that
   link. The build now gives the project its own copy of the bundle first.
+- Loading a URL now stops the download as soon as the server answers 416 or
+  another error status, instead of reading the rest of the response body or
+  leaving the connection open. With a numeric `length`, a 416 answer now gives
+  an empty buffer with `fetch` too, as it already did over Node's `http`
+  module, instead of the start of the error body.
 - The README no longer lists `DataView` among the in-memory inputs that
   `length: 'auto'` accepts. For in-memory data, `load()` takes an
   `ArrayBuffer`, `SharedArrayBuffer` or Node.js `Buffer`, as its type
