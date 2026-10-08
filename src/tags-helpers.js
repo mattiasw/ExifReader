@@ -11,15 +11,19 @@ import {decodeUtf8ByteString, getByteString} from './utils.js';
 
 // Across the test corpus, for whole files and for the 128 KiB and
 // length: 'auto' reads, out-of-slot values decode at most 1.2241 times the
-// buffer (faulty files parsed with includeUnknown). The multiple stays at 4
-// for Exif compressed in a small PNG or JPEG XL, as the budget is sized from
-// the file: a camera's Exif decodes up to 3.3 times a PNG of a few KB, and
-// 3.6 to 5.1 times a JPEG XL under 5 KB, so 4 already truncates the largest.
-// Description text is not charged, as real TIFFs whose large BYTE tags get
-// joined descriptions would need 4.48 times. A decoded byte costs about 15
-// bytes of heap, mostly as an array element and its share of the joined
-// description.
+// buffer (faulty files parsed with includeUnknown). Exif decompressed from a
+// PNG or JPEG XL gets its own allowance on top of the file-sized budget, see
+// MAX_DECOMPRESSED_VALUE_ALLOWANCE. Description text is not charged, as real
+// TIFFs whose large BYTE tags get joined descriptions would need 4.48 times.
+// A decoded byte costs about 15 bytes of heap, mostly as an array element and
+// its share of the joined description.
 const MAX_VALUE_SIZE_PER_BUFFER_SIZE = 4;
+
+// Real Exif decodes at most about 2 times its own size (the MakerNote bytes
+// decode twice), so MAX_VALUE_SIZE_PER_BUFFER_SIZE times its decompressed size
+// covers it. The cap keeps a small crafted file from decoding values in
+// proportion to what it decompresses to: at most this much more per load.
+const MAX_DECOMPRESSED_VALUE_ALLOWANCE = 1024 * 1024;
 
 // A buffer holds at most byteLength / 12 IFD entries and a real file reads each
 // once. The multiple leaves room for an IFD reached through more than one
@@ -57,7 +61,7 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
  * Reads the tags of an IFD, and for a 0th IFD also those of the thumbnail IFD
  * it points to.
  *
- * @param {{remaining: number, ifdEntriesRemaining: number}} [valueBudget] -
+ * @param {{remaining: number, ifdEntriesRemaining: number, decompressedAllowanceRemaining: number}} [valueBudget] -
  * Caps the total size of the decoded tag values and the number of IFD entries
  * read, see getValueBudget. Pass the same object to several calls to bound them
  * together; omit it to give this call its own budget. Once the entry count runs
@@ -163,7 +167,8 @@ function takeIfdEntry(valueBudget) {
  * tags decode the same bytes over and over.
  *
  * loadView shares one budget across the Exif IFDs, then the maker note, then
- * MPF, then the Exif decompressed from PNG text chunks and JPEG XL brob boxes.
+ * MPF, then the Exif decompressed from PNG text chunks and JPEG XL brob boxes,
+ * each of which first adds its allowance, see addDecompressedValueAllowance.
  * Once it is used up, later out-of-slot values decode empty, Make included,
  * and an empty Make or MakerNote turns maker note detection off. An ASCII
  * value also draws for each string after its first, and keeps only the
@@ -174,17 +179,41 @@ function takeIfdEntry(valueBudget) {
  * proportion to the decompressed size.
  *
  * @param {DataView} dataView - The buffer the values are decoded from.
- * @returns {{remaining: number, ifdEntriesRemaining: number}} The budget:
- * remaining is the bytes left to decode, with each extra ASCII string counted
- * as BUDGET_BYTES_PER_EXTRA_ASCII_STRING bytes; ifdEntriesRemaining is the IFD
- * entries left to read, MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY times the
- * byteLength / 12 entries the buffer can hold.
+ * @returns {{remaining: number, ifdEntriesRemaining: number, decompressedAllowanceRemaining: number}}
+ * The budget: remaining is the bytes left to decode, with each extra ASCII
+ * string counted as BUDGET_BYTES_PER_EXTRA_ASCII_STRING bytes;
+ * ifdEntriesRemaining is the IFD entries left to read,
+ * MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY times the byteLength / 12 entries the
+ * buffer can hold; decompressedAllowanceRemaining is what decompressed Exif
+ * can still add to remaining, MAX_DECOMPRESSED_VALUE_ALLOWANCE per budget.
  */
 export function getValueBudget(dataView) {
     return {
         remaining: dataView.byteLength * MAX_VALUE_SIZE_PER_BUFFER_SIZE,
-        ifdEntriesRemaining: Math.floor(dataView.byteLength / IFD_ENTRY_LENGTH) * MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY
+        ifdEntriesRemaining: Math.floor(dataView.byteLength / IFD_ENTRY_LENGTH) * MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY,
+        decompressedAllowanceRemaining: MAX_DECOMPRESSED_VALUE_ALLOWANCE
     };
+}
+
+/**
+ * Adds the allowance of an Exif block decompressed from the file to the
+ * budget: MAX_VALUE_SIZE_PER_BUFFER_SIZE times its decompressed size, up to
+ * what is left of the budget's decompressedAllowanceRemaining, which it draws
+ * from. Leaves the IFD entry count as it is. Does nothing without a budget.
+ *
+ * @param {{remaining: number, decompressedAllowanceRemaining: number}} [valueBudget]
+ * @param {number} decompressedByteLength - The size of the decompressed Exif.
+ */
+export function addDecompressedValueAllowance(valueBudget, decompressedByteLength) {
+    if (valueBudget === undefined) {
+        return;
+    }
+    const allowance = Math.min(
+        decompressedByteLength * MAX_VALUE_SIZE_PER_BUFFER_SIZE,
+        valueBudget.decompressedAllowanceRemaining
+    );
+    valueBudget.remaining += allowance;
+    valueBudget.decompressedAllowanceRemaining -= allowance;
 }
 
 function getNumberOfFields(dataView, offset, byteOrder) {
@@ -325,7 +354,7 @@ function tagValueFitsInDataView(dataView, offsetOrigin, tagValueOffset, tagType,
 
 // Draws each out-of-slot value from the shared budget, so a crafted file
 // cannot have thousands of tags decode the same bytes over and over. Real
-// files stay below it unless their Exif is compressed into a very small file.
+// files stay below it.
 function getBoundedTagCount(remainingBudget, tagType, tagCount) {
     const boundedCount = Math.min(tagCount, Math.floor(remainingBudget / Types.typeSizes[tagType]));
     if (boundedCount === 1 && tagCount > 1) {

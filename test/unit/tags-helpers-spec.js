@@ -11,7 +11,7 @@
 import {expect} from 'chai';
 import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import TagNames from '../../src/tag-names.js';
-import {readIfd, get0thIfdOffset, getValueBudget, BUDGET_BYTES_PER_EXTRA_ASCII_STRING} from '../../src/tags-helpers.js';
+import {readIfd, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING} from '../../src/tags-helpers.js';
 import ByteOrder from '../../src/byte-order.js';
 import DataViewWrapper from '../../src/dataview.js';
 
@@ -856,6 +856,47 @@ describe('tags-helpers', () => {
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyTag1']).to.be.undefined;
             expect(budget.ifdEntriesRemaining).to.equal(0);
+        });
+    });
+
+    describe('decompressed value allowance', () => {
+        const MAX_DECOMPRESSED_VALUE_ALLOWANCE = 1024 * 1024;
+
+        it('should give a budget the whole decompressed value allowance', () => {
+            const dataView = getDataView('\x00'.repeat(64));
+            expect(getValueBudget(dataView).decompressedAllowanceRemaining).to.equal(MAX_DECOMPRESSED_VALUE_ALLOWANCE);
+        });
+
+        it('should add 4 times the decompressed size to the budget while under the cap', () => {
+            const budget = {remaining: 10, ifdEntriesRemaining: 3, decompressedAllowanceRemaining: MAX_DECOMPRESSED_VALUE_ALLOWANCE};
+            addDecompressedValueAllowance(budget, 1000);
+            expect(budget.remaining).to.equal(10 + 4 * 1000);
+            expect(budget.decompressedAllowanceRemaining).to.equal(MAX_DECOMPRESSED_VALUE_ALLOWANCE - 4 * 1000);
+        });
+
+        it('should add only what is left of the cap once it binds', () => {
+            const budget = {remaining: 10, ifdEntriesRemaining: 3, decompressedAllowanceRemaining: 100};
+            addDecompressedValueAllowance(budget, 1000);
+            expect(budget.remaining).to.equal(10 + 100);
+            expect(budget.decompressedAllowanceRemaining).to.equal(0);
+        });
+
+        it('should add nothing once the cap is spent', () => {
+            const budget = {remaining: 10, ifdEntriesRemaining: 3, decompressedAllowanceRemaining: 100};
+            addDecompressedValueAllowance(budget, 1000);
+            addDecompressedValueAllowance(budget, 1000);
+            expect(budget.remaining).to.equal(10 + 100);
+            expect(budget.decompressedAllowanceRemaining).to.equal(0);
+        });
+
+        it('should not add to the IFD entry count', () => {
+            const budget = {remaining: 10, ifdEntriesRemaining: 3, decompressedAllowanceRemaining: MAX_DECOMPRESSED_VALUE_ALLOWANCE};
+            addDecompressedValueAllowance(budget, 1000);
+            expect(budget.ifdEntriesRemaining).to.equal(3);
+        });
+
+        it('should do nothing without a budget', () => {
+            expect(() => addDecompressedValueAllowance(undefined, 1000)).to.not.throw();
         });
     });
 
