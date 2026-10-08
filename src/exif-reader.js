@@ -440,6 +440,9 @@ export function loadView(
                     if (readTags.Thumbnail) {
                         delete readTags.Thumbnail;
                     }
+                    if (readTags.MakerNote) {
+                        delete readTags.MakerNote.__offset;
+                    }
                     deferredResults.brobExif = readTags;
                 })
                 .catch(() => {

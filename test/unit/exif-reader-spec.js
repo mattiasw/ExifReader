@@ -788,6 +788,28 @@ describe('exif-reader', function () {
         expect(result.MyBrobExifTag).to.equal(42);
     });
 
+    it('should not return the internal offset on MakerNote in brob Exif', async () => {
+        const decompressedBuffer = new ArrayBuffer(OFFSET_TEST_VALUE + 100);
+        const decompressedView = new DataView(decompressedBuffer);
+        decompressedView.setUint32(0, OFFSET_TEST_VALUE - 4);
+
+        swapImageHeader({
+            fileType: {value: 'jxl', description: 'JPEG XL'},
+            brobExifChunk: {dataOffset: 0, length: 10}
+        });
+        swapTagsRead(Tags, {MakerNote: {value: [1, 2, 3], __offset: 5}});
+
+        const result = await ExifReader.loadView(
+            new DataView(new ArrayBuffer(10)),
+            {
+                async: true,
+                decompress: {brotli: () => Promise.resolve(decompressedBuffer)}
+            }
+        );
+
+        expect(result.MakerNote).to.deep.equal({value: [1, 2, 3]});
+    });
+
     it('should size the decoded-value budget of brob Exif data from the file plus 4 times the decompressed data', async () => {
         const decompressedLength = OFFSET_TEST_VALUE + 100;
         const decompressedBuffer = new ArrayBuffer(decompressedLength);
@@ -1143,6 +1165,29 @@ describe('exif-reader', function () {
         );
 
         expect(result.exif).to.deep.equal(myTags);
+    });
+
+    it('should not return the internal offset on MakerNote in expanded brob Exif', async () => {
+        const decompressedBuffer = new ArrayBuffer(OFFSET_TEST_VALUE + 100);
+        const decompressedView = new DataView(decompressedBuffer);
+        decompressedView.setUint32(0, OFFSET_TEST_VALUE - 4);
+
+        swapImageHeader({
+            fileType: {value: 'jxl', description: 'JPEG XL'},
+            brobExifChunk: {dataOffset: 0, length: 10}
+        });
+        swapTagsRead(Tags, {MakerNote: {value: [1, 2, 3], __offset: 5}});
+
+        const result = await ExifReader.loadView(
+            new DataView(new ArrayBuffer(10)),
+            {
+                async: true,
+                expanded: true,
+                decompress: {brotli: () => Promise.resolve(decompressedBuffer)}
+            }
+        );
+
+        expect(result.exif.MakerNote).to.deep.equal({value: [1, 2, 3]});
     });
 
     it('should prefer plain Exif over brob Exif in loadView', async () => {
