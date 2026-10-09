@@ -4,12 +4,15 @@
 
 import {expect} from 'chai';
 import {getByteStringFromNumber, swapProperties} from './test-utils.js';
-import PhotoshopTags from '../../src/photoshop-tags.js';
+import PhotoshopTags, {MAX_RESOURCES} from '../../src/photoshop-tags.js';
 import TagNames, {MAX_PATH_RECORDS} from '../../src/photoshop-tag-names.js';
 import {getCharacterArray} from '../../src/utils.js';
 import {createTagFilter} from '../../src/tag-filter.js';
 
 describe('photoshop-tags', () => {
+    // Ids from 0x4000 up are unknown in the real TagNames dictionary.
+    const UNKNOWN_ID_BASE = 0x4000;
+    const CLIPPING_PATH_BLOCK = {id: 0x0bb7, resource: '\x04Clip'};
     const restores = [];
 
     afterEach(() => {
@@ -211,12 +214,78 @@ describe('photoshop-tags', () => {
         expect(PhotoshopTags.read(Number.MAX_SAFE_INTEGER)).to.deep.equal({});
     });
 
+    it('should read every resource up to the maximum resource count', () => {
+        const bytes = getCharacterArray(getUnknownBlocksString(MAX_RESOURCES));
+
+        const tags = PhotoshopTags.read(bytes, true);
+
+        expect(Object.keys(tags)).to.have.lengthOf(MAX_RESOURCES);
+        expect(tags).to.have.own.property(`undefined-${UNKNOWN_ID_BASE + MAX_RESOURCES - 1}`);
+    });
+
+    it('should stop reading resources at the maximum resource count', () => {
+        const bytes = getCharacterArray(getUnknownBlocksString(MAX_RESOURCES + 1));
+
+        const tags = PhotoshopTags.read(bytes, true);
+
+        expect(Object.keys(tags)).to.have.lengthOf(MAX_RESOURCES);
+        expect(tags).to.not.have.own.property(`undefined-${UNKNOWN_ID_BASE + MAX_RESOURCES}`);
+    });
+
+    const NO_TAG_FILLERS = [
+        {
+            kind: 'unknown resources read without includeUnknown',
+            signature: '8BIM',
+            includeUnknown: false,
+            tagFilter: undefined
+        },
+        {
+            kind: 'resources left out by the tag filter',
+            signature: '8BIM',
+            includeUnknown: true,
+            tagFilter: createTagFilter({includeTags: {photoshop: ['ClippingPathName']}})
+        },
+        {
+            kind: 'blocks without the 8BIM signature',
+            signature: 'XXXX',
+            includeUnknown: true,
+            tagFilter: undefined
+        }
+    ];
+
+    for (const {kind, signature, includeUnknown, tagFilter} of NO_TAG_FILLERS) {
+        it(`should count ${kind} once each toward the maximum resource count`, () => {
+            const bytes = getCharacterArray(
+                getUnknownBlocksString(MAX_RESOURCES - 1, signature) + getPhotoshopBlockString(CLIPPING_PATH_BLOCK)
+            );
+
+            const tags = PhotoshopTags.read(bytes, includeUnknown, tagFilter);
+
+            expect(tags.ClippingPathName).to.deep.include({id: 0x0bb7, description: 'Clip'});
+        });
+
+        it(`should count ${kind} toward the maximum resource count`, () => {
+            const bytes = getCharacterArray(
+                getUnknownBlocksString(MAX_RESOURCES, signature) + getPhotoshopBlockString(CLIPPING_PATH_BLOCK)
+            );
+
+            expect(PhotoshopTags.read(bytes, includeUnknown, tagFilter)).to.deep.equal({});
+        });
+    }
+
     function getPhotoshopBytes(block) {
         return getCharacterArray(getPhotoshopBlockString(block));
     }
 
-    function getPhotoshopBlockString({id, name = '', resource = ''}) {
-        const signature = '8BIM';
+    function getUnknownBlocksString(count, signature = '8BIM') {
+        let blocks = '';
+        for (let index = 0; index < count; index++) {
+            blocks += getPhotoshopBlockString({signature, id: UNKNOWN_ID_BASE + index});
+        }
+        return blocks;
+    }
+
+    function getPhotoshopBlockString({signature = '8BIM', id, name = '', resource = ''}) {
         return signature
             + getByteStringFromNumber(id, 2)
             + getPaddedPascalString(name)
