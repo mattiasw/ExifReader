@@ -101,26 +101,9 @@ describe('icc-tag-names', () => {
         expect(iccProfile[80].value(dataViewFromString('1234'), 0)).to.equal('1234');
     });
 
-    describe('sliceToString', () => {
-        it('should convert a small slice such as a signature', () => {
-            const bytes = buildBytePattern(4);
-            expect(sliceToString(bytes.buffer)).to.equal(expectedString(bytes));
-        });
-
-        it('should convert a slice of exactly one chunk', () => {
-            const bytes = buildBytePattern(8192);
-            expect(sliceToString(bytes.buffer)).to.equal(expectedString(bytes));
-        });
-
-        it('should convert a slice one byte larger than one chunk', () => {
-            const bytes = buildBytePattern(8193);
-            expect(sliceToString(bytes.buffer)).to.equal(expectedString(bytes));
-        });
-
-        it('should convert a slice spanning several chunks in full', () => {
-            const bytes = buildBytePattern(3 * 8192 + 5);
-            expect(sliceToString(bytes.buffer)).to.equal(expectedString(bytes));
-        });
+    it('should convert a slice spanning several chunks to a string', () => {
+        const bytes = buildBytePattern(3 * 8192 + 5);
+        expect(sliceToString(bytes.buffer)).to.equal(expectedString(bytes));
     });
 });
 

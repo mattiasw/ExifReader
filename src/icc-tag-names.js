@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView} from './utils.js';
+import {getByteString, getStringFromDataView} from './utils.js';
 
 export const iccTags = {
     'desc': {
@@ -119,17 +119,8 @@ function parseDate(dataView, offset) {
     return new Date(Date.UTC(year, month, day, hours, minutes, seconds));
 }
 
-// Engines cap the number of arguments Function.prototype.apply can pass
-// through, so a large slice is converted in fixed-size chunks.
-const MAX_CHARS_PER_CALL = 8192;
-
 export function sliceToString(slice) {
-    const bytes = new Uint8Array(slice);
-    const chunks = [];
-    for (let offset = 0; offset < bytes.length; offset += MAX_CHARS_PER_CALL) {
-        chunks.push(String.fromCharCode.apply(null, bytes.subarray(offset, offset + MAX_CHARS_PER_CALL)));
-    }
-    return chunks.join('');
+    return getByteString(new Uint8Array(slice));
 }
 
 function toCompany(value) {
