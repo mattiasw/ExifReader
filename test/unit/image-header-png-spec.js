@@ -181,15 +181,15 @@ describe('image-header-png', () => {
         expect(ImageHeaderPng.findPngOffsets(dataView, true)).to.not.have.property('iccChunks');
     });
 
+    const ICCP_CHUNK_TYPE = 'iCCP';
+    const CRC_CHECKSUM = '\x00\x00\x00\x00';
+    const ICC_DATA_OFFSET = PNG_IMAGE_START.length + 4 + ICCP_CHUNK_TYPE.length;
+
+    function getIccpChunk(chunkData, declaredLength = chunkData.length) {
+        return getByteStringFromNumber(declaredLength, 4) + ICCP_CHUNK_TYPE + chunkData;
+    }
+
     describe('iCCP profile name bounds', () => {
-        const ICCP_CHUNK_TYPE = 'iCCP';
-        const CRC_CHECKSUM = '\x00\x00\x00\x00';
-        const ICC_DATA_OFFSET = PNG_IMAGE_START.length + 4 + ICCP_CHUNK_TYPE.length;
-
-        function getIccpChunk(chunkData, declaredLength = chunkData.length) {
-            return getByteStringFromNumber(declaredLength, 4) + ICCP_CHUNK_TYPE + chunkData;
-        }
-
         it('should accept a profile name of 79 bytes', () => {
             const profileName = 'A'.repeat(79);
             const chunkDataHeader = `${profileName}\x00\x00`;
@@ -294,6 +294,54 @@ describe('image-header-png', () => {
                     compressionMethod: 0
                 }]
             });
+        });
+    });
+
+    describe('only the first valid iCCP chunk', () => {
+        it('should keep only the first of two valid iCCP chunks', () => {
+            const firstChunkData = 'FirstProfile\x00\x00<first profile>';
+            const firstChunk = getIccpChunk(firstChunkData) + CRC_CHECKSUM;
+            const secondChunk = getIccpChunk('SecondProfile\x00\x00<second profile>') + CRC_CHECKSUM;
+            const dataView = getDataView(PNG_IMAGE_START + firstChunk + secondChunk);
+
+            expect(ImageHeaderPng.findPngOffsets(dataView, true).iccChunks).to.deep.equal([{
+                offset: ICC_DATA_OFFSET + 'FirstProfile\x00\x00'.length,
+                length: '<first profile>'.length,
+                chunkNumber: 1,
+                chunksTotal: 1,
+                profileName: 'FirstProfile',
+                compressionMethod: 0
+            }]);
+        });
+
+        it('should keep a single entry for many minimal iCCP chunks', () => {
+            const minimalChunkData = '\x00\x00';
+            const dataView = getDataView(PNG_IMAGE_START + (getIccpChunk(minimalChunkData) + CRC_CHECKSUM).repeat(1000));
+
+            expect(ImageHeaderPng.findPngOffsets(dataView, true).iccChunks).to.deep.equal([{
+                offset: ICC_DATA_OFFSET + minimalChunkData.length,
+                length: 0,
+                chunkNumber: 1,
+                chunksTotal: 1,
+                profileName: '',
+                compressionMethod: 0
+            }]);
+        });
+
+        it('should keep a valid iCCP chunk that follows one with an invalid profile name', () => {
+            const invalidChunk = getIccpChunk(`${'A'.repeat(80)}\x00\x00<invalid profile>`) + CRC_CHECKSUM;
+            const validChunkDataHeader = 'ValidProfile\x00\x00';
+            const validChunk = getIccpChunk(`${validChunkDataHeader}<valid profile>`) + CRC_CHECKSUM;
+            const dataView = getDataView(PNG_IMAGE_START + invalidChunk + validChunk);
+
+            expect(ImageHeaderPng.findPngOffsets(dataView, true).iccChunks).to.deep.equal([{
+                offset: ICC_DATA_OFFSET + invalidChunk.length + validChunkDataHeader.length,
+                length: '<valid profile>'.length,
+                chunkNumber: 1,
+                chunksTotal: 1,
+                profileName: 'ValidProfile',
+                compressionMethod: 0
+            }]);
         });
     });
 
@@ -449,6 +497,18 @@ describe('image-header-png', () => {
             ImageHeaderPng.findPngOffsets(getDataView(PNG_IMAGE_START + chunk), true, metadataBlocks);
             expect(metadataBlocks).to.deep.equal([
                 {type: 'icc', start: PNG_IMAGE_START.length, end: PNG_IMAGE_START.length + chunk.length},
+            ]);
+        });
+
+        it('should emit an icc block for every valid iCCP chunk (async)', () => {
+            const firstChunk = getIccpChunk('FirstProfile\x00\x00<first profile>') + crcChecksum;
+            const secondChunk = getIccpChunk('SecondProfile\x00\x00<second profile>') + crcChecksum;
+            const secondChunkStart = PNG_IMAGE_START.length + firstChunk.length;
+            const metadataBlocks = [];
+            ImageHeaderPng.findPngOffsets(getDataView(PNG_IMAGE_START + firstChunk + secondChunk), true, metadataBlocks);
+            expect(metadataBlocks).to.deep.equal([
+                {type: 'icc', start: PNG_IMAGE_START.length, end: secondChunkStart},
+                {type: 'icc', start: secondChunkStart, end: secondChunkStart + secondChunk.length},
             ]);
         });
 

@@ -135,6 +135,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   about 277 MB with `async: true`. An iCCP chunk whose profile name is longer
   than 79 bytes, or whose profile name and compression method do not fit
   inside the chunk, is now skipped.
+- A PNG made of many small iCCP chunks used memory far above the file size:
+  8 MiB of minimal iCCP chunks raised peak memory to about 195 MB with
+  `async: true`. Only the first valid iCCP chunk was ever used, as the PNG
+  spec allows only one, and later ones are no longer kept. The same file now
+  peaks at about 80 MB.
 - A PNG text chunk with a long keyword, iTXt language tag or iTXt translated
   keyword used memory far above the file size: an 8 MiB tEXt chunk with no
   terminator raised peak memory to about 300 MB. A PNG text chunk whose
