@@ -86,6 +86,9 @@ describe('utils', () => {
     });
 
     describe('dataUriToBuffer', () => {
+        const ALL_BYTES = Array.from({length: 256}, (_, i) => i);
+        const ALL_BYTES_BASE64 = Buffer.from(ALL_BYTES).toString('base64');
+
         it('should decode the payload as base64 when the header says so', () => {
             const buffer = Utils.dataUriToBuffer('data:image/jpeg;base64,YWJj');
 
@@ -96,6 +99,59 @@ describe('utils', () => {
             const buffer = Utils.dataUriToBuffer('data:,foo;base64,bar');
 
             expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from('foo;base64,bar', (char) => char.charCodeAt(0)));
+        });
+
+        it('should decode a base64 payload without a per-byte Uint8Array.from callback', () => {
+            const restore = swapProperties(Uint8Array, {
+                from() {
+                    throw new Error('Uint8Array.from');
+                }
+            });
+
+            let buffer;
+            try {
+                buffer = Utils.dataUriToBuffer(`data:image/jpeg;base64,${ALL_BYTES_BASE64}`);
+            } finally {
+                restore();
+            }
+            expect(buffer).to.be.an.instanceof(ArrayBuffer);
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(ALL_BYTES);
+        });
+
+        it('should URL-decode a payload without Buffer or a per-byte Uint8Array.from callback', () => {
+            const restore = swapProperties(globalThis, {
+                Buffer: undefined
+            });
+            const restoreFrom = swapProperties(Uint8Array, {
+                from() {
+                    throw new Error('Uint8Array.from');
+                }
+            });
+
+            let truncatedBuffer;
+            let allBytesBuffer;
+            try {
+                truncatedBuffer = Utils.dataUriToBuffer('data:,a%20b%E2%82%AC');
+                allBytesBuffer = Utils.dataUriToBuffer(`data:,${encodeURIComponent(String.fromCharCode(...ALL_BYTES))}`);
+            } finally {
+                restoreFrom();
+                restore();
+            }
+            expect(truncatedBuffer).to.be.an.instanceof(ArrayBuffer);
+            expect(Array.from(new Uint8Array(truncatedBuffer))).to.deep.equal([0x61, 0x20, 0x62, 0xac]);
+            expect(allBytesBuffer).to.be.an.instanceof(ArrayBuffer);
+            expect(Array.from(new Uint8Array(allBytesBuffer))).to.deep.equal(ALL_BYTES);
+        });
+
+        it('should throw InvalidCharacterError for an invalid base64 payload', () => {
+            expect(() => Utils.dataUriToBuffer('data:image/jpeg;base64,!!!!')).to.throw().with.property('name', 'InvalidCharacterError');
+        });
+
+        it('should URL-decode a payload into a UTF-8 Buffer when Buffer exists', () => {
+            const buffer = Utils.dataUriToBuffer('data:,%E2%82%AC');
+
+            expect(Buffer.isBuffer(buffer)).to.equal(true);
+            expect(Array.from(buffer)).to.deep.equal([0xe2, 0x82, 0xac]);
         });
     });
 

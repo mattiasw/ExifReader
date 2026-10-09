@@ -275,7 +275,7 @@ export function dataUriToBuffer(dataUri) {
 
     if (header.indexOf(';base64') !== -1) {
         if (typeof atob !== 'undefined') {
-            return Uint8Array.from(atob(data), (char) => char.charCodeAt(0)).buffer;
+            return binaryStringToArrayBuffer(atob(data));
         }
         if (typeof Buffer === 'undefined') {
             return undefined;
@@ -293,7 +293,15 @@ export function dataUriToBuffer(dataUri) {
         }
         return new Buffer(decodedData); // eslint-disable-line no-undef
     }
-    return Uint8Array.from(decodedData, (char) => char.charCodeAt(0)).buffer;
+    return binaryStringToArrayBuffer(decodedData);
+}
+
+function binaryStringToArrayBuffer(string) {
+    const bytes = new Uint8Array(string.length);
+    for (let i = 0; i < string.length; i++) {
+        bytes[i] = string.charCodeAt(i);
+    }
+    return bytes.buffer;
 }
 
 export function padStart(string, length, character) {

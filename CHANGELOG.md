@@ -194,6 +194,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seconds. XMP packets with elements nested deeper than 256 levels are now
   left out without being parsed. Any packet nested about 2,000 levels deep
   already lost all its XMP tags to a stack overflow in ExifReader's own code.
+- A base64 data URI passed to `load()` used memory far above its size: an
+  8 MiB data URI holding a 6 MiB XMP packet raised peak memory to about
+  445 MB and took about 0.65 seconds. The same data URI now peaks at about
+  116 MB and takes about 0.09 seconds.
 
 ## [4.47.0] - 2026-10-08
 
