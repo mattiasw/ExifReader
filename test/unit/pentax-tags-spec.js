@@ -18,6 +18,7 @@ const BIG_ENDIAN_STRING = String.fromCharCode(ByteOrder.BIG_ENDIAN & 0xff, ByteO
 const LITTLE_ENDIAN_STRING = String.fromCharCode(ByteOrder.LITTLE_ENDIAN & 0xff, ByteOrder.LITTLE_ENDIAN >> 8);
 const PENTAX_MODEL_ID_TAG_ID = 0x0005;
 const LEVEL_INFO_TAG_ID = 0x022b;
+const UNKNOWN_TAG_ID = 0x7fff;
 const TYPE_SHORT = 3;
 const TYPE_LONG = 4;
 const TYPE_UNDEFINED = 7;
@@ -216,6 +217,94 @@ describe('pentax-tags', () => {
 
             expect(tags['CameraOrientation'].value).to.equal(3);
             expect(tags['CameraOrientation'].description).to.equal('Rotate 90 CW');
+        });
+
+        it('should not read RollAngle or PitchAngle from the bytes after a 4-byte LevelInfo in its value slot', function () {
+            const dataView = getPentaxDataView([
+                getUndefinedField(LEVEL_INFO_TAG_ID, [0, 3, 0, 0]),
+                getLongField(PENTAX_MODEL_ID_TAG_ID, PentaxTags.MODEL_ID.K3_III)
+            ]);
+
+            const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false);
+
+            expect(tags['CameraOrientation'].value).to.equal(3);
+            expect(tags).to.not.have.property('RollAngle');
+            expect(tags).to.not.have.property('PitchAngle');
+            expect(tags).to.not.have.property('LevelInfo');
+        });
+
+        it('should not read any field from a 1-byte LevelInfo', function () {
+            const dataView = getPentaxDataView([
+                {id: LEVEL_INFO_TAG_ID, type: TYPE_UNDEFINED, count: 1, data: '\x00\x03\x00\x00'},
+                getLongField(PENTAX_MODEL_ID_TAG_ID, PentaxTags.MODEL_ID.K3_III)
+            ]);
+
+            const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false);
+
+            expect(tags['PentaxModelID'].value).to.equal(PentaxTags.MODEL_ID.K3_III);
+            expect(tags).to.not.have.property('CameraOrientation');
+            expect(tags).to.not.have.property('RollAngle');
+            expect(tags).to.not.have.property('PitchAngle');
+            expect(tags).to.not.have.property('LevelInfo');
+        });
+
+        it('should read only CameraOrientation from a 2-byte LevelInfo', function () {
+            const dataView = getPentaxDataView([
+                getUndefinedField(LEVEL_INFO_TAG_ID, [0, 3]),
+                getLongField(PENTAX_MODEL_ID_TAG_ID, PentaxTags.MODEL_ID.K3_III)
+            ]);
+
+            const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false);
+
+            expect(tags['CameraOrientation'].value).to.equal(3);
+            expect(tags).to.not.have.property('RollAngle');
+            expect(tags).to.not.have.property('PitchAngle');
+        });
+
+        for (const levelInfoBytes of [[0, 3, 0, 0, 42], [0, 3, 0, 0, 42, 0]]) {
+            it(`should not read PitchAngle from the bytes after a ${levelInfoBytes.length}-byte LevelInfo`, function () {
+                const dataView = getPentaxDataView([
+                    getLongField(PENTAX_MODEL_ID_TAG_ID, PentaxTags.MODEL_ID.K3_III),
+                    getUndefinedField(LEVEL_INFO_TAG_ID, levelInfoBytes),
+                    getUndefinedField(UNKNOWN_TAG_ID, [7, 7, 7, 7, 7])
+                ]);
+
+                const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false);
+
+                expect(tags['CameraOrientation'].value).to.equal(3);
+                expect(tags['RollAngle'].value).to.equal(42);
+                expect(tags['RollAngle'].description).to.equal('-21');
+                expect(tags).to.not.have.property('PitchAngle');
+            });
+        }
+
+        it('should not read any field from a LevelInfo whose value lies outside the file', function () {
+            const dataView = getPentaxDataView([
+                getLongField(PENTAX_MODEL_ID_TAG_ID, PentaxTags.MODEL_ID.K3_III),
+                {id: LEVEL_INFO_TAG_ID, type: TYPE_UNDEFINED, count: 7, data: getUint32(0xffff)}
+            ]);
+
+            const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false);
+
+            expect(tags['PentaxModelID'].value).to.equal(PentaxTags.MODEL_ID.K3_III);
+            expect(tags).to.not.have.property('CameraOrientation');
+            expect(tags).to.not.have.property('RollAngle');
+            expect(tags).to.not.have.property('PitchAngle');
+            expect(tags).to.not.have.property('LevelInfo');
+        });
+
+        it('should not read any field from a LevelInfo the decoded-value budget left empty', function () {
+            const dataView = getPentaxDataView([
+                getLongField(PENTAX_MODEL_ID_TAG_ID, PentaxTags.MODEL_ID.K3_III),
+                getUndefinedField(LEVEL_INFO_TAG_ID, [0, 3, 0, 0, 42, 0, 42])
+            ]);
+
+            const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false, false, undefined, {remaining: 0, ifdEntriesRemaining: 1000});
+
+            expect(tags).to.not.have.property('CameraOrientation');
+            expect(tags).to.not.have.property('RollAngle');
+            expect(tags).to.not.have.property('PitchAngle');
+            expect(tags).to.not.have.property('LevelInfo');
         });
 
         function getLevelInfoDataView(levelInfoTags, littleEndian = false) {
