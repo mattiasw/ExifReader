@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {decodeUtf8ByteString, getByteString, objectAssign, setProperty, tryDecodeUtf8ByteString} from './utils.js';
+import {decodeUtf8ByteString, getByteString, getTagKey, objectAssign, setProperty, tryDecodeUtf8ByteString} from './utils.js';
 import XmpTagNames from './xmp-tag-names.js';
 import DOMParser from './dom-parser.js';
 import TextDecoder from './text-decoder.js';
@@ -130,7 +130,10 @@ function readTags(tags, chunkDataView, domParser) {
         parseXMPObject(convertToObject(rdf, true, decodeValue), xmpTags, Object.create(null));
         // A parsed tag named _raw must not replace the packet string.
         delete xmpTags._raw;
-        objectAssign(tags, xmpTags);
+        const names = Object.keys(xmpTags);
+        for (let i = 0; i < names.length; i++) {
+            setProperty(tags, getTagKey(names[i]), xmpTags[names[i]]);
+        }
         return true;
     } catch (error) {
         return false;

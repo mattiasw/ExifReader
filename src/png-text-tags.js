@@ -4,7 +4,7 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringValueFromArray, getStringFromDataView, decompress, setProperty, objectAssign, COMPRESSION_METHOD_NONE, getHexDigitValue} from './utils.js';
+import {getStringValueFromArray, getStringFromDataView, decompress, setProperty, getTagKey, objectAssign, COMPRESSION_METHOD_NONE, getHexDigitValue} from './utils.js';
 import TagDecoder from './tag-decoder.js';
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
 import Tags from './tags.js';
@@ -90,7 +90,7 @@ function read(
                     embeddedIptcTags = objectAssign(embeddedIptcTags || {}, rawProfileTags.embeddedIptcTags);
                 }
             } else if (tag.name && tagFilter.shouldParseGroup('png')) {
-                setProperty(tags, tag.name, {
+                setProperty(tags, getTagKey(tag.name), {
                     value: tag.value,
                     description: tag.description
                 });
@@ -217,7 +217,7 @@ function getTagsFromTextTag({name, value, description}, includeUnknown, computed
                 return {};
             }
             const readTags = {};
-            setProperty(readTags, name, {
+            setProperty(readTags, getTagKey(name), {
                 value,
                 description
             });

@@ -2042,6 +2042,38 @@ describe('xmp-tags', function () {
                     expect(tags.value).to.be.undefined;
                 });
 
+                it('should append _ to a tag named after an Object.prototype method', () => {
+                    const xmlString = getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:hasOwnProperty="4711" xmp:toString="4812">
+                            <xmp:valueOf>4913</xmp:valueOf>
+                        </rdf:Description>
+                    `);
+                    const dataView = getDataView(xmlString);
+                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    expect(Object.keys(tags).filter((key) => key !== '_raw')).to.have.members(['hasOwnProperty_', 'toString_', 'valueOf_']);
+                    expect(tags['hasOwnProperty_']).to.deep.equal({value: '4711', attributes: {}, description: '4711'});
+                    expect(tags['toString_']).to.deep.equal({value: '4812', attributes: {}, description: '4812'});
+                    expect(tags['valueOf_']).to.deep.equal({value: '4913', attributes: {}, description: '4913'});
+                    expect(tags.hasOwnProperty('hasOwnProperty_')).to.be.true; // eslint-disable-line no-prototype-builtins
+                    expect(String(tags)).to.equal('[object Object]');
+                });
+
+                describe('with an enumerable property added to Object.prototype', () => {
+                    afterEach(() => {
+                        delete Object.prototype.myPolyfill;
+                    });
+
+                    // A packet without a description, so that only the merge of
+                    // the parsed tags into the result could pick the property up.
+                    it('should not merge the inherited property into the tags', () => {
+                        Object.prototype.myPolyfill = () => 4711;
+                        const xmlString = getXmlString('');
+                        const dataView = getDataView(xmlString);
+                        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                        expect(Object.keys(tags)).to.deep.equal(['_raw']);
+                    });
+                });
+
                 it('should keep the raw packet as _raw when there is an element named _raw', () => {
                     const xmlString = getXmlString(`
                         <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
@@ -2114,12 +2146,12 @@ describe('xmp-tags', function () {
                     `);
                     const dataView = getDataView(xmlString);
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
-                    expect(tags).to.have.own.property('constructor');
-                    expect(tags['constructor'].value).to.equal('4711');
+                    expect(tags).to.have.own.property('constructor_');
+                    expect(tags['constructor_'].value).to.equal('4711');
                     // Without the fix this is a String object built by the
                     // inherited Object function, not a primitive.
-                    expect(typeof tags['constructor'].description).to.equal('string');
-                    expect(tags['constructor'].description).to.equal('4711');
+                    expect(typeof tags['constructor_'].description).to.equal('string');
+                    expect(tags['constructor_'].description).to.equal('4711');
                 });
 
                 it('should not describe an attribute value with an inherited property of the tag name table', () => {
@@ -2128,11 +2160,11 @@ describe('xmp-tags', function () {
                     `);
                     const dataView = getDataView(xmlString);
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
-                    expect(tags).to.have.own.property('hasOwnProperty');
-                    expect(tags['hasOwnProperty'].value).to.equal('4711');
+                    expect(tags).to.have.own.property('hasOwnProperty_');
+                    expect(tags['hasOwnProperty_'].value).to.equal('4711');
                     // Without the fix the inherited hasOwnProperty is called here,
                     // which makes the description false instead of a string.
-                    expect(tags['hasOwnProperty'].description).to.equal('4711');
+                    expect(tags['hasOwnProperty_'].description).to.equal('4711');
                 });
 
                 it('should parse a list in an element named after an object property like any other list', () => {
@@ -2148,12 +2180,12 @@ describe('xmp-tags', function () {
                     `);
                     const dataView = getDataView(xmlString);
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
-                    expect(tags).to.have.own.property('constructor');
-                    expect(tags['constructor'].value).to.deep.equal([
+                    expect(tags).to.have.own.property('constructor_');
+                    expect(tags['constructor_'].value).to.deep.equal([
                         {value: '4711', attributes: {}, description: '4711'},
                         {value: '4812', attributes: {}, description: '4812'}
                     ]);
-                    expect(tags['constructor'].description).to.equal('4711, 4812');
+                    expect(tags['constructor_'].description).to.equal('4711, 4812');
                 });
 
                 it('should still describe a list with the description function of a real tag name', () => {

@@ -3330,6 +3330,36 @@ describe('exif-reader', function () {
     });
 
     describe('keys the library computes itself', () => {
+        it('should keep the Object.prototype methods of the result when PNG text tags are named after them', () => {
+            const png = getPngWithChunks(
+                getPngChunk('tEXt', 'hasOwnProperty\x00fake-has-own-property'),
+                getPngChunk('tEXt', 'toString\x00fake-to-string'),
+                getPngChunk('tEXt', 'Other\x00fake-other')
+            );
+
+            const tags = ExifReader.loadView(getDataView(png));
+
+            expect(tags.hasOwnProperty('Other')).to.be.true; // eslint-disable-line no-prototype-builtins
+            expect(String(tags)).to.equal('[object Object]');
+            expect(tags.hasOwnProperty_.value).to.equal('fake-has-own-property');
+            expect(tags.toString_.value).to.equal('fake-to-string');
+        });
+
+        it('should keep the Object.prototype methods of the group when PNG text tags are named after them', () => {
+            const png = getPngWithChunks(
+                getPngChunk('tEXt', 'hasOwnProperty\x00fake-has-own-property'),
+                getPngChunk('tEXt', 'toString\x00fake-to-string'),
+                getPngChunk('tEXt', 'Other\x00fake-other')
+            );
+
+            const tags = ExifReader.loadView(getDataView(png), {expanded: true});
+
+            expect(tags.png.hasOwnProperty('Other')).to.be.true; // eslint-disable-line no-prototype-builtins
+            expect(String(tags.png)).to.equal('[object Object]');
+            expect(tags.png.hasOwnProperty_.value).to.equal('fake-has-own-property');
+            expect(tags.png.toString_.value).to.equal('fake-to-string');
+        });
+
         it('should not return a PNG text tag named Thumbnail as the thumbnail', () => {
             const png = getPngWithChunks(
                 getPngChunk('tEXt', 'Thumbnail\x00fake-thumbnail'),
