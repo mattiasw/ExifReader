@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   also marks `PentaxVersion`, `PentaxModelID`, `CameraOrientation`,
   `RollAngle` and `PitchAngle` optional, since a file may lack any of them.
 
+### Security
+
+- Nothing limited how many Photoshop image resources ExifReader read from
+  the Exif `PhotoshopSettings` tag: a crafted TIFF whose 4 MiB
+  `PhotoshopSettings` value held about 300,000 tiny resources raised peak
+  memory to about 385 MB and blocked `load()` for about 2 seconds, against
+  about 167 MB for one plain 4 MiB tag value. At most the first 4,096
+  Photoshop image resources in the `PhotoshopSettings` value are now read, so
+  the same file peaks at about 220 MB and takes under 0.4 seconds. Real files
+  carry a few dozen resources.
+
 ## [4.48.0] - 2026-10-09
 
 ### Added
