@@ -555,6 +555,96 @@ describe('iptc-tags', function () {
         });
     });
 
+    describe('IPTC dataset count', () => {
+        const EMPTY_DATASET = '\x1c\x47\x11\x00\x00';
+
+        beforeEach(() => {
+            restores.push(swapProperties(IptcTagNames.iptc, {
+                0x4711: {
+                    name: 'MyIptcTag',
+                    repeatable: true
+                },
+                0x4712: 'MyOtherIptcTag'
+            }));
+        });
+
+        it('should stop at the count and keep the datasets read before it', () => {
+            const budget = {iptcDatasetsRemaining: 3};
+            const tags = IptcTags.read(getNaaBlockDataView(EMPTY_DATASET.repeat(5)), 0, false, undefined, budget);
+            expect(tags['MyIptcTag']).to.have.lengthOf(3);
+            expect(budget.iptcDatasetsRemaining).to.equal(0);
+        });
+
+        it('should draw one unit per started 48 bytes of a dataset', () => {
+            // A 43-byte value makes a 48-byte dataset with its 5-byte header.
+            const budget = {iptcDatasetsRemaining: 10};
+            IptcTags.read(getNaaBlockDataView(getDataset(0x4712, 43)), 0, false, undefined, budget);
+            expect(budget.iptcDatasetsRemaining).to.equal(9);
+            IptcTags.read(getNaaBlockDataView(getDataset(0x4712, 44)), 0, false, undefined, budget);
+            expect(budget.iptcDatasetsRemaining).to.equal(7);
+        });
+
+        it('should stop when the next dataset needs more units than are left', () => {
+            const budget = {iptcDatasetsRemaining: 1};
+            const tags = IptcTags.read(getNaaBlockDataView(getDataset(0x4712, 44) + EMPTY_DATASET), 0, false, undefined, budget);
+            expect(tags).to.deep.equal({});
+            expect(budget.iptcDatasetsRemaining).to.equal(1);
+        });
+
+        it('should count the unknown datasets it skips', () => {
+            const budget = {iptcDatasetsRemaining: 1};
+            const tags = IptcTags.read(getNaaBlockDataView('\x1c\x47\x99\x00\x00' + EMPTY_DATASET), 0, false, undefined, budget);
+            expect(tags).to.deep.equal({});
+            expect(budget.iptcDatasetsRemaining).to.equal(0);
+        });
+
+        it('should count the datasets the tag filter skips', () => {
+            const budget = {iptcDatasetsRemaining: 1};
+            const tagFilter = {shouldParseTag: (groupKey, tagName, tagCode) => tagCode !== 0x4712};
+            const tags = IptcTags.read(getNaaBlockDataView(getDataset(0x4712, 0) + EMPTY_DATASET), 0, false, tagFilter, budget);
+            expect(tags).to.deep.equal({});
+            expect(budget.iptcDatasetsRemaining).to.equal(0);
+        });
+
+        it('should stop two reads sharing one budget at the shared total', () => {
+            const budget = {iptcDatasetsRemaining: 3};
+            const firstTags = IptcTags.read(getNaaBlockDataView(EMPTY_DATASET.repeat(2)), 0, false, undefined, budget);
+            const secondTags = IptcTags.read(getCharacterArray(EMPTY_DATASET.repeat(2)), 0, false, undefined, budget);
+            expect(firstTags['MyIptcTag']).to.have.lengthOf(2);
+            expect(secondTags['MyIptcTag'].id).to.equal(0x4711);
+            expect(budget.iptcDatasetsRemaining).to.equal(0);
+        });
+
+        it('should size the count from the data view without a budget', () => {
+            const dataView = getNaaBlockDataView(EMPTY_DATASET.repeat(1200));
+            expect(getUnitsWithoutBudget(dataView.byteLength)).to.equal(1149);
+            const tags = IptcTags.read(dataView, 0);
+            expect(tags['MyIptcTag']).to.have.lengthOf(1149);
+        });
+
+        it('should size the count from the array without a budget', () => {
+            const array = getCharacterArray(EMPTY_DATASET.repeat(1200));
+            expect(getUnitsWithoutBudget(array.length)).to.equal(1149);
+            const tags = IptcTags.read(array, 0);
+            expect(tags['MyIptcTag']).to.have.lengthOf(1149);
+        });
+
+        it('should read nothing when the count is spent', () => {
+            const budget = {iptcDatasetsRemaining: 0};
+            const tags = IptcTags.read(getNaaBlockDataView(EMPTY_DATASET), 0, false, undefined, budget);
+            expect(tags).to.deep.equal({});
+        });
+
+        function getDataset(tagCode, valueSize) {
+            return '\x1c' + getByteStringFromNumber(tagCode, 2) + getByteStringFromNumber(valueSize, 2) + 'A'.repeat(valueSize);
+        }
+
+        // Every budget starts with 1024 units and gets one more per 48 bytes.
+        function getUnitsWithoutBudget(byteLength) {
+            return 1024 + Math.floor(byteLength / 48);
+        }
+    });
+
     function getNaaBlockDataView(tagsData) {
         return getDataView('8BIM\x04\x04\x00\x00' + getByteStringFromNumber(tagsData.length, 4) + tagsData);
     }

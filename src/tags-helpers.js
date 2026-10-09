@@ -37,6 +37,25 @@ const MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY = 4;
 // against 87 for BYTE values.
 export const BUDGET_BYTES_PER_EXTRA_ASCII_STRING = 2;
 
+// A buffer gets one IPTC dataset unit per this many bytes, and a dataset draws
+// one unit per started this many bytes, header included. Short datasets cost
+// up to about 1.2 KB of peak memory each, so this keeps an 8 MiB file of them
+// at most about 33 times its size. Longer datasets draw about one unit per this
+// many of their own bytes, so the count does not cut them below what the file
+// holds; they cost about 25 to 36 times their size.
+export const BYTES_PER_IPTC_DATASET = 48;
+
+// Every load can read this many units whatever its size, so a small file with
+// a real IPTC block is read in full. They cost at most about 1.2 MB.
+const MIN_IPTC_DATASET_UNITS = 1024;
+
+// The dataset header, the smallest dataset there is.
+export const IPTC_DATASET_HEADER_SIZE = 5;
+
+// Real compressed IPTC is far smaller. The cap bounds how many datasets a small
+// file can add by decompressing to a large IPTC block.
+const MAX_DECOMPRESSED_IPTC_ALLOWANCE = 8192;
+
 const getTagValueAt = {
     1: Types.getByteAt,
     3: Types.getShortAt,
@@ -186,22 +205,31 @@ function takeIfdEntry(valueBudget) {
  *
  * The budget also counts the IFD entries read, shared the same way, so that
  * Exif decompressed from a small file cannot have its entries read in
- * proportion to the decompressed size.
+ * proportion to the decompressed size. It counts the IPTC datasets read too,
+ * across every IPTC read of the load; IPTC decompressed from a PNG text chunk
+ * first adds its allowance, see addDecompressedIptcAllowance.
  *
  * @param {DataView} dataView - The buffer the values are decoded from.
- * @returns {{remaining: number, ifdEntriesRemaining: number, decompressedAllowanceRemaining: number}}
+ * @returns {{remaining: number, ifdEntriesRemaining: number, decompressedAllowanceRemaining: number, iptcDatasetsRemaining: number, decompressedIptcAllowanceRemaining: number}}
  * The budget: remaining is the bytes left to decode, with each extra ASCII
  * string counted as BUDGET_BYTES_PER_EXTRA_ASCII_STRING bytes;
  * ifdEntriesRemaining is the IFD entries left to read,
  * MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY times the byteLength / 12 entries the
  * buffer can hold; decompressedAllowanceRemaining is what decompressed Exif
- * can still add to remaining, MAX_DECOMPRESSED_VALUE_ALLOWANCE per budget.
+ * can still add to remaining, MAX_DECOMPRESSED_VALUE_ALLOWANCE per budget;
+ * iptcDatasetsRemaining is the IPTC dataset units left, MIN_IPTC_DATASET_UNITS
+ * plus one per BYTES_PER_IPTC_DATASET bytes of the buffer, of which a dataset
+ * draws one per started BYTES_PER_IPTC_DATASET bytes; decompressedIptcAllowanceRemaining
+ * is what decompressed IPTC can still add to iptcDatasetsRemaining,
+ * MAX_DECOMPRESSED_IPTC_ALLOWANCE per budget.
  */
 export function getValueBudget(dataView) {
     return {
         remaining: dataView.byteLength * MAX_VALUE_SIZE_PER_BUFFER_SIZE,
         ifdEntriesRemaining: Math.floor(dataView.byteLength / IFD_ENTRY_LENGTH) * MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY,
-        decompressedAllowanceRemaining: MAX_DECOMPRESSED_VALUE_ALLOWANCE
+        decompressedAllowanceRemaining: MAX_DECOMPRESSED_VALUE_ALLOWANCE,
+        iptcDatasetsRemaining: MIN_IPTC_DATASET_UNITS + Math.floor(dataView.byteLength / BYTES_PER_IPTC_DATASET),
+        decompressedIptcAllowanceRemaining: MAX_DECOMPRESSED_IPTC_ALLOWANCE
     };
 }
 
@@ -209,7 +237,8 @@ export function getValueBudget(dataView) {
  * Adds the allowance of an Exif block decompressed from the file to the
  * budget: MAX_VALUE_SIZE_PER_BUFFER_SIZE times its decompressed size, up to
  * what is left of the budget's decompressedAllowanceRemaining, which it draws
- * from. Leaves the IFD entry count as it is. Does nothing without a budget.
+ * from. Leaves the IFD entry count and the IPTC dataset count as they are.
+ * Does nothing without a budget.
  *
  * @param {{remaining: number, decompressedAllowanceRemaining: number}} [valueBudget]
  * @param {number} decompressedByteLength - The size of the decompressed Exif.
@@ -224,6 +253,28 @@ export function addDecompressedValueAllowance(valueBudget, decompressedByteLengt
     );
     valueBudget.remaining += allowance;
     valueBudget.decompressedAllowanceRemaining -= allowance;
+}
+
+/**
+ * Adds the allowance of an IPTC block decompressed from the file to the
+ * budget's iptcDatasetsRemaining: one unit per IPTC_DATASET_HEADER_SIZE
+ * decompressed bytes, enough for every dataset the block holds, up to what is
+ * left of the budget's decompressedIptcAllowanceRemaining, which it draws from.
+ * Leaves the other fields as they are. Does nothing without a budget.
+ *
+ * @param {{iptcDatasetsRemaining: number, decompressedIptcAllowanceRemaining: number}} [valueBudget]
+ * @param {number} decompressedByteLength - The size of the decompressed IPTC.
+ */
+export function addDecompressedIptcAllowance(valueBudget, decompressedByteLength) {
+    if (valueBudget === undefined) {
+        return;
+    }
+    const allowance = Math.min(
+        Math.floor(decompressedByteLength / IPTC_DATASET_HEADER_SIZE),
+        valueBudget.decompressedIptcAllowanceRemaining
+    );
+    valueBudget.iptcDatasetsRemaining += allowance;
+    valueBudget.decompressedIptcAllowanceRemaining -= allowance;
 }
 
 function getNumberOfFields(dataView, offset, byteOrder) {
