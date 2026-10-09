@@ -1695,7 +1695,7 @@ describe('xmp-tags', function () {
                     expect(Object.getPrototypeOf(tags['MyXMPTag'].value)).to.equal(null);
                     expect(tags['MyXMPTag'].value).to.deep.equal({
                         ['__proto__']: {value: '4711', attributes: {}, description: '4711'},
-                        constructor: {value: '4812', attributes: {}, description: '4812'}
+                        constructor_: {value: '4812', attributes: {}, description: '4812'}
                     });
                 });
 
@@ -2058,6 +2058,129 @@ describe('xmp-tags', function () {
                     expect(String(tags)).to.equal('[object Object]');
                 });
 
+                it('should append _ to a member of a structure named after an Object.prototype method', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:MyXMPTag rdf:parseType="Resource">
+                            <xmp:hasOwnProperty>4711</xmp:hasOwnProperty>
+                            <xmp:toString>4812</xmp:toString>
+                        </xmp:MyXMPTag>
+                    `, domParser);
+                    const value = tags['MyXMPTag'].value;
+                    expect(Object.keys(value)).to.deep.equal(['hasOwnProperty_', 'toString_']);
+                    expect(value['hasOwnProperty_']).to.deep.equal({value: '4711', attributes: {}, description: '4711'});
+                    expect(value['toString_']).to.deep.equal({value: '4812', attributes: {}, description: '4812'});
+                    expect(value.hasOwnProperty('hasOwnProperty_')).to.be.true; // eslint-disable-line no-prototype-builtins
+                    expect(String(value)).to.equal('[object Object]');
+                    expect(tags['MyXMPTag'].description).to.equal('hasOwnProperty_: 4711; toString_: 4812');
+                });
+
+                it('should append _ to a member of a structured list item named after an Object.prototype method', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:MyXMPTag>
+                            <rdf:Bag>
+                                <rdf:li rdf:parseType="Resource"><xmp:valueOf>4711</xmp:valueOf></rdf:li>
+                            </rdf:Bag>
+                        </xmp:MyXMPTag>
+                    `, domParser);
+                    const item = tags['MyXMPTag'].value[0];
+                    expect(Object.keys(item)).to.deep.equal(['valueOf_']);
+                    expect(item['valueOf_']).to.deep.equal({value: '4711', attributes: {}, description: '4711'});
+                    expect(typeof item.valueOf).to.equal('function');
+                    expect(String(item)).to.equal('[object Object]');
+                    expect(tags['MyXMPTag'].description).to.equal('valueOf_: 4711');
+                });
+
+                it('should append _ to a member of a compact structure named after an Object.prototype method', () => {
+                    const tags = readNestedXmp('<xmp:MyXMPTag xmp:hasOwnProperty="4711"/>', domParser);
+                    const value = tags['MyXMPTag'].value;
+                    expect(Object.keys(value)).to.deep.equal(['hasOwnProperty_']);
+                    expect(value['hasOwnProperty_']).to.deep.equal({value: '4711', attributes: {}, description: '4711'});
+                    expect(value.hasOwnProperty('hasOwnProperty_')).to.be.true; // eslint-disable-line no-prototype-builtins
+                    expect(String(value)).to.equal('[object Object]');
+                    expect(tags['MyXMPTag'].description).to.equal('hasOwnProperty_: 4711');
+                });
+
+                it('should append _ to the members of a nested rdf:Description named after Object.prototype methods', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:MyXMPTag>
+                            <rdf:Description xmp:isPrototypeOf="4711">
+                                <xmp:toString>4812</xmp:toString>
+                            </rdf:Description>
+                        </xmp:MyXMPTag>
+                    `, domParser);
+                    const value = tags['MyXMPTag'].value;
+                    expect(Object.keys(value)).to.deep.equal(['isPrototypeOf_', 'toString_']);
+                    expect(value['isPrototypeOf_']).to.deep.equal({value: '4711', attributes: {}, description: '4711'});
+                    expect(value['toString_']).to.deep.equal({value: '4812', attributes: {}, description: '4812'});
+                    expect(String(value)).to.equal('[object Object]');
+                    expect(tags['MyXMPTag'].description).to.equal('isPrototypeOf_: 4711; toString_: 4812');
+                });
+
+                it('should append _ to a qualifier attribute named after an Object.prototype method', () => {
+                    const tags = readNestedXmp('<xmp:MyXMPTag xmp:toString="4711">4812</xmp:MyXMPTag>', domParser);
+                    expect(tags['MyXMPTag'].value).to.equal('4812');
+                    expect(tags['MyXMPTag'].attributes).to.deep.equal({toString_: '4711'});
+                    expect(String(tags['MyXMPTag'].attributes)).to.equal('[object Object]');
+                });
+
+                it('should append _ to a qualifier element next to rdf:value named after an Object.prototype method', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:MyXMPTag rdf:parseType="Resource">
+                            <rdf:value>4711</rdf:value>
+                            <xmp:constructor>4812</xmp:constructor>
+                        </xmp:MyXMPTag>
+                    `, domParser);
+                    expect(tags['MyXMPTag'].value).to.equal('4711');
+                    expect(tags['MyXMPTag'].attributes).to.deep.equal({constructor_: '4812'});
+                    expect(tags['MyXMPTag'].attributes.constructor).to.equal(Object);
+                });
+
+                it('should keep the attributes inside a qualifier with element content in an object without a prototype', () => {
+                    const tags = readNestedXmp(`
+                        <xmp:MyXMPTag rdf:parseType="Resource">
+                            <rdf:value>4711</rdf:value>
+                            <xmp:MyQualifier><xmp:MyElement toString="1" hasOwnProperty="2"/></xmp:MyQualifier>
+                        </xmp:MyXMPTag>
+                    `, domParser);
+                    const elementAttributes = tags['MyXMPTag'].attributes['MyQualifier']['xmp:MyElement'].attributes;
+                    expect(elementAttributes).to.deep.equal({toString: '1', hasOwnProperty: '2'});
+                    expect(Object.getPrototypeOf(elementAttributes)).to.equal(null);
+                });
+
+                it('should not let any name from the packet hide an Object.prototype method anywhere in the result', () => {
+                    const tags = XmpTags.read(getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:toString="1">
+                            <xmp:valueOf>2</xmp:valueOf>
+                            <xmp:MyResource rdf:parseType="Resource"><xmp:hasOwnProperty>3</xmp:hasOwnProperty></xmp:MyResource>
+                            <xmp:MyNested>
+                                <rdf:Description xmp:isPrototypeOf="4"><xmp:propertyIsEnumerable>5</xmp:propertyIsEnumerable></rdf:Description>
+                            </xmp:MyNested>
+                            <xmp:MyCompact xmp:toLocaleString="6"/>
+                            <xmp:MyList>
+                                <rdf:Bag>
+                                    <rdf:li rdf:parseType="Resource"><xmp:constructor>7</xmp:constructor></rdf:li>
+                                    <rdf:li xmp:toString="8">9</rdf:li>
+                                    <rdf:li rdf:parseType="Resource">
+                                        <rdf:value>10</rdf:value>
+                                        <xmp:MyQualifier><xmp:MyElement toString="11"><xmp:MyChild>12</xmp:MyChild></xmp:MyElement></xmp:MyQualifier>
+                                    </rdf:li>
+                                </rdf:Bag>
+                            </xmp:MyList>
+                            <xmp:MyElementValue><xmp:MyChild xmp:toString="13"><xmp:valueOf>14</xmp:valueOf></xmp:MyChild></xmp:MyElementValue>
+                            <xmp:MySimple xmp:hasOwnProperty="15">16</xmp:MySimple>
+                            <xmp:MyRdfValue rdf:parseType="Resource">
+                                <rdf:value><xmp:toString>17</xmp:toString></rdf:value>
+                                <xmp:valueOf>18</xmp:valueOf>
+                            </xmp:MyRdfValue>
+                            <xmp:MyQualified rdf:parseType="Resource">
+                                <rdf:value>19</rdf:value>
+                                <xmp:MyQualifier><xmp:MyElement toString="20"><xmp:MyChild>21</xmp:MyChild></xmp:MyElement></xmp:MyQualifier>
+                            </xmp:MyQualified>
+                        </rdf:Description>
+                    `), [], domParser);
+                    expect(getPathsOfKeysHidingObjectPrototypeMethods(tags, 'tags')).to.deep.equal([]);
+                });
+
                 describe('with an enumerable property added to Object.prototype', () => {
                     afterEach(() => {
                         delete Object.prototype.myPolyfill;
@@ -2217,14 +2340,14 @@ describe('xmp-tags', function () {
                     `);
                     const dataView = getDataView(xmlString);
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
-                    expect(Object.keys(tags['MyXMPTag'].value)).to.deep.equal(['constructor']);
-                    expect(tags['MyXMPTag'].value['constructor']).to.deep.equal({
+                    expect(Object.keys(tags['MyXMPTag'].value)).to.deep.equal(['constructor_']);
+                    expect(tags['MyXMPTag'].value['constructor_']).to.deep.equal({
                         value: '4711',
                         attributes: {},
                         description: '4711'
                     });
                     expect(tags['MyXMPTag'].attributes).to.deep.equal({MyQualifier: '4812'});
-                    expect(tags['MyXMPTag'].description).to.equal('constructor: 4711');
+                    expect(tags['MyXMPTag'].description).to.equal('constructor_: 4711');
                 });
 
                 it('should read a child of rdf:value named __proto__', () => {
@@ -2325,9 +2448,9 @@ describe('xmp-tags', function () {
                     expect(tags['Orientation'].description).to.equal('3');
                 });
 
-                it('should keep a tiff:ResolutionUnit list whose items cannot be converted to a string', () => {
-                    // An item whose own toString is not a function cannot be coerced to a
-                    // string, so the description function throws when it converts the list.
+                it('should describe a tiff:ResolutionUnit list whose item has a member named toString', () => {
+                    // The member is returned as toString_, so it does not hide the item's
+                    // toString method and the description function can convert the list.
                     const xmlString = getXmlString(`
                         <rdf:Description xmlns:tiff="http://ns.adobe.com/tiff/1.0/" xmlns:xmp="http://ns.example.com/xmp">
                             <tiff:ResolutionUnit>
@@ -2341,10 +2464,10 @@ describe('xmp-tags', function () {
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
                     expect(tags['ResolutionUnit']).to.deep.equal({
                         value: [
-                            {toString: {value: '4711', attributes: {}, description: '4711'}}
+                            {toString_: {value: '4711', attributes: {}, description: '4711'}}
                         ],
                         attributes: {},
-                        description: 'toString: 4711'
+                        description: 'Unknown'
                     });
                 });
 
@@ -3237,4 +3360,18 @@ function readCountingJoins(xmlString, domParser) {
         restore();
     }
     return {tags, joinedLength};
+}
+
+// Paths of the own keys that hide an inherited Object.prototype method. An
+// object without a prototype has no methods to hide, so its keys are skipped.
+function getPathsOfKeysHidingObjectPrototypeMethods(value, path) {
+    if ((value === null) || (typeof value !== 'object')) {
+        return [];
+    }
+    const hasPrototype = Object.getPrototypeOf(value) !== null;
+    return Object.keys(value).flatMap((key) => {
+        const keyPath = `${path}.${key}`;
+        const hidesMethod = hasPrototype && (key !== '__proto__') && Object.prototype.hasOwnProperty.call(Object.prototype, key);
+        return (hidesMethod ? [keyPath] : []).concat(getPathsOfKeysHidingObjectPrototypeMethods(value[key], keyPath));
+    });
 }

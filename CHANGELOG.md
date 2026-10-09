@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - In environments without `TextDecoder`, a PNG `tEXt` or `iTXt` chunk with
   empty text made `load()` fail. The tag now gets an empty value, as it does
   with `TextDecoder`.
+- An XMP structure member, list item member, `rdf:value` child or qualifier
+  whose name is the name of an `Object.prototype` method, such as
+  `hasOwnProperty` or `toString`, is now returned with `_` appended, as
+  top-level XMP properties are since 4.48.0. Under its own name it could hide
+  that method on the tag value or on its `attributes` object, so calling
+  `hasOwnProperty()` on it, or converting it to a string, could throw. The
+  attribute names inside a qualifier that holds child elements are now kept
+  in objects without a prototype, for the same reason.
 
 ### Security
 

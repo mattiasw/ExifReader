@@ -202,20 +202,25 @@ come straight from the image and can contain arbitrary text, including HTML-like
 markup. Never insert them into a page as HTML (for example through `innerHTML`)
 without escaping or sanitizing them first, otherwise a crafted image could lead
 to cross-site scripting. Use `textContent`, your framework's escaping, or a
-sanitizer such as DOMPurify when displaying metadata. The property names inside
-a tag value come from the image too, and a tag whose name is `__proto__` is kept
-under that name as a regular property, so it does not replace the prototype of
-the object holding it. A tag whose name comes from the image and is the name of
-an `Object.prototype` method, such as `hasOwnProperty`, `toString` or
-`constructor`, is returned under that name with `_` appended
-(`hasOwnProperty_`), so it does not hide the method on the result object or on
-a group object, and `includeTags` and `excludeTags` match it by that returned
-name. Property names inside a tag value are not changed in this way. A value
-parsed from an XMP `rdf:value` element that holds child elements other than a
-list is returned as an object without a prototype.
-Such an object has no inherited methods, and copying it into an object of your
-own with `Object.assign` or a deep merge helper without filtering the keys could
-let a crafted image replace that object's prototype.
+sanitizer such as DOMPurify when displaying metadata.
+
+The property names inside a tag value come from the image too, and a tag whose
+name is `__proto__` is kept under that name as a regular property, so it does
+not replace the prototype of the object holding it. A tag whose name comes from
+the image and is the name of an `Object.prototype` method, such as
+`hasOwnProperty`, `toString` or `constructor`, is returned under that name with
+`_` appended (`hasOwnProperty_`), so it does not hide the method on the result
+object or on a group object, and `includeTags` and `excludeTags` match it by
+that returned name. The same applies to the property names inside an XMP tag
+value (structure members, members of list items and children of `rdf:value`)
+and to the keys of an XMP tag's `attributes`. A value parsed from an XMP
+`rdf:value` element that holds child elements other than a list is returned as
+an object without a prototype. An XMP qualifier in `attributes` that holds
+child elements is returned as its element tree, with the element and attribute
+names unchanged and kept in objects without a prototype. Such an object has no
+inherited methods, and copying it into an object of your own with
+`Object.assign` or a deep merge helper without filtering the keys could let a
+crafted image replace that object's prototype.
 
 #### Grouping
 
