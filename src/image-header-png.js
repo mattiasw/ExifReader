@@ -86,15 +86,10 @@ function findPngOffsets(dataView, async, metadataBlocks) {
             }
         } else if (isPngTextChunk(dataView, offset, async)) {
             offsets.hasAppMarkers = true;
-            const chunkType = getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
             if (!offsets.pngTextChunks) {
                 offsets.pngTextChunks = [];
             }
-            offsets.pngTextChunks.push({
-                length: chunkDataLength,
-                type: chunkType,
-                offset: offset + PNG_CHUNK_DATA_OFFSET
-            });
+            offsets.pngTextChunks.push(offset + PNG_CHUNK_LENGTH_OFFSET);
             blockType = 'png';
         } else if (isPngExifChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;

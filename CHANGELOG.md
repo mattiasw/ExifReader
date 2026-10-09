@@ -45,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   memory far above its size: an 8 MiB `tEXt` chunk raised peak memory to
   about 565 MB and took about 0.7 seconds. It is now converted in chunks, so
   the same file peaks at about 105 MB and takes about 0.05 seconds.
+- A PNG made of many small text chunks used memory far above the file size:
+  8 MiB of empty tEXt chunks raised peak memory to about 265 MB with
+  `async: true`. This applied to tEXt, iTXt and zTXt chunks alike. Less is
+  now kept per text chunk while the file is read, and the same file now peaks
+  at about 126 MB.
 
 ## [4.48.0] - 2026-10-09
 
