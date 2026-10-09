@@ -198,6 +198,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   8 MiB data URI holding a 6 MiB XMP packet raised peak memory to about
   445 MB and took about 0.65 seconds. The same data URI now peaks at about
   116 MB and takes about 0.09 seconds.
+- A JPEG whose MPF `MPEntry` table held many entries made ExifReader build
+  one MPF `Images` entry per 16 bytes of the table: an 8 MiB file whose table
+  fills it raised peak memory to about 1,000 MB and blocked `load()` for about
+  1.9 seconds. The MPF `Images` array now holds at most the first 256 entries
+  of the table, so the same file peaks at about 280 to 340 MB and takes about
+  0.4 seconds. Real MPF files carry a handful of images.
 
 ## [4.47.0] - 2026-10-08
 
