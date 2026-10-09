@@ -105,17 +105,17 @@ function findPngOffsets(dataView, async, metadataBlocks) {
             const iccHeader = parseIccHeader(dataView, iccHeaderOffset, chunkDataLength);
             if (iccHeader !== undefined) {
                 offsets.hasAppMarkers = true;
+                // PNG spec: a file has at most one iCCP chunk, so only the first valid one is kept.
                 if (!offsets.iccChunks) {
-                    offsets.iccChunks = [];
+                    offsets.iccChunks = [{
+                        offset: iccHeader.compressedProfileOffset,
+                        length: chunkDataLength - (iccHeader.compressedProfileOffset - iccHeaderOffset),
+                        chunkNumber: 1,
+                        chunksTotal: 1,
+                        profileName: iccHeader.profileName,
+                        compressionMethod: iccHeader.compressionMethod
+                    }];
                 }
-                offsets.iccChunks.push({
-                    offset: iccHeader.compressedProfileOffset,
-                    length: chunkDataLength - (iccHeader.compressedProfileOffset - iccHeaderOffset),
-                    chunkNumber: 1,
-                    chunksTotal: 1,
-                    profileName: iccHeader.profileName,
-                    compressionMethod: iccHeader.compressionMethod
-                });
                 blockType = 'icc';
             }
         } else if (isPngChunk(dataView, offset)) {
