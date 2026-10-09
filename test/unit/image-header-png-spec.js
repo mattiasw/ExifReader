@@ -101,18 +101,7 @@ describe('image-header-png', () => {
 
         expect(offsets).to.deep.equal({
             hasAppMarkers: true,
-            pngTextChunks: [
-                {
-                    offset: PNG_IMAGE_START.length + chunkLength0.length + chunkType0.length,
-                    type: 'tEXt',
-                    length: chunkData0.length,
-                },
-                {
-                    offset: PNG_IMAGE_START.length + chunk0.length + chunkLength0.length + chunkType0.length,
-                    type: 'iTXt',
-                    length: chunkData1.length,
-                },
-            ],
+            pngTextChunks: [PNG_IMAGE_START.length, PNG_IMAGE_START.length + chunk0.length],
         });
     });
 
@@ -130,13 +119,7 @@ describe('image-header-png', () => {
 
         expect(offsets).to.deep.equal({
             hasAppMarkers: true,
-            pngTextChunks: [
-                {
-                    offset: PNG_IMAGE_START.length + chunkLength.length + chunkType.length,
-                    type: 'zTXt',
-                    length: chunkData.length,
-                },
-            ],
+            pngTextChunks: [PNG_IMAGE_START.length],
         });
     });
 

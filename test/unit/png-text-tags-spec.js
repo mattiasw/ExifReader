@@ -11,6 +11,7 @@ import IptcTags from '../../src/iptc-tags.js';
 import Constants from '../../src/constants.js';
 import {getStringFromDataView, withDecompressBudget} from '../../src/utils.js';
 import DataViewWrapper from '../../src/dataview.js';
+import {crc32} from 'node:zlib';
 
 describe('png-text-tags', () => {
     let restoreTagReaders;
@@ -25,11 +26,10 @@ describe('png-text-tags', () => {
     it('should read image tags', () => {
         const tagDatatEXt = 'MyTag0\x00My value.';
         const tagDataiTXt = 'MyTag1\x00\x00\x00fr\x00MyFrTag1\x00My second value.';
-        const dataView = getDataView(tagDatatEXt + tagDataiTXt);
-        const chunks = [
-            {type: TYPE_TEXT, offset: 0, length: tagDatatEXt.length},
-            {type: TYPE_ITXT, offset: tagDatatEXt.length, length: tagDataiTXt.length},
-        ];
+        const {dataView, chunks} = buildTextChunks([
+            {type: TYPE_TEXT, bytes: toBytes(tagDatatEXt)},
+            {type: TYPE_ITXT, bytes: toBytes(tagDataiTXt)},
+        ]);
 
         const {readTags} = PngTextTags.read(dataView, chunks);
 
@@ -45,10 +45,9 @@ describe('png-text-tags', () => {
 
     it('should read a tEXt value relative to the DataView when it has a non-zero byteOffset', () => {
         const tagDatatEXt = 'MyTag0\x00My value.';
-        const dataView = getPaddedDataView(tagDatatEXt, 4);
-        const chunks = [
-            {type: TYPE_TEXT, offset: 0, length: tagDatatEXt.length}
-        ];
+        const textChunks = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(tagDatatEXt)}]);
+        const dataView = getPaddedDataView(textChunks.dataView, 4);
+        const chunks = [0];
 
         const {readTags} = PngTextTags.read(dataView, chunks);
 
@@ -60,10 +59,9 @@ describe('png-text-tags', () => {
 
     it('should not read past the end of an iTXt chunk that is cut off after its compression flag', () => {
         const tagData = 'Comment\x00\x01';
-        const dataView = getDataView(tagData);
-        const chunks = [
-            {type: TYPE_ITXT, offset: 0, length: 100}
-        ];
+        const {dataView, chunks} = buildTextChunks([
+            {type: TYPE_ITXT, bytes: toBytes(tagData), declaredLength: 100, withCrc: false}
+        ]);
 
         const {readTags} = PngTextTags.read(dataView, chunks);
 
@@ -73,12 +71,23 @@ describe('png-text-tags', () => {
         });
     });
 
+    it('should read the bytes that are there for a tEXt chunk whose declared length runs past the end of the buffer', () => {
+        const {dataView, chunks} = buildTextChunks([
+            {type: TYPE_TEXT, bytes: toBytes('MyTag\x00abc'), declaredLength: 100, withCrc: false}
+        ]);
+
+        const {readTags} = PngTextTags.read(dataView, chunks);
+
+        expect(readTags['MyTag']).to.deep.equal({
+            value: 'abc',
+            description: 'abc'
+        });
+    });
+
     it('should read a tEXt tag with empty text when TextDecoder is missing', () => {
-        const tagData = 'Comment\x00';
-        const dataView = getDataView(tagData);
-        const chunks = [
-            {type: TYPE_TEXT, offset: 0, length: tagData.length}
-        ];
+        const {dataView, chunks} = buildTextChunks([
+            {type: TYPE_TEXT, bytes: toBytes('Comment\x00')}
+        ]);
         const restoreGlobal = swapProperties(globalThis, {TextDecoder: undefined});
 
         let readTags;
@@ -96,10 +105,9 @@ describe('png-text-tags', () => {
 
     it('should read a tEXt tag from a Node Buffer backed DataView wrapper', () => {
         const tagDatatEXt = 'MyTag0\x00My value.';
-        const dataView = toBufferBackedDataView(getDataView(tagDatatEXt));
-        const chunks = [
-            {type: TYPE_TEXT, offset: 0, length: tagDatatEXt.length}
-        ];
+        const textChunks = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(tagDatatEXt)}]);
+        const dataView = toBufferBackedDataView(textChunks.dataView);
+        const chunks = textChunks.chunks;
 
         const {readTags} = PngTextTags.read(dataView, chunks);
 
@@ -111,10 +119,9 @@ describe('png-text-tags', () => {
 
     it('should read an uncompressed iTXt tag from a Node Buffer backed DataView wrapper', () => {
         const text = 'My value.';
-        const dataView = toBufferBackedDataView(getItextDataView('MyTagUtf8', 'en', 'MyTagUtf8', text));
-        const chunks = [
-            {type: TYPE_ITXT, offset: 0, length: dataView.byteLength}
-        ];
+        const textChunks = buildTextChunks([getChunkFromDataView(TYPE_ITXT, getItextDataView('MyTagUtf8', 'en', 'MyTagUtf8', text))]);
+        const dataView = toBufferBackedDataView(textChunks.dataView);
+        const chunks = textChunks.chunks;
 
         const {readTags} = PngTextTags.read(dataView, chunks);
 
@@ -125,10 +132,11 @@ describe('png-text-tags', () => {
     });
 
     it('should read a compressed zTXt tag from a Node Buffer backed DataView wrapper', async () => {
-        const dataView = toBufferBackedDataView(await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.'));
-        const chunks = [
-            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
-        ];
+        const textChunks = buildTextChunks([
+            getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.'))
+        ]);
+        const dataView = toBufferBackedDataView(textChunks.dataView);
+        const chunks = textChunks.chunks;
 
         const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
         const tags = await readTagsPromise;
@@ -140,10 +148,7 @@ describe('png-text-tags', () => {
     });
 
     it('should read compressed zTXt tags', async () => {
-        const dataView = await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.');
-        const chunks = [
-            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
-        ];
+        const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.'))]);
 
         const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
         const tags = await readTagsPromise;
@@ -156,10 +161,7 @@ describe('png-text-tags', () => {
 
     it('should read uncompressed iTXt tags with UTF-8 text', () => {
         const text = 'My emoji value: 🏔️✨';
-        const dataView = getItextDataView('MyTagUtf8', 'en', 'MyTagUtf8', text);
-        const chunks = [
-            {type: TYPE_ITXT, offset: 0, length: dataView.byteLength}
-        ];
+        const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ITXT, getItextDataView('MyTagUtf8', 'en', 'MyTagUtf8', text))]);
 
         const {readTags} = PngTextTags.read(dataView, chunks);
 
@@ -173,10 +175,7 @@ describe('png-text-tags', () => {
     // unclear why. The process should be the same as currently coded.
     // it('should read compressed iTXt tags', async () => {
     //     const text = 'My compressed iTXt value.';
-    //     const dataView = await getCompressedTagData(TYPE_ITXT, 'MyTag', text);
-    //     const chunks = [
-    //         {type: TYPE_ITXT, offset: 0, length: dataView.byteLength}
-    //     ];
+    //     const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ITXT, await getCompressedTagData(TYPE_ITXT, 'MyTag', text))]);
 
     //     const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
     //     const tags = await readTagsPromise;
@@ -192,10 +191,7 @@ describe('png-text-tags', () => {
             read: (data, offset) => ({tags: getStringFromDataView(data, offset, data.byteLength)})
         });
         const EXIF_DATA = 'Exif\0\0<Exif\ndata>';
-        const dataView = await getCompressedTagData(TYPE_ZTXT, 'Raw profile type exif', `\nexif\n${('' + EXIF_DATA.length).padStart(8, ' ')}\n${stringToHex(EXIF_DATA)}`);
-        const chunks = [
-            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
-        ];
+        const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'Raw profile type exif', `\nexif\n${('' + EXIF_DATA.length).padStart(8, ' ')}\n${stringToHex(EXIF_DATA)}`))]);
 
         const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
         const tags = await readTagsPromise;
@@ -323,10 +319,7 @@ describe('png-text-tags', () => {
             read: (data, offset) => getStringFromDataView(data, offset, data.byteLength)
         });
         const IPTC_DATA = '<IPTC data>';
-        const dataView = await getCompressedTagData(TYPE_ZTXT, 'Raw profile type iptc', `\niptc\n${('' + IPTC_DATA.length).padStart(8, ' ')}\n${stringToHex(IPTC_DATA)}`);
-        const chunks = [
-            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
-        ];
+        const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'Raw profile type iptc', `\niptc\n${('' + IPTC_DATA.length).padStart(8, ' ')}\n${stringToHex(IPTC_DATA)}`))]);
 
         const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
         const tags = await readTagsPromise;
@@ -335,10 +328,7 @@ describe('png-text-tags', () => {
     });
 
     it('should ignore tags that use compression when async is not passed', async () => {
-        const dataView = await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.');
-        const chunks = [
-            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
-        ];
+        const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.'))]);
 
         const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks);
 
@@ -351,11 +341,9 @@ describe('png-text-tags', () => {
         const value = 'Custom deflate result.';
         const compressedBytes = new Uint8Array([1, 2, 3]);
         const headerStr = `${name}\x00\x00`;
-        const header = getDataView(headerStr);
-        const dataView = concatDataViews(header, new DataView(compressedBytes.buffer));
-        const chunks = [
-            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
-        ];
+        const {dataView, chunks} = buildTextChunks([
+            {type: TYPE_ZTXT, bytes: concatBytes(toBytes(headerStr), compressedBytes)}
+        ]);
 
         const decompressConfig = {
             deflate: () => Uint8Array.from(value, (c) => c.charCodeAt(0))
@@ -425,10 +413,7 @@ describe('png-text-tags', () => {
 
     it('should keep an uncompressed tag with the keyword __proto__ as an own tag', () => {
         const tagData = '__proto__\x00hello';
-        const dataView = getDataView(tagData);
-        const chunks = [
-            {type: TYPE_TEXT, offset: 0, length: tagData.length}
-        ];
+        const {dataView, chunks} = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(tagData)}]);
 
         const {readTags} = PngTextTags.read(dataView, chunks);
 
@@ -441,10 +426,7 @@ describe('png-text-tags', () => {
     });
 
     it('should keep a compressed tag with the keyword __proto__ as an own tag', async () => {
-        const dataView = await getCompressedTagData(TYPE_ZTXT, '__proto__', 'hello');
-        const chunks = [
-            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
-        ];
+        const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, '__proto__', 'hello'))]);
 
         const tags = await PngTextTags.read(dataView, chunks, true).readTagsPromise;
 
@@ -460,10 +442,7 @@ describe('png-text-tags', () => {
 
     it('should append _ to an uncompressed tag with the keyword of an Object.prototype method', () => {
         const tagData = 'hasOwnProperty\x00hello';
-        const dataView = getDataView(tagData);
-        const chunks = [
-            {type: TYPE_TEXT, offset: 0, length: tagData.length}
-        ];
+        const {dataView, chunks} = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(tagData)}]);
 
         const {readTags} = PngTextTags.read(dataView, chunks);
 
@@ -476,10 +455,7 @@ describe('png-text-tags', () => {
     });
 
     it('should append _ to a compressed tag with the keyword of an Object.prototype method', async () => {
-        const dataView = await getCompressedTagData(TYPE_ZTXT, 'toString', 'hello');
-        const chunks = [
-            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
-        ];
+        const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'toString', 'hello'))]);
 
         const tags = await PngTextTags.read(dataView, chunks, true).readTagsPromise;
 
@@ -494,10 +470,7 @@ describe('png-text-tags', () => {
 
     it('should read an uncompressed tag with the keyword __exif as a text tag', () => {
         const tagData = '__exif\x00FROMFILE';
-        const dataView = getDataView(tagData);
-        const chunks = [
-            {type: TYPE_TEXT, offset: 0, length: tagData.length}
-        ];
+        const {dataView, chunks} = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(tagData)}]);
 
         const {readTags} = PngTextTags.read(dataView, chunks);
 
@@ -1649,27 +1622,43 @@ describe('png-text-tags', () => {
         return new DataViewWrapper(Buffer.from(bytes));
     }
 
-    function getPaddedDataView(content, pad) {
-        const buffer = new ArrayBuffer(pad + content.length);
+    function getPaddedDataView(contentDataView, pad) {
+        const buffer = new ArrayBuffer(pad + contentDataView.byteLength);
         const view = new Uint8Array(buffer);
         view.fill(0x99, 0, pad);
-        for (let i = 0; i < content.length; i++) {
-            view[pad + i] = content.charCodeAt(i);
-        }
+        view.set(new Uint8Array(contentDataView.buffer, contentDataView.byteOffset, contentDataView.byteLength), pad);
         return new DataView(buffer, pad);
     }
 
+    // Each entry becomes a whole PNG chunk (length, type, data, CRC). Pass a larger
+    // declaredLength and withCrc: false to make a final chunk that is cut off.
     function buildTextChunks(textChunks) {
-        const length = textChunks.reduce((total, {bytes}) => total + bytes.length, 0);
-        const bytes = new Uint8Array(length);
+        const chunkBytes = textChunks.map(getPngChunkBytes);
+        const bytes = new Uint8Array(chunkBytes.reduce((total, chunk) => total + chunk.length, 0));
         const chunks = [];
         let offset = 0;
-        for (const textChunk of textChunks) {
-            bytes.set(textChunk.bytes, offset);
-            chunks.push({type: textChunk.type, offset, length: textChunk.bytes.length});
-            offset += textChunk.bytes.length;
+        for (const chunk of chunkBytes) {
+            bytes.set(chunk, offset);
+            chunks.push(offset);
+            offset += chunk.length;
         }
         return {dataView: new DataView(bytes.buffer), chunks};
+    }
+
+    function getPngChunkBytes({type, bytes, declaredLength = bytes.length, withCrc = true}) {
+        const typeAndData = concatBytes(toBytes(type), bytes);
+        const chunk = new Uint8Array(4 + typeAndData.length + (withCrc ? 4 : 0));
+        const chunkView = new DataView(chunk.buffer);
+        chunkView.setUint32(0, declaredLength);
+        chunk.set(typeAndData, 4);
+        if (withCrc) {
+            chunkView.setUint32(4 + typeAndData.length, crc32(typeAndData));
+        }
+        return chunk;
+    }
+
+    function getChunkFromDataView(type, dataView) {
+        return {type, bytes: new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength)};
     }
 
     function getZtxtChunk(keyword, compressedBytes) {

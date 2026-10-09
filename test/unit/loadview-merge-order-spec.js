@@ -40,7 +40,7 @@ describe('loadView merge order', function () {
             iccChunks: [1, 2],
             mpfDataOffset: 1,
             pngHeaderOffset: 1,
-            pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
+            pngTextChunks: [1],
             pngChunkOffsets: [1],
             vp8xChunkOffset: 1,
             gifHeaderOffset: 1,
@@ -94,7 +94,7 @@ function loadAsyncWithDelays({iccDelayMs, pngTextDelayMs}) {
     fakeImageHeader({
         fileType: {value: 'png', description: 'PNG'},
         iccChunks: [1],
-        pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
+        pngTextChunks: [1],
     });
 
     fakeIccTagsReadAsync({Collision: {value: 'icc'}}, iccDelayMs);

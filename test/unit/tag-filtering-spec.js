@@ -146,7 +146,7 @@ describe('tag filtering options', function () {
     it('excludeTags: { png: true } should not block embedded exif tags', async function () {
         fakeImageHeader({
             fileType: 'png',
-            pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
+            pngTextChunks: [1],
         });
         fakePngTextTagsReadAsync(
             {'Color Type': {value: 2, description: 'RGB'}},
@@ -167,7 +167,7 @@ describe('tag filtering options', function () {
     it('includeTags.thumbnail should not turn the thumbnail IFD of embedded png exif into a Thumbnail tag', async function () {
         fakeImageHeader({
             fileType: 'png',
-            pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
+            pngTextChunks: [1],
         });
         fakePngTextTagsReadAsync({}, [{
             embeddedExifTags: {
@@ -191,7 +191,7 @@ describe('tag filtering options', function () {
     it('includeTags: { png: true } should not include embedded exif when exif is not included', async function () {
         fakeImageHeader({
             fileType: 'png',
-            pngTextChunks: [{type: 'tEXt', offset: 1, length: 1}],
+            pngTextChunks: [1],
         });
         fakePngTextTagsReadAsync(
             {'Color Type': {value: 2, description: 'RGB'}},

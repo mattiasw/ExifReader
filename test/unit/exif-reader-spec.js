@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import vm from 'node:vm';
-import {deflateSync} from 'node:zlib';
+import {deflateSync, crc32} from 'node:zlib';
 import {expect} from 'chai';
 import {getCharacterArray, getBase64Image, getDataView as getDataViewOrWrapper} from '../../src/utils.js';
 import * as ExifReader from '../../src/exif-reader.js';
@@ -34,7 +34,7 @@ import Composite from '../../src/composite.js';
 
 const OFFSET_TEST_VALUE = 4711;
 const XMP_FIELD_LENGTH_TEST_VALUE = 47;
-const PNG_FIELD_LENGTH_TEST_VALUE = 47;
+const SECOND_OFFSET_TEST_VALUE = 4758;
 const OFFSET_TEST_VALUE_ICC2_1 = 27110;
 const OFFSET_TEST_VALUE_ICC2_2 = 47110;
 const OFFSET_TEST_VALUE_ICC2_3 = 67110;
@@ -1377,10 +1377,7 @@ describe('exif-reader', function () {
         const myTags = {MyTag: 42};
         const myAsyncTags = {MyAsyncTag: 42};
         swapImageHeader({
-            pngTextChunks: [
-                {type: 'tEXt', length: PNG_FIELD_LENGTH_TEST_VALUE, offset: OFFSET_TEST_VALUE},
-                {type: 'zTXt', length: PNG_FIELD_LENGTH_TEST_VALUE, offset: OFFSET_TEST_VALUE}
-            ]
+            pngTextChunks: [OFFSET_TEST_VALUE, SECOND_OFFSET_TEST_VALUE]
         });
         swapPngTextTagsRead(myTags, myAsyncTags);
         expect(await ExifReader.loadView(undefined, {async: true})).to.deep.equal({...myTags, ...myAsyncTags});
@@ -1393,10 +1390,7 @@ describe('exif-reader', function () {
         const keywordChunk = getZtxtChunkBytes('__exif', 'FROMFILE');
         const dataView = new DataView(new Uint8Array(Buffer.concat([exifChunk, keywordChunk])).buffer);
         swapImageHeader({
-            pngTextChunks: [
-                {type: 'zTXt', offset: 0, length: exifChunk.length},
-                {type: 'zTXt', offset: exifChunk.length, length: keywordChunk.length}
-            ]
+            pngTextChunks: [0, exifChunk.length]
         });
         swap(Tags, {
             read() {
@@ -1412,10 +1406,15 @@ describe('exif-reader', function () {
 
         function getZtxtChunkBytes(keyword, value) {
             const COMPRESSION_METHOD_DEFLATE = '\0';
-            return Buffer.concat([
-                Buffer.from(`${keyword}\0${COMPRESSION_METHOD_DEFLATE}`, 'latin1'),
+            const typeAndData = Buffer.concat([
+                Buffer.from(`zTXt${keyword}\0${COMPRESSION_METHOD_DEFLATE}`, 'latin1'),
                 deflateSync(Buffer.from(value, 'latin1'))
             ]);
+            const length = Buffer.alloc(4);
+            length.writeUInt32BE(typeAndData.length - 4);
+            const crc = Buffer.alloc(4);
+            crc.writeUInt32BE(crc32(typeAndData));
+            return Buffer.concat([length, typeAndData, crc]);
         }
     });
 
@@ -3546,7 +3545,7 @@ function captureDecodedValueBudgets(exifTags) {
 
 function capturePngTextValueBudgets(appMarkers) {
     const capturedBudgets = {};
-    swapImageHeader({...appMarkers, pngTextChunks: [{type: 'zTXt', offset: 0, length: 16}]});
+    swapImageHeader({...appMarkers, pngTextChunks: [0]});
     swap(Tags, {
         read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
             capturedBudgets.exif = valueBudget;
@@ -3618,8 +3617,7 @@ function swapMakerNoteTagsRead(tagsValue, makerNoteModule) {
 function swapPngTextTagsRead(tagsValue, asyncTagsValue) {
     swap(PngTextTags, {
         read(dataView, pngTextChunks, async) {
-            if ((pngTextChunks[0].type === 'tEXt' && pngTextChunks[0].offset === OFFSET_TEST_VALUE) && (pngTextChunks[0].length === PNG_FIELD_LENGTH_TEST_VALUE)
-                && (pngTextChunks[1].type === 'zTXt' && pngTextChunks[1].offset === OFFSET_TEST_VALUE) && (pngTextChunks[1].length === PNG_FIELD_LENGTH_TEST_VALUE)) {
+            if (pngTextChunks.length === 2 && pngTextChunks[0] === OFFSET_TEST_VALUE && pngTextChunks[1] === SECOND_OFFSET_TEST_VALUE) {
                 return {readTags: tagsValue, readTagsPromise: async ? Promise.resolve([{readTags: asyncTagsValue}]) : undefined};
             }
             return {};
