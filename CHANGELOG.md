@@ -204,6 +204,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   1.9 seconds. The MPF `Images` array now holds at most the first 256 entries
   of the table, so the same file peaks at about 280 to 340 MB and takes about
   0.4 seconds. Real MPF files carry a handful of images.
+- A Photoshop `PathInformation` resource in the Exif `PhotoshopSettings` tag
+  had every one of its path records decoded: a crafted 4 MiB TIFF whose
+  resource held about 160,000 records raised peak memory to about 400 MB and
+  blocked `load()` for about 1.7 seconds, against about 167 MB for one plain
+  4 MiB tag value. At most 32,768 path records are now decoded per image,
+  shared by all its `PathInformation` resources, and the records past that are
+  left out of the description. The same file now peaks at about 330 MB and
+  takes about 0.65 seconds, also when its records are split across two
+  resources.
 
 ## [4.47.0] - 2026-10-08
 

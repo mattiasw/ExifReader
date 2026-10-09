@@ -5,6 +5,7 @@
 import {expect} from 'chai';
 import PhotoshopTagNames, {
     // OsTypeKeys,
+    MAX_PATH_RECORDS,
     PathRecordTypes,
 } from '../../src/photoshop-tag-names.js';
 import {getDataView} from './test-utils.js';
@@ -188,6 +189,44 @@ describe('photoshop-tag-names', () => {
                     }
                 ]
             });
+    });
+
+    it('should decode only as many PathInformation records as the budget allows', () => {
+        const dataView = getDataView(
+            '\x00\x06' + '\x00'.repeat(24)
+            + '\x00\x00' + '\x00\x04' + '\x00'.repeat(22)
+            + '\x00\x03' + '\x00\x05' + '\x00'.repeat(22)
+        );
+        const recordBudget = {remaining: 2};
+
+        expect(JSON.parse(PhotoshopTagNames[0x07d0].description(dataView, recordBudget)))
+            .to.deep.equal({
+                types: {
+                    [PathRecordTypes.FILL_RULE]: 'Path fill rule',
+                    [PathRecordTypes.CLOSED_SUBPATH_LENGTH]: 'Closed subpath length'
+                },
+                paths: [
+                    {type: PathRecordTypes.FILL_RULE, path: []},
+                    {type: PathRecordTypes.CLOSED_SUBPATH_LENGTH, path: [4]}
+                ]
+            });
+        expect(recordBudget.remaining).to.equal(0);
+    });
+
+    it('should decode no PathInformation records when the budget is spent', () => {
+        const dataView = getDataView('\x00\x06' + '\x00'.repeat(24));
+
+        expect(PhotoshopTagNames[0x07d0].description(dataView, {remaining: 0}))
+            .to.equal('{"types":{},"paths":[]}');
+    });
+
+    it('should decode at most MAX_PATH_RECORDS PathInformation records on each call without a budget', () => {
+        const dataView = getDataView(('\x00\x06' + '\x00'.repeat(24)).repeat(MAX_PATH_RECORDS + 1));
+
+        expect(JSON.parse(PhotoshopTagNames[0x07d0].description(dataView)).paths)
+            .to.have.lengthOf(MAX_PATH_RECORDS);
+        expect(JSON.parse(PhotoshopTagNames[0x07d0].description(dataView)).paths)
+            .to.have.lengthOf(MAX_PATH_RECORDS);
     });
 
     it('should handle tag ClippingPathName', () => {

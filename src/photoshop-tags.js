@@ -4,9 +4,9 @@
 
 // Specification: https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/
 
-import {getDataView, getStringFromDataView, getPascalStringFromDataView, setProperty} from './utils.js';
+import {getByteString, getDataView, getStringFromDataView, getPascalStringFromDataView, setProperty} from './utils.js';
 import Types from './types.js';
-import TagNames from './photoshop-tag-names.js';
+import TagNames, {MAX_PATH_RECORDS} from './photoshop-tag-names.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
 
 export default {
@@ -25,7 +25,9 @@ function read(bytes, includeUnknown, tagFilter = NOOP_TAG_FILTER) {
     if (!Array.isArray(bytes)) {
         return {};
     }
-    const dataView = getDataView(new Uint8Array(bytes).buffer);
+    const byteArray = new Uint8Array(bytes);
+    const dataView = getDataView(byteArray.buffer);
+    const pathRecordBudget = {remaining: MAX_PATH_RECORDS};
     const tags = {};
     let offset = 0;
 
@@ -54,11 +56,11 @@ function read(bytes, includeUnknown, tagFilter = NOOP_TAG_FILTER) {
             const valueDataView = getDataView(dataView.buffer, offset, resourceSize);
             const tag = {
                 id: tagId,
-                value: getStringFromDataView(valueDataView, 0, resourceSize),
+                value: getByteString(byteArray, offset, offset + resourceSize),
             };
             if (TagNames[tagId]) {
                 try {
-                    tag.description = TagNames[tagId].description(valueDataView);
+                    tag.description = TagNames[tagId].description(valueDataView, pathRecordBudget);
                 } catch (error) {
                     tag.description = '<no description formatter>';
                 }
