@@ -736,6 +736,61 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myExifTags);
     });
 
+    it('should not convert an ApplicationNotes value of strings to XMP', () => {
+        const myExifTags = {ApplicationNotes: {value: ['<x:xmpmeta></x:xmpmeta>']}};
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        const readXmpStrings = swapXmpTagsReadRecording();
+
+        expect(ExifReader.loadView()).to.deep.equal(myExifTags);
+        expect(ExifReader.loadView({}, {expanded: true})).to.not.have.property('xmp');
+        expect(readXmpStrings).to.deep.equal([]);
+    });
+
+    it('should not convert an ApplicationNotes value of strings and holes to XMP', () => {
+        const value = [];
+        value[100000] = 'a';
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, {ApplicationNotes: {value}});
+        const readXmpStrings = swapXmpTagsReadRecording();
+
+        ExifReader.loadView();
+
+        expect(readXmpStrings).to.deep.equal([]);
+    });
+
+    it('should not convert an ApplicationNotes value of rational pairs to XMP', () => {
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, {ApplicationNotes: {value: [[60, 1], [120, 1]]}});
+        const readXmpStrings = swapXmpTagsReadRecording();
+
+        ExifReader.loadView();
+
+        expect(readXmpStrings).to.deep.equal([]);
+    });
+
+    it('should not convert an ASCII ApplicationNotes tag in a TIFF file to XMP', () => {
+        const nulRun = '\x00'.repeat(300) + 'a';
+        const tiff = getApplicationNotesTiff(IFD_TYPE_ASCII, nulRun.length, nulRun);
+        expect(getXmpStringsReadFromTiff(tiff)).to.deep.equal([]);
+    });
+
+    it('should not convert a RATIONAL ApplicationNotes tag in a TIFF file to XMP', () => {
+        const rationals = getByteStringFromNumber(60, 4) + getByteStringFromNumber(1, 4)
+            + getByteStringFromNumber(120, 4) + getByteStringFromNumber(1, 4);
+        const tiff = getApplicationNotesTiff(IFD_TYPE_RATIONAL, 2, rationals);
+        expect(getXmpStringsReadFromTiff(tiff)).to.deep.equal([]);
+    });
+
+    it('should convert a BYTE ApplicationNotes tag in a TIFF file to XMP', () => {
+        const packet = '<x:xmpmeta></x:xmpmeta>';
+        const tiff = getApplicationNotesTiff(IFD_TYPE_BYTE, packet.length, packet);
+        expect(getXmpStringsReadFromTiff(tiff)).to.deep.equal([packet]);
+    });
+
+    it('should convert an UNDEFINED ApplicationNotes tag in a TIFF file to XMP', () => {
+        const packet = '<x:xmpmeta></x:xmpmeta>';
+        const tiff = getApplicationNotesTiff(IFD_TYPE_UNDEFINED, packet.length, packet);
+        expect(getXmpStringsReadFromTiff(tiff)).to.deep.equal([packet]);
+    });
+
     it('should be able to find ICC segment inside Exif APP segment (used in TIFF files)', () => {
         const myExifTags = {ICC_Profile: {value: [1, 2, 3]}};
         const myIccTags = {MyIccTag: 42};
@@ -3576,16 +3631,27 @@ function swapXmpTagsRead(tagsValue) {
 }
 
 function getXmpStringReadFromApplicationNotes(myExifTags) {
-    let readXmpString;
     swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+    const readXmpStrings = swapXmpTagsReadRecording();
+    ExifReader.loadView();
+    return readXmpStrings[0];
+}
+
+function swapXmpTagsReadRecording() {
+    const readXmpStrings = [];
     swap(XmpTags, {
         read(xmpString) {
-            readXmpString = xmpString;
+            readXmpStrings.push(xmpString);
             return {};
         }
     });
-    ExifReader.loadView();
-    return readXmpString;
+    return readXmpStrings;
+}
+
+function getXmpStringsReadFromTiff(tiff) {
+    const readXmpStrings = swapXmpTagsReadRecording();
+    ExifReader.loadView(getDataView(tiff));
+    return readXmpStrings;
 }
 
 function swapIccTagsRead(tagsValue, async = false) {
@@ -3703,6 +3769,7 @@ function getBufferLikeData(data) {
     };
 }
 
+const IFD_TYPE_ASCII = 2;
 const IFD_TYPE_SHORT = 3;
 const IFD_TYPE_LONG = 4;
 const IFD_TYPE_UNDEFINED = 7;
@@ -3927,6 +3994,18 @@ function getApplicationNotesThenExposureTimeTiff() {
         + getByteStringFromNumber(0, 4)
         + '\x00'.repeat(APPLICATION_NOTES_LENGTH)
         + getByteStringFromNumber(1, 4) + getByteStringFromNumber(250, 4);
+}
+
+// A TIFF block whose 0th IFD holds only an ApplicationNotes tag, its value
+// stored after the IFD.
+function getApplicationNotesTiff(type, count, value) {
+    const IFD0_OFFSET = 8;
+    const VALUE_OFFSET = IFD0_OFFSET + 2 + 12 + 4;
+    return 'MM\x00\x2a' + getByteStringFromNumber(IFD0_OFFSET, 4)
+        + getByteStringFromNumber(1, 2)
+        + getIfdEntry(0x02bc, type, count, getByteStringFromNumber(VALUE_OFFSET, 4))
+        + getByteStringFromNumber(0, 4)
+        + value;
 }
 
 function getPngChunk(type, data) {

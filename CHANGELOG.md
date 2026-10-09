@@ -58,6 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `async: true`. This applied to tEXt, iTXt and zTXt chunks alike. Less is
   now kept per text chunk while the file is read, and the same file now peaks
   at about 126 MB.
+- An Exif `ApplicationNotes` tag stored as ASCII text or as two or more
+  rational numbers was converted to XMP, although XMP writers store the
+  packet in this tag as bytes: a crafted TIFF with an 8 MiB ASCII
+  `ApplicationNotes` value blocked `load()` for about 0.5 seconds. Such a tag
+  is no longer converted to XMP, so the same file takes about 0.24 seconds,
+  and with `expanded: true` it no longer leaves an empty `xmp` group.
 
 ## [4.48.0] - 2026-10-09
 

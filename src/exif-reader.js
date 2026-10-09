@@ -240,7 +240,7 @@ export function loadView(
         if (
             Constants.USE_XMP
             && parsedExifTags['ApplicationNotes']
-            && Array.isArray(parsedExifTags['ApplicationNotes'].value)
+            && isNumberArray(parsedExifTags['ApplicationNotes'].value)
             && !hasXmpData(xmpChunks)
             && tagFilter.shouldParseGroup('xmp')
         ) {
@@ -1017,6 +1017,12 @@ function getGpsGroupFromExifTags(exifTags) {
     }
 
     return gps;
+}
+
+// ASCII values hold strings and holes, values of two or more rationals hold
+// number pairs: neither converts to the character codes of an XMP packet.
+function isNumberArray(value) {
+    return Array.isArray(value) && typeof value[0] === 'number';
 }
 
 function hasXmpData(xmpChunks) {
