@@ -7,7 +7,7 @@ import XmpTagNames from './xmp-tag-names.js';
 import DOMParser from './dom-parser.js';
 import TextDecoder from './text-decoder.js';
 import {isMissingNamespaceError, addMissingNamespaces} from './xmp-namespaces.js';
-import {exceedsElementDepth} from './xmp-element-depth.js';
+import {exceedsMarkupBounds} from './xmp-element-depth.js';
 
 export default {
     read
@@ -31,6 +31,11 @@ const MAX_NESTING_DEPTH = 16;
 // xmldom 0.9.12 walks one link per enclosing declaring element on every prefix
 // lookup, and the DOM conversion here recurses once per level.
 const MAX_ELEMENT_DEPTH = 256;
+
+// Each markup node takes about 2 KB of peak heap in xmldom 0.9.12. With short
+// names and values, reading a packet within this bound into tags peaks below
+// about 800 MB.
+const MAX_MARKUP_NODES = 250000;
 
 // Parsing is synchronous and oneLevelDeeper always restores the counter, so
 // one counter serves every read.
@@ -210,8 +215,8 @@ function trimAfterPacketTrailer(xmlSource) {
 }
 
 function parseFromString(domParser, xmlString, isRetry = false) {
-    if (exceedsElementDepth(xmlString, MAX_ELEMENT_DEPTH)) {
-        throw new ParseError(`XMP elements nested deeper than ${MAX_ELEMENT_DEPTH} levels.`);
+    if (exceedsMarkupBounds(xmlString, MAX_ELEMENT_DEPTH, MAX_MARKUP_NODES)) {
+        throw new ParseError(`XMP elements nested deeper than ${MAX_ELEMENT_DEPTH} levels or more than ${MAX_MARKUP_NODES} markup nodes.`);
     }
     try {
         const doc = domParser.parseFromString(xmlString, 'application/xml');

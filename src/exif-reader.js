@@ -39,6 +39,11 @@ import {createTagFilter} from './tag-filter.js';
 import {buildTagsFromMergeSteps, isThenable} from './loadview-pipeline.js';
 import exifErrors from './errors.js';
 
+// Brob XMP is bounded by the file size, as brob Exif is, plus room for one JPEG
+// standard XMP segment so that a small file can still carry a typical packet.
+const BROB_XMP_SIZE_PER_INPUT_SIZE = 4;
+const BROB_XMP_SIZE_ALLOWANCE = 64 * 1024;
+
 export default {
     load,
     loadView,
@@ -467,6 +472,10 @@ export function loadView(
         deferredPromises.push(
             decompress(compressedXmpData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
                 .then((decompressedDataView) => {
+                    if (exceedsBrobXmpSizeBound(decompressedDataView, dataView)) {
+                        deferredResults.brobXmp = {};
+                        return;
+                    }
                     deferredResults.brobXmp = XmpTags.read(
                         decompressedDataView,
                         [{dataOffset: 0, length: decompressedDataView.byteLength}],
@@ -796,6 +805,11 @@ function getBrobDataView(dataView, brobChunk) {
         bytes[i] = dataView.getUint8(brobChunk.dataOffset + i);
     }
     return new DataView(bytes.buffer);
+}
+
+function exceedsBrobXmpSizeBound(decompressedDataView, inputDataView) {
+    return decompressedDataView.byteLength
+        > BROB_XMP_SIZE_PER_INPUT_SIZE * inputDataView.byteLength + BROB_XMP_SIZE_ALLOWANCE;
 }
 
 function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter) {

@@ -21,6 +21,7 @@ const META_ELEMENT_END = '</x:xmpmeta>';
 
 const MAX_NESTING_DEPTH = 16;
 const MAX_ELEMENT_DEPTH = 256;
+const MAX_MARKUP_NODES = 250000;
 // getNestedXmlString adds rdf:RDF and rdf:Description above the nested values.
 const NESTED_XML_STRING_ELEMENT_DEPTH = 2;
 // The top-level properties are the first level, so the outermost nested tag's members are the second.
@@ -2804,6 +2805,42 @@ describe('xmp-tags', function () {
         });
     });
 
+    // The stub parser keeps real xmldom away from cap-sized packets, which cost hundreds of megabytes.
+    describe('markup node bound before parsing', () => {
+        it('should parse a packet with exactly as many markup nodes as the bound', () => {
+            const xmlString = getXmlStringWithMarkupNodes(MAX_MARKUP_NODES);
+
+            const {received} = readChunksWithStubParser([xmlString]);
+
+            expect(received).to.deep.equal([xmlString]);
+        });
+
+        it('should not parse a packet with one markup node more than the bound', () => {
+            const {tags, received} = readChunksWithStubParser([getXmlStringWithMarkupNodes(MAX_MARKUP_NODES + 1)]);
+
+            expect(received).to.deep.equal([]);
+            expect(tags).to.deep.equal({});
+        });
+
+        it('should parse a packet combined from standard and extended XMP with as many markup nodes as the bound', () => {
+            const xmlString = getXmlStringWithMarkupNodes(MAX_MARKUP_NODES);
+            const [standardXmp, extendedXmp] = splitInHalf(xmlString);
+
+            const {received} = readChunksWithStubParser([standardXmp, extendedXmp]);
+
+            expect(received).to.deep.equal([standardXmp, extendedXmp, xmlString]);
+        });
+
+        it('should not parse a packet combined from standard and extended XMP with more markup nodes than the bound', () => {
+            const [standardXmp, extendedXmp] = splitInHalf(getXmlStringWithMarkupNodes(MAX_MARKUP_NODES + 1));
+
+            const {tags, received} = readChunksWithStubParser([standardXmp, extendedXmp]);
+
+            expect(received).to.deep.equal([standardXmp, extendedXmp]);
+            expect(tags).to.deep.equal({});
+        });
+    });
+
     describe('bounded chunk allocation (GHSA-q53f-v5gx-7j78)', () => {
         it('does not allocate beyond the available data when a chunk declares a length larger than the buffer', () => {
             const xmlString = getXmlString('');
@@ -2906,13 +2943,22 @@ function readWithRecordingParser(text) {
 }
 
 function readChunksWithRecordingParser(texts) {
+    const realParser = new XmldomDomParser({onError: onErrorStopParsing});
+    return readChunksWithParser(texts, (xml, mimeType) => realParser.parseFromString(xml, mimeType));
+}
+
+// The stub hands back an empty document, so no packet is read into tags.
+function readChunksWithStubParser(texts) {
+    return readChunksWithParser(texts, () => ({getElementsByTagName: () => [], childNodes: []}));
+}
+
+function readChunksWithParser(texts, parse) {
     const byteStrings = texts.map(toUtf8ByteString);
     const received = [];
-    const realParser = new XmldomDomParser({onError: onErrorStopParsing});
     const domParser = {
         parseFromString(xml, mimeType) {
             received.push(xml);
-            return realParser.parseFromString(xml, mimeType);
+            return parse(xml, mimeType);
         }
     };
 
@@ -2979,6 +3025,16 @@ function getNestedXmlString(content) {
             ${content}
         </rdf:Description>
     `);
+}
+
+// rdf:RDF and its namespace declaration are the first two nodes.
+function getXmlStringWithMarkupNodes(nodeCount) {
+    return getXmlString('<a/>'.repeat(nodeCount - 2));
+}
+
+function splitInHalf(text) {
+    const splitIndex = Math.floor(text.length / 2);
+    return [text.slice(0, splitIndex), text.slice(splitIndex)];
 }
 
 // rdf:RDF and the rdf:x elements nest depth + 1 elements deep, besides a dc:title sibling.
