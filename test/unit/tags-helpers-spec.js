@@ -537,6 +537,19 @@ describe('tags-helpers', () => {
         });
     });
 
+    it('should describe an encoded-string tag with a faulty offset as the faulty value', () => {
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x92\x86\x00\x07' // UserComment, UNDEFINED.
+            + '\x00\x00\x00\x10' // Number of tag items.
+            + '\x00\x00\x01\x00' // Offset past the end of the data.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+        );
+        const tags = readIfd(dataView, 'exif', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags.UserComment.value).to.equal('<faulty value>');
+        expect(tags.UserComment.description).to.equal('<faulty value>');
+    });
+
     it('should add a computed value for an ASCII tag when enabled', function () {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
         const dataView = getDataView(

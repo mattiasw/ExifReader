@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to base64 with `Buffer` in Node.js and in chunks elsewhere. The same read
   now takes about 6 ms and raises peak memory by about 11 MB in Node.js, and
   by about 45 MB in a browser-like environment without `Buffer`.
+- The descriptions of the Exif `UserComment` and the GPS
+  `GPSProcessingMethod` and `GPSAreaInformation` tags converted their text
+  one character at a time: a crafted TIFF with an 8 MiB `UserComment` raised
+  peak memory to about 550 MB and blocked `load()` for about 0.75 seconds.
+  The text is now converted in chunks, so the same file peaks at about
+  230 MB and takes about 0.3 seconds.
 
 ## [4.48.0] - 2026-10-09
 
