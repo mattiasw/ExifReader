@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Photoshop image resources in the `PhotoshopSettings` value are now read, so
   the same file peaks at about 220 MB and takes under 0.4 seconds. Real files
   carry a few dozen resources.
+- Reading `Thumbnail.base64`, or `base64` of an MPF image, used memory far
+  above the image size: for an 8 MiB thumbnail it took about 0.8 s and raised
+  peak memory about 355 MB above loading the file. The image is now converted
+  to base64 with `Buffer` in Node.js and in chunks elsewhere. The same read
+  now takes about 6 ms and raises peak memory by about 11 MB in Node.js, and
+  by about 45 MB in a browser-like environment without `Buffer`.
 
 ## [4.48.0] - 2026-10-09
 
