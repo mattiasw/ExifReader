@@ -9,6 +9,7 @@ import {DOMParser as XmldomDomParser, onErrorStopParsing} from '@xmldom/xmldom';
 import {DOMParser as LinkedomDomParser} from 'linkedom';
 import {getConsoleWarnSpy, getDataView, swapProperties} from './test-utils.js';
 import {createRequire} from 'node:module';
+import DataViewWrapper from '../../src/dataview.js';
 import DomParserModule from '../../src/dom-parser.js';
 import TextDecoderModule from '../../src/text-decoder.js';
 import XmpTags from '../../src/xmp-tags.js';
@@ -2850,6 +2851,29 @@ describe('xmp-tags', function () {
             const tags = XmpTags.read(dataView, [{dataOffset: 0, length: oversizedLength}]);
 
             expect(tags._raw).to.equal(xmlString);
+        });
+
+        it('should read chunks at non-zero offsets through a DataViewWrapper around a Buffer', () => {
+            const domParser = new XmldomDomParser({onError: onErrorStopParsing});
+            const standardXmp = getXmlString('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:Standard="1"/>');
+            const extendedXmp = getXmlString('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:Extended="2"/>');
+            const padding = '\x00\x00\x00\x00';
+            const dataView = new DataViewWrapper(Buffer.from(padding + standardXmp + extendedXmp, 'latin1'));
+
+            const tags = XmpTags.read(
+                dataView,
+                [
+                    {dataOffset: padding.length, length: standardXmp.length},
+                    {dataOffset: padding.length + standardXmp.length, length: extendedXmp.length}
+                ],
+                domParser
+            );
+
+            expect(tags).to.deep.equal({
+                _raw: standardXmp + extendedXmp,
+                Standard: {value: '1', attributes: {}, description: '1'},
+                Extended: {value: '2', attributes: {}, description: '2'}
+            });
         });
     });
 });

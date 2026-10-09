@@ -24,6 +24,20 @@ const MINIMAL_ICC_SEGMENT = '\xff\xe2\x00\x10ICC_PROFILE\x00\x01\x01';
 // A larger APP2 ICC segment: a field length of 20 puts four bytes of profile data after
 // the two chunk bytes, so a scan that reuses another segment's length loses its place.
 const PADDED_ICC_SEGMENT = '\xff\xe2\x00\x14ICC_PROFILE\x00\x01\x01\x00\x00\x00\x00';
+// The smallest APP1 XMP segment: a field length of 31 covers the length field plus
+// the identifier, with no packet bytes.
+const MINIMAL_XMP_SEGMENT = '\xff\xe1\x00\x1fhttp://ns.adobe.com/xap/1.0/\x00';
+// A larger APP1 XMP segment: a field length of 35 puts four packet bytes after the
+// identifier, so a scan that reuses another segment's length loses its place.
+const PADDED_XMP_SEGMENT = '\xff\xe1\x00\x23http://ns.adobe.com/xap/1.0/\x00\x00\x00\x00\x00';
+// The smallest APP1 extended XMP segment: the identifier, the GUID, the total length
+// and the offset, with no packet bytes.
+const MINIMAL_EXTENDED_XMP_SEGMENT = '\xff\xe1\x00\x4dhttp://ns.adobe.com/xmp/extension/\x00'
+    + '5740B4AB4292ABB7BDCE0639415FA33F\x00\x00\x00\x00\x00\x00\x00\x00';
+// A larger APP1 extended XMP segment: a field length of 81 puts four packet bytes after
+// the offset, so a scan that reuses another segment's length loses its place.
+const PADDED_EXTENDED_XMP_SEGMENT = '\xff\xe1\x00\x51http://ns.adobe.com/xmp/extension/\x00'
+    + '5740B4AB4292ABB7BDCE0639415FA33F\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00';
 const TIFF_HEADER_LITTLE_ENDIAN = '\x49\x49\x2a\x00\x08\x00\x00\x00';
 const ZEROTH_IFD_WITH_ONE_ENTRY = '\x01\x00'
     + '\x0f\x01\x02\x00\x01\x00\x00\x00\x00\x00\x00\x00'
@@ -213,6 +227,48 @@ describe('image-header-jpeg', () => {
         const {iccChunks, tiffHeaderOffset} = ImageHeaderJpeg.findJpegOffsets(dataView);
         expect(iccChunks).to.have.lengthOf(255);
         expect(tiffHeaderOffset).to.equal(5592);
+    });
+
+    it('should stop collecting XMP chunks at the cap', () => {
+        const dataView = getDataView(`\xff\xd8${MINIMAL_XMP_SEGMENT.repeat(1100)}`);
+        const {xmpChunks} = ImageHeaderJpeg.findJpegOffsets(dataView);
+        expect(xmpChunks).to.have.lengthOf(1024);
+        // The chunks that are kept are the first ones, not the last ones.
+        expect(xmpChunks[0].dataOffset).to.equal(35);
+        expect(xmpChunks[1023].dataOffset).to.equal(33794);
+    });
+
+    it('should count extended XMP segments toward the same cap', () => {
+        const dataView = getDataView(`\xff\xd8${MINIMAL_XMP_SEGMENT}${MINIMAL_EXTENDED_XMP_SEGMENT.repeat(1100)}`);
+        const {xmpChunks} = ImageHeaderJpeg.findJpegOffsets(dataView);
+        expect(xmpChunks).to.have.lengthOf(1024);
+        expect(xmpChunks[0].dataOffset).to.equal(35);
+        expect(xmpChunks[1023].dataOffset).to.equal(80852);
+    });
+
+    it('should keep every XMP chunk in a file that stays within the cap', () => {
+        const dataView = getDataView(`\xff\xd8${MINIMAL_XMP_SEGMENT.repeat(1024)}`);
+        expect(ImageHeaderJpeg.findJpegOffsets(dataView).xmpChunks).to.have.lengthOf(1024);
+    });
+
+    it('should keep advancing the scan by the size of each XMP segment past the cap', () => {
+        const dataView = getDataView(`\xff\xd8${MINIMAL_XMP_SEGMENT.repeat(1024)}${PADDED_XMP_SEGMENT.repeat(45)}\xff\xe1\x00\x08Exif\x00\x00`);
+        const metadataBlocks = [];
+        const {xmpChunks, tiffHeaderOffset} = ImageHeaderJpeg.findJpegOffsets(dataView, metadataBlocks);
+        expect(xmpChunks).to.have.lengthOf(1024);
+        expect(tiffHeaderOffset).to.equal(35469);
+        expect(metadataBlocks).to.deep.include({type: 'xmp', start: 35422, end: 35459});
+        expect(metadataBlocks).to.deep.include({type: 'exif', start: 35459, end: 35469});
+    });
+
+    it('should keep advancing the scan by the size of each extended XMP segment past the cap', () => {
+        const dataView = getDataView(`\xff\xd8${MINIMAL_XMP_SEGMENT}${MINIMAL_EXTENDED_XMP_SEGMENT.repeat(1023)}${PADDED_EXTENDED_XMP_SEGMENT.repeat(2)}\xff\xe1\x00\x08Exif\x00\x00`);
+        const metadataBlocks = [];
+        const {xmpChunks, tiffHeaderOffset} = ImageHeaderJpeg.findJpegOffsets(dataView, metadataBlocks);
+        expect(xmpChunks).to.have.lengthOf(1024);
+        expect(tiffHeaderOffset).to.equal(81028);
+        expect(metadataBlocks).to.deep.include({type: 'xmp', start: 80935, end: 81018});
+        expect(metadataBlocks).to.deep.include({type: 'exif', start: 81018, end: 81028});
     });
 
     it('should keep first valid IPTC APP13 offset when later APP13 segment is malformed', () => {

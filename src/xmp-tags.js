@@ -111,6 +111,8 @@ function combineChunks(dataView, chunks) {
 function getBoundedChunkBytes(dataView, chunk) {
     // The bound is the view's own extent, not the buffer's, since the slice
     // starts at the view's byteOffset.
+    // dataView can be a DataViewWrapper whose buffer is a Buffer, which a
+    // Uint8Array view constructor would copy whole, so the bytes come from slice.
     const bufferLength = dataView.byteLength;
     const byteOffset = dataView.byteOffset || 0;
     const start = Math.min(Math.max(chunk.dataOffset, 0), bufferLength);
