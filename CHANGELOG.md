@@ -261,6 +261,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   580 MB. The hex text is now decoded in place, and the same PNG takes about
   1.4 seconds and 450 MB. Characters other than hex digits in the profile
   data, such as spaces or carriage returns, are now skipped.
+- With `length: 'auto'`, loading a URL now stops reading each response once it
+  has as many bytes as the end offset of the range that request asked for,
+  when the server ignores the Range request or sends more than was asked for.
+  Before, a server could answer the first request, for 128 KiB, with a
+  response of any size, and all of it was kept in memory. This applies
+  wherever `fetch` supports streaming response bodies, as in current browsers
+  and Node.js, and in Node.js when no global `fetch` is defined. Requests that
+  ask for the whole file still read all of it: after a 416 answer, and after 4
+  requests that did not reach the end of the metadata. The next request can
+  also still ask for up to the file size the server reports when the first
+  128 KiB holds no metadata, or up to where the metadata says it ends.
 
 ## [4.47.0] - 2026-10-08
 

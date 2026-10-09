@@ -2277,15 +2277,58 @@ describe('exif-reader', function () {
                 expect(tags.metadataRange.complete).to.equal(true);
             });
 
-            it('should converge in 1 fetch when the server returns 200 with the full body', async () => {
+            it('should converge in 2 fetches when a Range-ignoring server returns 200 and the metadata extends past the initial 128 KiB', async () => {
                 swapForAutoTest({end: 200000});
                 installFetchMock(300000, {alwaysFullBody: true});
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(fetchCalls).to.have.lengthOf(2);
+                expect(fetchCalls[0].range).to.equal('bytes=0-131071');
+                expect(fetchCalls[1].range).to.equal('bytes=131072-262143');
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(tags.metadataRange.fetched).to.equal(262144);
+                expect(tags.metadataRange.buffer.byteLength).to.equal(200000);
+            });
+
+            it('should keep only the requested bytes when a Range-ignoring server returns a larger body', async () => {
+                swapForAutoTest({end: 4000});
+                installFetchMock(1024 * 1024, {alwaysFullBody: true});
 
                 const tags = await ExifReader.load(URL, AUTO_OPTIONS);
 
                 expect(fetchCalls).to.have.lengthOf(1);
                 expect(tags.metadataRange.complete).to.equal(true);
                 expect(tags.metadataRange.requests).to.equal(1);
+                expect(tags.metadataRange.fetched).to.equal(131072);
+            });
+
+            it('should stop reading the stream when a 206 response sends more than the requested range', async () => {
+                swapForAutoTest({end: 4000});
+
+                const CHUNK_SIZE = 64 * 1024;
+                const CHUNK_COUNT = 16;
+                const fullBuffer = new ArrayBuffer(CHUNK_SIZE * CHUNK_COUNT);
+                const chunks = Array.from({length: CHUNK_COUNT}, () => new Uint8Array(CHUNK_SIZE));
+                const stream = stubStreamBody(chunks);
+                installCustomFetchMock([
+                    {
+                        status: 206,
+                        contentRange: `bytes 0-131071/${fullBuffer.byteLength}`,
+                        stream,
+                        body: () => fullBuffer,
+                    },
+                ]);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(1);
+                expect(tags.metadataRange.fetched).to.equal(131072);
+                expect(stream.state.cancelled).to.equal(true);
+                expect(stream.state.reads).to.be.at.least(1);
+                expect(stream.state.reads).to.be.below(CHUNK_COUNT);
             });
 
             it('should not corrupt the buffer when the server returns 200 on a follow-up Range request', async () => {
@@ -2306,7 +2349,7 @@ describe('exif-reader', function () {
                 const tags = await ExifReader.load(URL, AUTO_OPTIONS);
 
                 expect(tags.metadataRange.complete).to.equal(true);
-                expect(tags.metadataRange.fetched).to.equal(FULL_SIZE);
+                expect(tags.metadataRange.fetched).to.equal(262144);
                 expect(tags.metadataRange.requests).to.equal(2);
                 expect(tags.metadataRange.buffer.byteLength).to.equal(200000);
             });
@@ -2329,6 +2372,23 @@ describe('exif-reader', function () {
                 expect(tags.metadataRange.complete).to.equal(true);
                 expect(tags.metadataRange.requests).to.equal(2);
                 expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+            });
+
+            it('should read the whole body in the full GET after a 416', async () => {
+                swapForAutoTest({end: 200000});
+
+                const FULL_SIZE = 300000;
+                installCustomFetchMock([
+                    {status: 416, body: () => new ArrayBuffer(0)},
+                    {status: 200, contentLength: FULL_SIZE, body: () => new ArrayBuffer(FULL_SIZE)},
+                ]);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(fetchCalls[1].range).to.equal(undefined);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(tags.metadataRange.fetched).to.equal(FULL_SIZE);
             });
 
             it('should jump to EOF in one extra fetch when the parser finds no blocks in the initial prefix', async () => {
@@ -2412,6 +2472,30 @@ describe('exif-reader', function () {
                 expect(tags.metadataRange.fetched).to.equal(BODY_SIZE);
             });
 
+            it('should read the whole body in the fallback when a Range-ignoring server sends no size', async () => {
+                // The loop reads 128 KiB, 256 KiB, 512 KiB and 1 MiB, each 200
+                // cut at its requested end, then the fallback reads to EOF.
+                const BODY_SIZE = 3 * 1024 * 1024;
+                swapImageHeaderDynamic((dataView) => {
+                    const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
+                    return {
+                        tiffHeaderOffset: OFFSET_TEST_VALUE,
+                        metadataBlocks: [{type: 'exif', start: 2, end: len + 1000}],
+                    };
+                });
+                swapTagsRead(Tags, {MyExifTag: 42});
+                installCustomFetchMock(Array.from({length: 5}, () => ({
+                    status: 200,
+                    body: () => new ArrayBuffer(BODY_SIZE),
+                })));
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(5);
+                expect(tags.metadataRange.fetched).to.equal(BODY_SIZE);
+            });
+
             function installCustomFetchMock(stages) {
                 let idx = 0;
                 global.fetch = (url, options) => {
@@ -2421,11 +2505,31 @@ describe('exif-reader', function () {
                     return Promise.resolve({
                         status: stage.status,
                         headers: makeHeaders(stage.contentRange, stage.contentLength),
+                        body: stage.stream ? stage.stream.body : undefined,
                         arrayBuffer() {
                             return Promise.resolve(stage.body());
                         },
                     });
                 };
+            }
+
+            function stubStreamBody(chunks) {
+                const pending = chunks.slice();
+                const state = {reads: 0, cancelled: false};
+                const reader = {
+                    read() {
+                        state.reads++;
+                        if (pending.length === 0) {
+                            return Promise.resolve({done: true, value: undefined});
+                        }
+                        return Promise.resolve({done: false, value: pending.shift()});
+                    },
+                    cancel() {
+                        state.cancelled = true;
+                        return Promise.resolve();
+                    },
+                };
+                return {state, body: {getReader: () => reader, cancel: () => reader.cancel()}};
             }
         });
 
@@ -2451,40 +2555,67 @@ describe('exif-reader', function () {
                 global.__non_webpack_require__ = originalRequire;
             });
 
-            function installHttpMock(fullBuffer) {
+            function installHttpMock(fullBuffer, {ignoreRange = false, chunkSize} = {}) {
                 const full = Buffer.isBuffer(fullBuffer) ? fullBuffer : Buffer.alloc(fullBuffer);
                 global.__non_webpack_require__ = function (moduleName) {
                     if (/^https?$/.test(moduleName)) {
                         return {
                             get(url, options, callback) {
                                 const range = options && options.headers && options.headers.range;
-                                getCalls.push({url, range});
-                                const m = range && /^bytes=(\d+)-(\d*)$/.exec(range);
+                                const call = {url, range, destroyed: false};
+                                getCalls.push(call);
+                                const honorRange = Boolean(range) && !ignoreRange;
+                                const m = honorRange && /^bytes=(\d+)-(\d*)$/.exec(range);
                                 const start = m ? parseInt(m[1], 10) : 0;
                                 const end = m && m[2] ? parseInt(m[2], 10) + 1 : full.length;
                                 const slice = full.subarray(start, end);
+                                const listeners = {};
                                 const response = {
-                                    statusCode: range ? 206 : 200,
+                                    statusCode: honorRange ? 206 : 200,
                                     statusMessage: 'OK',
                                     headers: {
-                                        'content-range': range ? `bytes ${start}-${end - 1}/${full.length}` : undefined,
+                                        'content-range': honorRange ? `bytes ${start}-${end - 1}/${full.length}` : undefined,
                                         'content-length': String(slice.length),
                                     },
                                     on(eventName, cb) {
-                                        if (eventName === 'data') {
-                                            setTimeout(() => cb(slice), 0);
-                                        } else if (eventName === 'end') {
-                                            setTimeout(() => cb(), 0);
-                                        }
+                                        listeners[eventName] = cb;
+                                    },
+                                    destroy() {
+                                        call.destroyed = true;
                                     },
                                     resume: () => undefined,
                                 };
-                                setTimeout(() => callback(response), 0);
+                                setTimeout(() => {
+                                    callback(response);
+                                    emitBody(call, listeners, splitIntoChunks(slice, chunkSize || slice.length));
+                                }, 0);
                                 return {on: () => undefined};
                             }
                         };
                     }
                 };
+            }
+
+            function emitBody(call, listeners, chunks) {
+                setTimeout(() => {
+                    if (call.destroyed) {
+                        return;
+                    }
+                    if (chunks.length === 0) {
+                        listeners.end();
+                        return;
+                    }
+                    listeners.data(chunks.shift());
+                    emitBody(call, listeners, chunks);
+                }, 0);
+            }
+
+            function splitIntoChunks(buffer, chunkSize) {
+                const chunks = [];
+                for (let offset = 0; offset < buffer.length; offset += chunkSize) {
+                    chunks.push(buffer.subarray(offset, offset + chunkSize));
+                }
+                return chunks;
             }
 
             it('should converge in 2 fetches via Node http with Range header', async () => {
@@ -2499,6 +2630,32 @@ describe('exif-reader', function () {
                 expect(tags.metadataRange.complete).to.equal(true);
                 expect(tags.metadataRange.requests).to.equal(2);
                 expect(Buffer.isBuffer(tags.metadataRange.buffer)).to.equal(true);
+            });
+
+            it('should stop reading and destroy the response when the server sends more than the requested range', async () => {
+                swapForAutoTest({end: 4000});
+                installHttpMock(1024 * 1024, {ignoreRange: true, chunkSize: 64 * 1024});
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(getCalls).to.have.lengthOf(1);
+                expect(getCalls[0].destroyed).to.equal(true);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(1);
+                expect(tags.metadataRange.fetched).to.equal(131072);
+            });
+
+            it('should converge in 2 requests when a Range-ignoring server returns 200 and the metadata extends past the initial 128 KiB', async () => {
+                swapForAutoTest({end: 200000});
+                installHttpMock(300000, {ignoreRange: true});
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(getCalls).to.have.lengthOf(2);
+                expect(getCalls[1].range).to.equal('bytes=131072-262143');
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(tags.metadataRange.fetched).to.equal(262144);
             });
         });
 
