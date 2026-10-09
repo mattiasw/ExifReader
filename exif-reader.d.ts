@@ -344,23 +344,23 @@ interface CanonTags {
 }
 
 interface PentaxTags {
-    PentaxVersion: {
+    PentaxVersion?: {
         value: number[];
         description: string;
     };
-    PentaxModelID: {
+    PentaxModelID?: {
         value: number;
         description: string;
     };
-    Orientation: {
+    CameraOrientation?: {
         value: number;
         description: 'Horizontal (normal)' | 'Rotate 270 CW' | 'Rotate 180' | 'Rotate 90 CW' | 'Upwards' | 'Downwards' | 'Unknown';
     };
-    RollAngle: {
+    RollAngle?: {
         value: number;
         description: string;
     };
-    PitchAngle: {
+    PitchAngle?: {
         value: number;
         description: string;
     };
