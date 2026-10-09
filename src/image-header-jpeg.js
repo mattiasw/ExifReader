@@ -40,6 +40,9 @@ const ICC_TOTAL_CHUNKS_OFFSET = ICC_CHUNK_NUMBER_OFFSET + 1;
 // Guards against memory exhaustion from a crafted file. Both chunk fields are a
 // single byte, so a longer list could never be assembled into a profile anyway.
 const MAX_ICC_CHUNKS = 255;
+// Guards against memory exhaustion from a crafted file. An extended XMP segment
+// holds at most about 64 KiB, so this still allows about 64 MiB of XMP.
+const MAX_XMP_CHUNKS = 1024;
 
 const APP2_MPF_IDENTIFIER = 'MPF\0';
 
@@ -168,14 +171,18 @@ function findJpegOffsets(dataView, metadataBlocks) {
                 xmpChunks = [];
             }
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
-            xmpChunks.push(getXmpChunkDetails(appMarkerPosition, fieldLength));
+            if (xmpChunks.length < MAX_XMP_CHUNKS) {
+                xmpChunks.push(getXmpChunkDetails(appMarkerPosition, fieldLength));
+            }
             blockType = 'xmp';
         } else if (Constants.USE_XMP && isApp1ExtendedXmpMarker(dataView, appMarkerPosition)) {
             if (!xmpChunks) {
                 xmpChunks = [];
             }
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
-            xmpChunks.push(getExtendedXmpChunkDetails(appMarkerPosition, fieldLength));
+            if (xmpChunks.length < MAX_XMP_CHUNKS) {
+                xmpChunks.push(getExtendedXmpChunkDetails(appMarkerPosition, fieldLength));
+            }
             blockType = 'xmp';
         } else if (Constants.USE_IPTC && isApp13PhotoshopMarker(dataView, appMarkerPosition)) {
             fieldLength = dataView.getUint16(appMarkerPosition + APP_MARKER_SIZE);
