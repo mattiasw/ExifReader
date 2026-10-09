@@ -5,7 +5,7 @@
 import {expect} from 'chai';
 import {getByteStringFromNumber, swapProperties} from './test-utils.js';
 import PhotoshopTags from '../../src/photoshop-tags.js';
-import TagNames from '../../src/photoshop-tag-names.js';
+import TagNames, {MAX_PATH_RECORDS} from '../../src/photoshop-tag-names.js';
 import {getCharacterArray} from '../../src/utils.js';
 
 describe('photoshop-tags', () => {
@@ -119,6 +119,34 @@ describe('photoshop-tags', () => {
 
         expect(tags.FirstTag).to.deep.include({id: 0x4711, value: 'ab'});
         expect(Object.keys(tags)).to.have.lengthOf(1);
+    });
+
+    it('should share one path record budget between the PathInformation resources of a read', () => {
+        const FILL_RULE_RECORD = '\x00\x06' + '\x00'.repeat(24);
+        const firstResource = FILL_RULE_RECORD.repeat(MAX_PATH_RECORDS - 1);
+        const secondResource = FILL_RULE_RECORD.repeat(2);
+        const bytes = getCharacterArray(
+            getPhotoshopBlockString({id: 0x07d0, name: 'A', resource: firstResource})
+            + getPhotoshopBlockString({id: 0x07d0, name: 'B', resource: secondResource})
+        );
+
+        const tags = PhotoshopTags.read(bytes);
+
+        expect(JSON.parse(tags.A.description).paths).to.have.lengthOf(MAX_PATH_RECORDS - 1);
+        expect(JSON.parse(tags.B.description).paths).to.have.lengthOf(1);
+        expect(tags.A.value).to.equal(firstResource);
+        expect(tags.B.value).to.equal(secondResource);
+        expect(PhotoshopTags.read(bytes)).to.deep.equal(tags);
+    });
+
+    it('should keep one character per byte in the value of a resource longer than 8192 bytes', () => {
+        const longResource = Array.from({length: 10000}, (_, index) => String.fromCharCode(index % 256)).join('');
+        const bytes = getCharacterArray(
+            getPhotoshopBlockString({id: 0x4711, resource: 'ab'})
+            + getPhotoshopBlockString({id: 0x4712, resource: longResource})
+        );
+
+        expect(PhotoshopTags.read(bytes, true)['undefined-18194'].value).to.equal(longResource);
     });
 
     // Tag id 0x4711 does not exist in the real TagNames dictionary so the
