@@ -4,7 +4,7 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringValueFromArray, getStringFromDataView, decompress, setProperty, objectAssign, COMPRESSION_METHOD_NONE} from './utils.js';
+import {getStringValueFromArray, getStringFromDataView, decompress, setProperty, objectAssign, COMPRESSION_METHOD_NONE, getHexDigitValue} from './utils.js';
 import TagDecoder from './tag-decoder.js';
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
 import Tags from './tags.js';
@@ -355,14 +355,41 @@ function isIptcGroupTag(name, value) {
 }
 
 function decodeRawData(value) {
-    const parts = value.match(/\n(exif|iptc)\n\s*\d+\n([\s\S]*)$/);
-    return hexToDataView(parts[2].replace(/\n/g, ''));
+    const header = /\n(exif|iptc)\n\s*\d+\n/.exec(value);
+    if (!header) {
+        throw new Error('Invalid raw profile header.');
+    }
+    const dataStart = header.index + header[0].length;
+    const digitCount = countHexDigits(value, dataStart);
+    if (digitCount % 2 !== 0) {
+        throw new Error('Odd number of hex digits in raw profile.');
+    }
+
+    const bytes = new Uint8Array(digitCount / 2);
+    let byteIndex = 0;
+    let highNibble = -1;
+    for (let i = dataStart; i < value.length; i++) {
+        const nibble = getHexDigitValue(value.charCodeAt(i));
+        if (nibble < 0) {
+            // Newlines and any other non-hex character are skipped, as ImageMagick and exiv2 do.
+            continue;
+        }
+        if (highNibble < 0) {
+            highNibble = nibble;
+        } else {
+            bytes[byteIndex++] = (highNibble << 4) | nibble;
+            highNibble = -1;
+        }
+    }
+    return new DataView(bytes.buffer);
 }
 
-function hexToDataView(hex) {
-    const dataView = new DataView(new ArrayBuffer(hex.length / 2));
-    for (let i = 0; i < hex.length; i += 2) {
-        dataView.setUint8(i / 2, parseInt(hex.substring(i, i + 2), 16));
+function countHexDigits(value, start) {
+    let count = 0;
+    for (let i = start; i < value.length; i++) {
+        if (getHexDigitValue(value.charCodeAt(i)) >= 0) {
+            count++;
+        }
     }
-    return dataView;
+    return count;
 }
