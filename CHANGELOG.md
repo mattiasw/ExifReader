@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Orientation`, so `Orientation` in the flat result is optional again. It
   also marks `PentaxVersion`, `PentaxModelID`, `CameraOrientation`,
   `RollAngle` and `PitchAngle` optional, since a file may lack any of them.
+- In environments without `TextDecoder`, a PNG `tEXt` or `iTXt` chunk with
+  empty text made `load()` fail. The tag now gets an empty value, as it does
+  with `TextDecoder`.
 
 ### Security
 
@@ -37,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   peak memory to about 550 MB and blocked `load()` for about 0.75 seconds.
   The text is now converted in chunks, so the same file peaks at about
   230 MB and takes about 0.3 seconds.
+- In environments without `TextDecoder`, the text of an uncompressed PNG
+  `tEXt` or `iTXt` chunk was converted one character at a time and used
+  memory far above its size: an 8 MiB `tEXt` chunk raised peak memory to
+  about 565 MB and took about 0.7 seconds. It is now converted in chunks, so
+  the same file peaks at about 105 MB and takes about 0.05 seconds.
 
 ## [4.48.0] - 2026-10-09
 

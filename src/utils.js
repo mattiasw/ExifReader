@@ -476,8 +476,8 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
         try {
             return new TextDecoder(encoding).decode(dataView);
         } catch (error) {
-            const bytes = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
-            return Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
+            // Like TextDecoder's decode(), read a missing view as no bytes.
+            return dataView ? getByteString(getUint8View(dataView)) : '';
         }
     }
     return dataView;
