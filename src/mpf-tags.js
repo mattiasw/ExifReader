@@ -20,6 +20,10 @@ const ENTRY_SIZE = 16;
 // proportional to its size instead of n^2.
 const MAX_IMAGE_SIZE_PER_BUFFER_SIZE = 8;
 
+// Real MPF files carry a handful of images (the corpus maximum is 2). The cap
+// keeps a crafted entry table from building an object per 16 bytes of the file.
+const MAX_IMAGES = 256;
+
 function read(
     dataView,
     dataOffset,
@@ -63,7 +67,8 @@ function addMpfImages(dataView, dataOffset, tags, byteOrder) {
     const byteOffset = dataView.byteOffset || 0;
     let remainingImageBytes = bufferLength * MAX_IMAGE_SIZE_PER_BUFFER_SIZE;
     const images = [];
-    for (let i = 0; i < Math.ceil(tags['MPEntry'].value.length / ENTRY_SIZE); i++) {
+    const imageCount = Math.min(Math.ceil(tags['MPEntry'].value.length / ENTRY_SIZE), MAX_IMAGES);
+    for (let i = 0; i < imageCount; i++) {
         images[i] = {};
 
         const attributes = getImageNumberValue(tags['MPEntry'].value, i * ENTRY_SIZE, Types.getTypeSize('LONG'), byteOrder);

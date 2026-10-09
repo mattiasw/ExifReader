@@ -8,6 +8,7 @@ import MpfTags from '../../src/mpf-tags.js';
 import {getStringValueFromArray, getBase64Image} from '../../src/utils.js';
 
 const MP_ENTRY_VALUE_OFFSET = 26;
+const MAX_IMAGES = 256;
 const SURROUNDING_BYTE = 0x99;
 const SURROUNDING_SIZE = 4000;
 
@@ -176,6 +177,33 @@ describe('mpf-tags', () => {
         // file) and later entries get nothing, so the total does not grow with
         // the entry count.
         expect(tags['Images'][entryCount - 1].image.byteLength).to.equal(0);
+    });
+
+    it('should read only the first entries of an MPEntry table longer than the image cap', () => {
+        const entries = [];
+        for (let i = 0; i < MAX_IMAGES + 1; i++) {
+            entries.push({dependent1: i});
+        }
+        const dataView = buildMpfDataView(entries);
+
+        const tags = MpfTags.read(dataView, 0);
+
+        expect(tags['MPEntry'].value).to.have.lengthOf((MAX_IMAGES + 1) * 16);
+        expect(tags['Images']).to.have.lengthOf(MAX_IMAGES);
+        expect(tags['Images'][MAX_IMAGES - 1]['DependentImage1EntryNumber'].value).to.equal(MAX_IMAGES - 1);
+    });
+
+    it('should read every entry of an MPEntry table exactly as long as the image cap', () => {
+        const entries = [];
+        for (let i = 0; i < MAX_IMAGES; i++) {
+            entries.push({dependent1: i});
+        }
+        const dataView = buildMpfDataView(entries);
+
+        const tags = MpfTags.read(dataView, 0);
+
+        expect(tags['Images']).to.have.lengthOf(MAX_IMAGES);
+        expect(tags['Images'][MAX_IMAGES - 1]['DependentImage1EntryNumber'].value).to.equal(MAX_IMAGES - 1);
     });
 
     it('should truncate, not empty, the image where the budget runs out mid-slice', () => {
