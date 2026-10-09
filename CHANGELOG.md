@@ -213,6 +213,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   left out of the description. The same file now peaks at about 330 MB and
   takes about 0.65 seconds, also when its records are split across two
   resources.
+- Nothing limited how many elements, attributes and other markup nodes an XMP
+  packet handed to the XML parser, and each one takes about 2 KB of memory in
+  `@xmldom/xmldom`: a 16 MiB packet of empty elements ran a default Node.js
+  heap out of memory, and so did a 308-byte JPEG XL file whose `brob` box held
+  32 MiB of them compressed. XMP packets with more than 250,000 markup nodes
+  (elements, attributes, comments, processing instructions, CDATA sections
+  and DOCTYPE declarations), counted the way `@xmldom/xmldom` 0.9 reads the
+  markup, are now left out without being parsed, so the 16 MiB packet peaks
+  at about 160 MB. XMP in a JPEG XL `brob` box that decompresses to more than
+  4 times the file size plus 64 KiB is left out as well, so the 308-byte file
+  peaks at about 150 MB.
 
 ## [4.47.0] - 2026-10-08
 

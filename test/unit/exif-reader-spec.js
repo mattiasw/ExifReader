@@ -870,6 +870,52 @@ describe('exif-reader', function () {
         expect(result.MyBrobXmpTag).to.equal(45);
     });
 
+    describe('brob XMP size bound relative to the input', () => {
+        for (const inputLength of [10, 1000]) {
+            const bound = 4 * inputLength + 64 * 1024;
+
+            it(`should read brob XMP that decompresses to ${bound} bytes from a ${inputLength}-byte input`, async () => {
+                const {result, readCount} = await loadBrobXmpDecompressingTo(inputLength, bound);
+
+                expect(readCount).to.equal(1);
+                expect(result.MyBrobXmpTag).to.equal(45);
+            });
+
+            it(`should not read brob XMP that decompresses to ${bound + 1} bytes from a ${inputLength}-byte input`, async () => {
+                const {result, readCount} = await loadBrobXmpDecompressingTo(inputLength, bound + 1);
+
+                expect(readCount).to.equal(0);
+                expect(result.MyBrobXmpTag).to.be.undefined;
+                expect(result.FileType).to.deep.equal({value: 'jxl', description: 'JPEG XL'});
+            });
+        }
+
+        // The chunk is shorter than the larger input, so a bound taken from the chunk fails.
+        async function loadBrobXmpDecompressingTo(inputLength, decompressedLength) {
+            swapImageHeader({
+                fileType: {value: 'jxl', description: 'JPEG XL'},
+                brobXmpChunk: {dataOffset: 0, length: 10}
+            });
+            let readCount = 0;
+            swap(XmpTags, {
+                read() {
+                    readCount++;
+                    return {MyBrobXmpTag: 45};
+                }
+            });
+
+            const result = await ExifReader.loadView(
+                new DataView(new ArrayBuffer(inputLength)),
+                {
+                    async: true,
+                    decompress: {brotli: () => Promise.resolve(new Uint8Array(decompressedLength))}
+                }
+            );
+
+            return {result, readCount};
+        }
+    });
+
     describe('total decompressed size across brob boxes', () => {
         const DECOMPRESSED_SIZE = OFFSET_TEST_VALUE + 100;
 
