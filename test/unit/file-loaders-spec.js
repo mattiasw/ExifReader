@@ -944,6 +944,12 @@ describe('file-loaders', () => {
 
             expect(Array.from(new Uint8Array(buffer))).to.deep.equal([0xff, 0xd8, 0xff, 0xe1]);
         });
+
+        it('should resolve a percent-encoded base64 payload with its decoded bytes', async () => {
+            const buffer = await loadFile('data:image/png;base64,iVBORw0KGgo%3D');
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        });
     });
 
     describe('loadFileObject', () => {
