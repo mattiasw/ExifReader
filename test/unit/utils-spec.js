@@ -625,6 +625,39 @@ describe('utils', () => {
         expect(result).to.equal('MyText');
     });
 
+    it('should fall back to a byte string in chunks when TextDecoder is missing', () => {
+        const OFFSET = 7;
+        const length = 8192 * 2 + 300;
+        const backing = new Uint8Array(OFFSET + length + 5).fill(0x2a);
+        for (let i = 0; i < length; i++) {
+            backing[OFFSET + i] = i % 256;
+        }
+        const dataView = new DataView(backing.buffer, OFFSET, length);
+        let expected = '';
+        for (let i = 0; i < length; i++) {
+            expected += String.fromCharCode(backing[OFFSET + i]);
+        }
+        const originalFromCharCode = String.fromCharCode;
+        let calls = 0;
+        const restoreGlobal = swapProperties(globalThis, {TextDecoder: undefined});
+        const restoreString = swapProperties(String, {
+            fromCharCode(...charCodes) {
+                calls++;
+                return originalFromCharCode.apply(String, charCodes);
+            }
+        });
+
+        let result;
+        try {
+            result = Utils.decompress(dataView, undefined, 'latin1');
+        } finally {
+            restoreString();
+            restoreGlobal();
+        }
+        expect(result).to.equal(expected);
+        expect(calls).to.equal(3);
+    });
+
     describe('brotli decompression', () => {
         it('should use custom brotli function and return DataView', async () => {
             const inputData = new Uint8Array([1, 2, 3]);

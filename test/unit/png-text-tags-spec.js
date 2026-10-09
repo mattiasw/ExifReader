@@ -73,6 +73,27 @@ describe('png-text-tags', () => {
         });
     });
 
+    it('should read a tEXt tag with empty text when TextDecoder is missing', () => {
+        const tagData = 'Comment\x00';
+        const dataView = getDataView(tagData);
+        const chunks = [
+            {type: TYPE_TEXT, offset: 0, length: tagData.length}
+        ];
+        const restoreGlobal = swapProperties(globalThis, {TextDecoder: undefined});
+
+        let readTags;
+        try {
+            ({readTags} = PngTextTags.read(dataView, chunks));
+        } finally {
+            restoreGlobal();
+        }
+
+        expect(readTags['Comment']).to.deep.equal({
+            value: '',
+            description: ''
+        });
+    });
+
     it('should read a tEXt tag from a Node Buffer backed DataView wrapper', () => {
         const tagDatatEXt = 'MyTag0\x00My value.';
         const dataView = toBufferBackedDataView(getDataView(tagDatatEXt));
