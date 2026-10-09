@@ -88,6 +88,31 @@ describe('utils', () => {
     describe('dataUriToBuffer', () => {
         const ALL_BYTES = Array.from({length: 256}, (_, i) => i);
         const ALL_BYTES_BASE64 = Buffer.from(ALL_BYTES).toString('base64');
+        const ALL_BYTES_ESCAPED = ALL_BYTES.map((byte) => `%${byte.toString(16).toUpperCase().padStart(2, '0')}`).join('');
+
+        function decodeWithAndWithoutBuffer(dataUri) {
+            const withBuffer = Utils.dataUriToBuffer(dataUri);
+            const restore = swapProperties(globalThis, {Buffer: undefined});
+            let withoutBuffer;
+            try {
+                withoutBuffer = Utils.dataUriToBuffer(dataUri);
+            } finally {
+                restore();
+            }
+            expect(withBuffer).to.be.an.instanceof(ArrayBuffer);
+            expect(withoutBuffer).to.be.an.instanceof(ArrayBuffer);
+            return [Array.from(new Uint8Array(withBuffer)), Array.from(new Uint8Array(withoutBuffer))];
+        }
+
+        function expectBothWays(dataUri, bytes) {
+            const [withBuffer, withoutBuffer] = decodeWithAndWithoutBuffer(dataUri);
+            expect(withBuffer, 'with Buffer').to.deep.equal(bytes);
+            expect(withoutBuffer, 'without Buffer').to.deep.equal(bytes);
+        }
+
+        function charCodes(string) {
+            return Array.from(string, (char) => char.charCodeAt(0));
+        }
 
         it('should decode the payload as base64 when the header says so', () => {
             const buffer = Utils.dataUriToBuffer('data:image/jpeg;base64,YWJj');
@@ -128,17 +153,17 @@ describe('utils', () => {
                 }
             });
 
-            let truncatedBuffer;
+            let utf8Buffer;
             let allBytesBuffer;
             try {
-                truncatedBuffer = Utils.dataUriToBuffer('data:,a%20b%E2%82%AC');
-                allBytesBuffer = Utils.dataUriToBuffer(`data:,${encodeURIComponent(String.fromCharCode(...ALL_BYTES))}`);
+                utf8Buffer = Utils.dataUriToBuffer('data:,a%20b%E2%82%AC');
+                allBytesBuffer = Utils.dataUriToBuffer(`data:,${ALL_BYTES_ESCAPED}`);
             } finally {
                 restoreFrom();
                 restore();
             }
-            expect(truncatedBuffer).to.be.an.instanceof(ArrayBuffer);
-            expect(Array.from(new Uint8Array(truncatedBuffer))).to.deep.equal([0x61, 0x20, 0x62, 0xac]);
+            expect(utf8Buffer).to.be.an.instanceof(ArrayBuffer);
+            expect(Array.from(new Uint8Array(utf8Buffer))).to.deep.equal([0x61, 0x20, 0x62, 0xe2, 0x82, 0xac]);
             expect(allBytesBuffer).to.be.an.instanceof(ArrayBuffer);
             expect(Array.from(new Uint8Array(allBytesBuffer))).to.deep.equal(ALL_BYTES);
         });
@@ -147,11 +172,56 @@ describe('utils', () => {
             expect(() => Utils.dataUriToBuffer('data:image/jpeg;base64,!!!!')).to.throw().with.property('name', 'InvalidCharacterError');
         });
 
-        it('should URL-decode a payload into a UTF-8 Buffer when Buffer exists', () => {
-            const buffer = Utils.dataUriToBuffer('data:,%E2%82%AC');
+        it('should decode a percent escape of every byte value in upper and lower case', () => {
+            expectBothWays(`data:,${ALL_BYTES_ESCAPED}`, ALL_BYTES);
+            expectBothWays(`data:,${ALL_BYTES_ESCAPED.toLowerCase()}`, ALL_BYTES);
+        });
 
-            expect(Buffer.isBuffer(buffer)).to.equal(true);
-            expect(Array.from(buffer)).to.deep.equal([0xe2, 0x82, 0xac]);
+        it('should keep a malformed percent escape as text', () => {
+            expectBothWays('data:,%', [0x25]);
+            expectBothWays('data:,a%2', [0x61, 0x25, 0x32]);
+            expectBothWays('data:,%%41', [0x25, 0x41]);
+            expectBothWays('data:,%G1', [0x25, 0x47, 0x31]);
+        });
+
+        it('should keep a percent sign followed by a sign, a space or a non-hex digit as text', () => {
+            expectBothWays('data:,%+1%-1% 1%4G', charCodes('%+1%-1% 1%4G'));
+        });
+
+        it('should decode a percent escape that ends the payload', () => {
+            expectBothWays('data:,a%41', [0x61, 0x41]);
+        });
+
+        it('should decode an empty payload to an empty ArrayBuffer', () => {
+            expectBothWays('data:,', []);
+        });
+
+        it('should UTF-8 encode literal non-ASCII characters in the payload', () => {
+            expectBothWays('data:,é', [0xc3, 0xa9]);
+            expectBothWays('data:,\u{1F600}', [0xf0, 0x9f, 0x98, 0x80]);
+            expectBothWays('data:,a%FFé\u{1F600}', [0x61, 0xff, 0xc3, 0xa9, 0xf0, 0x9f, 0x98, 0x80]);
+            expectBothWays('data:,\u0080', [0xc2, 0x80]);
+            expectBothWays('data:,\uffff', [0xef, 0xbf, 0xbf]);
+        });
+
+        it('should throw URIError for a lone surrogate in the payload', () => {
+            expect(() => Utils.dataUriToBuffer('data:,\ud800')).to.throw(URIError);
+        });
+
+        it('should not UTF-8 encode an ASCII payload', () => {
+            const restore = swapProperties(globalThis, {
+                encodeURIComponent() {
+                    throw new Error('encodeURIComponent');
+                }
+            });
+
+            let buffer;
+            try {
+                buffer = Utils.dataUriToBuffer('data:,a%20b');
+            } finally {
+                restore();
+            }
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal([0x61, 0x20, 0x62]);
         });
     });
 

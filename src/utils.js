@@ -286,14 +286,7 @@ export function dataUriToBuffer(dataUri) {
         return new Buffer(data, 'base64'); // eslint-disable-line no-undef
     }
 
-    const decodedData = decodeURIComponent(data);
-    if (typeof Buffer !== 'undefined') {
-        if (typeof Buffer.from !== 'undefined') { // eslint-disable-line no-undef
-            return Buffer.from(decodedData); // eslint-disable-line no-undef
-        }
-        return new Buffer(decodedData); // eslint-disable-line no-undef
-    }
-    return binaryStringToArrayBuffer(decodedData);
+    return percentDecodeToBytes(data).buffer;
 }
 
 function binaryStringToArrayBuffer(string) {
@@ -302,6 +295,53 @@ function binaryStringToArrayBuffer(string) {
         bytes[i] = string.charCodeAt(i);
     }
     return bytes.buffer;
+}
+
+// WHATWG URL "string percent-decode" (used for data: URLs, RFC 2397): UTF-8 encode, then each %XX is one byte.
+function percentDecodeToBytes(string) {
+    const byteString = /[\u0080-\uffff]/.test(string) ? unescape(encodeURIComponent(string)) : string;
+    const bytes = new Uint8Array(byteString.length - 2 * countPercentEscapes(byteString));
+    let byteIndex = 0;
+    for (let i = 0; i < byteString.length; i++) {
+        if (isPercentEscape(byteString, i)) {
+            bytes[byteIndex++] = getHexDigitValue(byteString.charCodeAt(i + 1)) * 16 + getHexDigitValue(byteString.charCodeAt(i + 2));
+            i += 2;
+        } else {
+            bytes[byteIndex++] = byteString.charCodeAt(i);
+        }
+    }
+    return bytes;
+}
+
+function countPercentEscapes(byteString) {
+    let count = 0;
+    for (let i = 0; i < byteString.length; i++) {
+        if (isPercentEscape(byteString, i)) {
+            count++;
+            i += 2;
+        }
+    }
+    return count;
+}
+
+function isPercentEscape(byteString, index) {
+    return byteString.charCodeAt(index) === 0x25
+        && index + 2 < byteString.length
+        && getHexDigitValue(byteString.charCodeAt(index + 1)) !== -1
+        && getHexDigitValue(byteString.charCodeAt(index + 2)) !== -1;
+}
+
+function getHexDigitValue(charCode) {
+    if (charCode >= 0x30 && charCode <= 0x39) {
+        return charCode - 0x30;
+    }
+    if (charCode >= 0x41 && charCode <= 0x46) {
+        return charCode - 0x41 + 10;
+    }
+    if (charCode >= 0x61 && charCode <= 0x66) {
+        return charCode - 0x61 + 10;
+    }
+    return -1;
 }
 
 export function padStart(string, length, character) {

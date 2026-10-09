@@ -927,7 +927,7 @@ describe('file-loaders', () => {
         it('should reject instead of throwing when the data URI cannot be decoded', async () => {
             let promise;
             expect(() => {
-                promise = loadFile('data:,%E0%A4%A');
+                promise = loadFile('data:image/jpeg;base64,!!!!');
             }).to.not.throw();
 
             let error;
@@ -936,7 +936,13 @@ describe('file-loaders', () => {
             } catch (rejection) {
                 error = rejection;
             }
-            expect(error).to.be.instanceOf(URIError);
+            expect(error).to.have.property('name', 'InvalidCharacterError');
+        });
+
+        it('should resolve a URL-encoded payload that is not valid UTF-8 with its raw bytes', async () => {
+            const buffer = await loadFile('data:image/jpeg,%FF%D8%FF%E1');
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal([0xff, 0xd8, 0xff, 0xe1]);
         });
     });
 

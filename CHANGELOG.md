@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not a finite non-negative number or `'auto'`, such as the string `'1024'`,
   `NaN`, `Infinity` or a negative number. Such a value was ignored and the
   whole file was read.
+- In browsers and wherever `Buffer` is not defined, a URL-encoded data URI
+  that writes a byte above 0x7F as the character with that code, either
+  literally or as its UTF-8 escapes such as `%C2%89` for 0x89 (what
+  `encodeURIComponent` of a binary string gives), now decodes to the UTF-8
+  bytes of that character, as it already did in Node.js. Write such a byte as
+  a single escape (`%89`) or use base64.
 
 ### Fixed
 
@@ -70,9 +76,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer takes its compression method from the byte after the chunk. It now
   gives an empty text value, whatever follows it.
 - `load()` now returns a rejected promise instead of throwing when a data URI
-  cannot be decoded, such as one with invalid base64 or a malformed percent
-  escape. A data URI is now treated as base64 only when `;base64` is in its
-  header, not when it appears in a URL-encoded payload.
+  cannot be decoded, such as one with invalid base64. A data URI is now
+  treated as base64 only when `;base64` is in its header, not when it appears
+  in a URL-encoded payload.
+- A URL-encoded data URI, one without `;base64`, is now decoded byte for byte
+  as browsers do, so `%FF` is the byte 0xFF. One that holds a JPEG or PNG now
+  loads instead of failing with `URIError`, and the result is the same with
+  and without `Buffer`.
 - A Canon maker note or a Pentax K-3 III `LevelInfo` value of 4 bytes or
   fewer, which the IFD entry stores in place of an offset, is now parsed from
   where it is stored instead of from a position further into the file.
