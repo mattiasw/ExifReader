@@ -255,6 +255,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one file is now limited in proportion to its size, and the datasets past the
   limit are left out, so the same PNG now takes about 2.4 seconds and 580 MB,
   and the JPEG about 120 MB.
+- Decoding a PNG `Raw profile type exif` or `Raw profile type iptc` profile
+  copied its hex text and parsed it one byte at a time: a 348 KB PNG holding
+  48 MiB of IPTC in a zTXt chunk took about 2.3 seconds and peaked at about
+  580 MB. The hex text is now decoded in place, and the same PNG takes about
+  1.4 seconds and 450 MB. Characters other than hex digits in the profile
+  data, such as spaces or carriage returns, are now skipped.
 
 ## [4.47.0] - 2026-10-08
 

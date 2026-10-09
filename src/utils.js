@@ -331,7 +331,11 @@ function isPercentEscape(byteString, index) {
         && getHexDigitValue(byteString.charCodeAt(index + 2)) !== -1;
 }
 
-function getHexDigitValue(charCode) {
+/**
+ * @param {number} charCode
+ * @returns {number} The value of the hex digit, or -1 for any other character.
+ */
+export function getHexDigitValue(charCode) {
     if (charCode >= 0x30 && charCode <= 0x39) {
         return charCode - 0x30;
     }

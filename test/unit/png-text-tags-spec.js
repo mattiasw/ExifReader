@@ -762,6 +762,70 @@ describe('png-text-tags', () => {
             expect(elapsed).to.be.below(1000);
         });
 
+        const EVERY_NIBBLE_DATA = '\x01\x23\x45\x67\x89\xab\xcd\xef\xfe\xdc\xba\x98\x76\x54\x32\x10';
+
+        it('should decode uppercase hex digits in a tEXt raw profile like lowercase ones', () => {
+            const hex = stringToHex(EVERY_NIBBLE_DATA);
+
+            const decoded = readDecodedExifRawProfile(getRawProfileValueWithHex('exif', EVERY_NIBBLE_DATA, hex.toUpperCase()));
+
+            expect(decoded).to.deep.equal([EVERY_NIBBLE_DATA]);
+        });
+
+        it('should decode tEXt raw profile hex split into lines, also inside a digit pair, into a view covering its whole buffer', () => {
+            const data = EVERY_NIBBLE_DATA.repeat(3);
+            const splitHex = stringToHex(data).replace(/(.{72})/g, '$1\n');
+            const hex = splitHex.slice(0, 37) + '\n' + splitHex.slice(37);
+            const views = [];
+            restoreTagReaders = swapProperties(Tags, {
+                read: (dataView) => {
+                    views.push(dataView);
+                    return {tags: {}};
+                }
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValueWithHex('exif', data, hex))
+            ]);
+
+            PngTextTags.read(dataView, chunks);
+
+            expect(views).to.have.lengthOf(1);
+            expect(getStringFromDataView(views[0], 0, views[0].byteLength)).to.equal(data);
+            expect(views[0].byteOffset).to.equal(0);
+            expect(views[0].byteLength).to.equal(views[0].buffer.byteLength);
+        });
+
+        it('should skip spaces, carriage returns and other non-hex characters in a tEXt raw profile', () => {
+            const separators = [' ', '\r\n', '/', ':', '@', 'G', '`', 'g', '\t'];
+            const hex = stringToHex(EVERY_NIBBLE_DATA).split('')
+                .map((digit, index) => digit + separators[index % separators.length])
+                .join('');
+
+            const decoded = readDecodedExifRawProfile(getRawProfileValueWithHex('exif', EVERY_NIBBLE_DATA, hex));
+
+            expect(decoded).to.deep.equal([EVERY_NIBBLE_DATA]);
+        });
+
+        it('should drop a tEXt raw profile with an odd number of hex digits and still read the next chunk', () => {
+            let readCalls = 0;
+            restoreTagReaders = swapProperties(Tags, {
+                read: () => {
+                    readCalls++;
+                    return {tags: {Model: {value: 'abc'}}};
+                }
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM') + '0'),
+                getTextChunk('MyTag', 'My value.')
+            ]);
+
+            const result = PngTextTags.read(dataView, chunks);
+
+            expect(readCalls).to.equal(0);
+            expect(result.embeddedExifTags).to.be.undefined;
+            expect(result.readTags).to.deep.equal({MyTag: {value: 'My value.', description: 'My value.'}});
+        });
+
         function getExifWithOneUnknownTag(tagId) {
             const tagIdBytes = String.fromCharCode(tagId >> 8, tagId & 0xff);
             return 'Exif\0\0'
@@ -1502,6 +1566,23 @@ describe('png-text-tags', () => {
 
     function getRawProfileValue(type, data) {
         return `\n${type}\n${String(data.length).padStart(8, ' ')}\n${stringToHex(data)}`;
+    }
+
+    function getRawProfileValueWithHex(type, data, hex) {
+        return `\n${type}\n${String(data.length).padStart(8, ' ')}\n${hex}`;
+    }
+
+    function readDecodedExifRawProfile(rawProfileValue) {
+        const decoded = [];
+        restoreTagReaders = swapProperties(Tags, {
+            read: (dataView) => {
+                decoded.push(getStringFromDataView(dataView, 0, dataView.byteLength));
+                return {tags: {}};
+            }
+        });
+        const {dataView, chunks} = buildTextChunks([getTextChunk('Raw profile type exif', rawProfileValue)]);
+        PngTextTags.read(dataView, chunks);
+        return decoded;
     }
 
     function stringToHex(text) {
