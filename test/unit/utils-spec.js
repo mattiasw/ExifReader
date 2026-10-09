@@ -1150,6 +1150,37 @@ describe('utils', () => {
         });
     });
 
+    describe('getTagKey', () => {
+        it('should keep an ordinary name', () => {
+            expect(Utils.getTagKey('MyTag')).to.equal('MyTag');
+        });
+
+        it('should keep __proto__ under its own name', () => {
+            expect(Utils.getTagKey('__proto__')).to.equal('__proto__');
+        });
+
+        it('should keep a name that is not an Object.prototype property', () => {
+            expect(Utils.getTagKey('then')).to.equal('then');
+            expect(Utils.getTagKey('HasOwnProperty')).to.equal('HasOwnProperty');
+        });
+
+        it('should append _ to the name of an Object.prototype method', () => {
+            expect(Utils.getTagKey('hasOwnProperty')).to.equal('hasOwnProperty_');
+            expect(Utils.getTagKey('toString')).to.equal('toString_');
+            expect(Utils.getTagKey('valueOf')).to.equal('valueOf_');
+            expect(Utils.getTagKey('constructor')).to.equal('constructor_');
+        });
+
+        it('should append _ to the name of a property added to Object.prototype at runtime', () => {
+            Object.defineProperty(Object.prototype, 'myPolyfill', {value: () => 4711, configurable: true, writable: true});
+            try {
+                expect(Utils.getTagKey('myPolyfill')).to.equal('myPolyfill_');
+            } finally {
+                delete Object.prototype.myPolyfill;
+            }
+        });
+    });
+
     describe('objectAssign', () => {
         it('should copy properties from all sources', () => {
             expect(Utils.objectAssign({a: 1}, {b: 2}, {c: 3})).to.deep.equal({a: 1, b: 2, c: 3});

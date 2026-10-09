@@ -437,6 +437,40 @@ describe('png-text-tags', () => {
         });
     });
 
+    it('should append _ to an uncompressed tag with the keyword of an Object.prototype method', () => {
+        const tagData = 'hasOwnProperty\x00hello';
+        const dataView = getDataView(tagData);
+        const chunks = [
+            {type: TYPE_TEXT, offset: 0, length: tagData.length}
+        ];
+
+        const {readTags} = PngTextTags.read(dataView, chunks);
+
+        expect(Object.keys(readTags)).to.deep.equal(['hasOwnProperty_']);
+        expect(readTags.hasOwnProperty_).to.deep.equal({
+            value: 'hello',
+            description: 'hello'
+        });
+        expect(readTags.hasOwnProperty).to.equal(Object.prototype.hasOwnProperty);
+    });
+
+    it('should append _ to a compressed tag with the keyword of an Object.prototype method', async () => {
+        const dataView = await getCompressedTagData(TYPE_ZTXT, 'toString', 'hello');
+        const chunks = [
+            {type: TYPE_ZTXT, offset: 0, length: dataView.byteLength}
+        ];
+
+        const tags = await PngTextTags.read(dataView, chunks, true).readTagsPromise;
+
+        const readTags = tags[0].readTags;
+        expect(Object.keys(readTags)).to.deep.equal(['toString_']);
+        expect(readTags.toString_).to.deep.equal({
+            value: 'hello',
+            description: 'hello'
+        });
+        expect(String(readTags)).to.equal('[object Object]');
+    });
+
     it('should read an uncompressed tag with the keyword __exif as a text tag', () => {
         const tagData = '__exif\x00FROMFILE';
         const dataView = getDataView(tagData);

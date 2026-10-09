@@ -230,6 +230,22 @@ export function setProperty(object, key, value) {
     object[key] = value;
 }
 
+/**
+ * Returns the key to store a tag under whose name comes from an image. A name
+ * that is an `Object.prototype` property, such as `hasOwnProperty`, would hide
+ * that method on the object holding it, so it gets `_` appended. `__proto__`
+ * is kept, since `setProperty` stores it as an own property.
+ *
+ * @param {string} name The tag name from the image.
+ * @returns {string} The name, with `_` appended if it would hide an inherited property.
+ */
+export function getTagKey(name) {
+    if (name !== '__proto__' && Object.prototype.hasOwnProperty.call(Object.prototype, name)) {
+        return name + '_';
+    }
+    return name;
+}
+
 export function deferInit(object, key, initializer) {
     let initialized = false;
     Object.defineProperty(object, key, {

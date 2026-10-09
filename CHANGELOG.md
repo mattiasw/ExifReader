@@ -35,6 +35,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one named `FileType` no longer takes the `FileType` key when `FileType` is
   filtered out. In expanded output, `xmp._raw` is always the raw XMP packet
   string, even when the XMP has an element or attribute named `_raw`.
+- An XMP property, PNG text keyword or Photoshop resource name that is the
+  name of an `Object.prototype` method, such as `hasOwnProperty`, `toString`
+  or `constructor`, is now returned with `_` appended (`hasOwnProperty_`).
+  Under its own name it hid that method on the result object and on its
+  group, so calling `tags.hasOwnProperty()` or converting the result to a
+  string threw.
+- A Photoshop resource that ExifReader does not know, returned as
+  `undefined-<id>` with `includeUnknown`, is now kept when `includeTags` lists
+  `undefined-<id>`. It was dropped when the resource had a name in the file.
+  `excludeTags` no longer drops such a resource when it lists that name from
+  the file, since the resource is not returned under it.
 - A custom build no longer rewrites the bundle in other projects that share it
   through a hardlink. When exifreader's postinstall is allowed to run (by
   default in pnpm 9, and in pnpm 10 when exifreader is listed in
