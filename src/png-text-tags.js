@@ -11,7 +11,7 @@ import Tags from './tags.js';
 import IptcTags from './iptc-tags.js';
 import Constants from './constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
-import {addDecompressedValueAllowance} from './tags-helpers.js';
+import {addDecompressedValueAllowance, addDecompressedIptcAllowance} from './tags-helpers.js';
 
 export default {
     read
@@ -109,7 +109,7 @@ function read(
             tagFilter,
             valueBudget,
             compressedThumbnailReader,
-            addDecompressedValueAllowance
+            true
         )));
 
     return {
@@ -173,15 +173,15 @@ function isRawProfileTag({name, value}) {
     return isExifGroupTag(name, value) || isIptcGroupTag(name, value);
 }
 
-function getTagsFromTextTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget, getThumbnail, addValueAllowance) {
+function getTagsFromTextTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget, getThumbnail, isDecompressed) {
     try {
         if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
             if (!tagFilter.shouldParseGroup('exif')) {
                 return {};
             }
             const exifDataView = decodeRawData(value);
-            if (addValueAllowance) {
-                addValueAllowance(valueBudget, exifDataView.byteLength);
+            if (isDecompressed) {
+                addDecompressedValueAllowance(valueBudget, exifDataView.byteLength);
             }
             const embeddedExifTags = Tags.read(
                 exifDataView,
@@ -199,12 +199,17 @@ function getTagsFromTextTag({name, value, description}, includeUnknown, computed
             if (!tagFilter.shouldParseGroup('iptc')) {
                 return {};
             }
+            const iptcDataView = decodeRawData(value);
+            if (isDecompressed) {
+                addDecompressedIptcAllowance(valueBudget, iptcDataView.byteLength);
+            }
             return {
                 embeddedIptcTags: IptcTags.read(
-                    decodeRawData(value),
+                    iptcDataView,
                     0,
                     includeUnknown,
-                    tagFilter
+                    tagFilter,
+                    valueBudget
                 )
             };
         } else if (name && !isExifGroupTag(name, value) && !isIptcGroupTag(name, value)) {

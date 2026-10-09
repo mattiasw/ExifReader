@@ -11,7 +11,7 @@
 import {expect} from 'chai';
 import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import TagNames from '../../src/tag-names.js';
-import {readIfd, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING} from '../../src/tags-helpers.js';
+import {readIfd, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, addDecompressedIptcAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING} from '../../src/tags-helpers.js';
 import ByteOrder from '../../src/byte-order.js';
 import DataViewWrapper from '../../src/dataview.js';
 
@@ -981,6 +981,85 @@ describe('tags-helpers', () => {
         it('should do nothing without a budget', () => {
             expect(() => addDecompressedValueAllowance(undefined, 1000)).to.not.throw();
         });
+
+        it('should not add to the IPTC dataset count', () => {
+            const budget = {
+                remaining: 10,
+                ifdEntriesRemaining: 3,
+                decompressedAllowanceRemaining: MAX_DECOMPRESSED_VALUE_ALLOWANCE,
+                iptcDatasetsRemaining: 7,
+                decompressedIptcAllowanceRemaining: 100
+            };
+            addDecompressedValueAllowance(budget, 1000);
+            expect(budget.iptcDatasetsRemaining).to.equal(7);
+            expect(budget.decompressedIptcAllowanceRemaining).to.equal(100);
+        });
+    });
+
+    describe('IPTC dataset count', () => {
+        // Every budget starts with 1024 units, one unit is drawn per started
+        // 48 bytes of a dataset, and a decompressed IPTC block adds one unit
+        // per 5 bytes (the smallest dataset), up to 8192 per budget.
+        const MIN_IPTC_DATASET_UNITS = 1024;
+        const MAX_DECOMPRESSED_IPTC_ALLOWANCE = 8192;
+
+        it('should give any buffer the minimum IPTC dataset units', () => {
+            expect(getValueBudget(getDataView('')).iptcDatasetsRemaining).to.equal(MIN_IPTC_DATASET_UNITS);
+        });
+
+        it('should give a buffer one more IPTC dataset unit per whole 48 bytes', () => {
+            expect(getValueBudget(getDataView('\x00'.repeat(95))).iptcDatasetsRemaining).to.equal(MIN_IPTC_DATASET_UNITS + 1);
+            expect(getValueBudget(getDataView('\x00'.repeat(96))).iptcDatasetsRemaining).to.equal(MIN_IPTC_DATASET_UNITS + 2);
+        });
+
+        it('should give a budget the whole decompressed IPTC allowance', () => {
+            const dataView = getDataView('\x00'.repeat(64));
+            expect(getValueBudget(dataView).decompressedIptcAllowanceRemaining).to.equal(MAX_DECOMPRESSED_IPTC_ALLOWANCE);
+        });
+
+        it('should add one unit per 5 decompressed bytes while under the cap', () => {
+            const budget = getIptcBudget(MAX_DECOMPRESSED_IPTC_ALLOWANCE);
+            addDecompressedIptcAllowance(budget, 1004);
+            expect(budget.iptcDatasetsRemaining).to.equal(7 + 200);
+            expect(budget.decompressedIptcAllowanceRemaining).to.equal(MAX_DECOMPRESSED_IPTC_ALLOWANCE - 200);
+        });
+
+        it('should add only what is left of the cap once it binds', () => {
+            const budget = getIptcBudget(100);
+            addDecompressedIptcAllowance(budget, 1000);
+            expect(budget.iptcDatasetsRemaining).to.equal(7 + 100);
+            expect(budget.decompressedIptcAllowanceRemaining).to.equal(0);
+        });
+
+        it('should add nothing once the cap is spent', () => {
+            const budget = getIptcBudget(100);
+            addDecompressedIptcAllowance(budget, 1000);
+            addDecompressedIptcAllowance(budget, 1000);
+            expect(budget.iptcDatasetsRemaining).to.equal(7 + 100);
+            expect(budget.decompressedIptcAllowanceRemaining).to.equal(0);
+        });
+
+        it('should leave the Exif value budget and the IFD entry count alone', () => {
+            const budget = getIptcBudget(MAX_DECOMPRESSED_IPTC_ALLOWANCE);
+            addDecompressedIptcAllowance(budget, 1000);
+            expect(budget.remaining).to.equal(10);
+            expect(budget.ifdEntriesRemaining).to.equal(3);
+            expect(budget.decompressedAllowanceRemaining).to.equal(50);
+        });
+
+        it('should do nothing without a budget', () => {
+            expect(() => addDecompressedIptcAllowance(undefined, 1000)).to.not.throw();
+        });
+
+        function getIptcBudget(decompressedIptcAllowanceRemaining) {
+            return {
+                remaining: 10,
+                ifdEntriesRemaining: 3,
+                decompressedAllowanceRemaining: 50,
+                iptcDatasetsRemaining: 7,
+                decompressedIptcAllowanceRemaining
+            };
+        }
     });
 
     describe('multi-string ASCII values', () => {

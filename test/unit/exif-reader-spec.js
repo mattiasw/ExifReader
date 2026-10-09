@@ -564,7 +564,74 @@ describe('exif-reader', function () {
         expect(capturedBudgets.pngText).to.deep.equal({
             remaining: 4 * 16,
             ifdEntriesRemaining: 4 * Math.floor(16 / 12),
-            decompressedAllowanceRemaining: 1024 * 1024
+            decompressedAllowanceRemaining: 1024 * 1024,
+            iptcDatasetsRemaining: 1024 + Math.floor(16 / 48),
+            decompressedIptcAllowanceRemaining: 8192
+        });
+    });
+
+    it('should pass the decoded-value budget of the Exif read on to the IPTC read of IPTC-NAA', () => {
+        const capturedBudgets = {};
+        swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE});
+        swap(Tags, {
+            read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
+                capturedBudgets.exif = valueBudget;
+                return {tags: {'IPTC-NAA': {value: [0x1c]}}, byteOrder: ByteOrder.BIG_ENDIAN};
+            }
+        });
+        swap(IptcTags, {
+            read(...args) {
+                capturedBudgets.iptc = args[4];
+                return {};
+            }
+        });
+
+        ExifReader.loadView(getDataView('\x00'.repeat(16)));
+
+        expect(capturedBudgets.exif).to.be.an('object');
+        expect(capturedBudgets.iptc).to.equal(capturedBudgets.exif);
+    });
+
+    it('should pass the decoded-value budget of the Exif read on to the IPTC read of the APP13 segment', () => {
+        const capturedBudgets = {};
+        swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE, iptcDataOffset: OFFSET_TEST_VALUE});
+        swap(Tags, {
+            read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
+                capturedBudgets.exif = valueBudget;
+                return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
+            }
+        });
+        swap(IptcTags, {
+            read(...args) {
+                capturedBudgets.iptc = args[4];
+                return {};
+            }
+        });
+
+        ExifReader.loadView(getDataView('\x00'.repeat(16)));
+
+        expect(capturedBudgets.exif).to.be.an('object');
+        expect(capturedBudgets.iptc).to.equal(capturedBudgets.exif);
+    });
+
+    it('should give the IPTC read of the APP13 segment a budget sized from the file when there is no Exif', () => {
+        let capturedBudget;
+        swapImageHeader({iptcDataOffset: OFFSET_TEST_VALUE});
+        swap(IptcTags, {
+            read(...args) {
+                capturedBudget = args[4];
+                return {};
+            }
+        });
+
+        ExifReader.loadView(getDataView('\x00'.repeat(100)));
+
+        expect(capturedBudget).to.deep.equal({
+            remaining: 4 * 100,
+            ifdEntriesRemaining: 4 * Math.floor(100 / 12),
+            decompressedAllowanceRemaining: 1024 * 1024,
+            iptcDatasetsRemaining: 1024 + Math.floor(100 / 48),
+            decompressedIptcAllowanceRemaining: 8192
         });
     });
 
@@ -837,7 +904,9 @@ describe('exif-reader', function () {
         expect(capturedBudget).to.deep.equal({
             remaining: 4 * 10 + 4 * decompressedLength,
             ifdEntriesRemaining: 4 * Math.floor(10 / 12),
-            decompressedAllowanceRemaining: 1024 * 1024 - 4 * decompressedLength
+            decompressedAllowanceRemaining: 1024 * 1024 - 4 * decompressedLength,
+            iptcDatasetsRemaining: 1024 + Math.floor(10 / 48),
+            decompressedIptcAllowanceRemaining: 8192
         });
     });
 
@@ -2822,6 +2891,31 @@ describe('exif-reader', function () {
             expect(calls).to.be.at.most(maxEntries);
         });
 
+        it('should bound the IPTC datasets read from a compressed PNG text chunk by the input size and the decompressed allowance', async () => {
+            const datasetCount = 20000;
+            const png = getPngWithCompressedEmptyKeywords(datasetCount);
+            // 1024 dataset units, one more per 48 bytes of the file, plus at
+            // most 8192 for decompressed IPTC.
+            const maxDatasets = 1024 + Math.floor(png.length / 48) + 8192;
+            expect(datasetCount).to.be.above(maxDatasets);
+
+            const tags = await ExifReader.loadView(getDataView(png), {async: true, expanded: true});
+
+            expect(tags.iptc.Keywords).to.have.lengthOf(maxDatasets);
+        });
+
+        it('should bound the IPTC datasets read from an APP13 segment by the input size', () => {
+            const datasetCount = 2000;
+            const jpeg = getJpegWithEmptyKeywords(datasetCount);
+            // 1024 dataset units and one more per 48 bytes of the file.
+            const maxDatasets = 1024 + Math.floor(jpeg.length / 48);
+            expect(datasetCount).to.be.above(maxDatasets);
+
+            const tags = ExifReader.loadView(getDataView(jpeg), {expanded: true});
+
+            expect(tags.iptc.Keywords).to.have.lengthOf(maxDatasets);
+        });
+
         function getDecodedValueLength(tags, groupKeys) {
             let length = 0;
             for (const groupKey of groupKeys) {
@@ -3548,6 +3642,27 @@ function getInSlotEntriesTiff(entryCount) {
         + getByteStringFromNumber(entryCount, 2)
         + getIfdEntry(0x4711, IFD_TYPE_SHORT, 1, getByteStringFromNumber(42, 2) + '\x00\x00').repeat(entryCount)
         + getByteStringFromNumber(0, 4);
+}
+
+// An NAA resource block of datasetCount empty Keywords datasets.
+function getEmptyKeywordsNaaBlock(datasetCount) {
+    const iim = '\x1c\x02\x19\x00\x00'.repeat(datasetCount);
+    return '8BIM\x04\x04\x00\x00' + getByteStringFromNumber(iim.length, 4) + iim;
+}
+
+// A PNG with a zTXt "Raw profile type iptc" chunk of datasetCount empty
+// Keywords datasets.
+function getPngWithCompressedEmptyKeywords(datasetCount) {
+    const COMPRESSION_METHOD_DEFLATE = '\x00';
+    const iptc = getEmptyKeywordsNaaBlock(datasetCount);
+    const rawProfile = `\niptc\n${String(iptc.length).padStart(8, ' ')}\n${Buffer.from(iptc, 'latin1').toString('hex')}`;
+    const compressedProfile = deflateSync(Buffer.from(rawProfile, 'latin1')).toString('latin1');
+    return getPngWithChunks(getPngChunk('zTXt', 'Raw profile type iptc\x00' + COMPRESSION_METHOD_DEFLATE + compressedProfile));
+}
+
+// A JPEG whose APP13 segment holds datasetCount empty Keywords datasets.
+function getJpegWithEmptyKeywords(datasetCount) {
+    return '\xff\xd8' + getAppSegment('\xff\xed', 'Photoshop 3.0\x00' + getEmptyKeywordsNaaBlock(datasetCount)) + '\xff\xd9';
 }
 
 function getPngWithChunks(...chunks) {

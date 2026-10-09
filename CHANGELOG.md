@@ -237,6 +237,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   290 MB. Only the first 1024 XMP segments of a JPEG file, standard and
   extended counted together, are now read, far more than real files use, and
   the same file now peaks at about 85 MB.
+- IPTC in compressed PNG text chunks (`Raw profile type iptc`) could make
+  ExifReader read IPTC datasets in proportion to the decompressed size rather
+  than the file size: a crafted 446 KB PNG blocked `load()` for about 4
+  seconds and raised peak memory to about 1.3 GB. An 8 MB JPEG of empty IPTC
+  datasets raised it to about 380 MB. The number of IPTC datasets read from
+  one file is now limited in proportion to its size, and the datasets past the
+  limit are left out, so the same PNG now takes about 2.4 seconds and 580 MB,
+  and the JPEG about 120 MB.
 
 ## [4.47.0] - 2026-10-08
 

@@ -238,7 +238,13 @@ describe('png-text-tags', () => {
             getZtxtChunk('Raw profile type exif', toBytes(exifValue))
         ]);
         const decompressConfig = {deflate: (bytes) => bytes};
-        const valueBudget = {remaining: 1000, ifdEntriesRemaining: 1000, decompressedAllowanceRemaining: 1024 * 1024};
+        const valueBudget = {
+            remaining: 1000,
+            ifdEntriesRemaining: 1000,
+            decompressedAllowanceRemaining: 1024 * 1024,
+            iptcDatasetsRemaining: 7,
+            decompressedIptcAllowanceRemaining: 8192
+        };
 
         await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
 
@@ -247,6 +253,48 @@ describe('png-text-tags', () => {
             remaining: 1000 + 4 * exifData.length,
             decompressedAllowanceRemaining: 1024 * 1024 - 4 * exifData.length
         }]);
+        expect(valueBudget.iptcDatasetsRemaining).to.equal(7);
+        expect(valueBudget.decompressedIptcAllowanceRemaining).to.equal(8192);
+    });
+
+    it('should raise the IPTC dataset count by one per 5 decoded bytes of zTXt IPTC before reading it', async () => {
+        const seenAtRead = [];
+        restoreTagReaders = swapProperties(IptcTags, {
+            read: (...args) => {
+                seenAtRead.push({
+                    byteLength: args[0].byteLength,
+                    valueBudget: args[4],
+                    remaining: args[4].remaining,
+                    iptcDatasetsRemaining: args[4].iptcDatasetsRemaining,
+                    decompressedIptcAllowanceRemaining: args[4].decompressedIptcAllowanceRemaining
+                });
+                return {};
+            }
+        });
+        // 22 bytes: 4 empty datasets and 2 more bytes, which add 4 units.
+        const iptcData = '\x1c\x02\x19\x00\x00'.repeat(4) + '\x00\x00';
+        const {dataView, chunks} = buildTextChunks([
+            getZtxtChunk('Raw profile type iptc', toBytes(getRawProfileValue('iptc', iptcData)))
+        ]);
+        const decompressConfig = {deflate: (bytes) => bytes};
+        const valueBudget = {
+            remaining: 1000,
+            ifdEntriesRemaining: 1000,
+            decompressedAllowanceRemaining: 1024 * 1024,
+            iptcDatasetsRemaining: 7,
+            decompressedIptcAllowanceRemaining: 8192
+        };
+
+        await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
+
+        expect(seenAtRead).to.deep.equal([{
+            byteLength: iptcData.length,
+            valueBudget,
+            remaining: 1000,
+            iptcDatasetsRemaining: 7 + 4,
+            decompressedIptcAllowanceRemaining: 8192 - 4
+        }]);
+        expect(seenAtRead[0].valueBudget).to.equal(valueBudget);
     });
 
     it('should read zTXt tags with IPTC data', async () => {
@@ -638,6 +686,31 @@ describe('png-text-tags', () => {
             PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, valueBudget);
 
             expect(seenAtRead).to.deep.equal([{remaining: 1000, decompressedAllowanceRemaining: 1024 * 1024}]);
+        });
+
+        it('should pass the IPTC read of a tEXt IPTC raw profile the budget without an allowance', () => {
+            const seenAtRead = [];
+            restoreTagReaders = swapProperties(IptcTags, {
+                read: (...args) => {
+                    seenAtRead.push({
+                        valueBudget: args[4],
+                        iptcDatasetsRemaining: args[4].iptcDatasetsRemaining,
+                        decompressedIptcAllowanceRemaining: args[4].decompressedIptcAllowanceRemaining
+                    });
+                    return {};
+                }
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', '\x1c\x02\x19\x00\x00'.repeat(4)))
+            ]);
+            const valueBudget = {iptcDatasetsRemaining: 7, decompressedIptcAllowanceRemaining: 8192};
+
+            PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, valueBudget);
+
+            expect(seenAtRead).to.have.lengthOf(1);
+            expect(seenAtRead[0].valueBudget).to.equal(valueBudget);
+            expect(seenAtRead[0].iptcDatasetsRemaining).to.equal(7);
+            expect(seenAtRead[0].decompressedIptcAllowanceRemaining).to.equal(8192);
         });
 
         it('should drop tEXt Exif and IPTC raw profiles in a build without Exif and IPTC support', () => {

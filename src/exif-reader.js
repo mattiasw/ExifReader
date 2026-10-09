@@ -221,7 +221,8 @@ export function loadView(
                 parsedExifTags['IPTC-NAA'].value,
                 0,
                 includeUnknown,
-                tagFilter
+                tagFilter,
+                valueBudget
             );
             const parsedIptcTags =
                 filterTagsForParse('iptc', readIptcTags, tagFilter);
@@ -390,7 +391,7 @@ export function loadView(
         && iptcDataOffset !== undefined
         && tagFilter.shouldParseGroup('iptc')
     ) {
-        const readTags = IptcTags.read(dataView, iptcDataOffset, includeUnknown, tagFilter);
+        const readTags = IptcTags.read(dataView, iptcDataOffset, includeUnknown, tagFilter, valueBudget);
         const parsedIptcTags = filterTagsForParse('iptc', readTags, tagFilter);
         parsedGroups.iptc = parsedIptcTags;
 
