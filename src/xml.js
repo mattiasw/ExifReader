@@ -53,11 +53,28 @@ function findOffsets(dataView, metadataBlocks) {
 function hasXmpClosingMarker(dataView) {
     // XMP packets can have arbitrary trailing whitespace padding, so scan
     // the entire buffer rather than a fixed tail window.
-    const text = getStringFromDataView(dataView, 0, dataView.byteLength);
     for (let i = 0; i < XMP_END_PATTERNS.length; i++) {
-        if (text.indexOf(XMP_END_PATTERNS[i]) !== -1) {
+        if (containsAsciiString(dataView, XMP_END_PATTERNS[i])) {
             return true;
         }
     }
     return false;
+}
+
+function containsAsciiString(dataView, string) {
+    for (let offset = 0; offset + string.length <= dataView.byteLength; offset++) {
+        if (hasAsciiStringAt(dataView, offset, string)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function hasAsciiStringAt(dataView, offset, string) {
+    for (let i = 0; i < string.length; i++) {
+        if (dataView.getUint8(offset + i) !== string.charCodeAt(i)) {
+            return false;
+        }
+    }
+    return true;
 }

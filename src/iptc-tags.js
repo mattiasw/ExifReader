@@ -5,6 +5,7 @@
 import IptcTagNames from './iptc-tag-names.js';
 import TagDecoder from './tag-decoder.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
+import {getValueBudget, BYTES_PER_IPTC_DATASET, IPTC_DATASET_HEADER_SIZE} from './tags-helpers.js';
 
 const BYTES_8BIM = 0x3842494d;
 const BYTES_8BIM_SIZE = 4;
@@ -14,25 +15,36 @@ const RESOURCE_NAME_MIN_SIZE = 2;
 const RESOURCE_SIZE_SIZE = 4;
 const RESOURCE_BLOCK_MIN_HEADER_SIZE = BYTES_8BIM_SIZE + RESOURCE_ID_SIZE + RESOURCE_NAME_MIN_SIZE + RESOURCE_SIZE_SIZE;
 const NAA_RESOURCE_BLOCK_TYPE = 0x0404; // Sometimes called resource ID.
-const TAG_HEADER_SIZE = 5;
 
 export default {
     read
 };
 
-function read(dataView, dataOffset, includeUnknown, tagFilter = NOOP_TAG_FILTER) {
+/**
+ * Reads the IPTC datasets of an NAA resource block, or of a naked IPTC block
+ * given as an array of bytes.
+ *
+ * @param {{iptcDatasetsRemaining: number}} [valueBudget] - The per-load budget
+ * from getValueBudget. Each dataset header read draws from its
+ * iptcDatasetsRemaining, and reading stops when it runs out, returning the
+ * tags read so far. Omitted, a budget is sized from the data read.
+ * @returns {Object} The read tags, keyed by tag name.
+ */
+function read(dataView, dataOffset, includeUnknown, tagFilter = NOOP_TAG_FILTER, valueBudget) {
     try {
         if (Array.isArray(dataView)) {
+            const arrayDataView = new DataView(Uint8Array.from(dataView).buffer);
             return parseTags(
-                new DataView(Uint8Array.from(dataView).buffer),
+                arrayDataView,
                 {size: dataView.length},
                 0,
                 includeUnknown,
-                tagFilter
+                tagFilter,
+                valueBudget || getValueBudget(arrayDataView)
             );
         }
         const {naaBlock, dataOffset: newDataOffset} = getNaaResourceBlock(dataView, dataOffset);
-        return parseTags(dataView, naaBlock, newDataOffset, includeUnknown, tagFilter);
+        return parseTags(dataView, naaBlock, newDataOffset, includeUnknown, tagFilter, valueBudget || getValueBudget(dataView));
     } catch (error) {
         return {};
     }
@@ -76,7 +88,7 @@ function getBlockPadding(resourceBlock) {
     return 0;
 }
 
-function parseTags(dataView, naaBlock, dataOffset, includeUnknown, tagFilter) {
+function parseTags(dataView, naaBlock, dataOffset, includeUnknown, tagFilter, valueBudget) {
     const tags = {};
     let encoding = undefined;
 
@@ -89,7 +101,8 @@ function parseTags(dataView, naaBlock, dataOffset, includeUnknown, tagFilter) {
             tags,
             encoding,
             includeUnknown,
-            tagFilter
+            tagFilter,
+            valueBudget
         );
 
         if (tag === null) {
@@ -123,7 +136,7 @@ function parseTags(dataView, naaBlock, dataOffset, includeUnknown, tagFilter) {
             }
         }
 
-        dataOffset += TAG_HEADER_SIZE + tagSize;
+        dataOffset += IPTC_DATASET_HEADER_SIZE + tagSize;
     }
 
     return tags;
@@ -135,17 +148,22 @@ function readTag(
     tags = {},
     encoding = undefined,
     includeUnknown = false,
-    tagFilter = NOOP_TAG_FILTER
+    tagFilter = NOOP_TAG_FILTER,
+    valueBudget
 ) {
     const TAG_CODE_OFFSET = 1;
     const TAG_SIZE_OFFSET = 3;
 
-    if (leadByteIsMissing(dataView, dataOffset)) {
+    if (leadByteIsMissing(dataView, dataOffset) || headerIsTruncated(dataView, dataOffset)) {
         return {tag: null, tagSize: 0};
     }
 
     const tagCode = dataView.getUint16(dataOffset + TAG_CODE_OFFSET);
     const tagSize = dataView.getUint16(dataOffset + TAG_SIZE_OFFSET);
+
+    if (valueIsTruncated(dataView, dataOffset, tagSize) || !takeDatasetUnits(valueBudget, tagSize)) {
+        return {tag: null, tagSize: 0};
+    }
 
     if (!includeUnknown && !IptcTagNames['iptc'][tagCode]) {
         return {tag: undefined, tagSize};
@@ -159,7 +177,7 @@ function readTag(
         return {tag: undefined, tagSize};
     }
 
-    const tagValue = getTagValue(dataView, dataOffset + TAG_HEADER_SIZE, tagSize);
+    const tagValue = getTagValue(dataView, dataOffset + IPTC_DATASET_HEADER_SIZE, tagSize);
 
     const tag = {
         id: tagCode,
@@ -175,6 +193,15 @@ function readTag(
     }
 
     return {tag, tagSize};
+}
+
+function takeDatasetUnits(valueBudget, tagSize) {
+    const units = Math.ceil((IPTC_DATASET_HEADER_SIZE + tagSize) / BYTES_PER_IPTC_DATASET);
+    if (valueBudget.iptcDatasetsRemaining >= units) {
+        valueBudget.iptcDatasetsRemaining -= units;
+        return true;
+    }
+    return false;
 }
 
 function getIptcTagNameForFiltering(tagCode, includeUnknown) {
@@ -201,6 +228,14 @@ function getIptcTagNameForFiltering(tagCode, includeUnknown) {
 function leadByteIsMissing(dataView, dataOffset) {
     const TAG_LEAD_BYTE = 0x1c;
     return dataView.getUint8(dataOffset) !== TAG_LEAD_BYTE;
+}
+
+function headerIsTruncated(dataView, dataOffset) {
+    return dataOffset + IPTC_DATASET_HEADER_SIZE > dataView.byteLength;
+}
+
+function valueIsTruncated(dataView, dataOffset, tagSize) {
+    return dataOffset + IPTC_DATASET_HEADER_SIZE + tagSize > dataView.byteLength;
 }
 
 function getTagValue(dataView, offset, size) {

@@ -55,19 +55,22 @@ export function makeLoadAuto(loadFromData) {
 
     function loadAdaptiveFromFilenameOrUrl(filename, options) {
         if (/^\w+:\/\//.test(filename)) {
+            // Cap at `end`, not `end - start`: a 200 replaces the buffer from byte 0.
             if (typeof fetch !== 'undefined') {
                 return adaptiveLoop({
-                    readRange: (start, end) => fetchRange(filename, {start, end}),
+                    readRange: (start, end) => fetchRange(filename, {start, end, maxBytes: end}),
                     options,
                 });
             }
             return adaptiveLoop({
-                readRange: (start, end) => nodeGetRange(filename, {start, end}),
+                readRange: (start, end) => nodeGetRange(filename, {start, end, maxBytes: end}),
                 options,
             });
         }
         if (isDataUri(filename)) {
-            return loadAdaptiveFromMemory(dataUriToBuffer(filename), options);
+            return Promise.resolve()
+                .then(() => dataUriToBuffer(filename))
+                .then((buffer) => loadAdaptiveFromMemory(buffer, options));
         }
         return adaptiveLoop({
             readRange: (start, end, ctx) => readLocalFileRange(filename, {

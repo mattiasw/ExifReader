@@ -20,6 +20,7 @@ export function buildTagsFromMergeSteps({
     deps,
 }) {
     let tags = {};
+    const embeddedExifThumbnails = [];
 
     for (let i = 0; i < mergeSteps.length; i++) {
         tags = applyMergeStep({
@@ -33,6 +34,7 @@ export function buildTagsFromMergeSteps({
             exifDataView,
             fileType,
             thumbnailIfdTags,
+            embeddedExifThumbnails,
             tags,
             deps,
         });
@@ -73,6 +75,7 @@ export function applyMergeStep({
     exifDataView,
     fileType,
     thumbnailIfdTags,
+    embeddedExifThumbnails = [],
     tags,
     deps,
 }) {
@@ -195,8 +198,11 @@ export function applyMergeStep({
     }
 
     if (Constants.USE_PNG && step.type === 'processPngTextReadTags') {
+        addEmbeddedExifThumbnail(embeddedExifThumbnails, step.embeddedExifThumbnail);
         return addPngTextReadTagsToTagsAndGroups({
             readTags: step.readTags,
+            embeddedExifTags: step.embeddedExifTags,
+            embeddedIptcTags: step.embeddedIptcTags,
             parsedGroups,
             expanded,
             tagFilter,
@@ -211,6 +217,7 @@ export function applyMergeStep({
 
         for (let i = 0; i < tagList.length; i++) {
             const entry = tagList[i];
+            addEmbeddedExifThumbnail(embeddedExifThumbnails, entry.embeddedExifThumbnail);
             tags = addPngTextReadTagsToTagsAndGroups({
                 readTags: entry.readTags || {},
                 embeddedExifTags: entry.embeddedExifTags,
@@ -274,32 +281,30 @@ export function applyMergeStep({
     }
 
     if (step.type === 'thumbnail') {
+        // Flat output can already hold an XMP or PNG text tag named Thumbnail.
+        delete tags.Thumbnail;
+
         if (
             !tagFilter.shouldReturnGroup('thumbnail')
             || !tagFilter.shouldReturnTag('thumbnail', 'Thumbnail')
         ) {
-            delete tags.Thumbnail;
-
             return tags;
         }
 
-        if (!thumbnailIfdTags) {
-            return tags;
-        }
-
-        const parsedThumbnailIfdTags = deps.filterTagsForParse(
-            'thumbnail',
+        const mainThumbnail = getMainThumbnail({
             thumbnailIfdTags,
-            tagFilter
-        );
-
-        const thumbnail = Constants.USE_EXIF
-            && Constants.USE_THUMBNAIL
-            && deps.Thumbnail.get(exifDataView || dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
+            tagFilter,
+            dataView,
+            exifDataView,
+            tiffHeaderOffset,
+            deps,
+        });
+        let thumbnail = mainThumbnail;
+        if (!hasImage(mainThumbnail)) {
+            thumbnail = getFirstEmbeddedExifThumbnailWithImage(embeddedExifThumbnails) || mainThumbnail;
+        }
         if (thumbnail) {
             tags.Thumbnail = thumbnail;
-        } else {
-            delete tags.Thumbnail;
         }
 
         return tags;
@@ -322,6 +327,9 @@ export function applyMergeStep({
     }
 
     if (step.type === 'fileType') {
+        // Flat output can already hold an XMP or PNG text tag named FileType.
+        delete tags.FileType;
+
         if (
             fileType
             && tagFilter.shouldReturnGroup('file')
@@ -341,6 +349,39 @@ export function applyMergeStep({
     }
 
     return tags;
+}
+
+function addEmbeddedExifThumbnail(embeddedExifThumbnails, embeddedExifThumbnail) {
+    if (embeddedExifThumbnail) {
+        embeddedExifThumbnails.push(embeddedExifThumbnail);
+    }
+}
+
+function getMainThumbnail({thumbnailIfdTags, tagFilter, dataView, exifDataView, tiffHeaderOffset, deps}) {
+    if (!thumbnailIfdTags) {
+        return undefined;
+    }
+
+    const parsedThumbnailIfdTags = deps.filterTagsForParse(
+        'thumbnail',
+        thumbnailIfdTags,
+        tagFilter
+    );
+
+    return Constants.USE_EXIF
+        && Constants.USE_THUMBNAIL
+        && deps.Thumbnail.get(exifDataView || dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
+}
+
+function hasImage(thumbnail) {
+    return !!thumbnail && !!thumbnail.image;
+}
+
+function getFirstEmbeddedExifThumbnailWithImage(embeddedExifThumbnails) {
+    if (!(Constants.USE_PNG && Constants.USE_EXIF && Constants.USE_THUMBNAIL)) {
+        return undefined;
+    }
+    return embeddedExifThumbnails.filter(hasImage)[0];
 }
 
 export function mergeAssignGroup(tags, groupKey, returnedTags, expanded, deps) {
@@ -405,13 +446,7 @@ export function addPngTextReadTagsToTagsAndGroups({
             if (expanded) {
                 merge.group(tags, 'exif', returnedEmbeddedExifTags);
             } else {
-                // The thumbnail image is never read from a text chunk, so the
-                // thumbnail IFD would land at the top level with no image.
-                const returnedEmbeddedExifTagsForFlat =
-                    deps.objectAssign({}, returnedEmbeddedExifTags);
-                delete returnedEmbeddedExifTagsForFlat.Thumbnail;
-
-                tags = merge.topLevel(tags, returnedEmbeddedExifTagsForFlat);
+                tags = merge.topLevel(tags, returnedEmbeddedExifTags);
             }
         }
     }

@@ -32,23 +32,30 @@ export function isDataUri(filename) {
  * in `load()`.
  *
  * @param {string} filename URL, data URI, or local file path.
- * @param {{length?: number}} [options]
- * @returns {Promise<ArrayBuffer|Buffer>} The whole file, or its first `length` bytes if specified.
+ * @param {{length?: number}} [options] A fractional `length` is rounded down.
+ * @returns {Promise<ArrayBuffer|Buffer>} The whole file, or its first `length` bytes if specified. Rejects when
+ *          `length` is not `undefined`, `null` or a finite non-negative number, and with the decoder's error when a
+ *          data URI cannot be decoded.
  */
 export function loadFile(filename, options) {
+    const range = legacyRange(options);
+    if (!range) {
+        return rejectInvalidLength();
+    }
+
     if (/^\w+:\/\//.test(filename)) {
         if (typeof fetch !== 'undefined') {
-            return fetchRange(filename, legacyRange(options)).then((r) => r.buffer);
+            return fetchRange(filename, range).then((r) => r.buffer);
         }
 
-        return nodeGetRange(filename, legacyRange(options)).then((r) => r.buffer);
+        return nodeGetRange(filename, range).then((r) => r.buffer);
     }
 
     if (isDataUri(filename)) {
-        return Promise.resolve(dataUriToBuffer(filename));
+        return Promise.resolve().then(() => dataUriToBuffer(filename));
     }
 
-    return readLocalFileRange(filename, legacyRange(options)).then((r) => r.buffer);
+    return readLocalFileRange(filename, range).then((r) => r.buffer);
 }
 
 /**
@@ -56,18 +63,32 @@ export function loadFile(filename, options) {
  * code path in `load()`.
  *
  * @param {File} file
- * @param {{length?: number}} [options]
- * @returns {Promise<ArrayBuffer>}
+ * @param {{length?: number}} [options] A fractional `length` is rounded down.
+ * @returns {Promise<ArrayBuffer>} Rejects when `length` is not `undefined`, `null` or a finite non-negative number.
  */
 export function loadFileObject(file, options) {
-    return readFileObjectRange(file, legacyRange(options)).then((r) => r.buffer);
+    const range = legacyRange(options);
+    if (!range) {
+        return rejectInvalidLength();
+    }
+
+    return readFileObjectRange(file, range).then((r) => r.buffer);
 }
 
 function legacyRange(options) {
-    if (options && Number.isInteger(options.length) && options.length >= 0) {
-        return {start: 0, end: options.length, maxBytes: options.length};
+    const length = options ? options.length : undefined;
+    if (length === undefined || length === null) {
+        return {start: 0};
     }
-    return {start: 0};
+    if (Number.isFinite(length) && length >= 0) {
+        const end = Math.floor(length);
+        return {start: 0, end, maxBytes: end};
+    }
+    return undefined;
+}
+
+function rejectInvalidLength() {
+    return Promise.reject(new Error('The length option must be a finite non-negative number or "auto".'));
 }
 
 /**
@@ -76,15 +97,21 @@ function legacyRange(options) {
  *
  * @param {string} url
  * @param {{start?: number, end?: number, maxBytes?: number}} [range] `end` is exclusive. Omit (or pass `Infinity`)
- *        to read to EOF. With `maxBytes` (a non-negative integer) at most that many body bytes are kept, for a 2xx
- *        status and for 416; where the response body is a `ReadableStream` the transfer is stopped once they have
- *        arrived, otherwise the whole body is read and cut.
+ *        to read to EOF. With `maxBytes` (a non-negative integer) at most that many body bytes are kept on a 2xx
+ *        response; where the response body is a `ReadableStream` the transfer is stopped once they have arrived,
+ *        otherwise the whole body is read and cut.
  * @returns {Promise<{buffer: ArrayBuffer, totalSize: number|undefined, status: number|undefined}>}
  *          `totalSize` is taken from the `Content-Range` or `Content-Length` response header when present.
  *          Rejects with `Could not fetch file: <status>` on non-2xx responses, except 416 which the
- *          `length: 'auto'` loop consumes as a fall-back signal. Mirrors `nodeGetRange`.
+ *          `length: 'auto'` loop consumes as a fall-back signal and which resolves with an empty buffer.
+ *          The body of a 416 or a rejected status is never read; a `ReadableStream` body is cancelled.
+ *          An empty range (`end <= start`) resolves with an empty buffer without a request.
+ *          Mirrors `nodeGetRange`.
  */
 export function fetchRange(url, {start = 0, end, maxBytes} = {}) {
+    if (isEmptyRange(start, end)) {
+        return Promise.resolve({buffer: new ArrayBuffer(0), totalSize: undefined, status: undefined});
+    }
     const options = {method: 'GET'};
     if (start > 0 || (end !== undefined && end !== Infinity)) {
         options.headers = {range: buildRangeHeader(start, end)};
@@ -92,10 +119,15 @@ export function fetchRange(url, {start = 0, end, maxBytes} = {}) {
     return fetch(url, options).then((response) => {
         const status = response && typeof response.status === 'number' ? response.status : undefined;
         if (status !== undefined && !isAcceptableFetchStatus(status)) {
+            cancelQuietly(response.body);
             const statusText = response.statusText || '';
             return Promise.reject(new Error(`Could not fetch file: ${status} ${statusText}`.trim()));
         }
         const totalSize = totalSizeFromFetchResponse(response);
+        if (status === HTTP_STATUS_RANGE_NOT_SATISFIABLE) {
+            cancelQuietly(response.body);
+            return {buffer: new ArrayBuffer(0), totalSize, status};
+        }
         return readFetchBody(response, maxBytes).then((buffer) => ({buffer, totalSize, status}));
     });
 }
@@ -146,8 +178,8 @@ function readStreamUpTo(reader, maxBytes) {
     });
 }
 
-function cancelQuietly(reader) {
-    Promise.resolve().then(() => reader.cancel()).then(undefined, () => undefined);
+function cancelQuietly(cancellable) {
+    Promise.resolve().then(() => cancellable.cancel()).then(undefined, () => undefined);
 }
 
 /**
@@ -189,6 +221,10 @@ function createByteCollector(maxBytes) {
     }
 }
 
+function isEmptyRange(start, end) {
+    return end !== undefined && end !== Infinity && end <= start;
+}
+
 function buildRangeHeader(start, end) {
     if (end === undefined || end === Infinity) {
         return `bytes=${start}-`;
@@ -214,7 +250,9 @@ function isAcceptableFetchStatus(status) {
 
 /**
  * Range-aware Node `http(s).get`. Same contract as `fetchRange`. Rejects
- * on non-2xx responses with the status line in the error message.
+ * on non-2xx responses with the status line in the error message, except
+ * 416 which resolves with an empty buffer. The body of a 416 or a rejected
+ * status is not read: the response is destroyed.
  *
  * @param {string} url
  * @param {{start?: number, end?: number, maxBytes?: number}} [range] `end` is exclusive. Omit (or pass `Infinity`)
@@ -223,6 +261,9 @@ function isAcceptableFetchStatus(status) {
  * @returns {Promise<{buffer: Buffer, totalSize: number|undefined, status: number|undefined}>}
  */
 export function nodeGetRange(url, {start = 0, end, maxBytes} = {}) {
+    if (isEmptyRange(start, end)) {
+        return Promise.resolve({buffer: Buffer.alloc(0), totalSize: undefined, status: undefined});
+    }
     return new Promise((resolve, reject) => {
         const options = {};
         if (start > 0 || (end !== undefined && end !== Infinity)) {
@@ -252,11 +293,12 @@ export function nodeGetRange(url, {start = 0, end, maxBytes} = {}) {
             } else if (response.statusCode === HTTP_STATUS_RANGE_NOT_SATISFIABLE) {
                 // Resolve (rather than reject) so the adaptive `length: 'auto'`
                 // loop can fall back to a full read, mirroring the fetch path.
-                response.resume();
-                resolve({buffer: Buffer.alloc(0), totalSize: totalSizeFromNodeResponse(response), status: response.statusCode});
+                const totalSize = totalSizeFromNodeResponse(response);
+                response.destroy();
+                resolve({buffer: Buffer.alloc(0), totalSize, status: response.statusCode});
             } else {
                 reject(new Error(`Could not fetch file: ${response.statusCode} ${response.statusMessage}`));
-                response.resume();
+                response.destroy();
             }
         }).on('error', (error) => reject(error));
     });

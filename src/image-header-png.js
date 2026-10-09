@@ -4,7 +4,7 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringFromDataView, getNullTerminatedStringFromDataView, pushMetadataBlock} from './utils.js';
+import {getStringFromDataView, pushMetadataBlock} from './utils.js';
 import Constants from './constants.js';
 
 export default {
@@ -26,6 +26,8 @@ export const TYPE_PHYS = 'pHYs';
 export const TYPE_TIME = 'tIME';
 export const TYPE_EXIF = 'eXIf';
 export const TYPE_ICCP = 'iCCP';
+// PNG spec: an iCCP profile name is at most 79 bytes, like a text keyword.
+const MAX_ICC_PROFILE_NAME_LENGTH = 79;
 
 /**
  * Checks if the provided data view represents a PNG file.
@@ -100,20 +102,20 @@ function findPngOffsets(dataView, async, metadataBlocks) {
             blockType = 'exif';
         } else if (Constants.USE_ICC && async && isPngIccpChunk(dataView, offset)) {
             const iccHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
-            const iccHeader = parseIccHeader(dataView, iccHeaderOffset);
+            const iccHeader = parseIccHeader(dataView, iccHeaderOffset, chunkDataLength);
             if (iccHeader !== undefined) {
                 offsets.hasAppMarkers = true;
+                // PNG spec: a file has at most one iCCP chunk, so only the first valid one is kept.
                 if (!offsets.iccChunks) {
-                    offsets.iccChunks = [];
+                    offsets.iccChunks = [{
+                        offset: iccHeader.compressedProfileOffset,
+                        length: chunkDataLength - (iccHeader.compressedProfileOffset - iccHeaderOffset),
+                        chunkNumber: 1,
+                        chunksTotal: 1,
+                        profileName: iccHeader.profileName,
+                        compressionMethod: iccHeader.compressionMethod
+                    }];
                 }
-                offsets.iccChunks.push({
-                    offset: iccHeader.compressedProfileOffset,
-                    length: chunkDataLength - (iccHeader.compressedProfileOffset - iccHeaderOffset),
-                    chunkNumber: 1,
-                    chunksTotal: 1,
-                    profileName: iccHeader.profileName,
-                    compressionMethod: iccHeader.compressionMethod
-                });
                 blockType = 'icc';
             }
         } else if (isPngChunk(dataView, offset)) {
@@ -190,22 +192,32 @@ function getPngXmpDataOffset(dataView, offset) {
     return offset;
 }
 
-function parseIccHeader(dataView, offset) {
+function parseIccHeader(dataView, offset, chunkDataLength) {
     const NULL_SEPARATOR_SIZE = 1;
     const COMPRESSION_METHOD_SIZE = 1;
+    const chunkEnd = Math.min(offset + chunkDataLength, dataView.byteLength);
 
-    const profileName = getNullTerminatedStringFromDataView(dataView, offset);
-    offset += profileName.length + NULL_SEPARATOR_SIZE;
-
-    if (offset + COMPRESSION_METHOD_SIZE > dataView.byteLength) {
+    const profileNameLength = getIccProfileNameLength(dataView, offset, chunkEnd);
+    if (profileNameLength === undefined) {
         return undefined;
     }
-    const compressionMethod = dataView.getUint8(offset);
-    offset += COMPRESSION_METHOD_SIZE;
+    const compressionMethodOffset = offset + profileNameLength + NULL_SEPARATOR_SIZE;
+    if (compressionMethodOffset + COMPRESSION_METHOD_SIZE > chunkEnd) {
+        return undefined;
+    }
 
     return {
-        profileName,
-        compressionMethod,
-        compressedProfileOffset: offset
+        profileName: getStringFromDataView(dataView, offset, profileNameLength),
+        compressionMethod: dataView.getUint8(compressionMethodOffset),
+        compressedProfileOffset: compressionMethodOffset + COMPRESSION_METHOD_SIZE
     };
+}
+
+function getIccProfileNameLength(dataView, offset, chunkEnd) {
+    for (let i = 0; i <= MAX_ICC_PROFILE_NAME_LENGTH && offset + i < chunkEnd; i++) {
+        if (dataView.getUint8(offset + i) === 0) {
+            return i;
+        }
+    }
+    return undefined;
 }

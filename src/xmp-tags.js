@@ -2,11 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {decodeUtf8ByteString, getStringFromDataView, objectAssign, setProperty, tryDecodeUtf8ByteString} from './utils.js';
+import {decodeUtf8ByteString, getByteString, getTagKey, objectAssign, setProperty, tryDecodeUtf8ByteString} from './utils.js';
 import XmpTagNames from './xmp-tag-names.js';
 import DOMParser from './dom-parser.js';
 import TextDecoder from './text-decoder.js';
 import {isMissingNamespaceError, addMissingNamespaces} from './xmp-namespaces.js';
+import {exceedsMarkupBounds} from './xmp-element-depth.js';
 
 export default {
     read
@@ -23,9 +24,18 @@ const COMMENT_NODE = 8;
 const PACKET_TRAILER_START = '<?xpacket end="';
 const PACKET_TRAILER_END = '"?>';
 
-// Each nested value repeats the descriptions of everything below it, so the
-// description text grows with the square of the nesting depth.
-const MAX_NESTING_DEPTH = 32;
+// Each level repeats the descriptions of everything below it, so any part of
+// the packet's text is copied into at most twice this many descriptions.
+const MAX_NESTING_DEPTH = 16;
+
+// xmldom 0.9.12 walks one link per enclosing declaring element on every prefix
+// lookup, and the DOM conversion here recurses once per level.
+const MAX_ELEMENT_DEPTH = 256;
+
+// Each markup node takes about 2 KB of peak heap in xmldom 0.9.12. With short
+// names and values, reading a packet within this bound into tags peaks below
+// about 800 MB.
+const MAX_MARKUP_NODES = 250000;
 
 // Parsing is synchronous and oneLevelDeeper always restores the counter, so
 // one counter serves every read.
@@ -101,6 +111,8 @@ function combineChunks(dataView, chunks) {
 function getBoundedChunkBytes(dataView, chunk) {
     // The bound is the view's own extent, not the buffer's, since the slice
     // starts at the view's byteOffset.
+    // dataView can be a DataViewWrapper whose buffer is a Buffer, which a
+    // Uint8Array view constructor would copy whole, so the bytes come from slice.
     const bufferLength = dataView.byteLength;
     const byteOffset = dataView.byteOffset || 0;
     const start = Math.min(Math.max(chunk.dataOffset, 0), bufferLength);
@@ -116,7 +128,12 @@ function readTags(tags, chunkDataView, domParser) {
 
         const xmpTags = {};
         parseXMPObject(convertToObject(rdf, true, decodeValue), xmpTags, Object.create(null));
-        objectAssign(tags, xmpTags);
+        // A parsed tag named _raw must not replace the packet string.
+        delete xmpTags._raw;
+        const names = Object.keys(xmpTags);
+        for (let i = 0; i < names.length; i++) {
+            setProperty(tags, getTagKey(names[i]), xmpTags[names[i]]);
+        }
         return true;
     } catch (error) {
         return false;
@@ -162,7 +179,8 @@ function decodeXmlSource(source) {
             // Not valid UTF-8.
         }
     }
-    return decodeByteString(getStringFromDataView(source, 0, source.byteLength));
+    const bytes = new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+    return decodeByteString(getByteString(bytes));
 }
 
 function decodeByteString(byteString) {
@@ -202,6 +220,9 @@ function trimAfterPacketTrailer(xmlSource) {
 }
 
 function parseFromString(domParser, xmlString, isRetry = false) {
+    if (exceedsMarkupBounds(xmlString, MAX_ELEMENT_DEPTH, MAX_MARKUP_NODES)) {
+        throw new ParseError(`XMP elements nested deeper than ${MAX_ELEMENT_DEPTH} levels or more than ${MAX_MARKUP_NODES} markup nodes.`);
+    }
     try {
         const doc = domParser.parseFromString(xmlString, 'application/xml');
         const errors = doc.getElementsByTagName('parsererror');
@@ -369,7 +390,9 @@ function getLocalName(name) {
     if (/^MicrosoftPhoto(_\d+_)?:Rating$/i.test(name)) {
         return 'RatingPercent';
     }
-    return name.split(':')[1];
+    const localName = name.split(':')[1];
+    // No prefix (the name can be in a default namespace) or an empty local part: keep the whole name.
+    return localName || name;
 }
 
 // A parent describes its members without their description functions, so

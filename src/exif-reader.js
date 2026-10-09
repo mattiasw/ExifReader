@@ -8,7 +8,7 @@
  */
 /* global Buffer */
 
-import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray, assertPromiseSupport, setProperty} from './utils.js';
+import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getByteString, getStringValueFromArray, assertPromiseSupport, setProperty} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import Constants from './constants.js';
@@ -17,7 +17,7 @@ import ByteOrder from './byte-order.js';
 import {getTiffHeaderOffset} from './image-header-iso-bmff.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
-import {getValueBudget} from './tags-helpers.js';
+import {getValueBudget, addDecompressedValueAllowance} from './tags-helpers.js';
 import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
 import JxlFileTags from './jxl-file-tags.js';
@@ -38,6 +38,11 @@ import Composite from './composite.js';
 import {createTagFilter} from './tag-filter.js';
 import {buildTagsFromMergeSteps, isThenable} from './loadview-pipeline.js';
 import exifErrors from './errors.js';
+
+// Brob XMP is bounded by the file size, as brob Exif is, plus room for one JPEG
+// standard XMP segment so that a small file can still carry a typical packet.
+const BROB_XMP_SIZE_PER_INPUT_SIZE = 4;
+const BROB_XMP_SIZE_ALLOWANCE = 64 * 1024;
 
 export default {
     load,
@@ -216,7 +221,8 @@ export function loadView(
                 parsedExifTags['IPTC-NAA'].value,
                 0,
                 includeUnknown,
-                tagFilter
+                tagFilter,
+                valueBudget
             );
             const parsedIptcTags =
                 filterTagsForParse('iptc', readIptcTags, tagFilter);
@@ -239,7 +245,7 @@ export function loadView(
             && tagFilter.shouldParseGroup('xmp')
         ) {
             const readXmpTags = XmpTags.read(
-                getStringValueFromArray(parsedExifTags['ApplicationNotes'].value),
+                getByteString(parsedExifTags['ApplicationNotes'].value),
                 undefined,
                 domParser
             );
@@ -385,7 +391,7 @@ export function loadView(
         && iptcDataOffset !== undefined
         && tagFilter.shouldParseGroup('iptc')
     ) {
-        const readTags = IptcTags.read(dataView, iptcDataOffset, includeUnknown, tagFilter);
+        const readTags = IptcTags.read(dataView, iptcDataOffset, includeUnknown, tagFilter, valueBudget);
         const parsedIptcTags = filterTagsForParse('iptc', readTags, tagFilter);
         parsedGroups.iptc = parsedIptcTags;
 
@@ -428,6 +434,7 @@ export function loadView(
             decompress(compressedExifData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
                 .then((decompressedDataView) => {
                     const brobTiffHeaderOffset = getTiffHeaderOffset(decompressedDataView, 0);
+                    addDecompressedValueAllowance(valueBudget, decompressedDataView.byteLength);
                     const {tags: readTags} = Tags.read(
                         decompressedDataView,
                         brobTiffHeaderOffset,
@@ -438,6 +445,9 @@ export function loadView(
                     );
                     if (readTags.Thumbnail) {
                         delete readTags.Thumbnail;
+                    }
+                    if (readTags.MakerNote) {
+                        delete readTags.MakerNote.__offset;
                     }
                     deferredResults.brobExif = readTags;
                 })
@@ -463,6 +473,10 @@ export function loadView(
         deferredPromises.push(
             decompress(compressedXmpData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
                 .then((decompressedDataView) => {
+                    if (exceedsBrobXmpSizeBound(decompressedDataView, dataView)) {
+                        deferredResults.brobXmp = {};
+                        return;
+                    }
                     deferredResults.brobXmp = XmpTags.read(
                         decompressedDataView,
                         [{dataOffset: 0, length: decompressedDataView.byteLength}],
@@ -562,7 +576,7 @@ export function loadView(
             || tagFilter.shouldParseGroup('iptc')
         )
     ) {
-        const {readTags, readTagsPromise} = PngTextTags.read(
+        const {readTags, embeddedExifTags, embeddedIptcTags, embeddedExifThumbnail, readTagsPromise} = PngTextTags.read(
             dataView,
             pngTextChunks,
             async,
@@ -570,13 +584,17 @@ export function loadView(
             computed,
             tagFilter,
             decompressConfig,
-            valueBudget
+            valueBudget,
+            getPngTextThumbnailReader(tagFilter)
         );
         pngTextIsAsync = !!readTagsPromise;
 
         mergeSteps.push({
             type: 'processPngTextReadTags',
             readTags,
+            embeddedExifTags,
+            embeddedIptcTags,
+            embeddedExifThumbnail,
         });
 
         if (readTagsPromise) {
@@ -779,7 +797,20 @@ function getBrobDataView(dataView, brobChunk) {
     // than its header, so bound the view by the bytes present. The JXL header
     // parser never reports a dataOffset past the end of the view.
     const length = Math.max(0, Math.min(brobChunk.length, dataView.byteLength - brobChunk.dataOffset));
-    return new DataView(dataView.buffer, dataView.byteOffset + brobChunk.dataOffset, length);
+    if (isDataViewLike(dataView)) {
+        return new DataView(dataView.buffer, dataView.byteOffset + brobChunk.dataOffset, length);
+    }
+    // The Node Buffer wrapper has no ArrayBuffer to view, so copy the bytes out.
+    const bytes = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+        bytes[i] = dataView.getUint8(brobChunk.dataOffset + i);
+    }
+    return new DataView(bytes.buffer);
+}
+
+function exceedsBrobXmpSizeBound(decompressedDataView, inputDataView) {
+    return decompressedDataView.byteLength
+        > BROB_XMP_SIZE_PER_INPUT_SIZE * inputDataView.byteLength + BROB_XMP_SIZE_ALLOWANCE;
 }
 
 function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter) {
@@ -798,6 +829,21 @@ function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed
         // safely.
         return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN, valueBudget};
     }
+}
+
+function getPngTextThumbnailReader(tagFilter) {
+    if (
+        !Constants.USE_EXIF
+        || !Constants.USE_THUMBNAIL
+        || !tagFilter.shouldReturnTag('thumbnail', 'Thumbnail')
+    ) {
+        return undefined;
+    }
+    return (dataView, thumbnailIfdTags, tiffHeaderOffset) => Thumbnail.get(
+        dataView,
+        filterTagsForParse('thumbnail', thumbnailIfdTags, tagFilter),
+        tiffHeaderOffset
+    );
 }
 
 function filterTagsForParse(groupKey, readTags, tagFilter) {

@@ -23,6 +23,8 @@ const LIK3III = {
     ROLL_ANGLE: 3,
     PITCH_ANGLE: 5
 };
+const INT8_SIZE = 1;
+const INT16_SIZE = 2;
 
 export default {
     read,
@@ -60,8 +62,15 @@ function read(
         );
 
         if (hasLevelInfoK3III(tags)) {
-            tags = objectAssign({}, tags, parseLevelInfoK3III(dataView, originOffset + tags['LevelInfo'].__offset, byteOrder));
+            tags = objectAssign({}, tags, parseLevelInfoK3III(
+                dataView,
+                originOffset + tags['LevelInfo'].__offset,
+                getLevelInfoLength(tags['LevelInfo'].value),
+                byteOrder
+            ));
             delete tags['LevelInfo'];
+        } else if (tags['LevelInfo']) {
+            delete tags['LevelInfo'].__offset;
         }
 
         return tags;
@@ -74,32 +83,47 @@ function hasLevelInfoK3III(tags) {
     return tags['PentaxModelID'] && tags['PentaxModelID'].value === MODEL_ID.K3_III && tags['LevelInfo'];
 }
 
-function parseLevelInfoK3III(dataView, levelInfoOffset, byteOrder) {
-    const tags = {};
+// A value of numbers holds at least as many bytes as elements, whatever its TIFF type.
+function getLevelInfoLength(levelInfoValue) {
+    if (Array.isArray(levelInfoValue) && typeof levelInfoValue[0] === 'number') {
+        return levelInfoValue.length;
+    }
+    return 0;
+}
 
-    if (levelInfoOffset + 7 > dataView.byteLength) {
-        return tags;
+function parseLevelInfoK3III(dataView, levelInfoOffset, levelInfoLength, byteOrder) {
+    const tags = {};
+    const littleEndian = byteOrder === ByteOrder.LITTLE_ENDIAN;
+
+    if (fieldFitsInLevelInfo(LIK3III.CAMERA_ORIENTATION, INT8_SIZE, levelInfoLength)) {
+        const cameraOrientation = dataView.getInt8(levelInfoOffset + LIK3III.CAMERA_ORIENTATION);
+        tags['CameraOrientation'] = {
+            value: cameraOrientation,
+            description: getOrientationDescription(cameraOrientation)
+        };
     }
 
-    const cameraOrientation = dataView.getInt8(levelInfoOffset + LIK3III.CAMERA_ORIENTATION);
-    tags['CameraOrientation'] = {
-        value: cameraOrientation,
-        description: getOrientationDescription(cameraOrientation)
-    };
+    if (fieldFitsInLevelInfo(LIK3III.ROLL_ANGLE, INT16_SIZE, levelInfoLength)) {
+        const rollAngle = dataView.getInt16(levelInfoOffset + LIK3III.ROLL_ANGLE, littleEndian);
+        tags['RollAngle'] = {
+            value: rollAngle,
+            description: getRollAngleDescription(rollAngle)
+        };
+    }
 
-    const rollAngle = dataView.getInt16(levelInfoOffset + LIK3III.ROLL_ANGLE, byteOrder === ByteOrder.LITTLE_ENDIAN);
-    tags['RollAngle'] = {
-        value: rollAngle,
-        description: getRollAngleDescription(rollAngle)
-    };
-
-    const pitchAngle = dataView.getInt16(levelInfoOffset + LIK3III.PITCH_ANGLE, byteOrder === ByteOrder.LITTLE_ENDIAN);
-    tags['PitchAngle'] = {
-        value: pitchAngle,
-        description: getPitchAngleDescription(pitchAngle)
-    };
+    if (fieldFitsInLevelInfo(LIK3III.PITCH_ANGLE, INT16_SIZE, levelInfoLength)) {
+        const pitchAngle = dataView.getInt16(levelInfoOffset + LIK3III.PITCH_ANGLE, littleEndian);
+        tags['PitchAngle'] = {
+            value: pitchAngle,
+            description: getPitchAngleDescription(pitchAngle)
+        };
+    }
 
     return tags;
+}
+
+function fieldFitsInLevelInfo(fieldOffset, fieldSize, levelInfoLength) {
+    return fieldOffset + fieldSize <= levelInfoLength;
 }
 
 function getOrientationDescription(orientation) {

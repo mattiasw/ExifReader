@@ -23,6 +23,9 @@ export const PathRecordTypes = {
 };
 
 const PATH_RECORD_SIZE = 24;
+// Real clipping paths hold at most a few thousand records. The cap is shared by
+// all PathInformation resources of one read so that splitting a path does not multiply it.
+export const MAX_PATH_RECORDS = 32768;
 
 export default {
     0x07d0: {
@@ -38,12 +41,12 @@ export default {
     },
 };
 
-function pathResource(dataView) {
+function pathResource(dataView, recordBudget = {remaining: MAX_PATH_RECORDS}) {
     const TYPE_SIZE = 2;
     const types = {};
     const paths = [];
 
-    for (let offset = 0; offset < dataView.byteLength; offset += TYPE_SIZE + PATH_RECORD_SIZE) {
+    for (let offset = 0; offset < dataView.byteLength && recordBudget.remaining > 0; offset += TYPE_SIZE + PATH_RECORD_SIZE) {
         const type = Types.getShortAt(dataView, offset);
         if (PATH_RECORD_TYPES[type]) {
             if (!types[type]) {
@@ -53,6 +56,7 @@ function pathResource(dataView) {
                 type,
                 path: PATH_RECORD_TYPES[type].path(dataView, offset + TYPE_SIZE)
             });
+            recordBudget.remaining--;
         }
     }
     return JSON.stringify({types, paths});

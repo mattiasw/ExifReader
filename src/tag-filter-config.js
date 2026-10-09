@@ -62,6 +62,8 @@ export const COMPOSITE_DEPENDENCY_TAGS = {
         'FocalPlaneYResolution',
         'FocalPlaneResolutionUnit',
         'FocalLengthIn35mmFilm',
+        'PixelXDimension',
+        'PixelYDimension',
     ],
 };
 

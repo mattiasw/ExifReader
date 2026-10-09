@@ -108,11 +108,11 @@ function scanStartTag(xmlString, fromIndex) {
     return {insertionIndex: -1, attributeValueSpans};
 }
 
-function hasSubstringAt(xmlString, substring, index) {
+export function hasSubstringAt(xmlString, substring, index) {
     return xmlString.slice(index, index + substring.length) === substring;
 }
 
-function skipPast(xmlString, fromIndex, endMarker) {
+export function skipPast(xmlString, fromIndex, endMarker) {
     const endIndex = xmlString.indexOf(endMarker, fromIndex);
     if (endIndex === -1) {
         return xmlString.length;

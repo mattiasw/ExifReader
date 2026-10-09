@@ -20,10 +20,20 @@ export function getStringFromDataView(dataView, offset, length) {
     return getStringValueFromArray(chars);
 }
 
-export function getNullTerminatedStringFromDataView(dataView, offset) {
+/**
+ * Reads a one-byte-per-character string up to its NUL terminator.
+ * @param {DataView} dataView
+ * @param {number} offset - Where the string starts.
+ * @param {number} [end] - Exclusive end of the read, clamped to the buffer
+ *     end. Defaults to the buffer end.
+ * @returns {string} The bytes before the first NUL or before the end,
+ *     whichever comes first.
+ */
+export function getNullTerminatedStringFromDataView(dataView, offset, end = dataView.byteLength) {
+    const readEnd = Math.min(end, dataView.byteLength);
     const chars = [];
     let i = 0;
-    while (offset + i < dataView.byteLength) {
+    while (offset + i < readEnd) {
         const char = dataView.getUint8(offset + i);
         if (char === 0) {
             break;
@@ -55,6 +65,40 @@ export function getPascalStringFromDataView(dataView, offset) {
 
 export function getStringValueFromArray(charArray) {
     return charArray.map((charCode) => String.fromCharCode(charCode)).join('');
+}
+
+// Engines cap the number of arguments Function.prototype.apply can pass, and
+// some older ones reject a typed array there, so bytes go in as plain chunks.
+const MAX_CHARS_PER_CALL = 8192;
+
+/**
+ * Converts bytes to a string with one character per byte.
+ * @param {Uint8Array|number[]} bytes
+ * @param {number} [start=0]
+ * @param {number} [end=bytes.length] Exclusive.
+ * @param {number[]} [charCodes=[]] Scratch array. A caller that converts many
+ *     short strings passes the same one so that each string does not allocate
+ *     its own.
+ * @returns {string}
+ */
+export function getByteString(bytes, start = 0, end = bytes.length, charCodes = []) {
+    if (end - start <= MAX_CHARS_PER_CALL) {
+        return getChunkString(bytes, start, end, charCodes);
+    }
+
+    const chunks = [];
+    for (let chunkStart = start; chunkStart < end; chunkStart += MAX_CHARS_PER_CALL) {
+        chunks.push(getChunkString(bytes, chunkStart, Math.min(chunkStart + MAX_CHARS_PER_CALL, end), charCodes));
+    }
+    return chunks.join('');
+}
+
+function getChunkString(bytes, start, end, charCodes) {
+    for (let i = start; i < end; i++) {
+        charCodes[i - start] = bytes[i];
+    }
+    charCodes.length = end - start;
+    return String.fromCharCode.apply(null, charCodes);
 }
 
 /**
@@ -186,6 +230,22 @@ export function setProperty(object, key, value) {
     object[key] = value;
 }
 
+/**
+ * Returns the key to store a tag under whose name comes from an image. A name
+ * that is an `Object.prototype` property, such as `hasOwnProperty`, would hide
+ * that method on the object holding it, so it gets `_` appended. `__proto__`
+ * is kept, since `setProperty` stores it as an own property.
+ *
+ * @param {string} name The tag name from the image.
+ * @returns {string} The name, with `_` appended if it would hide an inherited property.
+ */
+export function getTagKey(name) {
+    if (name !== '__proto__' && Object.prototype.hasOwnProperty.call(Object.prototype, name)) {
+        return name + '_';
+    }
+    return name;
+}
+
 export function deferInit(object, key, initializer) {
     let initialized = false;
     Object.defineProperty(object, key, {
@@ -225,29 +285,93 @@ export function getBase64Image(image) {
 }
 
 export function dataUriToBuffer(dataUri) {
-    const data = dataUri.substring(dataUri.indexOf(',') + 1);
+    const commaIndex = dataUri.indexOf(',');
+    const header = dataUri.substring(0, commaIndex);
+    const data = dataUri.substring(commaIndex + 1);
 
-    if (dataUri.indexOf(';base64') !== -1) {
+    if (header.indexOf(';base64') !== -1) {
+        const base64 = percentDecodeBase64Payload(data);
         if (typeof atob !== 'undefined') {
-            return Uint8Array.from(atob(data), (char) => char.charCodeAt(0)).buffer;
+            return binaryStringToArrayBuffer(atob(base64));
         }
         if (typeof Buffer === 'undefined') {
             return undefined;
         }
         if (typeof Buffer.from !== 'undefined') { // eslint-disable-line no-undef
-            return Buffer.from(data, 'base64'); // eslint-disable-line no-undef
+            return Buffer.from(base64, 'base64'); // eslint-disable-line no-undef
         }
-        return new Buffer(data, 'base64'); // eslint-disable-line no-undef
+        return new Buffer(base64, 'base64'); // eslint-disable-line no-undef
     }
 
-    const decodedData = decodeURIComponent(data);
-    if (typeof Buffer !== 'undefined') {
-        if (typeof Buffer.from !== 'undefined') { // eslint-disable-line no-undef
-            return Buffer.from(decodedData); // eslint-disable-line no-undef
-        }
-        return new Buffer(decodedData); // eslint-disable-line no-undef
+    return percentDecodeToBytes(data).buffer;
+}
+
+// WHATWG data: URL processing percent-decodes the body before the forgiving-base64 decode.
+// A non-ASCII payload can never be valid base64, so it goes to the decoder unchanged.
+function percentDecodeBase64Payload(data) {
+    if (data.indexOf('%') === -1 || /[\u0080-\uffff]/.test(data)) {
+        return data;
     }
-    return Uint8Array.from(decodedData, (char) => char.charCodeAt(0)).buffer;
+    return getByteString(percentDecodeToBytes(data));
+}
+
+function binaryStringToArrayBuffer(string) {
+    const bytes = new Uint8Array(string.length);
+    for (let i = 0; i < string.length; i++) {
+        bytes[i] = string.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+// WHATWG URL "string percent-decode" (used for data: URLs, RFC 2397): UTF-8 encode, then each %XX is one byte.
+function percentDecodeToBytes(string) {
+    const byteString = /[\u0080-\uffff]/.test(string) ? unescape(encodeURIComponent(string)) : string;
+    const bytes = new Uint8Array(byteString.length - 2 * countPercentEscapes(byteString));
+    let byteIndex = 0;
+    for (let i = 0; i < byteString.length; i++) {
+        if (isPercentEscape(byteString, i)) {
+            bytes[byteIndex++] = getHexDigitValue(byteString.charCodeAt(i + 1)) * 16 + getHexDigitValue(byteString.charCodeAt(i + 2));
+            i += 2;
+        } else {
+            bytes[byteIndex++] = byteString.charCodeAt(i);
+        }
+    }
+    return bytes;
+}
+
+function countPercentEscapes(byteString) {
+    let count = 0;
+    for (let i = 0; i < byteString.length; i++) {
+        if (isPercentEscape(byteString, i)) {
+            count++;
+            i += 2;
+        }
+    }
+    return count;
+}
+
+function isPercentEscape(byteString, index) {
+    return byteString.charCodeAt(index) === 0x25
+        && index + 2 < byteString.length
+        && getHexDigitValue(byteString.charCodeAt(index + 1)) !== -1
+        && getHexDigitValue(byteString.charCodeAt(index + 2)) !== -1;
+}
+
+/**
+ * @param {number} charCode
+ * @returns {number} The value of the hex digit, or -1 for any other character.
+ */
+export function getHexDigitValue(charCode) {
+    if (charCode >= 0x30 && charCode <= 0x39) {
+        return charCode - 0x30;
+    }
+    if (charCode >= 0x41 && charCode <= 0x46) {
+        return charCode - 0x41 + 10;
+    }
+    if (charCode >= 0x61 && charCode <= 0x66) {
+        return charCode - 0x61 + 10;
+    }
+    return -1;
 }
 
 export function padStart(string, length, character) {
@@ -293,8 +417,8 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
         return rejectExceedsMax(budget, maxDecompressedSize);
     }
 
-    if (decompressConfig && compressionMethod !== COMPRESSION_METHOD_NONE) {
-        const decompressType = compressionMethod === COMPRESSION_METHOD_DEFLATE ? 'deflate' : 'brotli';
+    const decompressType = getDecompressType(compressionMethod);
+    if (decompressConfig && decompressType) {
         const customFn = decompressConfig[decompressType];
         if (typeof customFn === 'function') {
             // Called now, not deferred: the input can view the caller's buffer, which may be reused once load() returns.
@@ -353,6 +477,16 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
         }
     }
     return dataView;
+}
+
+function getDecompressType(compressionMethod) {
+    if (compressionMethod === COMPRESSION_METHOD_DEFLATE) {
+        return 'deflate';
+    }
+    if (compressionMethod === COMPRESSION_METHOD_BROTLI) {
+        return 'brotli';
+    }
+    return undefined;
 }
 
 function getMaxDecompressedSize(decompressConfig) {

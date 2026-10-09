@@ -5,22 +5,56 @@
 import Constants from './constants.js';
 import Types from './types.js';
 import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './tag-names.js';
-import {IFD_ENTRY_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
+import {IFD_ENTRY_LENGTH, TIFF_HEADER_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
-import {decodeUtf8ByteString} from './utils.js';
+import {decodeUtf8ByteString, getByteString} from './utils.js';
 
-// Measured across the test corpus, the most demanding parse decodes tag
-// values totalling 1.2241 times the size of the buffer they are read from
-// (deliberately faulty files parsed with includeUnknown; real images peak
-// near 0.81x, as some tags legitimately read overlapping bytes), so a budget
-// of 4x is 3.27 times that worst case. The multiple is expensive here: a
-// decoded byte was measured to cost about 16 bytes of heap, mostly as an
-// array element plus its share of the joined description string.
+// Across the test corpus, for whole files and for the 128 KiB and
+// length: 'auto' reads, out-of-slot values decode at most 1.2241 times the
+// buffer (faulty files parsed with includeUnknown). Exif decompressed from a
+// PNG or JPEG XL gets its own allowance on top of the file-sized budget, see
+// MAX_DECOMPRESSED_VALUE_ALLOWANCE. Description text is not charged, as real
+// TIFFs whose large BYTE tags get joined descriptions would need 4.48 times.
+// A decoded byte costs about 15 bytes of heap, mostly as an array element and
+// its share of the joined description.
 const MAX_VALUE_SIZE_PER_BUFFER_SIZE = 4;
 
-// Engines cap the number of arguments Function.prototype.apply can pass, and
-// some older ones reject a typed array there, so bytes go in as plain chunks.
-const MAX_CHARS_PER_CALL = 8192;
+// Real Exif decodes at most about 2 times its own size (the MakerNote bytes
+// decode twice), so MAX_VALUE_SIZE_PER_BUFFER_SIZE times its decompressed size
+// covers it. The cap keeps a small crafted file from decoding values in
+// proportion to what it decompresses to: at most this much more per load.
+const MAX_DECOMPRESSED_VALUE_ALLOWANCE = 1024 * 1024;
+
+// A buffer holds at most byteLength / 12 IFD entries and a real file reads each
+// once. The multiple leaves room for an IFD reached through more than one
+// pointer. In the test corpus, whole files and 128 KiB and length: 'auto' reads
+// visit at most about as many entries as the buffer holds.
+const MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY = 4;
+
+// Each string after the first of an out-of-slot ASCII value costs this much
+// budget. 4 MiB files whose tags use the budget up on short strings peaked at
+// up to 107 times their size in RSS without it, 88 with 1 and 76 with 2,
+// against 87 for BYTE values.
+export const BUDGET_BYTES_PER_EXTRA_ASCII_STRING = 2;
+
+// A buffer gets one IPTC dataset unit per this many bytes, and a dataset draws
+// one unit per started this many bytes, header included. Short datasets cost
+// up to about 1.2 KB of peak memory each, so this keeps an 8 MiB file of them
+// at most about 33 times its size. Longer datasets draw about one unit per this
+// many of their own bytes, so the count does not cut them below what the file
+// holds; they cost about 25 to 36 times their size.
+export const BYTES_PER_IPTC_DATASET = 48;
+
+// Every load can read this many units whatever its size, so a small file with
+// a real IPTC block is read in full. They cost at most about 1.2 MB.
+const MIN_IPTC_DATASET_UNITS = 1024;
+
+// The dataset header, the smallest dataset there is.
+export const IPTC_DATASET_HEADER_SIZE = 5;
+
+// Real compressed IPTC is far smaller. The cap bounds how many datasets a small
+// file can add by decompressing to a large IPTC block.
+const MAX_DECOMPRESSED_IPTC_ALLOWANCE = 8192;
 
 const getTagValueAt = {
     1: Types.getByteAt,
@@ -33,22 +67,34 @@ const getTagValueAt = {
     13: Types.getIfdPointerAt
 };
 
+/**
+ * @returns {number|undefined} The absolute offset of the 0th IFD, or undefined
+ * when the header is truncated or the offset points into it.
+ */
 export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
     const offset = tiffHeaderOffset + TIFF_IFD_OFFSET_OFFSET;
     if (offset + Types.getTypeSize('LONG') > dataView.byteLength) {
         return undefined;
     }
-    return tiffHeaderOffset
-        + Types.getLongAt(dataView, offset, byteOrder);
+    const ifdOffset = Types.getLongAt(dataView, offset, byteOrder);
+    // An IFD starts past the TIFF header.
+    if (ifdOffset < TIFF_HEADER_LENGTH) {
+        return undefined;
+    }
+    return tiffHeaderOffset + ifdOffset;
 }
 
 /**
  * Reads the tags of an IFD, and for a 0th IFD also those of the thumbnail IFD
  * it points to.
  *
- * @param {{remaining: number}} [valueBudget] - Caps the total size of the
- * decoded tag values, see getValueBudget. Pass the same object to several
- * calls to bound them together; omit it to give this call its own budget.
+ * @param {{remaining: number, ifdEntriesRemaining: number, decompressedAllowanceRemaining: number}} [valueBudget] -
+ * Caps the total size of the decoded tag values and the number of IFD entries
+ * read, see getValueBudget. Pass the same object to several calls to bound them
+ * together; omit it to give this call its own budget. Once the entry count runs
+ * out, later entries and IFDs are not read, so their tags are absent rather than
+ * empty, and an IFD cut short does not follow its next-IFD offset. Nor does one
+ * whose next-IFD offset points into the TIFF header.
  * @returns {Object} The read tags, keyed by tag name.
  */
 export function readIfd(
@@ -68,10 +114,16 @@ export function readIfd(
 
     const tags = {};
     const numberOfFields = getNumberOfFields(dataView, offset, byteOrder);
+    let ranOutOfIfdEntries = false;
 
     offset += FIELD_COUNT_SIZE;
     for (let fieldIndex = 0; fieldIndex < numberOfFields; fieldIndex++) {
         if (offset + FIELD_SIZE > dataView.byteLength) {
+            ranOutOfIfdEntries = true;
+            break;
+        }
+        if (!takeIfdEntry(valueBudget)) {
+            ranOutOfIfdEntries = true;
             break;
         }
 
@@ -103,9 +155,9 @@ export function readIfd(
         offset += FIELD_SIZE;
     }
 
-    if (Constants.USE_THUMBNAIL && (offset < dataView.byteLength - Types.getTypeSize('LONG'))) {
+    if (Constants.USE_THUMBNAIL && !ranOutOfIfdEntries && (offset + Types.getTypeSize('LONG') <= dataView.byteLength)) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
-        if (nextIfdOffset !== 0 && ifdType === IFD_TYPE_0TH) {
+        if (nextIfdOffset >= TIFF_HEADER_LENGTH && ifdType === IFD_TYPE_0TH) {
             if (tagFilter.shouldParseGroup('thumbnail')) {
                 tags['Thumbnail'] = readIfd(
                     dataView,
@@ -126,6 +178,14 @@ export function readIfd(
     return tags;
 }
 
+function takeIfdEntry(valueBudget) {
+    if (valueBudget.ifdEntriesRemaining > 0) {
+        valueBudget.ifdEntriesRemaining--;
+        return true;
+    }
+    return false;
+}
+
 /**
  * Creates a budget for the total size of the tag values decoded from a buffer.
  *
@@ -136,15 +196,85 @@ export function readIfd(
  * tags decode the same bytes over and over.
  *
  * loadView shares one budget across the Exif IFDs, then the maker note, then
- * MPF, then the Exif decompressed from PNG text chunks and JPEG XL brob boxes.
+ * MPF, then the Exif decompressed from PNG text chunks and JPEG XL brob boxes,
+ * each of which first adds its allowance, see addDecompressedValueAllowance.
  * Once it is used up, later out-of-slot values decode empty, Make included,
- * and an empty Make or MakerNote turns maker note detection off.
+ * and an empty Make or MakerNote turns maker note detection off. An ASCII
+ * value also draws for each string after its first, and keeps only the
+ * strings the budget covers.
+ *
+ * The budget also counts the IFD entries read, shared the same way, so that
+ * Exif decompressed from a small file cannot have its entries read in
+ * proportion to the decompressed size. It counts the IPTC datasets read too,
+ * across every IPTC read of the load; IPTC decompressed from a PNG text chunk
+ * first adds its allowance, see addDecompressedIptcAllowance.
  *
  * @param {DataView} dataView - The buffer the values are decoded from.
- * @returns {{remaining: number}} The budget, in bytes left to decode.
+ * @returns {{remaining: number, ifdEntriesRemaining: number, decompressedAllowanceRemaining: number, iptcDatasetsRemaining: number, decompressedIptcAllowanceRemaining: number}}
+ * The budget: remaining is the bytes left to decode, with each extra ASCII
+ * string counted as BUDGET_BYTES_PER_EXTRA_ASCII_STRING bytes;
+ * ifdEntriesRemaining is the IFD entries left to read,
+ * MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY times the byteLength / 12 entries the
+ * buffer can hold; decompressedAllowanceRemaining is what decompressed Exif
+ * can still add to remaining, MAX_DECOMPRESSED_VALUE_ALLOWANCE per budget;
+ * iptcDatasetsRemaining is the IPTC dataset units left, MIN_IPTC_DATASET_UNITS
+ * plus one per BYTES_PER_IPTC_DATASET bytes of the buffer, of which a dataset
+ * draws one per started BYTES_PER_IPTC_DATASET bytes; decompressedIptcAllowanceRemaining
+ * is what decompressed IPTC can still add to iptcDatasetsRemaining,
+ * MAX_DECOMPRESSED_IPTC_ALLOWANCE per budget.
  */
 export function getValueBudget(dataView) {
-    return {remaining: dataView.byteLength * MAX_VALUE_SIZE_PER_BUFFER_SIZE};
+    return {
+        remaining: dataView.byteLength * MAX_VALUE_SIZE_PER_BUFFER_SIZE,
+        ifdEntriesRemaining: Math.floor(dataView.byteLength / IFD_ENTRY_LENGTH) * MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY,
+        decompressedAllowanceRemaining: MAX_DECOMPRESSED_VALUE_ALLOWANCE,
+        iptcDatasetsRemaining: MIN_IPTC_DATASET_UNITS + Math.floor(dataView.byteLength / BYTES_PER_IPTC_DATASET),
+        decompressedIptcAllowanceRemaining: MAX_DECOMPRESSED_IPTC_ALLOWANCE
+    };
+}
+
+/**
+ * Adds the allowance of an Exif block decompressed from the file to the
+ * budget: MAX_VALUE_SIZE_PER_BUFFER_SIZE times its decompressed size, up to
+ * what is left of the budget's decompressedAllowanceRemaining, which it draws
+ * from. Leaves the IFD entry count and the IPTC dataset count as they are.
+ * Does nothing without a budget.
+ *
+ * @param {{remaining: number, decompressedAllowanceRemaining: number}} [valueBudget]
+ * @param {number} decompressedByteLength - The size of the decompressed Exif.
+ */
+export function addDecompressedValueAllowance(valueBudget, decompressedByteLength) {
+    if (valueBudget === undefined) {
+        return;
+    }
+    const allowance = Math.min(
+        decompressedByteLength * MAX_VALUE_SIZE_PER_BUFFER_SIZE,
+        valueBudget.decompressedAllowanceRemaining
+    );
+    valueBudget.remaining += allowance;
+    valueBudget.decompressedAllowanceRemaining -= allowance;
+}
+
+/**
+ * Adds the allowance of an IPTC block decompressed from the file to the
+ * budget's iptcDatasetsRemaining: one unit per IPTC_DATASET_HEADER_SIZE
+ * decompressed bytes, enough for every dataset the block holds, up to what is
+ * left of the budget's decompressedIptcAllowanceRemaining, which it draws from.
+ * Leaves the other fields as they are. Does nothing without a budget.
+ *
+ * @param {{iptcDatasetsRemaining: number, decompressedIptcAllowanceRemaining: number}} [valueBudget]
+ * @param {number} decompressedByteLength - The size of the decompressed IPTC.
+ */
+export function addDecompressedIptcAllowance(valueBudget, decompressedByteLength) {
+    if (valueBudget === undefined) {
+        return;
+    }
+    const allowance = Math.min(
+        Math.floor(decompressedByteLength / IPTC_DATASET_HEADER_SIZE),
+        valueBudget.decompressedIptcAllowanceRemaining
+    );
+    valueBudget.iptcDatasetsRemaining += allowance;
+    valueBudget.decompressedIptcAllowanceRemaining -= allowance;
 }
 
 function getNumberOfFields(dataView, offset, byteOrder) {
@@ -175,6 +305,7 @@ function readTag(
     const tagCount = Types.getLongAt(dataView, offset + TAG_COUNT_OFFSET, byteOrder);
     let tagValue;
     let tagValueOffset;
+    let stringBudget;
 
     if (Types.typeSizes[tagType] === undefined || (!includeUnknown && TagNames[ifdType][tagCode] === undefined)) {
         return undefined;
@@ -186,14 +317,15 @@ function readTag(
     }
 
     if (tagValueFitsInOffsetSlot(tagType, tagCount)) {
-        tagValueOffset = offset + TAG_VALUE_OFFSET;
-        tagValue = getTagValue(dataView, tagValueOffset, tagType, tagCount, byteOrder);
+        tagValueOffset = offset + TAG_VALUE_OFFSET - offsetOrigin;
+        tagValue = getTagValue(dataView, offsetOrigin + tagValueOffset, tagType, tagCount, byteOrder);
     } else {
         tagValueOffset = Types.getLongAt(dataView, offset + TAG_VALUE_OFFSET, byteOrder);
         if (tagValueFitsInDataView(dataView, offsetOrigin, tagValueOffset, tagType, tagCount)) {
             const forceByteType = tagCode === TAG_CODE_IPTC_NAA;
             const boundedTagCount = getBoundedTagCount(valueBudget.remaining, tagType, tagCount);
             valueBudget.remaining -= boundedTagCount * Types.typeSizes[tagType];
+            stringBudget = valueBudget;
             tagValue = getTagValue(dataView, offsetOrigin + tagValueOffset, tagType, boundedTagCount, byteOrder, forceByteType);
         } else {
             tagValue = '<faulty value>';
@@ -201,7 +333,7 @@ function readTag(
     }
 
     if (tagType === Types.tagTypes['ASCII']) {
-        tagValue = getAsciiTagValue(tagValue);
+        tagValue = getAsciiTagValue(tagValue, stringBudget);
     }
 
     let tagDescription = tagValue;
@@ -283,7 +415,7 @@ function tagValueFitsInDataView(dataView, offsetOrigin, tagValueOffset, tagType,
 
 // Draws each out-of-slot value from the shared budget, so a crafted file
 // cannot have thousands of tags decode the same bytes over and over. Real
-// files, including ones whose tags read overlapping bytes, stay far below it.
+// files stay below it.
 function getBoundedTagCount(remainingBudget, tagType, tagCount) {
     const boundedCount = Math.min(tagCount, Math.floor(remainingBudget / Types.typeSizes[tagType]));
     if (boundedCount === 1 && tagCount > 1) {
@@ -295,9 +427,9 @@ function getBoundedTagCount(remainingBudget, tagType, tagCount) {
     return boundedCount;
 }
 
-function getAsciiTagValue(tagValue) {
+function getAsciiTagValue(tagValue, stringBudget) {
     if (tagValue instanceof Uint8Array) {
-        return getNullSeparatedStrings(tagValue);
+        return getNullSeparatedStrings(tagValue, stringBudget);
     }
     if (typeof tagValue === 'string') {
         return [tagValue];
@@ -308,17 +440,23 @@ function getAsciiTagValue(tagValue) {
 }
 
 // Empty strings are left as holes in the array, so each string keeps the
-// index given by the number of NULs before it.
-function getNullSeparatedStrings(bytes) {
+// index given by the number of NULs before it. With a string budget, each
+// string after the first draws from it, and the value stops when it runs out.
+function getNullSeparatedStrings(bytes, stringBudget) {
     const strings = [];
     const charCodes = [];
+    let hasString = false;
     let stringIndex = 0;
     let stringStart = 0;
 
     for (let i = 0; i <= bytes.length; i++) {
         if (i === bytes.length || bytes[i] === 0) {
             if (i > stringStart) {
+                if (hasString && !drawExtraString(stringBudget)) {
+                    break;
+                }
                 strings[stringIndex] = decodeUtf8ByteString(getByteString(bytes, stringStart, i, charCodes));
+                hasString = true;
             }
             stringIndex++;
             stringStart = i + 1;
@@ -328,26 +466,15 @@ function getNullSeparatedStrings(bytes) {
     return strings;
 }
 
-function getByteString(bytes, start, end, charCodes) {
-    if (end - start <= MAX_CHARS_PER_CALL) {
-        return getChunkString(bytes, start, end, charCodes);
+function drawExtraString(stringBudget) {
+    if (stringBudget === undefined) {
+        return true;
     }
-
-    const chunks = [];
-    for (let chunkStart = start; chunkStart < end; chunkStart += MAX_CHARS_PER_CALL) {
-        chunks.push(getChunkString(bytes, chunkStart, Math.min(chunkStart + MAX_CHARS_PER_CALL, end), charCodes));
+    if (stringBudget.remaining < BUDGET_BYTES_PER_EXTRA_ASCII_STRING) {
+        return false;
     }
-    return chunks.join('');
-}
-
-// Reuses the caller's array, so a value made of many short strings does not
-// allocate an array per string.
-function getChunkString(bytes, start, end, charCodes) {
-    for (let i = start; i < end; i++) {
-        charCodes[i - start] = bytes[i];
-    }
-    charCodes.length = end - start;
-    return String.fromCharCode.apply(null, charCodes);
+    stringBudget.remaining -= BUDGET_BYTES_PER_EXTRA_ASCII_STRING;
+    return true;
 }
 
 function getDescriptionFromTagValue(tagValue) {
