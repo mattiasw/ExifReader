@@ -252,6 +252,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   290 MB. Only the first 1024 XMP segments of a JPEG file, standard and
   extended counted together, are now read, far more than real files use, and
   the same file now peaks at about 85 MB.
+- XMP stored in the Exif `ApplicationNotes` tag, as in TIFF files, was
+  converted to text one character at a time: an 8 MiB tag took about 74 MB of
+  memory and 0.15 seconds more than reading the same file without XMP, and
+  now takes about 15 MB and 0.046 seconds more.
 - IPTC in compressed PNG text chunks (`Raw profile type iptc`) could make
   ExifReader read IPTC datasets in proportion to the decompressed size rather
   than the file size: a crafted 446 KB PNG blocked `load()` for about 4

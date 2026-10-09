@@ -8,7 +8,7 @@
  */
 /* global Buffer */
 
-import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getStringValueFromArray, assertPromiseSupport, setProperty} from './utils.js';
+import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getByteString, getStringValueFromArray, assertPromiseSupport, setProperty} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import Constants from './constants.js';
@@ -245,7 +245,7 @@ export function loadView(
             && tagFilter.shouldParseGroup('xmp')
         ) {
             const readXmpTags = XmpTags.read(
-                getStringValueFromArray(parsedExifTags['ApplicationNotes'].value),
+                getByteString(parsedExifTags['ApplicationNotes'].value),
                 undefined,
                 domParser
             );

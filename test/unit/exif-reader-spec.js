@@ -705,6 +705,25 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should pass the whole ApplicationNotes byte string to the XMP reader, converted in chunks', () => {
+        const packet = '<x:xmpmeta>' + '\u00c3\u0085'.repeat(5000) + '</x:xmpmeta>';
+        const myExifTags = {ApplicationNotes: {value: getCharacterArray(packet)}};
+        const originalFromCharCode = String.fromCharCode;
+        let fromCharCodeCalls = 0;
+        swap(String, {
+            fromCharCode(...charCodes) {
+                fromCharCodeCalls++;
+                return originalFromCharCode.apply(String, charCodes);
+            }
+        });
+
+        const xmpString = getXmpStringReadFromApplicationNotes(myExifTags);
+        const calls = fromCharCodeCalls;
+
+        expect(xmpString).to.equal(packet);
+        expect(calls).to.be.at.most(2);
+    });
+
     it('should skip an inline XMP segment whose Exif value lies outside the file', () => {
         const myExifTags = {ApplicationNotes: {value: '<faulty value>'}};
         swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
@@ -3525,6 +3544,19 @@ function swapXmpTagsRead(tagsValue) {
             return {};
         }
     });
+}
+
+function getXmpStringReadFromApplicationNotes(myExifTags) {
+    let readXmpString;
+    swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+    swap(XmpTags, {
+        read(xmpString) {
+            readXmpString = xmpString;
+            return {};
+        }
+    });
+    ExifReader.loadView();
+    return readXmpString;
 }
 
 function swapIccTagsRead(tagsValue, async = false) {
