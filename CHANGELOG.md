@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The TypeScript type for Pentax maker notes now names the K-3 III camera
+  orientation `CameraOrientation`, as the library returns it, instead of
+  `Orientation`, so `Orientation` in the flat result is optional again. It
+  also marks `PentaxVersion`, `PentaxModelID`, `CameraOrientation`,
+  `RollAngle` and `PitchAngle` optional, since a file may lack any of them.
+
 ## [4.48.0] - 2026-10-09
 
 ### Added

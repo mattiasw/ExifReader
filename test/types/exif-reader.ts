@@ -358,6 +358,38 @@ expandedTags.makerNotes?.["RollAngle"]?.value === 42;
 expandedTags.makerNotes?.["RollAngle"]?.description === '-21';
 tags["RollAngle"]?.value === 42;
 tags["RollAngle"]?.description === '-21';
+expandedTags.makerNotes?.["PitchAngle"]?.value === 42;
+expandedTags.makerNotes?.["PitchAngle"]?.description === '-21';
+tags["PitchAngle"]?.value === 42;
+tags["PitchAngle"]?.description === '-21';
+expandedTags.makerNotes?.["PentaxVersion"]?.value[0] === 8;
+expandedTags.makerNotes?.["PentaxVersion"]?.description === '8.0.0.0';
+tags["PentaxVersion"]?.value[0] === 8;
+expandedTags.makerNotes?.["PentaxModelID"]?.value === 0x13254;
+tags["PentaxModelID"]?.value === 0x13254;
+expandedTags.makerNotes?.["CameraOrientation"]?.value === 1;
+expandedTags.makerNotes?.["CameraOrientation"]?.description === 'Rotate 270 CW';
+tags["CameraOrientation"]?.value === 1;
+tags["CameraOrientation"]?.description === 'Rotate 270 CW';
+// @ts-expect-error
+expandedTags.makerNotes?.["CameraOrientation"]?.description === 'Sideways';
+// @ts-expect-error
+tags["CameraOrientation"]?.description === 'Sideways';
+// @ts-expect-error
+expandedTags.makerNotes?.["Orientation"];
+tags["Orientation"]?.value === 1;
+// @ts-expect-error
+tags["Orientation"].value;
+// @ts-expect-error
+expandedTags.makerNotes?.["PentaxVersion"].value;
+// @ts-expect-error
+expandedTags.makerNotes?.["PentaxModelID"].value;
+// @ts-expect-error
+expandedTags.makerNotes?.["CameraOrientation"].value;
+// @ts-expect-error
+expandedTags.makerNotes?.["RollAngle"].value;
+// @ts-expect-error
+expandedTags.makerNotes?.["PitchAngle"].value;
 
 //////////////
 // Composite
