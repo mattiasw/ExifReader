@@ -83,6 +83,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as browsers do, so `%FF` is the byte 0xFF. One that holds a JPEG or PNG now
   loads instead of failing with `URIError`, and the result is the same with
   and without `Buffer`.
+- A base64 data URI whose payload is also percent-encoded, such as
+  `data:image/png;base64,iVBORw0KGgo%3D`, is now percent-decoded before the
+  base64 decode, as browsers do. It no longer fails with
+  `InvalidCharacterError`, and without `atob` it no longer decodes to wrong
+  bytes.
 - A Canon maker note or a Pentax K-3 III `LevelInfo` value of 4 bytes or
   fewer, which the IFD entry stores in place of an offset, is now parsed from
   where it is stored instead of from a position further into the file.

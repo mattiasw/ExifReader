@@ -274,19 +274,29 @@ export function dataUriToBuffer(dataUri) {
     const data = dataUri.substring(commaIndex + 1);
 
     if (header.indexOf(';base64') !== -1) {
+        const base64 = percentDecodeBase64Payload(data);
         if (typeof atob !== 'undefined') {
-            return binaryStringToArrayBuffer(atob(data));
+            return binaryStringToArrayBuffer(atob(base64));
         }
         if (typeof Buffer === 'undefined') {
             return undefined;
         }
         if (typeof Buffer.from !== 'undefined') { // eslint-disable-line no-undef
-            return Buffer.from(data, 'base64'); // eslint-disable-line no-undef
+            return Buffer.from(base64, 'base64'); // eslint-disable-line no-undef
         }
-        return new Buffer(data, 'base64'); // eslint-disable-line no-undef
+        return new Buffer(base64, 'base64'); // eslint-disable-line no-undef
     }
 
     return percentDecodeToBytes(data).buffer;
+}
+
+// WHATWG data: URL processing percent-decodes the body before the forgiving-base64 decode.
+// A non-ASCII payload can never be valid base64, so it goes to the decoder unchanged.
+function percentDecodeBase64Payload(data) {
+    if (data.indexOf('%') === -1 || /[\u0080-\uffff]/.test(data)) {
+        return data;
+    }
+    return getByteString(percentDecodeToBytes(data));
 }
 
 function binaryStringToArrayBuffer(string) {
