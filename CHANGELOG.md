@@ -43,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Exif `SampleFormat` tag of an image with one sample per pixel, such as a
   grayscale TIFF, now has its format as its description, such as `Unsigned`,
   instead of `Unknown`.
+- The Exif `ComponentsConfiguration` tag now has its components as its
+  description, such as `YCbCr`, instead of an empty text. The description read
+  the component bytes as ASCII digits, which files do not store.
 
 ### Security
 
