@@ -69,6 +69,21 @@ describe('tag-names-utils', () => {
         expect(getVersionString([0x30, 0x32, 0x32, 0x30])).to.equal('0220');
     });
 
+    it('should get version string from a value of strings', () => {
+        expect(getVersionString(['0220'])).to.equal('0220');
+        expect(getVersionString(['0100'])).to.equal('0100');
+    });
+
+    it('should get version string from a value of strings with a hole before the string', () => {
+        const value = [];
+        value[1] = '0230';
+        expect(getVersionString(value)).to.equal('0230');
+    });
+
+    it('should keep the strings of a NUL-separated version value apart', () => {
+        expect(getVersionString(['02', '20'])).to.equal('02, 20');
+    });
+
     it('should convert a long version value in chunks', () => {
         const text = getPrintableText(10000);
         const {result, calls} = getResultCountingFromCharCode(getVersionString, getCharacterArray(text));
