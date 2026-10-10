@@ -23,16 +23,16 @@ You can try it out on the
 
 **Support table**
 
-| File type              | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | MakerNote          | Thumbnail | Image details |
-| -----------------------|---------|---------|---------|---------|---------|---------------|--------------------|-----------|---------------|
-| JPEG                   | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
-| JPEG XL&ast;&ast;&ast; | **yes** | no      | **yes** | no      | no      | **some**&ast; | **some**&ast;&ast; | **some**  | **yes**       |
-| TIFF                   | **yes** | **yes** | **yes** | **yes** | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | N/A           |
-| PNG                    | **yes** | **yes** | **yes** | **yes** | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
-| HEIC/HEIF              | **yes** | no      | **yes** | **yes** | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | no            |
-| AVIF                   | **yes** | no      | **yes** | **yes** | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | no            |
-| WebP                   | **yes** | no      | **yes** | **yes** | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
-| GIF                    | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | N/A                | N/A       | **yes**       |
+| File type              | Exif    | IPTC                         | XMP     | ICC                          | MPF     | Photoshop     | MakerNote          | Thumbnail | Image details |
+| -----------------------|---------|------------------------------|---------|------------------------------|---------|---------------|--------------------|-----------|---------------|
+| JPEG                   | **yes** | **yes**                      | **yes** | **yes**                      | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
+| JPEG XL&ast;&ast;&ast; | **yes** | **some**&ast;&ast;&ast;&ast; | **yes** | **some**&ast;&ast;&ast;&ast; | no      | **some**&ast; | **some**&ast;&ast; | **some**  | **yes**       |
+| TIFF                   | **yes** | **yes**                      | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | N/A           |
+| PNG                    | **yes** | **yes**                      | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
+| HEIC/HEIF              | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | no            |
+| AVIF                   | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | no            |
+| WebP                   | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
+| GIF                    | N/A     | N/A                          | N/A     | N/A                          | N/A     | N/A           | N/A                | N/A       | **yes**       |
 
 - `MakerNote` = Manufacturers' proprietary MakerNote tags.
 - `Image details` = image width, height, etc. read from image header.
@@ -51,8 +51,12 @@ You can try it out on the
     compression. This is supported in some environments when using
     `async: true`. See the [Asynchronous tags](#asynchronous-tags) and
     [Custom decompression](#custom-decompression) sections for details. The
-    thumbnail, the Photoshop tags and the maker notes are only read from an
-    uncompressed Exif box.
+    thumbnail, the IPTC tags, the ICC tags, the Photoshop tags and the maker
+    notes are only read from an uncompressed Exif box.
+- `****` = Read from the Exif data, where the `IPTC-NAA` and `ICC_Profile`
+    tags can carry them, in the same way as for TIFF files. The HEIC/HEIF,
+    AVIF and WebP formats define no IPTC block of their own. The ICC profile
+    inside a JPEG XL codestream is not read.
 
 If you're missing something that you think should be supported, file an issue
 with an attached example image and I'll see what I can do.
@@ -307,8 +311,8 @@ Some tags act as pointers or containers to other metadata. Excluding them can
 cause other tags or entire groups to disappear. Some important examples:
 
 - `Exif IFD Pointer`, `GPS Info IFD Pointer`, `Interoperability IFD Pointer`
-- `IPTC-NAA` (TIFF embedded IPTC), `ApplicationNotes` (TIFF embedded XMP),
-  `ICC_Profile` (TIFF embedded ICC)
+- `IPTC-NAA` (Exif embedded IPTC), `ApplicationNotes` (Exif embedded XMP),
+  `ICC_Profile` (Exif embedded ICC)
 - `MakerNote` and `Make` (maker note parsing)
 - `ImageSourceData` and `PhotoshopSettings` (Photoshop parsing)
 - `JPEGInterchangeFormat` and `JPEGInterchangeFormatLength` (thumbnails)
@@ -963,7 +967,7 @@ Possible modules to include or exclude:
 | `file`        | JPEG file details: image width, height etc.            |
 | `jfif`        | JFIF details in JPEG files: resolution, thumbnail etc. |
 | `png_file`    | PNG file details: image width, height etc.             |
-| `exif`        | Regular Exif tags. If excluded, will also exclude `photoshop`, `maker_notes`, and `thumbnail`. For TIFF files, excluding this will also exclude IPTC, XMP, and ICC. |
+| `exif`        | Regular Exif tags. If excluded, will also exclude `photoshop`, `maker_notes`, and `thumbnail`. Also excludes the IPTC, XMP and ICC tags that are read from the Exif data, which in TIFF files is all of them. |
 | `iptc`        | IPTC tags.                                             |
 | `xmp`         | XMP tags.                                              |
 | `icc`         | ICC color profile tags.                                |

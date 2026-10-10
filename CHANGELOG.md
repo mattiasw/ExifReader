@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that the JPEG XL thumbnail, Photoshop tags and maker notes are only read from
   an uncompressed Exif box, and that PNG Photoshop tags and maker notes are only
   read from an `eXIf` chunk.
+- The support table in the README now says that IPTC tags are read from the
+  Exif data of HEIC/HEIF, AVIF, WebP and JPEG XL files, and that ICC tags are
+  read from the Exif data of JPEG XL files, instead of marking them as not
+  supported. In JPEG XL files both are only read from an uncompressed Exif
+  box. The custom build and tag filtering sections of the README no longer say
+  that only TIFF files read IPTC, XMP and ICC tags from the Exif data.
 
 ## [4.48.1] - 2026-10-10
 
