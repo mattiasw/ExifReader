@@ -4,6 +4,7 @@
 
 import {expect} from 'chai';
 import TagNamesInteroperabilityIfd from '../../src/tag-names-interoperability-ifd.js';
+import {getVersionString} from '../../src/tag-names-utils.js';
 
 describe('tag-names-interoperability-ifd', () => {
     it('should have tag InteroperabilityIndex', () => {
@@ -13,6 +14,7 @@ describe('tag-names-interoperability-ifd', () => {
     it('should have tag InteroperabilityVersion', () => {
         expect(TagNamesInteroperabilityIfd[0x0002].name).to.equal('InteroperabilityVersion');
         expect(TagNamesInteroperabilityIfd[0x0002].description([48, 49, 48, 48])).to.equal('0100');
+        expect(TagNamesInteroperabilityIfd[0x0002].description).to.equal(getVersionString);
     });
 
     it('should have tag RelatedImageFileFormat', () => {

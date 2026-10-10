@@ -550,6 +550,32 @@ describe('tags-helpers', () => {
         expect(tags.UserComment.description).to.equal('<faulty value>');
     });
 
+    it('should describe a single-byte version tag as the byte value', () => {
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x90\x00\x00\x07' // ExifVersion, UNDEFINED.
+            + '\x00\x00\x00\x01' // Number of tag items.
+            + '\x30\x00\x00\x00' // Inline value.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+        );
+        const tags = readIfd(dataView, 'exif', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags.ExifVersion.value).to.equal(0x30);
+        expect(tags.ExifVersion.description).to.equal(0x30);
+    });
+
+    it('should describe a version tag with a faulty offset as the faulty value', () => {
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x90\x00\x00\x07' // ExifVersion, UNDEFINED.
+            + '\x00\x00\x00\x10' // Number of tag items.
+            + '\x00\x00\x01\x00' // Offset past the end of the data.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+        );
+        const tags = readIfd(dataView, 'exif', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags.ExifVersion.value).to.equal('<faulty value>');
+        expect(tags.ExifVersion.description).to.equal('<faulty value>');
+    });
+
     it('should add a computed value for an ASCII tag when enabled', function () {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
         const dataView = getDataView(

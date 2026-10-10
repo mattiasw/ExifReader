@@ -28,6 +28,20 @@ export function getEncodedString(value) {
     return 'Undefined';
 }
 
+/**
+ * Converts the bytes of a version tag, such as ExifVersion, to a string. A
+ * value that is not an array (a single byte, or '<faulty value>') is returned
+ * as it is.
+ * @param {number[]|number|string} value
+ * @returns {string|number}
+ */
+export function getVersionString(value) {
+    if (Array.isArray(value)) {
+        return getByteString(value);
+    }
+    return value;
+}
+
 export function getCalculatedGpsValue(value) {
     return (value[0][0] / value[0][1]) + (value[1][0] / value[1][1]) / 60 + (value[2][0] / value[2][1]) / 3600;
 }
