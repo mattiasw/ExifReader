@@ -35,10 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the MPF `MPFVersion` tags written as ASCII text, as some cameras do, now
   have that text as their description, such as `0220`, instead of a single
   wrong character.
-- A `SampleFormat` tag stored as ASCII text with a sample named after an
-  `Object.prototype` member, such as `constructor`, was described as that
-  member, for example the source text of the `Object` function. Such a
-  sample is now described as `Unknown`.
+- An Exif tag whose description is looked up in a fixed list of values, such
+  as `SampleFormat`, `InkSet` or `SecurityClassification`, and that was stored
+  as ASCII text naming an `Object.prototype` member, such as `constructor`,
+  was described as that member, for example the `Object` function, or as its
+  source text. Such a value is now described as `Unknown`.
 
 ### Security
 

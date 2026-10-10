@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {getCharacterArray} from '../../src/utils.js';
-import {getStringValue, getEncodedString, getVersionString} from '../../src/tag-names-utils.js';
+import {getStringValue, getEncodedString, getVersionString, getTableDescription} from '../../src/tag-names-utils.js';
 import {swapProperties} from './test-utils.js';
 
 describe('tag-names-utils', () => {
@@ -89,6 +89,38 @@ describe('tag-names-utils', () => {
         const {result, calls} = getResultCountingFromCharCode(getVersionString, getCharacterArray(text));
         expect(result).to.equal(text);
         expect(calls).to.be.at.most(10);
+    });
+
+    describe('getTableDescription', () => {
+        const table = {1: 'One', 2: 'Two'};
+
+        it('should describe an own key given as a number, a string or a one-element array', () => {
+            expect(getTableDescription(table, 1)).to.equal('One');
+            expect(getTableDescription(table, '1')).to.equal('One');
+            expect(getTableDescription(table, [1])).to.equal('One');
+            expect(getTableDescription(table, ['1'])).to.equal('One');
+        });
+
+        it('should describe an own string key given as a string or a one-element array', () => {
+            expect(getTableDescription({C: 'Confidential'}, 'C')).to.equal('Confidential');
+            expect(getTableDescription({C: 'Confidential'}, ['C'])).to.equal('Confidential');
+        });
+
+        it('should describe a value that is not a key as unknown', () => {
+            expect(getTableDescription(table, 3)).to.equal('Unknown');
+            expect(getTableDescription(table, ['3'])).to.equal('Unknown');
+        });
+
+        it('should describe a value named after an Object.prototype member as unknown', () => {
+            for (const value of ['constructor', '__proto__', 'toString', 'hasOwnProperty', ['constructor'], ['__proto__']]) {
+                expect(getTableDescription(table, value), String(value)).to.equal('Unknown');
+            }
+        });
+
+        it('should describe a falsy own key', () => {
+            expect(getTableDescription({0: 'Zero'}, 0)).to.equal('Zero');
+            expect(getTableDescription({0: 'Zero'}, -0)).to.equal('Zero');
+        });
     });
 
     function getPrintableText(length) {

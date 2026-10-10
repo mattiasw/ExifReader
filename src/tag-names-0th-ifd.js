@@ -4,12 +4,13 @@
 
 import TagNamesCommon from './tag-names-common.js';
 import {joinMapped} from './utils.js';
+import {getTableDescription} from './tag-names-utils.js';
 
 export default {
     0x000b: 'ProcessingSoftware',
     0x00fe: {
         name: 'SubfileType',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             0x0: 'Full-resolution image',
             0x1: 'Reduced-resolution image',
             0x2: 'Single page of multi-page image',
@@ -20,15 +21,15 @@ export default {
             0x7: 'Transparency mask of reduced-resolution multi-page image',
             0x10001: 'Alternate reduced-resolution image',
             0xffffffff: 'Invalid'
-        })[value] || 'Unknown'
+        }, value)
     },
     0x00ff: {
         name: 'OldSubfileType',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             0: 'Full-resolution image',
             1: 'Reduced-resolution image',
             2: 'Single page of multi-page image'
-        })[value] || 'Unknown'
+        }, value)
     },
     0x0100: 'ImageWidth',
     0x0101: 'ImageLength',
@@ -37,20 +38,20 @@ export default {
     0x0106: 'PhotometricInterpretation',
     0x0107: {
         name: 'Thresholding',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             1: 'No dithering or halftoning',
             2: 'Ordered dither or halfton',
             3: 'Randomized dither'
-        })[value] || 'Unknown'
+        }, value)
     },
     0x0108: 'CellWidth',
     0x0109: 'CellLength',
     0x010a: {
         name: 'FillOrder',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             1: 'Normal',
             2: 'Reversed'
-        })[value] || 'Unknown'
+        }, value)
     },
     0x010d: 'DocumentName',
     0x010e: 'ImageDescription',
@@ -116,13 +117,13 @@ export default {
     },
     0x0122: {
         name: 'GrayResponseUnit',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             1: '0.1',
             2: '0.001',
             3: '0.0001',
             4: '1e-05',
             5: '1e-06'
-        })[value] || 'Unknown'
+        }, value)
     },
     0x0128: {
         name: 'ResolutionUnit',
@@ -149,19 +150,19 @@ export default {
     0x014a: 'A100DataOffset',
     0x014c: {
         name: 'InkSet',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             1: 'CMYK',
             2: 'Not CMYK'
-        })[value] || 'Unknown'
+        }, value)
     },
     0x0151: 'TargetPrinter',
     0x0152: {
         name: 'ExtraSamples',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             0: 'Unspecified',
             1: 'Associated Alpha',
             2: 'Unassociated Alpha',
-        })[value] || 'Unknown'
+        }, value)
     },
     0x0153: {
         name: 'SampleFormat',
@@ -263,10 +264,10 @@ export default {
     0xc633: 'ShadowScale',
     0xc635: {
         name: 'MakerNoteSafety',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             0: 'Unsafe',
             1: 'Safe'
-        })[value] || 'Unknown'
+        }, value)
     },
     0xc65a: {
         name: 'CalibrationIlluminant1',
@@ -298,12 +299,12 @@ export default {
     0xc6fc: 'ProfileToneCurve',
     0xc6fd: {
         name: 'ProfileEmbedPolicy',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             0: 'Allow Copying',
             1: 'Embed if Used',
             2: 'Never Embed',
             3: 'No Restrictions'
-        })[value] || 'Unknown'
+        }, value)
     },
     0xc6fe: 'ProfileCopyright',
     0xc714: 'ForwardMatrix1',
@@ -314,12 +315,12 @@ export default {
     0xc719: 'PreviewSettingsDigest',
     0xc71a: {
         name: 'PreviewColorSpace',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             1: 'Gray Gamma 2.2',
             2: 'sRGB',
             3: 'Adobe RGB',
             4: 'ProPhoto RGB'
-        })[value] || 'Unknown'
+        }, value)
     },
     0xc71b: 'PreviewDateTime',
     0xc71c: 'RawImageDigest',
@@ -336,25 +337,25 @@ export default {
     0xc7a1: 'CameraLabel',
     0xc7a3: {
         name: 'ProfileHueSatMapEncoding',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             0: 'Linear',
             1: 'sRGB'
-        })[value] || 'Unknown'
+        }, value)
     },
     0xc7a4: {
         name: 'ProfileLookTableEncoding',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             0: 'Linear',
             1: 'sRGB'
-        })[value] || 'Unknown'
+        }, value)
     },
     0xc7a5: 'BaselineExposureOffset',
     0xc7a6: {
         name: 'DefaultBlackRender',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             0: 'Auto',
             1: 'None'
-        })[value] || 'Unknown'
+        }, value)
     },
     0xc7a7: 'NewRawImageDigest',
     0xc7a8: 'RawToPreviewGain'
@@ -376,7 +377,7 @@ function getSampleFormatText(sample) {
         5: 'Complex int',
         6: 'Complex float',
     };
-    return Object.prototype.hasOwnProperty.call(formats, sample) ? formats[sample] : 'Unknown';
+    return getTableDescription(formats, sample);
 }
 
 function decodeXPValue(value) {
