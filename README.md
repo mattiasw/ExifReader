@@ -26,29 +26,33 @@ You can try it out on the
 | File type              | Exif    | IPTC    | XMP     | ICC     | MPF     | Photoshop     | MakerNote          | Thumbnail | Image details |
 | -----------------------|---------|---------|---------|---------|---------|---------------|--------------------|-----------|---------------|
 | JPEG                   | **yes** | **yes** | **yes** | **yes** | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
-| JPEG XL&ast;&ast;&ast; | **yes** | no      | **yes** | no      | no      | no            | **some**&ast;&ast; | ???       | **yes**       |
-| TIFF                   | **yes** | **yes** | **yes** | **yes** | ???     | **some**&ast; | **some**&ast;&ast; | **yes**   | N/A           |
-| PNG                    | **yes** | **yes** | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | **yes**       |
-| HEIC/HEIF              | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
-| AVIF                   | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | no            |
-| WebP                   | **yes** | no      | **yes** | **yes** | ???     | ???           | **some**&ast;&ast; | **yes**   | **yes**       |
+| JPEG XL&ast;&ast;&ast; | **yes** | no      | **yes** | no      | no      | **some**&ast; | **some**&ast;&ast; | **some**  | **yes**       |
+| TIFF                   | **yes** | **yes** | **yes** | **yes** | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | N/A           |
+| PNG                    | **yes** | **yes** | **yes** | **yes** | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
+| HEIC/HEIF              | **yes** | no      | **yes** | **yes** | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | no            |
+| AVIF                   | **yes** | no      | **yes** | **yes** | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | no            |
+| WebP                   | **yes** | no      | **yes** | **yes** | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
 | GIF                    | N/A     | N/A     | N/A     | N/A     | N/A     | N/A           | N/A                | N/A       | **yes**       |
 
 - `MakerNote` = Manufacturers' proprietary MakerNote tags.
 - `Image details` = image width, height, etc. read from image header.
 - `N/A` = The feature is not applicable to this file type.
-- `???` = may be supported but has not been tested.
 - `*` = A draft implementation of Photoshop tags have been added with
     `ClippingPathName` and `PathInformation` currently supported. Photoshop tags
     are very different from other tags and need a lot of extra code so they have
     deliberately not been fully implemented. File an issue if there is something
-    you think should really be supported.
+    you think should really be supported. In PNG files, Photoshop tags are only
+    read from an `eXIf` chunk, not from a `Raw profile type exif` text chunk.
 - `**` = Some of the Canon-specific and Pentax-specific tags have been added.
-    File an issue if you think something more should be supported.
+    File an issue if you think something more should be supported. In PNG
+    files, maker notes are only read from an `eXIf` chunk, not from a
+    `Raw profile type exif` text chunk.
 - `***` = Metadata in JPEG XL are often (but not always) encoded with Brotli
     compression. This is supported in some environments when using
     `async: true`. See the [Asynchronous tags](#asynchronous-tags) and
-    [Custom decompression](#custom-decompression) sections for details.
+    [Custom decompression](#custom-decompression) sections for details. The
+    thumbnail, the Photoshop tags and the maker notes are only read from an
+    uncompressed Exif box.
 
 If you're missing something that you think should be supported, file an issue
 with an attached example image and I'll see what I can do.

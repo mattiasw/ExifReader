@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The support table in the README no longer marks any cell as untested. MPF is
+  a JPEG APP2 structure with no place in TIFF, PNG, HEIC/HEIF, AVIF or WebP,
+  so those cells now say not applicable. Photoshop tags are read from the Exif
+  data of PNG, HEIC/HEIF, AVIF, WebP and JPEG XL files just as they are from
+  TIFF, so those cells now say partially supported. The table now also says
+  that the JPEG XL thumbnail, Photoshop tags and maker notes are only read from
+  an uncompressed Exif box, and that PNG Photoshop tags and maker notes are only
+  read from an `eXIf` chunk.
+
 ## [4.48.1] - 2026-10-10
 
 ### Fixed
