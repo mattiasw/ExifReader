@@ -21,10 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The support table in the README no longer marks any cell as untested. MPF is
-  a JPEG APP2 structure with no place in TIFF, PNG, HEIC/HEIF, AVIF or WebP,
-  so those cells now say not applicable. Photoshop tags are read from the Exif
-  data of PNG, HEIC/HEIF, AVIF, WebP and JPEG XL files just as they are from
-  TIFF, so those cells now say partially supported.
+  a JPEG APP2 structure with no place in TIFF, PNG, HEIC/HEIF, AVIF, WebP or
+  JPEG XL, so those cells now say not applicable. Photoshop tags are read from
+  the Exif data of PNG, HEIC/HEIF, AVIF, WebP and JPEG XL files just as they
+  are from TIFF, so those cells now say partially supported.
 - The support table in the README now says that IPTC tags are read from the
   Exif data of HEIC/HEIF, AVIF, WebP and JPEG XL files, and that ICC tags are
   read from the Exif data of JPEG XL files, instead of marking them as not
