@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringValueFromArray as getStringValue} from './utils.js';
+import {getStringValueFromArray as getStringValue, getByteString} from './utils.js';
 
 export {getStringValue};
 
@@ -11,13 +11,13 @@ export function getEncodedString(value) {
         const encoding = getStringValue(value.slice(0, 8));
 
         if (encoding === 'ASCII\x00\x00\x00') {
-            return getStringValue(value.slice(8));
+            return getByteString(value, 8);
         } else if (encoding === 'JIS\x00\x00\x00\x00\x00') {
             return '[JIS encoded text]';
         } else if (encoding === 'UNICODE\x00') {
             return '[Unicode encoded text]';
         } else if (encoding === '\x00\x00\x00\x00\x00\x00\x00\x00') {
-            const text = getStringValue(value.slice(8));
+            const text = getByteString(value, 8);
             if (/[\x20-\x7e]/.test(text)) {
                 return text;
             }

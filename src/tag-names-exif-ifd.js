@@ -354,14 +354,7 @@ export default {
     0xa432: {
         'name': 'LensSpecification',
         'description': (value) => {
-            const focalLengthFrom = parseFloat((value[0][0] / value[0][1]).toFixed(5));
-            const focalLengthTo = parseFloat((value[1][0] / value[1][1]).toFixed(5));
-            const focalLengths = `${focalLengthFrom}-${focalLengthTo} mm`;
-            if (value[3][1] === 0) {
-                return `${focalLengths} f/?`;
-            }
-            const maxAperture = 1 / ((value[2][1] / value[2][1]) / (value[3][0] / value[3][1]));
-            return `${focalLengths} f/${parseFloat(maxAperture.toFixed(5))}`;
+            return `${getLensFocalLengths(value[0], value[1])} mm f/${getLensApertures(value[2], value[3])}`;
         }
     },
     0xa433: 'LensMake',
@@ -395,3 +388,31 @@ export default {
     0xfe57: 'Smoothness',
     0xfe58: 'MoireFilter'
 };
+
+function getLensFocalLengths(from, to) {
+    const focalLengthFrom = getRoundedRational(from);
+    const focalLengthTo = getRoundedRational(to);
+    if (focalLengthTo === 0 || focalLengthTo === focalLengthFrom) {
+        return `${focalLengthFrom}`;
+    }
+    return `${focalLengthFrom}-${focalLengthTo}`;
+}
+
+function getLensApertures(wide, long) {
+    const apertures = [wide, long].filter(isKnownRational).map(getRoundedRational);
+    if (apertures.length === 0) {
+        return '?';
+    }
+    if (apertures.length === 1 || apertures[1] === 0 || apertures[1] === apertures[0]) {
+        return `${apertures[0]}`;
+    }
+    return `${apertures[0]}-${apertures[1]}`;
+}
+
+function getRoundedRational(rational) {
+    return parseFloat((rational[0] / rational[1]).toFixed(5));
+}
+
+function isKnownRational(rational) {
+    return rational[1] !== 0;
+}

@@ -21,6 +21,10 @@ const SIGNATURE_SIZE = SIGNATURE.length;
 const TAG_NAME_MIN_SIZE = 2;
 const RESOURCE_BLOCK_MIN_HEADER_SIZE = SIGNATURE_SIZE + TAG_ID_SIZE + TAG_NAME_MIN_SIZE + RESOURCE_LENGTH_SIZE;
 
+// Photoshop defines about 2,100 resource ids and real files carry a few dozen,
+// so the cap never cuts a genuine file.
+export const MAX_RESOURCES = 4096;
+
 function read(bytes, includeUnknown, tagFilter = NOOP_TAG_FILTER) {
     if (!Array.isArray(bytes)) {
         return {};
@@ -31,7 +35,11 @@ function read(bytes, includeUnknown, tagFilter = NOOP_TAG_FILTER) {
     const tags = {};
     let offset = 0;
 
-    while (offset + RESOURCE_BLOCK_MIN_HEADER_SIZE <= dataView.byteLength) {
+    for (
+        let resourceCount = 0;
+        resourceCount < MAX_RESOURCES && offset + RESOURCE_BLOCK_MIN_HEADER_SIZE <= dataView.byteLength;
+        resourceCount++
+    ) {
         const signature = getStringFromDataView(dataView, offset, SIGNATURE_SIZE);
         offset += SIGNATURE_SIZE;
         const tagId = Types.getShortAt(dataView, offset);

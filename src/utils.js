@@ -191,9 +191,29 @@ export function getCharacterArray(string) {
     return string.split('').map((character) => character.charCodeAt(0));
 }
 
+// Guards against memory exhaustion from a crafted file. A real JPEG has at most 255 ICC
+// segments, ExifReader reads at most 1024 XMP ones, and other containers are few.
+export const MAX_METADATA_BLOCKS = 4096;
+
+/**
+ * Records one metadata block. The list holds at most MAX_METADATA_BLOCKS
+ * entries; past that, the last entry is widened to cover each further block
+ * and keeps its own type. Does nothing without a list or a type.
+ * @param {Array<{type: string, start: number, end: number}>|undefined} metadataBlocks
+ * @param {string|undefined} type
+ * @param {number} start
+ * @param {number} end Exclusive.
+ */
 export function pushMetadataBlock(metadataBlocks, type, start, end) {
-    if (metadataBlocks && type) {
+    if (!metadataBlocks || !type) {
+        return;
+    }
+    if (metadataBlocks.length < MAX_METADATA_BLOCKS) {
         metadataBlocks.push({type, start, end});
+    } else {
+        const lastBlock = metadataBlocks[metadataBlocks.length - 1];
+        lastBlock.start = Math.min(lastBlock.start, start);
+        lastBlock.end = Math.max(lastBlock.end, end);
     }
 }
 
@@ -267,21 +287,25 @@ export function deferInit(object, key, initializer) {
 }
 
 export function getBase64Image(image) {
+    if (typeof image === 'string' && typeof btoa !== 'undefined') {
+        // Only tests pass a string. btoa reads it as Latin-1, Buffer.from would use UTF-8.
+        return btoa(image);
+    }
+    if (hasBufferFrom()) {
+        return Buffer.from(image).toString('base64'); // eslint-disable-line no-undef
+    }
     if (typeof btoa !== 'undefined') {
-        if (typeof image === 'string') {
-            // This only happens during the build tests using Node 16+ (npm run test:build).
-            return btoa(image);
-        }
-        // IE11- does not implement reduce on the Uint8Array prototype.
-        return btoa(Array.prototype.reduce.call(new Uint8Array(image), (data, byte) => data + String.fromCharCode(byte), ''));
+        return btoa(getByteString(new Uint8Array(image)));
     }
     if (typeof Buffer === 'undefined') {
         return undefined;
     }
-    if (typeof Buffer.from !== 'undefined') { // eslint-disable-line no-undef
-        return Buffer.from(image).toString('base64'); // eslint-disable-line no-undef
-    }
     return (new Buffer(image)).toString('base64'); // eslint-disable-line no-undef
+}
+
+function hasBufferFrom() {
+    // Buffer polyfills before buffer@4.6.0 inherit Uint8Array.from, which returns an empty array for an ArrayBuffer.
+    return typeof Buffer !== 'undefined' && typeof Buffer.from !== 'undefined' && Buffer.from !== Uint8Array.from; // eslint-disable-line no-undef
 }
 
 export function dataUriToBuffer(dataUri) {
@@ -472,8 +496,8 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
         try {
             return new TextDecoder(encoding).decode(dataView);
         } catch (error) {
-            const bytes = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
-            return Array.from(bytes, (byte) => String.fromCharCode(byte)).join('');
+            // Like TextDecoder's decode(), read a missing view as no bytes.
+            return dataView ? getByteString(getUint8View(dataView)) : '';
         }
     }
     return dataView;

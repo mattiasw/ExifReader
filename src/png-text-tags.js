@@ -6,7 +6,7 @@
 
 import {getStringValueFromArray, getStringFromDataView, decompress, setProperty, getTagKey, objectAssign, COMPRESSION_METHOD_NONE, getHexDigitValue} from './utils.js';
 import TagDecoder from './tag-decoder.js';
-import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
+import {PNG_CHUNK_LENGTH_OFFSET, PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_DATA_OFFSET, PNG_CHUNK_TYPE_SIZE, TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
 import Tags from './tags.js';
 import IptcTags from './iptc-tags.js';
 import Constants from './constants.js';
@@ -33,6 +33,7 @@ const MAX_KEYWORD_LENGTH = 79;
 const MAX_LANGUAGE_TAG_LENGTH = 79;
 
 /**
+ * @param {number[]} pngTextChunks Chunk start offsets, where each chunk's length field is.
  * @param {function(DataView, object, number): object} [getThumbnail] Called with a
  *     decoded Exif raw profile, its thumbnail IFD tags and the TIFF header offset;
  *     returns the thumbnail tags, with `image` set when the thumbnail was read.
@@ -64,8 +65,10 @@ function read(
     const compressedChunks = [];
 
     for (let i = 0; i < pngTextChunks.length; i++) {
-        const {offset, length, type} = pngTextChunks[i];
-        const textChunk = parseTextChunk(dataView, offset, length, type);
+        const chunkOffset = pngTextChunks[i];
+        const length = dataView.getUint32(chunkOffset + PNG_CHUNK_LENGTH_OFFSET);
+        const type = getStringFromDataView(dataView, chunkOffset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
+        const textChunk = parseTextChunk(dataView, chunkOffset + PNG_CHUNK_DATA_OFFSET, length, type);
         if (!textChunk) {
             continue;
         }

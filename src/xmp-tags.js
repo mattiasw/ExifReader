@@ -132,7 +132,7 @@ function readTags(tags, chunkDataView, domParser) {
         delete xmpTags._raw;
         const names = Object.keys(xmpTags);
         for (let i = 0; i < names.length; i++) {
-            setProperty(tags, getTagKey(names[i]), xmpTags[names[i]]);
+            setProperty(tags, names[i], xmpTags[names[i]]);
         }
         return true;
     } catch (error) {
@@ -335,7 +335,9 @@ function getElementFromNode(node, decodeValue) {
 
 function getAttributes(element, decodeValue) {
     const elementAttributes = element.attributes;
-    const attributes = {};
+    // A qualifier with element content returns these unchanged in its element
+    // tree, so like the elements object they must not have a prototype.
+    const attributes = Object.create(null);
 
     for (let i = 0; i < elementAttributes.length; i++) {
         setProperty(attributes, elementAttributes[i].nodeName, decodeValue(elementAttributes[i].value));
@@ -382,8 +384,9 @@ function isNamespaceDefinition(name) {
 }
 
 function setParsedTag(tags, plainDescriptions, name, parsedTag) {
-    setProperty(tags, name, parsedTag.tag);
-    setProperty(plainDescriptions, name, parsedTag.plainDescription);
+    const key = getTagKey(name);
+    setProperty(tags, key, parsedTag.tag);
+    setProperty(plainDescriptions, key, parsedTag.plainDescription);
 }
 
 function getLocalName(name) {
@@ -531,7 +534,7 @@ function parseNodeAttributes(node) {
 
     for (const name in node.attributes) {
         if ((name !== 'rdf:parseType') && (name !== 'rdf:resource') && (!isNamespaceDefinition(name))) {
-            setProperty(attributes, getLocalName(name), node.attributes[name]);
+            setProperty(attributes, getTagKey(getLocalName(name)), node.attributes[name]);
         }
     }
 
@@ -547,7 +550,7 @@ function parseNodeChildrenAsAttributes(node) {
 
     for (const name in node.value) {
         if ((name !== 'rdf:value') && (!isNamespaceDefinition(name))) {
-            setProperty(attributes, getLocalName(name), node.value[name].value);
+            setProperty(attributes, getTagKey(getLocalName(name)), node.value[name].value);
         }
     }
 
