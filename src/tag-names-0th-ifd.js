@@ -168,7 +168,7 @@ export default {
         name: 'SampleFormat',
         description: (value) => {
             if (!Array.isArray(value)) {
-                return 'Unknown';
+                return getSampleFormatText(value);
             }
             return value.map(getSampleFormatText).join(', ');
         }
