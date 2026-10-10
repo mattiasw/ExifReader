@@ -1262,6 +1262,73 @@ describe('utils', () => {
             Utils.pushMetadataBlock(metadataBlocks, undefined, 12, 34);
             expect(metadataBlocks).to.deep.equal([]);
         });
+
+        it('should cap the block list at 4096 entries', () => {
+            expect(Utils.MAX_METADATA_BLOCKS).to.equal(4096);
+        });
+
+        it('should keep every block as given up to the cap', () => {
+            const metadataBlocks = getFullBlockList();
+            expect(metadataBlocks).to.deep.equal(getExpectedFullBlockList());
+        });
+
+        it('should widen the end of the last block instead of pushing past the cap', () => {
+            const metadataBlocks = getFullBlockList();
+            const {start, end} = getLastBlock(metadataBlocks);
+            Utils.pushMetadataBlock(metadataBlocks, 'png', end + 4, end + 16);
+            expect(metadataBlocks).to.have.lengthOf(Utils.MAX_METADATA_BLOCKS);
+            expect(getLastBlock(metadataBlocks)).to.deep.equal({type: 'png', start, end: end + 16});
+        });
+
+        it('should widen the start of the last block for an out-of-order block past the cap', () => {
+            const metadataBlocks = getFullBlockList();
+            const {end} = getLastBlock(metadataBlocks);
+            Utils.pushMetadataBlock(metadataBlocks, 'png', 2, 6);
+            expect(metadataBlocks).to.have.lengthOf(Utils.MAX_METADATA_BLOCKS);
+            expect(getLastBlock(metadataBlocks)).to.deep.equal({type: 'png', start: 2, end});
+        });
+
+        it('should not narrow the last block for a block inside it past the cap', () => {
+            const metadataBlocks = getFullBlockList();
+            const {start, end} = getLastBlock(metadataBlocks);
+            Utils.pushMetadataBlock(metadataBlocks, 'png', start + 1, end - 1);
+            expect(getLastBlock(metadataBlocks)).to.deep.equal({type: 'png', start, end});
+        });
+
+        it('should keep the type of the last block when widening it with another type', () => {
+            const metadataBlocks = getFullBlockList();
+            const {start, end} = getLastBlock(metadataBlocks);
+            Utils.pushMetadataBlock(metadataBlocks, 'exif', end, end + 10);
+            expect(getLastBlock(metadataBlocks)).to.deep.equal({type: 'png', start, end: end + 10});
+        });
+
+        it('should not widen the last block for a block without a type past the cap', () => {
+            const metadataBlocks = getFullBlockList();
+            const {start, end} = getLastBlock(metadataBlocks);
+            Utils.pushMetadataBlock(metadataBlocks, undefined, start - 1, end + 1);
+            expect(metadataBlocks).to.have.lengthOf(Utils.MAX_METADATA_BLOCKS);
+            expect(getLastBlock(metadataBlocks)).to.deep.equal({type: 'png', start, end});
+        });
+
+        function getFullBlockList() {
+            const metadataBlocks = [];
+            for (let i = 0; i < Utils.MAX_METADATA_BLOCKS; i++) {
+                Utils.pushMetadataBlock(metadataBlocks, 'png', 8 + i * 12, 20 + i * 12);
+            }
+            return metadataBlocks;
+        }
+
+        function getExpectedFullBlockList() {
+            const expected = [];
+            for (let i = 0; i < 4096; i++) {
+                expected.push({type: 'png', start: 8 + i * 12, end: 20 + i * 12});
+            }
+            return expected;
+        }
+
+        function getLastBlock(metadataBlocks) {
+            return metadataBlocks[metadataBlocks.length - 1];
+        }
     });
 
     describe('setProperty', () => {

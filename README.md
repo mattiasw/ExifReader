@@ -495,6 +495,10 @@ Block `type` reuses the filtering-group vocabulary (`exif`, `iptc`, `xmp`,
 `icc`, `mpf`, `jfif`, `file`, `png`, `riff`, `gif`), plus `mpfImage` for the
 sub-images of an MPF Multi-Picture JPEG. The same type may appear more than
 once (multi-chunk ICC, extended XMP), one entry per physical container.
+ExifReader records at most 4,096 of the containers it finds while scanning
+the file; in a file with more, the last one recorded keeps its own type and is
+widened to cover all the rest, so `start`, `end` and the `0..end` slice still
+cover every metadata byte. `mpfImage` blocks come on top of these.
 
 Typical workflow:
 

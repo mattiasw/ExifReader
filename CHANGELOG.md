@@ -64,6 +64,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ApplicationNotes` value blocked `load()` for about 0.5 seconds. Such a tag
   is no longer converted to XMP, so the same file takes about 0.24 seconds,
   and with `expanded: true` it no longer leaves an empty `xmp` group.
+- With `includeOffsets: true`, a crafted file made of many small metadata
+  segments (PNG chunks, JPEG APP segments, WebP chunks, JPEG XL boxes, HEIC
+  and AVIF item extents) made `metadataRange.blocks` grow without bound: 8 MiB
+  of nine-byte JPEG APP0 segments raised peak memory to about 225 MB, against
+  about 84 MB without `includeOffsets`. `metadataRange.blocks` now records at
+  most 4,096 of the metadata containers found in the file, the last one
+  widened to cover the rest, so the same file peaks at about 86 MB.
 
 ## [4.48.0] - 2026-10-09
 
