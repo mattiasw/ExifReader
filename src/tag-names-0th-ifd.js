@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import TagNamesCommon from './tag-names-common.js';
+import {joinMapped} from './utils.js';
 
 export default {
     0x000b: 'ProcessingSoftware',
@@ -136,15 +137,11 @@ export default {
     0x013d: 'Predictor',
     0x013e: {
         'name': 'WhitePoint',
-        'description': (values) => {
-            return values.map((value) => `${value[0]}/${value[1]}`).join(', ');
-        }
+        'description': (values) => joinMapped(values, getRationalText, ', ')
     },
     0x013f: {
         'name': 'PrimaryChromaticities',
-        'description': (values) => {
-            return values.map((value) => `${value[0]}/${value[1]}`).join(', ');
-        }
+        'description': (values) => joinMapped(values, getRationalText, ', ')
     },
     0x0141: 'HalftoneHints',
     0x0142: 'TileWidth',
@@ -169,18 +166,10 @@ export default {
     0x0153: {
         name: 'SampleFormat',
         description: (value) => {
-            const formats = {
-                1: 'Unsigned',
-                2: 'Signed',
-                3: 'Float',
-                4: 'Undefined',
-                5: 'Complex int',
-                6: 'Complex float',
-            };
             if (!Array.isArray(value)) {
                 return 'Unknown';
             }
-            return value.map((sample) => formats[sample] || 'Unknown').join(', ');
+            return value.map(getSampleFormatText).join(', ');
         }
     },
     0x0201: 'JPEGInterchangeFormat',
@@ -370,6 +359,25 @@ export default {
     0xc7a7: 'NewRawImageDigest',
     0xc7a8: 'RawToPreviewGain'
 };
+
+function getRationalText(value) {
+    if (!Array.isArray(value)) {
+        throw new TypeError('Expected a rational.');
+    }
+    return `${value[0]}/${value[1]}`;
+}
+
+function getSampleFormatText(sample) {
+    const formats = {
+        1: 'Unsigned',
+        2: 'Signed',
+        3: 'Float',
+        4: 'Undefined',
+        5: 'Complex int',
+        6: 'Complex float',
+    };
+    return Object.prototype.hasOwnProperty.call(formats, sample) ? formats[sample] : 'Unknown';
+}
 
 function decodeXPValue(value) {
     if (!Array.isArray(value)) {
