@@ -11,7 +11,7 @@ import Tags from './tags.js';
 import IptcTags from './iptc-tags.js';
 import Constants from './constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
-import {addDecompressedValueAllowance, addDecompressedIptcAllowance} from './tags-helpers.js';
+import {addDecompressedValueAllowance, addDecompressedIptcAllowance, takeEmbeddedExifThumbnail} from './tags-helpers.js';
 
 export default {
     read
@@ -29,6 +29,7 @@ const MAX_COMPRESSED_TEXT_CHUNKS = 255;
 const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;
 // PNG spec: a keyword is 1-79 bytes.
 const MAX_KEYWORD_LENGTH = 79;
+const IPTC_PROFILE_NAME = 'raw profile type iptc';
 // Our own bound: BCP 47 sets no maximum, but real tags are far shorter.
 const MAX_LANGUAGE_TAG_LENGTH = 79;
 
@@ -38,14 +39,21 @@ const MAX_LANGUAGE_TAG_LENGTH = 79;
  *     decoded Exif raw profile, its thumbnail IFD tags and the TIFF header offset;
  *     returns the thumbnail tags, with `image` set when the thumbnail was read.
  *     No thumbnail is returned when it is not passed.
- * @returns {{readTags: object, embeddedExifTags: object|undefined, embeddedIptcTags: object|undefined, embeddedExifThumbnail: object|undefined, readTagsPromise: Promise<object[]>|undefined}}
- *     `readTags`, the two embedded groups and `embeddedExifThumbnail` come from
- *     uncompressed chunks and are ready at once; the embedded groups are undefined
- *     when no uncompressed raw profile was parsed, and `embeddedExifThumbnail` is
- *     the first thumbnail with an image. `readTagsPromise` resolves to one result
- *     per compressed chunk, in chunk order, each with its own
- *     `embeddedExifThumbnail` when it has one and no uncompressed chunk had one,
- *     and is undefined when none is read.
+ * @param {function(DataView, object, number, number, object, {decompressed: boolean, hasIptcBlock: boolean}): object} [readCarriedGroups]
+ *     Called with a decoded Exif raw profile, the Exif tags read from it, the TIFF
+ *     header offset, the byte order, the value budget and where the profile came
+ *     from: `decompressed` when the chunk was compressed, `hasIptcBlock` when the
+ *     file has a `Raw profile type iptc` chunk. Returns the parsed groups the Exif
+ *     carries, keyed by group name. No groups are read when it is not passed.
+ * @returns {{readTags: object, embeddedExifTags: object|undefined, embeddedIptcTags: object|undefined, embeddedExifThumbnail: object|undefined, exifCarriedGroups: object|undefined, readTagsPromise: Promise<object[]>|undefined}}
+ *     `readTags`, the two embedded groups, `exifCarriedGroups` and
+ *     `embeddedExifThumbnail` come from uncompressed chunks and are ready at
+ *     once; the embedded groups and `exifCarriedGroups` are undefined when no
+ *     uncompressed raw profile was parsed, and `embeddedExifThumbnail` is the
+ *     first thumbnail with an image. `readTagsPromise` resolves to one result per
+ *     compressed chunk, in chunk order, each with its own `exifCarriedGroups`, and
+ *     its own `embeddedExifThumbnail` when it has one and no uncompressed chunk
+ *     had one, and is undefined when none is read.
  */
 function read(
     dataView,
@@ -56,12 +64,15 @@ function read(
     tagFilter = NOOP_TAG_FILTER,
     decompressConfig,
     valueBudget,
-    getThumbnail
+    getThumbnail,
+    readCarriedGroups
 ) {
     const tags = {};
     let embeddedExifTags;
     let embeddedIptcTags;
     let embeddedExifThumbnail;
+    let exifCarriedGroups;
+    const uncompressedRawProfiles = [];
     const compressedChunks = [];
 
     for (let i = 0; i < pngTextChunks.length; i++) {
@@ -75,23 +86,7 @@ function read(
         if (textChunk.compressionMethod === COMPRESSION_METHOD_NONE) {
             const tag = getUncompressedTag(textChunk);
             if (isRawProfileTag(tag)) {
-                const rawProfileTags = getTagsFromTextTag(
-                    tag,
-                    includeUnknown,
-                    computed,
-                    tagFilter,
-                    valueBudget,
-                    embeddedExifThumbnail ? undefined : getThumbnail
-                );
-                if (rawProfileTags.embeddedExifTags) {
-                    embeddedExifTags = objectAssign(embeddedExifTags || {}, rawProfileTags.embeddedExifTags);
-                }
-                if (rawProfileTags.embeddedExifThumbnail) {
-                    embeddedExifThumbnail = rawProfileTags.embeddedExifThumbnail;
-                }
-                if (rawProfileTags.embeddedIptcTags) {
-                    embeddedIptcTags = objectAssign(embeddedIptcTags || {}, rawProfileTags.embeddedIptcTags);
-                }
+                uncompressedRawProfiles.push(tag);
             } else if (tag.name && tagFilter.shouldParseGroup('png')) {
                 setProperty(tags, getTagKey(tag.name), {
                     value: tag.value,
@@ -100,6 +95,35 @@ function read(
             }
         } else if (async && compressedChunks.length < MAX_COMPRESSED_TEXT_CHUNKS) {
             compressedChunks.push(textChunk);
+        }
+    }
+
+    const hasIptcProfile = uncompressedRawProfiles.some((tag) => isIptcGroupTag(tag.name, tag.value))
+        || compressedChunks.some(isCompressedIptcProfile);
+
+    for (let i = 0; i < uncompressedRawProfiles.length; i++) {
+        const rawProfileTags = getTagsFromTextTag(
+            uncompressedRawProfiles[i],
+            includeUnknown,
+            computed,
+            tagFilter,
+            valueBudget,
+            embeddedExifThumbnail ? undefined : getThumbnail,
+            readCarriedGroups,
+            false,
+            hasIptcProfile
+        );
+        if (rawProfileTags.embeddedExifTags) {
+            embeddedExifTags = objectAssign(embeddedExifTags || {}, rawProfileTags.embeddedExifTags);
+        }
+        if (rawProfileTags.exifCarriedGroups) {
+            exifCarriedGroups = mergeCarriedGroups(exifCarriedGroups || {}, rawProfileTags.exifCarriedGroups);
+        }
+        if (rawProfileTags.embeddedExifThumbnail) {
+            embeddedExifThumbnail = rawProfileTags.embeddedExifThumbnail;
+        }
+        if (rawProfileTags.embeddedIptcTags) {
+            embeddedIptcTags = objectAssign(embeddedIptcTags || {}, rawProfileTags.embeddedIptcTags);
         }
     }
 
@@ -112,7 +136,9 @@ function read(
             tagFilter,
             valueBudget,
             compressedThumbnailReader,
-            true
+            readCarriedGroups,
+            true,
+            hasIptcProfile
         )));
 
     return {
@@ -120,8 +146,22 @@ function read(
         embeddedExifTags,
         embeddedIptcTags,
         embeddedExifThumbnail,
+        exifCarriedGroups,
         readTagsPromise: decompressionTasks.length > 0 ? runTasksInOrder(decompressionTasks, MAX_DECOMPRESSIONS_IN_FLIGHT) : undefined
     };
+}
+
+// A compressed profile counts before its value can be checked.
+function isCompressedIptcProfile({type, langChars, keywordChars}) {
+    return getName(type, langChars, keywordChars).toLowerCase() === IPTC_PROFILE_NAME;
+}
+
+function mergeCarriedGroups(target, source) {
+    const groupKeys = Object.keys(source);
+    for (let i = 0; i < groupKeys.length; i++) {
+        target[groupKeys[i]] = objectAssign(target[groupKeys[i]] || {}, source[groupKeys[i]]);
+    }
+    return target;
 }
 
 function parseTextChunk(dataView, offset, length, type) {
@@ -176,7 +216,7 @@ function isRawProfileTag({name, value}) {
     return isExifGroupTag(name, value) || isIptcGroupTag(name, value);
 }
 
-function getTagsFromTextTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget, getThumbnail, isDecompressed) {
+function getTagsFromTextTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget, getThumbnail, readCarriedGroups, isDecompressed, hasIptcProfile) {
     try {
         if (Constants.USE_EXIF && isExifGroupTag(name, value)) {
             if (!tagFilter.shouldParseGroup('exif')) {
@@ -186,18 +226,33 @@ function getTagsFromTextTag({name, value, description}, includeUnknown, computed
             if (isDecompressed) {
                 addDecompressedValueAllowance(valueBudget, exifDataView.byteLength);
             }
-            const embeddedExifTags = Tags.read(
+            const {tags: embeddedExifTags, byteOrder} = Tags.read(
                 exifDataView,
                 EXIF_OFFSET,
                 includeUnknown,
                 computed,
                 tagFilter,
                 valueBudget
-            ).tags;
+            );
+            const result = {embeddedExifTags};
+            if (readCarriedGroups) {
+                result.exifCarriedGroups = readCarriedGroups(
+                    exifDataView,
+                    embeddedExifTags,
+                    EXIF_OFFSET,
+                    byteOrder,
+                    valueBudget,
+                    {decompressed: isDecompressed, hasIptcBlock: hasIptcProfile}
+                );
+            }
             if (embeddedExifTags['MakerNote']) {
                 delete embeddedExifTags['MakerNote'].__offset;
             }
-            return withEmbeddedExifThumbnail({embeddedExifTags}, exifDataView, getThumbnail);
+            const thumbnail = takeEmbeddedExifThumbnail(embeddedExifTags, exifDataView, EXIF_OFFSET, getThumbnail);
+            if (thumbnail) {
+                result.embeddedExifThumbnail = thumbnail;
+            }
+            return result;
         } else if (Constants.USE_IPTC && isIptcGroupTag(name, value)) {
             if (!tagFilter.shouldParseGroup('iptc')) {
                 return {};
@@ -230,22 +285,6 @@ function getTagsFromTextTag({name, value, description}, includeUnknown, computed
         // Ignore the broken tag.
     }
     return {};
-}
-
-function withEmbeddedExifThumbnail(result, exifDataView, getThumbnail) {
-    const thumbnailIfdTags = result.embeddedExifTags.Thumbnail;
-    if (!thumbnailIfdTags) {
-        return result;
-    }
-    delete result.embeddedExifTags.Thumbnail;
-
-    if (getThumbnail) {
-        const thumbnail = getThumbnail(exifDataView, thumbnailIfdTags, EXIF_OFFSET);
-        if (thumbnail.image) {
-            result.embeddedExifThumbnail = thumbnail;
-        }
-    }
-    return result;
 }
 
 function decompressTextChunk({type, keywordChars, langChars, compressionMethod, valueChars}, decompressConfig) {
@@ -354,7 +393,7 @@ function isExifGroupTag(name, value) {
 }
 
 function isIptcGroupTag(name, value) {
-    return name.toLowerCase() === 'raw profile type iptc' && value.substring(1, 5) === 'iptc';
+    return name.toLowerCase() === IPTC_PROFILE_NAME && value.substring(1, 5) === 'iptc';
 }
 
 function decodeRawData(value) {

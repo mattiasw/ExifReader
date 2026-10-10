@@ -11,7 +11,7 @@
 import {expect} from 'chai';
 import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import TagNames from '../../src/tag-names.js';
-import {readIfd, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, addDecompressedIptcAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING} from '../../src/tags-helpers.js';
+import {readIfd, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, addDecompressedIptcAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING, takeEmbeddedExifThumbnail} from '../../src/tags-helpers.js';
 import ByteOrder from '../../src/byte-order.js';
 import DataViewWrapper from '../../src/dataview.js';
 
@@ -1197,6 +1197,55 @@ describe('tags-helpers', () => {
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyAsciiTag'].value).to.deep.equal(['a', 'b']);
             expect(budget.remaining).to.equal(0);
+        });
+    });
+
+    describe('embedded Exif thumbnail', () => {
+        const THUMBNAIL_IFD_TAGS = {JPEGInterchangeFormat: {value: 10}};
+
+        it('should leave tags without a thumbnail IFD alone and not call the reader', () => {
+            const readTags = {Model: {value: 'm'}};
+            const calls = [];
+
+            const thumbnail = takeEmbeddedExifThumbnail(readTags, 'dataView', 8, (...args) => calls.push(args));
+
+            expect(thumbnail).to.equal(undefined);
+            expect(readTags).to.deep.equal({Model: {value: 'm'}});
+            expect(calls).to.deep.equal([]);
+        });
+
+        it('should remove the thumbnail IFD when there is no reader', () => {
+            const readTags = {Model: {value: 'm'}, Thumbnail: THUMBNAIL_IFD_TAGS};
+
+            const thumbnail = takeEmbeddedExifThumbnail(readTags, 'dataView', 8, undefined);
+
+            expect(thumbnail).to.equal(undefined);
+            expect(readTags).to.deep.equal({Model: {value: 'm'}});
+        });
+
+        it('should return nothing when the reader finds no image', () => {
+            const readTags = {Thumbnail: THUMBNAIL_IFD_TAGS};
+
+            const thumbnail = takeEmbeddedExifThumbnail(readTags, 'dataView', 8, () => ({...THUMBNAIL_IFD_TAGS}));
+
+            expect(thumbnail).to.equal(undefined);
+            expect(readTags).to.deep.equal({});
+        });
+
+        it('should hand the reader the view, the IFD tags and the offset and return its thumbnail', () => {
+            const readTags = {Thumbnail: THUMBNAIL_IFD_TAGS};
+            const dataView = getDataView('\x00');
+            const calls = [];
+            const result = {...THUMBNAIL_IFD_TAGS, image: '<image>'};
+
+            const thumbnail = takeEmbeddedExifThumbnail(readTags, dataView, 8, (...args) => {
+                calls.push(args);
+                return result;
+            });
+
+            expect(thumbnail).to.equal(result);
+            expect(calls).to.deep.equal([[dataView, THUMBNAIL_IFD_TAGS, 8]]);
+            expect(readTags).to.deep.equal({});
         });
     });
 });

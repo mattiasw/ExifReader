@@ -17,7 +17,7 @@ import ByteOrder from './byte-order.js';
 import {getTiffHeaderOffset} from './image-header-iso-bmff.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
-import {getValueBudget, addDecompressedValueAllowance} from './tags-helpers.js';
+import {getValueBudget, addDecompressedValueAllowance, takeEmbeddedExifThumbnail} from './tags-helpers.js';
 import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
 import JxlFileTags from './jxl-file-tags.js';
@@ -36,13 +36,19 @@ import GifFileTags from './gif-file-tags.js';
 import Thumbnail from './thumbnail.js';
 import Composite from './composite.js';
 import {createTagFilter} from './tag-filter.js';
-import {buildTagsFromMergeSteps, isThenable} from './loadview-pipeline.js';
+import {buildTagsFromMergeSteps, isThenable, EXIF_CARRIED_GROUP_ORDER} from './loadview-pipeline.js';
 import exifErrors from './errors.js';
 
 // Brob XMP is bounded by the file size, as brob Exif is, plus room for one JPEG
 // standard XMP segment so that a small file can still carry a typical packet.
 const BROB_XMP_SIZE_PER_INPUT_SIZE = 4;
 const BROB_XMP_SIZE_ALLOWANCE = 64 * 1024;
+// An embedded thumbnail is sliced from a decoded or decompressed view that can be
+// far larger than the file. A real JPEG thumbnail shrinks only a little when
+// compressed, so bound the embedded thumbnails of a file by twice its size in
+// total, plus room for a typical thumbnail.
+const EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE = 2;
+const EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE = 64 * 1024;
 
 export default {
     load,
@@ -110,6 +116,7 @@ export function loadView(
     let thumbnailIfdTags = undefined;
     let valueBudget = undefined;
     let embeddedXmpStepForFlat = undefined;
+    let decompressedApplicationNotesSize = 0;
 
     const {
         fileType,
@@ -211,51 +218,27 @@ export function loadView(
         const parsedExifTags = filterTagsForParse('exif', readTags, tagFilter);
         parsedGroups.exif = parsedExifTags;
 
-        if (
-            Constants.USE_IPTC
-            && parsedExifTags['IPTC-NAA']
-            && iptcDataOffset === undefined
-            && tagFilter.shouldParseGroup('iptc')
-        ) {
-            const readIptcTags = IptcTags.read(
-                parsedExifTags['IPTC-NAA'].value,
-                0,
-                includeUnknown,
-                tagFilter,
-                valueBudget
-            );
-            const parsedIptcTags =
-                filterTagsForParse('iptc', readIptcTags, tagFilter);
-            parsedGroups.iptc = parsedIptcTags;
-
-            if (tagFilter.shouldReturnGroup('iptc')) {
-                mergeSteps.push({
-                    type: 'mergeGroupAssign',
-                    groupKey: 'iptc',
-                    parsedTags: parsedIptcTags,
-                });
+        const carriedGroups = readExifCarriedGroups(
+            parsedExifTags,
+            exifDataView || dataView,
+            tiffHeaderOffset,
+            byteOrder,
+            valueBudget,
+            {decompressed: false, hasIptcBlock: iptcDataOffset !== undefined}
+        );
+        for (let i = 0; i < EXIF_CARRIED_GROUP_ORDER.length; i++) {
+            const groupKey = EXIF_CARRIED_GROUP_ORDER[i];
+            if (carriedGroups[groupKey] === undefined) {
+                continue;
             }
-        }
-
-        if (
-            Constants.USE_XMP
-            && parsedExifTags['ApplicationNotes']
-            && isNumberArray(parsedExifTags['ApplicationNotes'].value)
-            && !hasXmpData(xmpChunks)
-            && tagFilter.shouldParseGroup('xmp')
-        ) {
-            const readXmpTags = XmpTags.read(
-                getByteString(parsedExifTags['ApplicationNotes'].value),
-                undefined,
-                domParser
-            );
-            const parsedXmpTags = filterTagsForParse('xmp', readXmpTags, tagFilter);
-            parsedGroups.xmp = parsedXmpTags;
-
-            if (tagFilter.shouldReturnGroup('xmp')) {
+            parsedGroups[groupKey] = carriedGroups[groupKey];
+            if (!tagFilter.shouldReturnGroup(groupKey)) {
+                continue;
+            }
+            if (groupKey === 'xmp') {
                 const step = {
                     type: 'mergeXmpGroupAssign',
-                    parsedTags: parsedXmpTags,
+                    parsedTags: carriedGroups.xmp,
                 };
 
                 if (expanded) {
@@ -263,108 +246,13 @@ export function loadView(
                 } else {
                     embeddedXmpStepForFlat = step;
                 }
-            }
-        }
-
-        if (
-            Constants.USE_PHOTOSHOP
-            && parsedExifTags['ImageSourceData']
-            && parsedExifTags['PhotoshopSettings']
-            && Array.isArray(parsedExifTags['PhotoshopSettings'].value)
-            && tagFilter.shouldParseGroup('photoshop')
-        ) {
-            const readPhotoshopTags = PhotoshopTags.read(
-                parsedExifTags['PhotoshopSettings'].value,
-                includeUnknown,
-                tagFilter
-            );
-            const parsedPhotoshopTags =
-                filterTagsForParse('photoshop', readPhotoshopTags, tagFilter);
-            parsedGroups.photoshop = parsedPhotoshopTags;
-
-            if (tagFilter.shouldReturnGroup('photoshop')) {
+            } else {
                 mergeSteps.push({
                     type: 'mergeGroupAssign',
-                    groupKey: 'photoshop',
-                    parsedTags: parsedPhotoshopTags,
+                    groupKey,
+                    parsedTags: carriedGroups[groupKey],
                 });
             }
-        }
-
-        if (
-            Constants.USE_ICC
-            && parsedExifTags['ICC_Profile']
-            && !hasIccData(iccChunks)
-            && tagFilter.shouldParseGroup('icc')
-        ) {
-            const readIccTags = IccTags.read(
-                parsedExifTags['ICC_Profile'].value,
-                [{
-                    offset: 0,
-                    length: parsedExifTags['ICC_Profile'].value.length,
-                    chunkNumber: 1,
-                    chunksTotal: 1
-                }]
-            );
-            const parsedIccTags = filterTagsForParse('icc', readIccTags, tagFilter);
-            parsedGroups.icc = parsedIccTags;
-
-            if (tagFilter.shouldReturnGroup('icc')) {
-                mergeSteps.push({
-                    type: 'mergeGroupAssign',
-                    groupKey: 'icc',
-                    parsedTags: parsedIccTags,
-                });
-            }
-        }
-
-        if (
-            Constants.USE_MAKER_NOTES
-            && parsedExifTags['MakerNote']
-            && tagFilter.shouldParseGroup('makerNotes')
-        ) {
-            if (hasCanonData(parsedExifTags)) {
-                const readCanonTags = CanonTags.read(
-                    exifDataView || dataView,
-                    tiffHeaderOffset,
-                    parsedExifTags['MakerNote'].__offset,
-                    byteOrder,
-                    includeUnknown,
-                    computed,
-                    tagFilter,
-                    valueBudget
-                );
-                parsedGroups.makerNotes = readCanonTags;
-                if (tagFilter.shouldReturnGroup('makerNotes')) {
-                    mergeSteps.push({
-                        type: 'mergeGroupAssign',
-                        groupKey: 'makerNotes',
-                        parsedTags: readCanonTags,
-                    });
-                }
-            } else if (hasPentaxType1Data(parsedExifTags)) {
-                const readPentaxTags = PentaxTags.read(
-                    exifDataView || dataView,
-                    tiffHeaderOffset,
-                    parsedExifTags['MakerNote'].__offset,
-                    includeUnknown,
-                    computed,
-                    tagFilter,
-                    valueBudget
-                );
-                parsedGroups.makerNotes = readPentaxTags;
-                if (tagFilter.shouldReturnGroup('makerNotes')) {
-                    mergeSteps.push({
-                        type: 'mergeGroupAssign',
-                        groupKey: 'makerNotes',
-                        parsedTags: readPentaxTags,
-                    });
-                }
-            }
-        }
-
-        if (parsedExifTags['MakerNote']) {
-            delete parsedExifTags['MakerNote'].__offset;
         }
 
         if (tagFilter.shouldReturnGroup('exif')) {
@@ -421,6 +309,8 @@ export function loadView(
         }
     }
 
+    const readEmbeddedExifThumbnail = getEmbeddedExifThumbnailReader(tagFilter, dataView);
+
     if (
         Constants.USE_JXL
         && Constants.USE_EXIF
@@ -435,7 +325,7 @@ export function loadView(
                 .then((decompressedDataView) => {
                     const brobTiffHeaderOffset = getTiffHeaderOffset(decompressedDataView, 0);
                     addDecompressedValueAllowance(valueBudget, decompressedDataView.byteLength);
-                    const {tags: readTags} = Tags.read(
+                    const {tags: readTags, byteOrder: brobByteOrder} = Tags.read(
                         decompressedDataView,
                         brobTiffHeaderOffset,
                         includeUnknown,
@@ -443,16 +333,24 @@ export function loadView(
                         tagFilter,
                         valueBudget
                     );
-                    if (readTags.Thumbnail) {
-                        delete readTags.Thumbnail;
-                    }
-                    if (readTags.MakerNote) {
-                        delete readTags.MakerNote.__offset;
-                    }
-                    deferredResults.brobExif = readTags;
+                    const thumbnail = takeEmbeddedExifThumbnail(
+                        readTags,
+                        decompressedDataView,
+                        brobTiffHeaderOffset,
+                        readEmbeddedExifThumbnail
+                    );
+                    const carriedGroups = readEmbeddedExifCarriedGroups(
+                        decompressedDataView,
+                        readTags,
+                        brobTiffHeaderOffset,
+                        brobByteOrder,
+                        valueBudget,
+                        {decompressed: true, hasIptcBlock: false}
+                    );
+                    deferredResults.brobExif = {exifTags: readTags, carriedGroups, thumbnail};
                 })
                 .catch(() => {
-                    deferredResults.brobExif = {};
+                    deferredResults.brobExif = undefined;
                 })
         );
         mergeSteps.push({
@@ -473,7 +371,7 @@ export function loadView(
         deferredPromises.push(
             decompress(compressedXmpData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
                 .then((decompressedDataView) => {
-                    if (exceedsBrobXmpSizeBound(decompressedDataView, dataView)) {
+                    if (exceedsBrobXmpSizeBound(decompressedDataView.byteLength, dataView)) {
                         deferredResults.brobXmp = {};
                         return;
                     }
@@ -576,7 +474,7 @@ export function loadView(
             || tagFilter.shouldParseGroup('iptc')
         )
     ) {
-        const {readTags, embeddedExifTags, embeddedIptcTags, embeddedExifThumbnail, readTagsPromise} = PngTextTags.read(
+        const {readTags, embeddedExifTags, embeddedIptcTags, embeddedExifThumbnail, exifCarriedGroups, readTagsPromise} = PngTextTags.read(
             dataView,
             pngTextChunks,
             async,
@@ -585,7 +483,8 @@ export function loadView(
             tagFilter,
             decompressConfig,
             valueBudget,
-            getPngTextThumbnailReader(tagFilter)
+            readEmbeddedExifThumbnail,
+            readEmbeddedExifCarriedGroups
         );
         pngTextIsAsync = !!readTagsPromise;
 
@@ -595,6 +494,7 @@ export function loadView(
             embeddedExifTags,
             embeddedIptcTags,
             embeddedExifThumbnail,
+            exifCarriedGroups,
         });
 
         if (readTagsPromise) {
@@ -764,6 +664,140 @@ export function loadView(
         }
         return !(Array.isArray(file) && file.length === 1 && file[0] === 'FileType');
     }
+
+    // Drops MakerNote.__offset once the maker note has been read, even when a
+    // reader throws.
+    function readExifCarriedGroups(parsedExifTags, exifTiffDataView, exifTiffHeaderOffset, exifByteOrder, exifValueBudget, source) {
+        const groups = {};
+
+        try {
+            if (
+                Constants.USE_IPTC
+                && parsedExifTags['IPTC-NAA']
+                && !source.hasIptcBlock
+                && tagFilter.shouldParseGroup('iptc')
+            ) {
+                const readIptcTags = IptcTags.read(
+                    parsedExifTags['IPTC-NAA'].value,
+                    0,
+                    includeUnknown,
+                    tagFilter,
+                    exifValueBudget
+                );
+                groups.iptc = filterTagsForParse('iptc', readIptcTags, tagFilter);
+            }
+
+            if (
+                Constants.USE_XMP
+                && parsedExifTags['ApplicationNotes']
+                && isNumberArray(parsedExifTags['ApplicationNotes'].value)
+                && !hasXmpData(xmpChunks)
+                && tagFilter.shouldParseGroup('xmp')
+                && (!source.decompressed || takeDecompressedApplicationNotesAllowance(parsedExifTags['ApplicationNotes'].value.length))
+            ) {
+                const readXmpTags = XmpTags.read(
+                    getByteString(parsedExifTags['ApplicationNotes'].value),
+                    undefined,
+                    domParser
+                );
+                groups.xmp = filterTagsForParse('xmp', readXmpTags, tagFilter);
+            }
+
+            if (
+                Constants.USE_PHOTOSHOP
+                && parsedExifTags['ImageSourceData']
+                && parsedExifTags['PhotoshopSettings']
+                && Array.isArray(parsedExifTags['PhotoshopSettings'].value)
+                && tagFilter.shouldParseGroup('photoshop')
+            ) {
+                const readPhotoshopTags = PhotoshopTags.read(
+                    parsedExifTags['PhotoshopSettings'].value,
+                    includeUnknown,
+                    tagFilter
+                );
+                groups.photoshop = filterTagsForParse('photoshop', readPhotoshopTags, tagFilter);
+            }
+
+            if (
+                Constants.USE_ICC
+                && parsedExifTags['ICC_Profile']
+                && !hasIccData(iccChunks)
+                && tagFilter.shouldParseGroup('icc')
+            ) {
+                const readIccTags = IccTags.read(
+                    parsedExifTags['ICC_Profile'].value,
+                    [{
+                        offset: 0,
+                        length: parsedExifTags['ICC_Profile'].value.length,
+                        chunkNumber: 1,
+                        chunksTotal: 1
+                    }]
+                );
+                groups.icc = filterTagsForParse('icc', readIccTags, tagFilter);
+            }
+
+            if (
+                Constants.USE_MAKER_NOTES
+                && parsedExifTags['MakerNote']
+                && tagFilter.shouldParseGroup('makerNotes')
+            ) {
+                if (hasCanonData(parsedExifTags)) {
+                    groups.makerNotes = CanonTags.read(
+                        exifTiffDataView,
+                        exifTiffHeaderOffset,
+                        parsedExifTags['MakerNote'].__offset,
+                        exifByteOrder,
+                        includeUnknown,
+                        computed,
+                        tagFilter,
+                        exifValueBudget
+                    );
+                } else if (hasPentaxType1Data(parsedExifTags)) {
+                    groups.makerNotes = PentaxTags.read(
+                        exifTiffDataView,
+                        exifTiffHeaderOffset,
+                        parsedExifTags['MakerNote'].__offset,
+                        includeUnknown,
+                        computed,
+                        tagFilter,
+                        exifValueBudget
+                    );
+                }
+            }
+        } finally {
+            if (parsedExifTags['MakerNote']) {
+                delete parsedExifTags['MakerNote'].__offset;
+            }
+        }
+
+        return groups;
+    }
+
+    // The brob XMP bound covers the decompressed Exif blocks of a file together,
+    // so that several cannot each pass it.
+    function takeDecompressedApplicationNotesAllowance(byteLength) {
+        if (exceedsBrobXmpSizeBound(decompressedApplicationNotesSize + byteLength, dataView)) {
+            return false;
+        }
+        decompressedApplicationNotesSize += byteLength;
+        return true;
+    }
+
+    // A maker note that throws must drop the groups, not the Exif tags already read.
+    function readEmbeddedExifCarriedGroups(exifTiffDataView, readTags, exifTiffHeaderOffset, exifByteOrder, exifValueBudget, source) {
+        try {
+            return readExifCarriedGroups(
+                filterTagsForParse('exif', readTags, tagFilter),
+                exifTiffDataView,
+                exifTiffHeaderOffset,
+                exifByteOrder,
+                exifValueBudget,
+                source
+            );
+        } catch (error) {
+            return {};
+        }
+    }
 }
 
 // A caller-supplied DataView can be a window into a larger buffer. Extractors
@@ -808,9 +842,8 @@ function getBrobDataView(dataView, brobChunk) {
     return new DataView(bytes.buffer);
 }
 
-function exceedsBrobXmpSizeBound(decompressedDataView, inputDataView) {
-    return decompressedDataView.byteLength
-        > BROB_XMP_SIZE_PER_INPUT_SIZE * inputDataView.byteLength + BROB_XMP_SIZE_ALLOWANCE;
+function exceedsBrobXmpSizeBound(byteLength, inputDataView) {
+    return byteLength > BROB_XMP_SIZE_PER_INPUT_SIZE * inputDataView.byteLength + BROB_XMP_SIZE_ALLOWANCE;
 }
 
 function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter) {
@@ -831,7 +864,7 @@ function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed
     }
 }
 
-function getPngTextThumbnailReader(tagFilter) {
+function getEmbeddedExifThumbnailReader(tagFilter, inputDataView) {
     if (
         !Constants.USE_EXIF
         || !Constants.USE_THUMBNAIL
@@ -839,11 +872,27 @@ function getPngTextThumbnailReader(tagFilter) {
     ) {
         return undefined;
     }
-    return (dataView, thumbnailIfdTags, tiffHeaderOffset) => Thumbnail.get(
-        dataView,
-        filterTagsForParse('thumbnail', thumbnailIfdTags, tagFilter),
-        tiffHeaderOffset
-    );
+    let copiedThumbnailSize = 0;
+    return (dataView, thumbnailIfdTags, tiffHeaderOffset) => {
+        const parsedThumbnailIfdTags = filterTagsForParse('thumbnail', thumbnailIfdTags, tagFilter);
+        const lengthTag = parsedThumbnailIfdTags.JPEGInterchangeFormatLength;
+        const sizeBound =
+            EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE * inputDataView.byteLength + EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE;
+        if (!hasLengthWithin(lengthTag, sizeBound - copiedThumbnailSize)) {
+            return parsedThumbnailIfdTags;
+        }
+        const thumbnail = Thumbnail.get(dataView, parsedThumbnailIfdTags, tiffHeaderOffset);
+        if (thumbnail.image) {
+            copiedThumbnailSize += lengthTag.value;
+        }
+        return thumbnail;
+    };
+}
+
+function hasLengthWithin(lengthTag, maxLength) {
+    return !!lengthTag
+        && typeof lengthTag.value === 'number'
+        && lengthTag.value <= maxLength;
 }
 
 function filterTagsForParse(groupKey, readTags, tagFilter) {

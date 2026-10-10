@@ -26,7 +26,7 @@ You can try it out on the
 | File type              | Exif    | IPTC                         | XMP     | ICC                          | MPF     | Photoshop     | MakerNote          | Thumbnail | Image details |
 | -----------------------|---------|------------------------------|---------|------------------------------|---------|---------------|--------------------|-----------|---------------|
 | JPEG                   | **yes** | **yes**                      | **yes** | **yes**                      | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
-| JPEG XL&ast;&ast;&ast; | **yes** | **some**&ast;&ast;&ast;&ast; | **yes** | **some**&ast;&ast;&ast;&ast; | no      | **some**&ast; | **some**&ast;&ast; | **some**  | **yes**       |
+| JPEG XL&ast;&ast;&ast; | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **some**&ast;&ast;&ast;&ast; | no      | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
 | TIFF                   | **yes** | **yes**                      | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | N/A           |
 | PNG                    | **yes** | **yes**                      | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
 | HEIC/HEIF              | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | no            |
@@ -41,18 +41,13 @@ You can try it out on the
     `ClippingPathName` and `PathInformation` currently supported. Photoshop tags
     are very different from other tags and need a lot of extra code so they have
     deliberately not been fully implemented. File an issue if there is something
-    you think should really be supported. In PNG files, Photoshop tags are only
-    read from an `eXIf` chunk, not from a `Raw profile type exif` text chunk.
+    you think should really be supported.
 - `**` = Some of the Canon-specific and Pentax-specific tags have been added.
-    File an issue if you think something more should be supported. In PNG
-    files, maker notes are only read from an `eXIf` chunk, not from a
-    `Raw profile type exif` text chunk.
+    File an issue if you think something more should be supported.
 - `***` = Metadata in JPEG XL are often (but not always) encoded with Brotli
     compression. This is supported in some environments when using
     `async: true`. See the [Asynchronous tags](#asynchronous-tags) and
-    [Custom decompression](#custom-decompression) sections for details. The
-    thumbnail, the IPTC tags, the ICC tags, the Photoshop tags and the maker
-    notes are only read from an uncompressed Exif box.
+    [Custom decompression](#custom-decompression) sections for details.
 - `****` = Read from the Exif data, where the `IPTC-NAA` and `ICC_Profile`
     tags can carry them, in the same way as for TIFF files. The HEIC/HEIF,
     AVIF and WebP formats define no IPTC block of their own. The ICC profile

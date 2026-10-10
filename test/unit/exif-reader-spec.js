@@ -800,6 +800,72 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should return the groups the Exif carries in reading order ahead of Exif in expanded mode', () => {
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, {
+            'IPTC-NAA': {value: [1]},
+            ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')},
+            ImageSourceData: {value: [1]},
+            PhotoshopSettings: {value: [1]},
+            ICC_Profile: {value: [1]},
+            Make: {value: ['Canon']},
+            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+        });
+        swapTagsRead(IptcTags, {Headline: {value: 'headline'}});
+        swapXmpTagsRead({Rating: {value: '5'}});
+        swap(PhotoshopTags, {read: () => ({ClippingPathName: {value: 'path1'}})});
+        swapIccTagsRead({ProfileVersion: {value: '4.3'}});
+        swapMakerNoteTagsRead({AutoRotate: {value: 0}}, CanonTags);
+
+        const tags = ExifReader.loadView(undefined, {expanded: true});
+
+        expect(Object.keys(tags)).to.deep.equal(['iptc', 'xmp', 'photoshop', 'icc', 'makerNotes', 'exif']);
+    });
+
+    for (const excludedGroupKey of ['iptc', 'xmp', 'photoshop', 'icc', 'makerNotes']) {
+        it(`should not read the ${excludedGroupKey} group the Exif carries when the group is excluded`, () => {
+            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, {
+                'IPTC-NAA': {value: [1]},
+                ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')},
+                ImageSourceData: {value: [1]},
+                PhotoshopSettings: {value: [1]},
+                ICC_Profile: {value: [1]},
+                Make: {value: ['Canon']},
+                MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+            });
+            const readGroupKeys = [];
+            for (const [groupKey, readerModule] of [
+                ['iptc', IptcTags],
+                ['xmp', XmpTags],
+                ['photoshop', PhotoshopTags],
+                ['icc', IccTags],
+                ['makerNotes', CanonTags],
+            ]) {
+                swap(readerModule, {
+                    read() {
+                        readGroupKeys.push(groupKey);
+                        return {};
+                    }
+                });
+            }
+
+            ExifReader.loadView(undefined, {excludeTags: {[excludedGroupKey]: true}});
+
+            expect(readGroupKeys).to.deep.equal(['iptc', 'xmp', 'photoshop', 'icc', 'makerNotes'].filter((groupKey) => groupKey !== excludedGroupKey));
+        });
+    }
+
+    it('should read ApplicationNotes XMP of an uncompressed Exif above the brob XMP size bound', () => {
+        const inputLength = 10;
+        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, {
+            ApplicationNotes: {value: new Array(4 * inputLength + 64 * 1024 + 1).fill(0x20)}
+        });
+        const readXmpStrings = swapXmpTagsReadRecording();
+
+        ExifReader.loadView(new DataView(new ArrayBuffer(inputLength)));
+
+        expect(readXmpStrings).to.have.lengthOf(1);
+    });
+
     it('should be able to find Canon MakerNote segment', () => {
         const myExifTags = {
             Make: {value: ['Canon']},
@@ -1011,6 +1077,323 @@ describe('exif-reader', function () {
         );
 
         expect(result.MyBrobXmpTag).to.equal(45);
+    });
+
+    describe('groups and thumbnail of brob Exif', () => {
+        const INPUT_LENGTH = 10;
+        const CANON_EXIF_TAGS = {
+            Make: {value: ['Canon']},
+            MakerNote: {value: [1, 2, 3], __offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+        };
+
+        it('should read the groups of brob Exif', async () => {
+            swapTagsRead(IptcTags, {Headline: {value: 'headline'}});
+            swapXmpTagsRead({Rating: {value: '5'}});
+            swap(PhotoshopTags, {read: () => ({ClippingPathName: {value: 'path1'}})});
+            swapIccTagsRead({ProfileVersion: {value: '4.3'}});
+            swapMakerNoteTagsRead({AutoRotate: {value: 0}}, CanonTags);
+            const exifTags = {
+                ...CANON_EXIF_TAGS,
+                'IPTC-NAA': {value: [1]},
+                ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')},
+                ImageSourceData: {value: [1]},
+                PhotoshopSettings: {value: [1]},
+                ICC_Profile: {value: [1]},
+            };
+
+            const expandedTags = await loadBrobExif({exifTags, options: {expanded: true}});
+            const tags = await loadBrobExif({exifTags});
+
+            expect(expandedTags.iptc).to.deep.equal({Headline: {value: 'headline'}});
+            expect(expandedTags.xmp).to.deep.equal({Rating: {value: '5'}});
+            expect(expandedTags.photoshop).to.deep.equal({ClippingPathName: {value: 'path1'}});
+            expect(expandedTags.icc).to.deep.equal({ProfileVersion: {value: '4.3'}});
+            expect(expandedTags.makerNotes).to.deep.equal({AutoRotate: {value: 0}});
+            expect(tags).to.deep.include({
+                Headline: {value: 'headline'},
+                Rating: {value: '5'},
+                ClippingPathName: {value: 'path1'},
+                ProfileVersion: {value: '4.3'},
+                AutoRotate: {value: 0},
+            });
+        });
+
+        it('should read the Canon maker notes of brob Exif from the decompressed data', async () => {
+            const canonTags = {AutoRotate: {value: 0, description: 'None'}};
+            const calls = [];
+            swap(CanonTags, {
+                read(...args) {
+                    calls.push(args);
+                    return canonTags;
+                }
+            });
+
+            const {tags, tagsReadCalls} = await loadBrobExifRecording({
+                exifTags: CANON_EXIF_TAGS,
+                options: {expanded: true, includeUnknown: true, computed: true}
+            });
+
+            const [dataView, tiffHeaderOffset, makerNoteOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget] = calls[0];
+            expect(calls).to.have.lengthOf(1);
+            expect(dataView).to.equal(tagsReadCalls[0].dataView);
+            expect(tiffHeaderOffset).to.equal(OFFSET_TEST_VALUE);
+            expect(makerNoteOffset).to.equal(OFFSET_TEST_VALUE_MAKER_NOTE);
+            expect(byteOrder).to.equal(ByteOrder.LITTLE_ENDIAN);
+            expect(includeUnknown).to.equal(true);
+            expect(computed).to.equal(true);
+            expect(tagFilter).to.equal(tagsReadCalls[0].tagFilter);
+            expect(valueBudget).to.equal(tagsReadCalls[0].valueBudget);
+            expect(tags.makerNotes).to.deep.equal(canonTags);
+            expect(tags.exif.MakerNote).to.deep.equal({value: [1, 2, 3]});
+        });
+
+        it('should read the Pentax maker notes of brob Exif from the decompressed data', async () => {
+            const pentaxTags = {LensType: {value: 1, description: '1'}};
+            const calls = [];
+            swap(PentaxTags, {
+                read(...args) {
+                    calls.push(args);
+                    return pentaxTags;
+                }
+            });
+            const pentaxNote = {value: getCharacterArray('PENTAX \x00\x00\x00'), __offset: OFFSET_TEST_VALUE_MAKER_NOTE};
+
+            const {tags, tagsReadCalls} = await loadBrobExifRecording({
+                exifTags: {MakerNote: pentaxNote},
+                options: {expanded: true, includeUnknown: true, computed: true}
+            });
+
+            const [dataView, tiffHeaderOffset, makerNoteOffset, includeUnknown, computed, tagFilter, valueBudget] = calls[0];
+            expect(dataView).to.equal(tagsReadCalls[0].dataView);
+            expect(tiffHeaderOffset).to.equal(OFFSET_TEST_VALUE);
+            expect(makerNoteOffset).to.equal(OFFSET_TEST_VALUE_MAKER_NOTE);
+            expect(includeUnknown).to.equal(true);
+            expect(computed).to.equal(true);
+            expect(tagFilter).to.equal(tagsReadCalls[0].tagFilter);
+            expect(valueBudget).to.equal(tagsReadCalls[0].valueBudget);
+            expect(tags.makerNotes).to.deep.equal(pentaxTags);
+            expect(tags.exif.MakerNote).to.not.have.property('__offset');
+        });
+
+        it('should not read the ApplicationNotes XMP of brob Exif when the file has an XMP segment', async () => {
+            const readXmpStrings = swapXmpTagsReadRecording();
+
+            await loadBrobExif({
+                exifTags: {ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')}},
+                appMarkers: {xmpChunks: [{dataOffset: 0, length: 4}]}
+            });
+
+            expect(readXmpStrings.filter((xmpString) => typeof xmpString === 'string')).to.deep.equal([]);
+        });
+
+        it('should not read the ICC profile of brob Exif when the file has an ICC segment', async () => {
+            const iccReads = [];
+            swap(IccTags, {
+                read(dataView, iccData) {
+                    iccReads.push(iccData);
+                    return {};
+                }
+            });
+
+            await loadBrobExif({
+                exifTags: {ICC_Profile: {value: [1, 2, 3]}},
+                appMarkers: {iccChunks: [OFFSET_TEST_VALUE_ICC2_1]}
+            });
+
+            expect(iccReads).to.deep.equal([[OFFSET_TEST_VALUE_ICC2_1]]);
+        });
+
+        it('should keep the Exif LensModel of brob Exif in flat mode when maker notes also has LensModel', async () => {
+            swapMakerNoteTagsRead({LensModel: {value: ['MakerNotes Lens']}, LensType: {value: 1}}, CanonTags);
+
+            const tags = await loadBrobExif({exifTags: {...CANON_EXIF_TAGS, LensModel: {value: ['Exif Lens']}}});
+
+            expect(tags.LensModel).to.deep.equal({value: ['Exif Lens']});
+            expect(tags.LensType).to.deep.equal({value: 1});
+        });
+
+        it('should read the maker notes of brob Exif when only maker notes are included', async () => {
+            const canonTags = {AutoRotate: {id: 1, value: 0, description: 'None'}};
+            swapMakerNoteTagsRead(canonTags, CanonTags);
+
+            const tags = await loadBrobExif({
+                exifTags: CANON_EXIF_TAGS,
+                options: {expanded: true, includeTags: {makerNotes: true}}
+            });
+
+            expect(tags.makerNotes).to.deep.equal(canonTags);
+            expect(tags).to.not.have.property('exif');
+        });
+
+        it('should return the Exif of brob Exif without maker notes when the maker note reader throws', async () => {
+            swap(CanonTags, {
+                read() {
+                    throw new Error('Broken maker note.');
+                }
+            });
+
+            const tags = await loadBrobExif({exifTags: CANON_EXIF_TAGS, options: {expanded: true}});
+
+            expect(tags).to.not.have.property('makerNotes');
+            expect(tags.exif.Make).to.deep.equal({value: ['Canon']});
+            expect(tags.exif.MakerNote).to.deep.equal({value: [1, 2, 3]});
+        });
+
+        it('should read ApplicationNotes XMP of brob Exif up to the brob XMP size bound', async () => {
+            const readXmpStrings = swapXmpTagsReadRecording();
+            const bound = 4 * INPUT_LENGTH + 64 * 1024;
+
+            await loadBrobExif({exifTags: {ApplicationNotes: {value: new Array(bound).fill(0x20)}}});
+
+            expect(readXmpStrings).to.have.lengthOf(1);
+            expect(readXmpStrings[0]).to.have.lengthOf(bound);
+        });
+
+        it('should not read ApplicationNotes XMP of brob Exif above the brob XMP size bound', async () => {
+            const readXmpStrings = swapXmpTagsReadRecording();
+            const bound = 4 * INPUT_LENGTH + 64 * 1024;
+
+            const tags = await loadBrobExif({
+                exifTags: {ApplicationNotes: {value: new Array(bound + 1).fill(0x20)}},
+                options: {expanded: true}
+            });
+
+            expect(readXmpStrings).to.deep.equal([]);
+            expect(tags).to.not.have.property('xmp');
+        });
+
+        describe('thumbnail', () => {
+            const THUMBNAIL_IFD_TAGS = {JPEGInterchangeFormat: {value: 8}, JPEGInterchangeFormatLength: {value: 2}};
+            const THUMBNAIL_SIZE_BOUND = 2 * INPUT_LENGTH + 64 * 1024;
+
+            it('should return the thumbnail of brob Exif, sliced from the decompressed data', async () => {
+                const thumbnailCalls = swapThumbnailRecording({image: '<image>'});
+
+                const {tags, tagsReadCalls} = await loadBrobExifRecording({
+                    exifTags: {Model: {value: 'model'}, Thumbnail: {...THUMBNAIL_IFD_TAGS}},
+                    options: {expanded: true}
+                });
+
+                expect(thumbnailCalls).to.have.lengthOf(1);
+                expect(thumbnailCalls[0].dataView).to.equal(tagsReadCalls[0].dataView);
+                expect(thumbnailCalls[0].tags).to.deep.equal(THUMBNAIL_IFD_TAGS);
+                expect(thumbnailCalls[0].tiffHeaderOffset).to.equal(OFFSET_TEST_VALUE);
+                expect(tags.Thumbnail.image).to.equal('<image>');
+                expect(tags.exif).to.deep.equal({Model: {value: 'model'}});
+            });
+
+            it('should return no thumbnail for brob Exif when the thumbnail has no image', async () => {
+                swapThumbnailRecording({});
+
+                const tags = await loadBrobExif({exifTags: {Thumbnail: {...THUMBNAIL_IFD_TAGS}}, options: {expanded: true}});
+
+                expect(tags).to.not.have.property('Thumbnail');
+                expect(tags).to.not.have.property('exif');
+            });
+
+            it('should not read the thumbnail of brob Exif when the thumbnail group is excluded', async () => {
+                const thumbnailCalls = swapThumbnailRecording({image: '<image>'});
+
+                const tags = await loadBrobExif({
+                    exifTags: {Model: {value: 'model'}, Thumbnail: {...THUMBNAIL_IFD_TAGS}},
+                    options: {expanded: true, excludeTags: {thumbnail: true}}
+                });
+
+                expect(thumbnailCalls).to.deep.equal([]);
+                expect(tags).to.not.have.property('Thumbnail');
+                expect(tags.exif).to.not.have.property('Thumbnail');
+            });
+
+            it('should read the thumbnail of brob Exif up to twice the file size plus 64 KiB', async () => {
+                const thumbnailCalls = swapThumbnailRecording({image: '<image>'});
+                const thumbnailIfdTags = {...THUMBNAIL_IFD_TAGS, JPEGInterchangeFormatLength: {value: THUMBNAIL_SIZE_BOUND}};
+
+                const tags = await loadBrobExif({exifTags: {Thumbnail: thumbnailIfdTags}});
+
+                expect(thumbnailCalls).to.have.lengthOf(1);
+                expect(tags.Thumbnail.image).to.equal('<image>');
+            });
+
+            it('should not read the thumbnail of brob Exif above twice the file size plus 64 KiB', async () => {
+                const thumbnailCalls = swapThumbnailRecording({image: '<image>'});
+                const thumbnailIfdTags = {...THUMBNAIL_IFD_TAGS, JPEGInterchangeFormatLength: {value: THUMBNAIL_SIZE_BOUND + 1}};
+
+                const tags = await loadBrobExif({exifTags: {Thumbnail: thumbnailIfdTags}});
+
+                expect(thumbnailCalls).to.deep.equal([]);
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+
+            for (const [description, thumbnailIfdTags] of [
+                ['no length', {JPEGInterchangeFormat: {value: 8}}],
+                ['a length that is not a number', {JPEGInterchangeFormat: {value: 8}, JPEGInterchangeFormatLength: {value: [2]}}],
+            ]) {
+                it(`should not read the thumbnail of brob Exif with ${description}`, async () => {
+                    const thumbnailCalls = swapThumbnailRecording({image: '<image>'});
+
+                    const tags = await loadBrobExif({exifTags: {Model: {value: 'model'}, Thumbnail: thumbnailIfdTags}});
+
+                    expect(thumbnailCalls).to.deep.equal([]);
+                    expect(tags).to.not.have.property('Thumbnail');
+                    expect(tags.Model).to.deep.equal({value: 'model'});
+                });
+            }
+
+            it('should return the thumbnail bytes of a real brob Exif', async () => {
+                const thumbnail = '\xff\xd8brob-thumbnail\xff\xd9';
+                const exifBlock = getByteStringFromNumber(0, 4) + getTiffWithThumbnail(thumbnail);
+                swapImageHeader({
+                    fileType: {value: 'jxl', description: 'JPEG XL'},
+                    brobExifChunk: {dataOffset: 0, length: 10}
+                });
+
+                const tags = await ExifReader.loadView(new DataView(new ArrayBuffer(thumbnail.length)), {
+                    async: true,
+                    decompress: {brotli: () => Promise.resolve(getDataView(exifBlock).buffer)}
+                });
+
+                expect(Buffer.from(tags.Thumbnail.image).toString('latin1')).to.equal(thumbnail);
+                expect(tags.ImageWidth.value).to.equal(1);
+            });
+
+            function swapThumbnailRecording(result) {
+                const calls = [];
+                swap(Thumbnail, {
+                    get(dataView, tags, tiffHeaderOffset) {
+                        calls.push({dataView, tags: {...tags}, tiffHeaderOffset});
+                        return {...tags, ...result};
+                    }
+                });
+                return calls;
+            }
+        });
+
+        function loadBrobExif(args) {
+            return loadBrobExifRecording(args).then(({tags}) => tags);
+        }
+
+        function loadBrobExifRecording({exifTags, options = {}, appMarkers = {}}) {
+            const decompressedBuffer = new ArrayBuffer(OFFSET_TEST_VALUE + 100);
+            new DataView(decompressedBuffer).setUint32(0, OFFSET_TEST_VALUE - 4);
+            swapImageHeader({
+                fileType: {value: 'jxl', description: 'JPEG XL'},
+                brobExifChunk: {dataOffset: 0, length: 10},
+                ...appMarkers
+            });
+            const tagsReadCalls = [];
+            swap(Tags, {
+                read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
+                    tagsReadCalls.push({dataView, tiffHeaderOffset, tagFilter, valueBudget});
+                    return {tags: structuredClone(exifTags), byteOrder: ByteOrder.LITTLE_ENDIAN};
+                }
+            });
+
+            return ExifReader.loadView(new DataView(new ArrayBuffer(INPUT_LENGTH)), {
+                async: true,
+                decompress: {brotli: () => Promise.resolve(decompressedBuffer)},
+                ...options
+            }).then((tags) => ({tags, tagsReadCalls}));
+        }
     });
 
     describe('brob XMP size bound relative to the input', () => {
@@ -3287,6 +3670,49 @@ describe('exif-reader', function () {
                 expect(tags.exif).to.not.have.property('Thumbnail');
             });
 
+            it('should return no thumbnail of a zTXt raw profile above twice the file size plus 64 KiB', async () => {
+                const COMPRESSION_METHOD_DEFLATE = '\x00';
+                const thumbnail = '\xff\xd8' + '\x00'.repeat(256 * 1024) + '\xff\xd9';
+                const rawProfile = getRawProfile(getTiffWithThumbnail(thumbnail));
+                const compressedProfile = deflateSync(Buffer.from(rawProfile, 'latin1')).toString('latin1');
+                const png = getPngWithChunks(getPngChunk('zTXt', 'Raw profile type exif\x00' + COMPRESSION_METHOD_DEFLATE + compressedProfile));
+
+                const tags = await ExifReader.loadView(getDataView(png), {async: true});
+
+                expect(2 * png.length + 64 * 1024).to.be.below(thumbnail.length);
+                expect(tags.ImageWidth.value).to.equal(1);
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+
+            it('should copy out the thumbnails of zTXt raw profiles up to twice the file size plus 64 KiB in total', async () => {
+                const COMPRESSION_METHOD_DEFLATE = '\x00';
+                const thumbnail = '\xff\xd8' + '\x00'.repeat(40 * 1024) + '\xff\xd9';
+                const rawProfile = getRawProfile(getTiffWithThumbnail(thumbnail));
+                const compressedProfile = deflateSync(Buffer.from(rawProfile, 'latin1')).toString('latin1');
+                const zTxtChunk = getPngChunk('zTXt', 'Raw profile type exif\x00' + COMPRESSION_METHOD_DEFLATE + compressedProfile);
+                const png = getPngWithChunks(zTxtChunk, zTxtChunk);
+                const copiedImageLengths = swapThumbnailGetRecordingImageLengths();
+
+                const tags = await ExifReader.loadView(getDataView(png), {async: true});
+
+                expect(2 * png.length + 64 * 1024).to.be.within(thumbnail.length, 2 * thumbnail.length - 1);
+                expect(copiedImageLengths).to.deep.equal([thumbnail.length]);
+                expect(tags.Thumbnail.image.byteLength).to.equal(thumbnail.length);
+            });
+
+            it('should not count a raw profile thumbnail without an image towards the thumbnail size bound', () => {
+                const getPng = (declaredLength) => getPngWithChunks(
+                    getRawProfileTextChunk(getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL, declaredLength)),
+                    getRawProfileTextChunk(getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL))
+                );
+                const bound = 2 * getPng(0).length + 64 * 1024;
+                const png = getPng(bound - RAW_PROFILE_THUMBNAIL.length + 1);
+
+                const tags = ExifReader.loadView(getDataView(png));
+
+                expect(Buffer.from(tags.Thumbnail.image).toString('latin1')).to.equal(RAW_PROFILE_THUMBNAIL);
+            });
+
             it('should return no thumbnail when it ends one byte past the decoded raw profile', () => {
                 const tiff = getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL, RAW_PROFILE_THUMBNAIL.length + 1);
                 const png = getPngWithChunks(getRawProfileTextChunk(tiff), getPngChunk('tEXt', 'Other\x00' + 'x'.repeat(100)));
@@ -3348,15 +3774,179 @@ describe('exif-reader', function () {
                 return getThumbnail;
             }
 
-            function getRawProfileTextChunk(tiff) {
-                return getPngChunk('tEXt', 'Raw profile type exif\x00' + getRawProfile(tiff));
-            }
-
-            function getRawProfile(tiff) {
-                const exif = 'Exif\x00\x00' + tiff;
-                return `\nexif\n${String(exif.length).padStart(8, ' ')}\n${Buffer.from(exif, 'latin1').toString('hex')}`;
+            function swapThumbnailGetRecordingImageLengths() {
+                const imageLengths = [];
+                const get = Thumbnail.get;
+                swap(Thumbnail, {
+                    get(...args) {
+                        const thumbnail = get(...args);
+                        if (thumbnail.image) {
+                            imageLengths.push(thumbnail.image.byteLength);
+                        }
+                        return thumbnail;
+                    }
+                });
+                return imageLengths;
             }
         });
+
+        describe('groups the Exif carries', () => {
+            const CANON_EXIF_TAGS = {
+                Make: {value: ['Canon']},
+                MakerNote: {value: [1, 2, 3], __offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+            };
+            const EXIF_TIFF = 'MM\x00\x2a' + getByteStringFromNumber(8, 4) + '<exif>';
+
+            it('should read the Canon maker notes of a tEXt raw profile from the decoded profile', () => {
+                swapTagsReadReturning(CANON_EXIF_TAGS);
+                const calls = swapCanonTagsReadRecording({AutoRotate: {value: 0}});
+                const png = getPngWithChunks(getRawProfileTextChunk(EXIF_TIFF));
+
+                const tags = ExifReader.loadView(getDataView(png), {expanded: true});
+
+                const [dataView, tiffHeaderOffset, makerNoteOffset, byteOrder] = calls[0];
+                expect(calls).to.have.lengthOf(1);
+                expect(dataView.byteLength).to.equal('Exif\x00\x00'.length + EXIF_TIFF.length);
+                expect(tiffHeaderOffset).to.equal(6);
+                expect(makerNoteOffset).to.equal(OFFSET_TEST_VALUE_MAKER_NOTE);
+                expect(byteOrder).to.equal(ByteOrder.LITTLE_ENDIAN);
+                expect(tags.makerNotes).to.deep.equal({AutoRotate: {value: 0}});
+                expect(tags.exif.MakerNote).to.deep.equal({value: [1, 2, 3]});
+            });
+
+            it('should read the Canon maker notes of a zTXt raw profile', async () => {
+                swapTagsReadReturning(CANON_EXIF_TAGS);
+                swapCanonTagsReadRecording({AutoRotate: {value: 0}});
+                const png = getPngWithChunks(getRawProfileZtxtChunk(EXIF_TIFF));
+
+                const tags = await ExifReader.loadView(getDataView(png), {async: true, expanded: true});
+
+                expect(tags.makerNotes).to.deep.equal({AutoRotate: {value: 0}});
+                expect(tags.exif.MakerNote).to.deep.equal({value: [1, 2, 3]});
+            });
+
+            it('should return the Exif of a raw profile without maker notes when the maker note reader throws', () => {
+                swapTagsReadReturning(CANON_EXIF_TAGS);
+                swap(CanonTags, {
+                    read() {
+                        throw new Error('Broken maker note.');
+                    }
+                });
+                const png = getPngWithChunks(getRawProfileTextChunk(EXIF_TIFF));
+
+                const tags = ExifReader.loadView(getDataView(png), {expanded: true});
+
+                expect(tags).to.not.have.property('makerNotes');
+                expect(tags.exif.Make).to.deep.equal({value: ['Canon']});
+                expect(tags.exif.MakerNote).to.deep.equal({value: [1, 2, 3]});
+            });
+
+            it('should read the IPTC-NAA tags of a zTXt raw profile when the file has no IPTC profile', async () => {
+                swapTagsReadReturning({'IPTC-NAA': {value: [1, 2, 3]}});
+                swapIptcTagsReadBySource();
+                const png = getPngWithChunks(getRawProfileZtxtChunk(EXIF_TIFF));
+
+                const tags = await ExifReader.loadView(getDataView(png), {async: true, expanded: true});
+
+                expect(tags.iptc).to.deep.equal({Headline: {value: 'exif'}});
+            });
+
+            for (const order of ['before', 'after']) {
+                it(`should return the IPTC profile over the IPTC-NAA of a zTXt Exif profile that comes ${order} it`, async () => {
+                    swapTagsReadReturning({'IPTC-NAA': {value: [1, 2, 3]}});
+                    swapIptcTagsReadBySource();
+                    const iptcChunk = getPngChunk('tEXt', 'Raw profile type iptc\x00' + getRawProfileOfType('iptc', '<iptc>'));
+                    const exifChunk = getRawProfileZtxtChunk(EXIF_TIFF);
+                    const png = order === 'before' ? getPngWithChunks(exifChunk, iptcChunk) : getPngWithChunks(iptcChunk, exifChunk);
+
+                    const tags = await ExifReader.loadView(getDataView(png), {async: true, expanded: true});
+
+                    expect(tags.iptc).to.deep.equal({Headline: {value: 'profile'}});
+                });
+            }
+
+            it('should read the IPTC-NAA tags of a raw profile when the Raw profile type iptc chunk holds no IPTC profile', () => {
+                swapTagsReadReturning({'IPTC-NAA': {value: [1, 2, 3]}});
+                swapIptcTagsReadBySource();
+                const png = getPngWithChunks(
+                    getRawProfileTextChunk(EXIF_TIFF),
+                    getPngChunk('tEXt', 'Raw profile type iptc\x00not a raw profile')
+                );
+
+                const tags = ExifReader.loadView(getDataView(png), {expanded: true});
+
+                expect(tags.iptc).to.deep.equal({Headline: {value: 'exif'}});
+            });
+
+            it('should read ApplicationNotes XMP of zTXt raw profiles up to the brob XMP size bound in total', async () => {
+                const getPng = () => getPngWithChunks(getRawProfileZtxtChunk(EXIF_TIFF), getRawProfileZtxtChunk(EXIF_TIFF));
+                const bound = 4 * getPng().length + 64 * 1024;
+                const applicationNotesLength = Math.floor(bound / 2) + 1;
+                swapTagsReadReturning({ApplicationNotes: {value: new Array(applicationNotesLength).fill(0x20)}});
+                const readXmpStrings = swapXmpTagsReadRecording();
+
+                await ExifReader.loadView(getDataView(getPng()), {async: true});
+
+                expect(readXmpStrings).to.have.lengthOf(1);
+                expect(readXmpStrings[0]).to.have.lengthOf(applicationNotesLength);
+            });
+
+            it('should not read the groups of Exif tags that the tag filter leaves out', () => {
+                swapTagsReadReturning({'IPTC-NAA': {id: 0x83bb, value: [1, 2, 3]}, Model: {id: 0x0110, value: 'model'}});
+                swapIptcTagsReadBySource();
+                const png = getPngWithChunks(getRawProfileTextChunk(EXIF_TIFF));
+
+                const tags = ExifReader.loadView(getDataView(png), {expanded: true, excludeTags: {exif: ['IPTC-NAA']}});
+
+                expect(tags).to.not.have.property('iptc');
+                expect(tags.exif.Model).to.deep.equal({id: 0x0110, value: 'model'});
+            });
+
+            function swapTagsReadReturning(exifTags) {
+                swap(Tags, {
+                    read() {
+                        return {tags: structuredClone(exifTags), byteOrder: ByteOrder.LITTLE_ENDIAN};
+                    }
+                });
+            }
+
+            function swapCanonTagsReadRecording(canonTags) {
+                const calls = [];
+                swap(CanonTags, {
+                    read(...args) {
+                        calls.push(args);
+                        return canonTags;
+                    }
+                });
+                return calls;
+            }
+
+            function swapIptcTagsReadBySource() {
+                swap(IptcTags, {
+                    read(data) {
+                        return {Headline: {value: Array.isArray(data) ? 'exif' : 'profile'}};
+                    }
+                });
+            }
+
+            function getRawProfileZtxtChunk(tiff) {
+                const COMPRESSION_METHOD_DEFLATE = '\x00';
+                const compressedProfile = deflateSync(Buffer.from(getRawProfile(tiff), 'latin1')).toString('latin1');
+                return getPngChunk('zTXt', 'Raw profile type exif\x00' + COMPRESSION_METHOD_DEFLATE + compressedProfile);
+            }
+        });
+
+        function getRawProfileTextChunk(tiff) {
+            return getPngChunk('tEXt', 'Raw profile type exif\x00' + getRawProfile(tiff));
+        }
+
+        function getRawProfile(tiff) {
+            return getRawProfileOfType('exif', 'Exif\x00\x00' + tiff);
+        }
+
+        function getRawProfileOfType(type, data) {
+            return `\n${type}\n${String(data.length).padStart(8, ' ')}\n${Buffer.from(data, 'latin1').toString('hex')}`;
+        }
 
         // IFD0 holds Model 'abc' and links to an IFD1 holding the thumbnail offset and length.
         function getExifRawProfileWithThumbnailIfd() {

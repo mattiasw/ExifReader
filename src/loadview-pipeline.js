@@ -4,6 +4,11 @@
 
 import Constants from './constants.js';
 
+// The order the main Exif block reads them in. It is the key order of expanded
+// output, and in flat output later groups win a key clash, so Exif wins over
+// all of them but an ApplicationNotes XMP packet.
+export const EXIF_CARRIED_GROUP_ORDER = ['iptc', 'xmp', 'photoshop', 'icc', 'makerNotes'];
+
 export function buildTagsFromMergeSteps({
     mergeSteps,
     deferredResults,
@@ -117,22 +122,25 @@ export function applyMergeStep({
     }
 
     if (Constants.USE_JXL && step.type === 'mergeBrobExifDeferred') {
-        const resolvedReadTags = deferredResults[step.deferredKey];
-        if (!resolvedReadTags || Object.keys(resolvedReadTags).length === 0) {
+        const resolved = deferredResults[step.deferredKey];
+        if (!resolved) {
             return tags;
         }
-        const parsedExifTags =
-            deps.filterTagsForParse('exif', resolvedReadTags, tagFilter);
-        parsedGroups.exif = !parsedGroups.exif ? parsedExifTags : deps.objectAssign({}, parsedGroups.exif, parsedExifTags);
-
-        if (!tagFilter.shouldReturnGroup('exif')) {
+        addEmbeddedExifThumbnail(embeddedExifThumbnails, resolved.thumbnail);
+        if (Object.keys(resolved.exifTags).length === 0) {
             return tags;
         }
 
-        const returnedTags =
-            deps.filterTagsForReturn('exif', parsedExifTags, tagFilter);
-
-        return mergeAssignGroup(tags, 'exif', returnedTags, expanded, deps);
+        return addExifAndCarriedGroupsToTagsAndGroups({
+            exifTags: resolved.exifTags,
+            carriedGroups: resolved.carriedGroups,
+            parsedGroups,
+            expanded,
+            tagFilter,
+            tags,
+            deps,
+            merge: createCopyingMerge(deps),
+        });
     }
 
     if (Constants.USE_JXL && step.type === 'mergeBrobXmpDeferred') {
@@ -202,6 +210,7 @@ export function applyMergeStep({
         return addPngTextReadTagsToTagsAndGroups({
             readTags: step.readTags,
             embeddedExifTags: step.embeddedExifTags,
+            exifCarriedGroups: step.exifCarriedGroups,
             embeddedIptcTags: step.embeddedIptcTags,
             parsedGroups,
             expanded,
@@ -221,6 +230,7 @@ export function applyMergeStep({
             tags = addPngTextReadTagsToTagsAndGroups({
                 readTags: entry.readTags || {},
                 embeddedExifTags: entry.embeddedExifTags,
+                exifCarriedGroups: entry.exifCarriedGroups,
                 embeddedIptcTags: entry.embeddedIptcTags,
                 parsedGroups,
                 expanded,
@@ -378,7 +388,7 @@ function hasImage(thumbnail) {
 }
 
 function getFirstEmbeddedExifThumbnailWithImage(embeddedExifThumbnails) {
-    if (!(Constants.USE_PNG && Constants.USE_EXIF && Constants.USE_THUMBNAIL)) {
+    if (!((Constants.USE_PNG || Constants.USE_JXL) && Constants.USE_EXIF && Constants.USE_THUMBNAIL)) {
         return undefined;
     }
     return embeddedExifThumbnails.filter(hasImage)[0];
@@ -424,6 +434,7 @@ export function mergeMergeGroup(tags, groupKey, returnedTags, expanded, deps) {
 export function addPngTextReadTagsToTagsAndGroups({
     readTags,
     embeddedExifTags,
+    exifCarriedGroups,
     embeddedIptcTags,
     parsedGroups,
     expanded,
@@ -433,22 +444,16 @@ export function addPngTextReadTagsToTagsAndGroups({
     merge = createCopyingMerge(deps),
 }) {
     if (embeddedExifTags) {
-        const parsedEmbeddedExifTags =
-            deps.filterTagsForParse('exif', embeddedExifTags, tagFilter);
-        merge.group(parsedGroups, 'exif', parsedEmbeddedExifTags);
-
-        if (tagFilter.shouldReturnGroup('exif')) {
-            const returnedEmbeddedExifTags = deps.filterTagsForReturn(
-                'exif',
-                parsedEmbeddedExifTags,
-                tagFilter
-            );
-            if (expanded) {
-                merge.group(tags, 'exif', returnedEmbeddedExifTags);
-            } else {
-                tags = merge.topLevel(tags, returnedEmbeddedExifTags);
-            }
-        }
+        tags = addExifAndCarriedGroupsToTagsAndGroups({
+            exifTags: embeddedExifTags,
+            carriedGroups: exifCarriedGroups || {},
+            parsedGroups,
+            expanded,
+            tagFilter,
+            tags,
+            deps,
+            merge,
+        });
     }
 
     if (embeddedIptcTags) {
@@ -491,6 +496,79 @@ export function addPngTextReadTagsToTagsAndGroups({
     }
 
     return tags;
+}
+
+/**
+ * Merges one Exif block and the groups it carries in the order the main Exif
+ * block merges them: the carried groups, then Exif, then in flat output the
+ * ApplicationNotes XMP. The carried groups arrive parsed and are not filtered
+ * for parse again.
+ *
+ * @returns {object} The tags, which flat output replaces rather than mutates.
+ */
+export function addExifAndCarriedGroupsToTagsAndGroups({
+    exifTags,
+    carriedGroups,
+    parsedGroups,
+    expanded,
+    tagFilter,
+    tags,
+    deps,
+    merge,
+}) {
+    let flatXmpGroup = undefined;
+
+    for (let i = 0; i < EXIF_CARRIED_GROUP_ORDER.length; i++) {
+        const groupKey = EXIF_CARRIED_GROUP_ORDER[i];
+        const group = carriedGroups[groupKey];
+        if (group === undefined) {
+            continue;
+        }
+        if (groupKey === 'xmp' && !expanded) {
+            flatXmpGroup = group;
+            continue;
+        }
+        tags = addCarriedGroup(groupKey, group);
+    }
+
+    if (exifTags) {
+        const parsedExifTags = deps.filterTagsForParse('exif', exifTags, tagFilter);
+        merge.group(parsedGroups, 'exif', parsedExifTags);
+
+        if (tagFilter.shouldReturnGroup('exif')) {
+            const returnedExifTags = deps.filterTagsForReturn('exif', parsedExifTags, tagFilter);
+            if (expanded) {
+                merge.group(tags, 'exif', returnedExifTags);
+            } else {
+                tags = merge.topLevel(tags, returnedExifTags);
+            }
+        }
+    }
+
+    if (flatXmpGroup !== undefined) {
+        tags = addCarriedGroup('xmp', flatXmpGroup, true);
+    }
+
+    return tags;
+
+    function addCarriedGroup(groupKey, group, isFlatXmp) {
+        merge.group(parsedGroups, groupKey, group);
+        if (!tagFilter.shouldReturnGroup(groupKey)) {
+            return tags;
+        }
+        const returnedTags = deps.filterTagsForReturn(groupKey, group, tagFilter);
+        if (expanded) {
+            merge.group(tags, groupKey, returnedTags);
+            return tags;
+        }
+        return merge.topLevel(tags, isFlatXmp ? getXmpTagsWithoutRaw(returnedTags) : returnedTags);
+    }
+
+    function getXmpTagsWithoutRaw(xmpTags) {
+        const xmpTagsWithoutRaw = deps.objectAssign({}, xmpTags);
+        delete xmpTagsWithoutRaw._raw;
+        return xmpTagsWithoutRaw;
+    }
 }
 
 function createCopyingMerge(deps) {
