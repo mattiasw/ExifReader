@@ -461,6 +461,17 @@ describe('image-header-png', () => {
             ]);
         });
 
+        it('should widen the last block instead of recording more than 4096 chunks', () => {
+            const emptyChunk = '\x00\x00\x00\x00' + 'pHYs' + crcChecksum;
+            const iendChunk = '\x00\x00\x00\x00' + 'IEND' + crcChecksum;
+            const metadataBlocks = [];
+            ImageHeaderPng.findPngOffsets(getDataView(PNG_IMAGE_START + emptyChunk.repeat(5000) + iendChunk), false, metadataBlocks);
+            expect(metadataBlocks).to.have.lengthOf(4096);
+            expect(metadataBlocks[0]).to.deep.equal({type: 'png', start: 8, end: 20});
+            expect(metadataBlocks[4095]).to.deep.equal({type: 'png', start: 8 + 4095 * 12, end: 8 + 5000 * 12});
+            expect(metadataBlocks.truncated).to.equal(false);
+        });
+
         it('should emit a png block for a zTXt chunk (async)', () => {
             const data = 'MyTag0\x00\x00My compressed value.';
             const chunk = `\x00\x00\x00${String.fromCharCode(data.length)}` + 'zTXt' + data + crcChecksum;

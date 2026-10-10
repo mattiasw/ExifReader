@@ -466,6 +466,22 @@ describe('image-header-jpeg', () => {
             }
         });
 
+        it('should widen the last block instead of recording more than 4096 segments', () => {
+            const segmentPair = `${APP0_MARKER}\x00\x07JFIF\x00${APP1_MARKER}\x00\x07Exif\x00`;
+            const dataView = getDataView(`\xff\xd8${segmentPair.repeat(2500)}${SOS_MARKER}\x00\x04\x00\x00`);
+            const warnSpy = getConsoleWarnSpy();
+            try {
+                const metadataBlocks = [];
+                ImageHeaderJpeg.findJpegOffsets(dataView, metadataBlocks);
+                expect(metadataBlocks).to.have.lengthOf(4096);
+                expect(metadataBlocks[4094]).to.deep.equal({type: 'jfif', start: 2 + 4094 * 9, end: 2 + 4095 * 9});
+                expect(metadataBlocks[4095]).to.deep.equal({type: 'exif', start: 2 + 4095 * 9, end: 2 + 5000 * 9});
+                expect(metadataBlocks.truncated).to.equal(false);
+            } finally {
+                warnSpy.reset();
+            }
+        });
+
         it('should mark metadataBlocks as truncated when SOS was not reached', () => {
             const dataView = getDataView('\xff\xd8\xff\xe1\x00\x08Exif\x00\x00');
             const metadataBlocks = [];

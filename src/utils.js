@@ -191,9 +191,29 @@ export function getCharacterArray(string) {
     return string.split('').map((character) => character.charCodeAt(0));
 }
 
+// Guards against memory exhaustion from a crafted file. A real JPEG has at most 255 ICC
+// segments, ExifReader reads at most 1024 XMP ones, and other containers are few.
+export const MAX_METADATA_BLOCKS = 4096;
+
+/**
+ * Records one metadata block. The list holds at most MAX_METADATA_BLOCKS
+ * entries; past that, the last entry is widened to cover each further block
+ * and keeps its own type. Does nothing without a list or a type.
+ * @param {Array<{type: string, start: number, end: number}>|undefined} metadataBlocks
+ * @param {string|undefined} type
+ * @param {number} start
+ * @param {number} end Exclusive.
+ */
 export function pushMetadataBlock(metadataBlocks, type, start, end) {
-    if (metadataBlocks && type) {
+    if (!metadataBlocks || !type) {
+        return;
+    }
+    if (metadataBlocks.length < MAX_METADATA_BLOCKS) {
         metadataBlocks.push({type, start, end});
+    } else {
+        const lastBlock = metadataBlocks[metadataBlocks.length - 1];
+        lastBlock.start = Math.min(lastBlock.start, start);
+        lastBlock.end = Math.max(lastBlock.end, end);
     }
 }
 
