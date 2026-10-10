@@ -130,8 +130,8 @@ describe('tag-names-exif-ifd', () => {
 
     it('should report correct name and description for ComponentsConfiguration', () => {
         expect(TagNamesExifIfd[0x9101].name).to.equal('ComponentsConfiguration');
-        expect(TagNamesExifIfd[0x9101].description([0x34, 0x35, 0x36, 0x30])).to.equal('RGB');
-        expect(TagNamesExifIfd[0x9101].description([0x31, 0x32, 0x33, 0x30])).to.equal('YCbCr');
+        expect(TagNamesExifIfd[0x9101].description([4, 5, 6, 0])).to.equal('RGB');
+        expect(TagNamesExifIfd[0x9101].description([1, 2, 3, 0])).to.equal('YCbCr');
     });
 
     it('should have tag CompressedBitsPerPixel', () => {

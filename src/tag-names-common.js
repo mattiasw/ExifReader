@@ -222,18 +222,18 @@ export default {
     YResolution: (value) => '' + Math.round(value[0] / value[1])
 };
 
-function getComponentText(character) {
-    if (character === 0x31) {
+function getComponentText(component) {
+    if (component === 1) {
         return 'Y';
-    } else if (character === 0x32) {
+    } else if (component === 2) {
         return 'Cb';
-    } else if (character === 0x33) {
+    } else if (component === 3) {
         return 'Cr';
-    } else if (character === 0x34) {
+    } else if (component === 4) {
         return 'R';
-    } else if (character === 0x35) {
+    } else if (component === 5) {
         return 'G';
-    } else if (character === 0x36) {
+    } else if (component === 6) {
         return 'B';
     }
 }

@@ -152,6 +152,7 @@ describe('xmp-tag-names', () => {
     it('should report correct description for exif:ComponentsConfiguration', () => {
         expect(XmpTagNames['exif:ComponentsConfiguration']({}, '4, 5, 6, 0')).to.equal('RGB');
         expect(XmpTagNames['exif:ComponentsConfiguration']({}, '1, 2, 3, 0')).to.equal('YCbCr');
+        expect(XmpTagNames['exif:ComponentsConfiguration']({}, 'YCbCr')).to.equal('YCbCr');
     });
 
     it('should report correct description for tiff:ResolutionUnit', () => {

@@ -32,12 +32,20 @@ describe('tag-names-common', () => {
 
     describe('ComponentsConfiguration', () => {
         it('should describe YCbCr and RGB components', () => {
-            expect(TagNamesCommon.ComponentsConfiguration([0x31, 0x32, 0x33, 0x30])).to.equal('YCbCr');
-            expect(TagNamesCommon.ComponentsConfiguration([0x34, 0x35, 0x36, 0x30])).to.equal('RGB');
+            expect(TagNamesCommon.ComponentsConfiguration([1, 2, 3, 0])).to.equal('YCbCr');
+            expect(TagNamesCommon.ComponentsConfiguration([4, 5, 6, 0])).to.equal('RGB');
+        });
+
+        it('should describe the components in byte order', () => {
+            expect(TagNamesCommon.ComponentsConfiguration([0, 3, 2, 1])).to.equal('CrCbY');
         });
 
         it('should ignore unknown bytes', () => {
-            expect(TagNamesCommon.ComponentsConfiguration([0x31, 0x00, 0x37, 0x36])).to.equal('YB');
+            expect(TagNamesCommon.ComponentsConfiguration([1, 0, 7, 6])).to.equal('YB');
+        });
+
+        it('should not describe ASCII digits as components', () => {
+            expect(TagNamesCommon.ComponentsConfiguration([0x31, 0x32, 0x33, 0x30])).to.equal('');
         });
 
         it('should throw for a value that is not an array', () => {
