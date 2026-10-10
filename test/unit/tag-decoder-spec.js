@@ -101,6 +101,12 @@ describe('tag-decoder', () => {
         expect(TagDecoder.decode('UTF-8', getCharacterArray('A\xc3\xbaC'))).to.equal('AúC');
     });
 
+    it('should decode a large value that is not valid UTF-8 as Windows-1252', () => {
+        const bytes = Array.from({length: 200000}, (_, index) => (index % 2 === 0 ? 0x80 : 0x41));
+
+        expect(TagDecoder.decode(undefined, bytes)).to.equal('€A'.repeat(100000));
+    });
+
     it('should decode UTF-8 when value is a string', () => {
         restoreTextDecoder = swapProperties(TextDecoderModule, {
             get() {

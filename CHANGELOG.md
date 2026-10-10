@@ -42,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   up to twice the file size plus 64 KiB in total. A small file could otherwise
   make the library copy out thumbnails many times its own size. The thumbnail
   of a JPEG XL Brotli Exif box has the same bound.
+- The text of an IPTC dataset in a block without a `Coded Character Set`
+  dataset was converted one character at a time: a crafted JPEG with about
+  8 MiB of IPTC `Caption/Abstract` text blocked `load()` for about 0.42
+  seconds and raised peak memory to about 130 MB. The text is now converted
+  in chunks, so the same file takes about 0.17 seconds and peaks at about
+  120 MB.
 
 ## [4.48.1] - 2026-10-10
 
