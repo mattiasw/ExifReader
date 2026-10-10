@@ -390,6 +390,10 @@ expandedTags.makerNotes?.["CameraOrientation"].value;
 expandedTags.makerNotes?.["RollAngle"].value;
 // @ts-expect-error
 expandedTags.makerNotes?.["PitchAngle"].value;
+// @ts-expect-error
+expandedTags.makerNotes?.["AutoRotate"].value;
+// @ts-expect-error
+tags["AutoRotate"].value;
 
 //////////////
 // Composite
