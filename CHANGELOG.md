@@ -7,22 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- JPEG XL files with a Brotli-compressed Exif box return the thumbnail, the
+  IPTC, XMP, ICC and Photoshop tags and the Canon and Pentax maker notes that
+  the Exif data carries, as files with an uncompressed Exif box do.
+- PNG files with Exif in a `Raw profile type exif` text chunk return the
+  Photoshop tags, the Canon and Pentax maker notes and the IPTC, XMP and ICC
+  tags that the Exif data carries, as files with an `eXIf` chunk do. A
+  `Raw profile type iptc` chunk in the same file takes precedence over IPTC
+  tags in the Exif data.
+
 ### Fixed
 
 - The support table in the README no longer marks any cell as untested. MPF is
   a JPEG APP2 structure with no place in TIFF, PNG, HEIC/HEIF, AVIF or WebP,
   so those cells now say not applicable. Photoshop tags are read from the Exif
   data of PNG, HEIC/HEIF, AVIF, WebP and JPEG XL files just as they are from
-  TIFF, so those cells now say partially supported. The table now also says
-  that the JPEG XL thumbnail, Photoshop tags and maker notes are only read from
-  an uncompressed Exif box, and that PNG Photoshop tags and maker notes are only
-  read from an `eXIf` chunk.
+  TIFF, so those cells now say partially supported.
 - The support table in the README now says that IPTC tags are read from the
   Exif data of HEIC/HEIF, AVIF, WebP and JPEG XL files, and that ICC tags are
   read from the Exif data of JPEG XL files, instead of marking them as not
-  supported. In JPEG XL files both are only read from an uncompressed Exif
-  box. The custom build and tag filtering sections of the README no longer say
-  that only TIFF files read IPTC, XMP and ICC tags from the Exif data.
+  supported. The custom build and tag filtering sections of the README no
+  longer say that only TIFF files read IPTC, XMP and ICC tags from the Exif
+  data.
+
+### Security
+
+- The thumbnails in the Exif data of compressed PNG text chunks are read only
+  up to twice the file size plus 64 KiB in total. A small file could otherwise
+  make the library copy out thumbnails many times its own size. The thumbnail
+  of a JPEG XL Brotli Exif box has the same bound.
 
 ## [4.48.1] - 2026-10-10
 

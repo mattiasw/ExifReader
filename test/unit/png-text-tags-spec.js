@@ -1021,6 +1021,189 @@ describe('png-text-tags', () => {
         });
     });
 
+    describe('groups an Exif raw profile carries', () => {
+        const EXIF_DATA = 'Exif\0\0MM\0\x2a\0\0\0\x08<maker note>';
+        const BYTE_ORDER = '<byte order>';
+
+        function swapTagsReadWithMakerNote() {
+            restoreTagReaders = swapProperties(Tags, {
+                read: () => ({
+                    tags: {
+                        Model: {value: 'abc'},
+                        MakerNote: {value: [1, 2], __offset: 14}
+                    },
+                    byteOrder: BYTE_ORDER
+                })
+            });
+        }
+
+        function getRecordingReadCarriedGroups(results) {
+            const calls = [];
+            function readCarriedGroups(dataView, exifTags, tiffHeaderOffset, byteOrder, valueBudget, source) {
+                calls.push({
+                    dataView,
+                    exifTags,
+                    makerNoteOffset: exifTags.MakerNote.__offset,
+                    tiffHeaderOffset,
+                    byteOrder,
+                    valueBudget,
+                    source
+                });
+                return results.shift();
+            }
+            return {readCarriedGroups, calls};
+        }
+
+        function getExifChunk() {
+            return getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA));
+        }
+
+        function readSourceOfExifChunk(otherChunks, async = false) {
+            swapTagsReadWithMakerNote();
+            const {readCarriedGroups, calls} = getRecordingReadCarriedGroups([{}]);
+            const {dataView, chunks} = buildTextChunks(otherChunks.concat([getExifChunk()]));
+            const decompressConfig = {deflate: (bytes) => bytes};
+
+            PngTextTags.read(dataView, chunks, async, false, false, undefined, decompressConfig, undefined, undefined, readCarriedGroups);
+
+            return calls[0].source;
+        }
+
+        it('should pass the decoded profile, its Exif tags, offset, byte order and budget to readCarriedGroups and return its groups', () => {
+            swapTagsReadWithMakerNote();
+            const carriedGroups = {makerNotes: {AutoRotate: {value: 0}}};
+            const {readCarriedGroups, calls} = getRecordingReadCarriedGroups([carriedGroups]);
+            const valueBudget = {remaining: 1000};
+            const {dataView, chunks} = buildTextChunks([getExifChunk()]);
+
+            const result = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, valueBudget, undefined, readCarriedGroups);
+
+            expect(calls).to.have.lengthOf(1);
+            expect(calls[0].dataView.byteLength).to.equal(EXIF_DATA.length);
+            expect(getStringFromDataView(calls[0].dataView, 0, EXIF_DATA.length)).to.equal(EXIF_DATA);
+            expect(calls[0].makerNoteOffset).to.equal(14);
+            expect(calls[0].exifTags.Model).to.deep.equal({value: 'abc'});
+            expect(calls[0].tiffHeaderOffset).to.equal(6);
+            expect(calls[0].byteOrder).to.equal(BYTE_ORDER);
+            expect(calls[0].valueBudget).to.equal(valueBudget);
+            expect(calls[0].source).to.deep.equal({decompressed: false, hasIptcBlock: false});
+            expect(result.exifCarriedGroups).to.deep.equal(carriedGroups);
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}, MakerNote: {value: [1, 2]}});
+        });
+
+        it('should read no carried groups and still drop the maker note offset when no readCarriedGroups is passed', () => {
+            swapTagsReadWithMakerNote();
+            const {dataView, chunks} = buildTextChunks([getExifChunk()]);
+
+            const result = PngTextTags.read(dataView, chunks);
+
+            expect(result.exifCarriedGroups).to.be.undefined;
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}, MakerNote: {value: [1, 2]}});
+        });
+
+        for (const position of ['before', 'after']) {
+            it(`should say the file has an IPTC block when a Raw profile type iptc chunk comes ${position} the Exif profile`, () => {
+                swapTagsReadWithMakerNote();
+                const {readCarriedGroups, calls} = getRecordingReadCarriedGroups([{}]);
+                const iptcChunk = getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', '<iptc>'));
+                const textChunks = position === 'before' ? [iptcChunk, getExifChunk()] : [getExifChunk(), iptcChunk];
+                const {dataView, chunks} = buildTextChunks(textChunks);
+
+                PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, undefined, readCarriedGroups);
+
+                expect(calls[0].source).to.deep.equal({decompressed: false, hasIptcBlock: true});
+            });
+        }
+
+        it('should say the file has an IPTC block when the Raw profile type iptc chunk is compressed and read asynchronously', () => {
+            const source = readSourceOfExifChunk([getZtxtChunk('Raw profile type iptc', toBytes('<compressed>'))], true);
+
+            expect(source.hasIptcBlock).to.equal(true);
+        });
+
+        it('should not say the file has an IPTC block when the compressed Raw profile type iptc chunk is not read', () => {
+            const source = readSourceOfExifChunk([getCompressedItxtChunk('Raw profile type iptc', toBytes('<compressed>'))]);
+
+            expect(source.hasIptcBlock).to.equal(false);
+        });
+
+        it('should not say the file has an IPTC block when the compressed Raw profile type iptc chunk is past the compressed chunk limit', () => {
+            const MAX_COMPRESSED_TEXT_CHUNKS = 255;
+            const fillerChunks = new Array(MAX_COMPRESSED_TEXT_CHUNKS).fill(getZtxtChunk('Comment', toBytes('<compressed>')));
+
+            const source = readSourceOfExifChunk(fillerChunks.concat([getZtxtChunk('Raw profile type iptc', toBytes('<compressed>'))]), true);
+
+            expect(source.hasIptcBlock).to.equal(false);
+        });
+
+        it('should match the Raw profile type iptc keyword case-insensitively', () => {
+            const source = readSourceOfExifChunk([getTextChunk('RAW PROFILE TYPE IPTC', getRawProfileValue('iptc', '<iptc>'))]);
+
+            expect(source.hasIptcBlock).to.equal(true);
+        });
+
+        for (const [description, textChunk, async] of [
+            ['whose value is not an IPTC raw profile', getTextChunk('Raw profile type iptc', 'not a raw profile')],
+            ['with a language tag', {
+                type: TYPE_ITXT,
+                bytes: toBytes('Raw profile type iptc\x00\x00\x00en\x00\x00' + getRawProfileValue('iptc', '<iptc>'))
+            }],
+            ['that is compressed, read asynchronously and has a language tag', {
+                type: TYPE_ITXT,
+                bytes: toBytes('Raw profile type iptc\x00\x01\x00en\x00\x00<compressed>')
+            }, true],
+        ]) {
+            it(`should not say the file has an IPTC block for a chunk ${description}`, () => {
+                expect(readSourceOfExifChunk([textChunk], async).hasIptcBlock).to.equal(false);
+            });
+        }
+
+        it('should merge the carried groups of several tEXt raw profiles group by group, the later one winning', () => {
+            swapTagsReadWithMakerNote();
+            const {readCarriedGroups, calls} = getRecordingReadCarriedGroups([
+                {makerNotes: {AutoRotate: {value: 'first'}, LensType: {value: 'first'}}, iptc: {Headline: {value: 'first'}}},
+                {makerNotes: {AutoRotate: {value: 'second'}}, photoshop: {ClippingPathName: {value: 'second'}}}
+            ]);
+            const {dataView, chunks} = buildTextChunks([getExifChunk(), getExifChunk()]);
+
+            const result = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, undefined, readCarriedGroups);
+
+            expect(calls).to.have.lengthOf(2);
+            expect(result.exifCarriedGroups).to.deep.equal({
+                makerNotes: {AutoRotate: {value: 'second'}, LensType: {value: 'first'}},
+                iptc: {Headline: {value: 'first'}},
+                photoshop: {ClippingPathName: {value: 'second'}}
+            });
+        });
+
+        it('should return the carried groups of a zTXt raw profile with its entry and say it was decompressed', async () => {
+            swapTagsReadWithMakerNote();
+            const firstGroups = {makerNotes: {AutoRotate: {value: 'first'}}};
+            const secondGroups = {makerNotes: {AutoRotate: {value: 'second'}}};
+            const {readCarriedGroups, calls} = getRecordingReadCarriedGroups([firstGroups, secondGroups]);
+            const {dataView, chunks} = buildTextChunks([
+                getZtxtChunk('Raw profile type exif', toBytes(getRawProfileValue('exif', EXIF_DATA))),
+                getZtxtChunk('Raw profile type exif', toBytes(getRawProfileValue('exif', EXIF_DATA)))
+            ]);
+            const decompressConfig = {deflate: (bytes) => bytes};
+
+            const result = PngTextTags.read(
+                dataView, chunks, true, false, false, undefined, decompressConfig, undefined, undefined, readCarriedGroups
+            );
+            const tagList = await result.readTagsPromise;
+
+            expect(result.exifCarriedGroups).to.be.undefined;
+            expect(calls.map((call) => call.source)).to.deep.equal([
+                {decompressed: true, hasIptcBlock: false},
+                {decompressed: true, hasIptcBlock: false}
+            ]);
+            expect(calls[0].makerNoteOffset).to.equal(14);
+            expect(calls[0].byteOrder).to.equal(BYTE_ORDER);
+            expect(tagList.map((entry) => entry.exifCarriedGroups)).to.deep.equal([firstGroups, secondGroups]);
+            expect(tagList[0].embeddedExifTags).to.deep.equal({Model: {value: 'abc'}, MakerNote: {value: [1, 2]}});
+        });
+    });
+
     describe('many compressed text chunks', () => {
         const MAX_COMPRESSED_TEXT_CHUNKS = 255;
         const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;

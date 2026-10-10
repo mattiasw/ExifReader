@@ -533,3 +533,23 @@ function getComputedRationalValue(rational) {
 
     return numerator / denominator;
 }
+
+/**
+ * Removes the thumbnail IFD from the tags of an embedded Exif block and reads
+ * its image with `readThumbnail`, when given.
+ *
+ * @returns {object|undefined} The thumbnail tags when an image was read.
+ */
+export function takeEmbeddedExifThumbnail(readTags, dataView, tiffHeaderOffset, readThumbnail) {
+    const thumbnailIfdTags = readTags.Thumbnail;
+    if (!thumbnailIfdTags) {
+        return undefined;
+    }
+    delete readTags.Thumbnail;
+
+    if (!readThumbnail) {
+        return undefined;
+    }
+    const thumbnail = readThumbnail(dataView, thumbnailIfdTags, tiffHeaderOffset);
+    return thumbnail.image ? thumbnail : undefined;
+}

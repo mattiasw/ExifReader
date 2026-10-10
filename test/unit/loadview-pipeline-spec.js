@@ -450,13 +450,28 @@ describe('loadView pipeline module', function () {
             expect(tags.Thumbnail).to.equal(rawThumbnail);
         });
 
-        for (const constant of ['USE_PNG', 'USE_EXIF', 'USE_THUMBNAIL']) {
-            it(`should return no raw profile thumbnail in a build without ${constant}`, function () {
-                swap(Constants, {[constant]: false});
+        for (const [description, constants] of [
+            ['USE_PNG and USE_JXL', {USE_PNG: false, USE_JXL: false}],
+            ['USE_EXIF', {USE_EXIF: false}],
+            ['USE_THUMBNAIL', {USE_THUMBNAIL: false}],
+        ]) {
+            it(`should return no raw profile thumbnail in a build without ${description}`, function () {
+                swap(Constants, constants);
 
                 const tags = applyThumbnailStepWithRawThumbnails([getRawThumbnail('raw')]);
 
                 expect(tags).to.not.have.property('Thumbnail');
+            });
+        }
+
+        for (const constant of ['USE_PNG', 'USE_JXL']) {
+            it(`should return an embedded thumbnail in a build with only ${constant} of the two`, function () {
+                swap(Constants, {USE_PNG: constant === 'USE_PNG', USE_JXL: constant === 'USE_JXL'});
+                const rawThumbnail = getRawThumbnail('raw');
+
+                const tags = applyThumbnailStepWithRawThumbnails([rawThumbnail]);
+
+                expect(tags.Thumbnail).to.equal(rawThumbnail);
             });
         }
 
@@ -1295,6 +1310,296 @@ describe('loadView pipeline module', function () {
                 parsedGroups,
                 expanded,
                 tagFilter: createTagFilter({}),
+                dataView: {},
+                tiffHeaderOffset: undefined,
+                fileType: undefined,
+                pngTextChunks: [],
+                pngTextIsAsync: false,
+                thumbnailIfdTags: undefined,
+                deps,
+            });
+            return {tags, parsedGroups};
+        }
+    });
+
+    describe('groups an Exif block carries', function () {
+        const CARRIED_GROUPS = {
+            iptc: {Headline: {value: 'headline'}},
+            xmp: {Rating: {value: '5'}, _raw: '<x:xmpmeta/>'},
+            photoshop: {ClippingPathName: {value: 'path1'}},
+            icc: {ProfileVersion: {value: '4.3'}},
+            makerNotes: {AutoRotate: {value: 0}},
+        };
+
+        it('should merge the carried groups of a PNG raw profile into their groups in expanded mode', function () {
+            const {tags, parsedGroups} = buildCarriedGroupTags({
+                steps: [getPngTextStep(CARRIED_GROUPS)],
+                expanded: true,
+            });
+
+            for (const groupKey of Object.keys(CARRIED_GROUPS)) {
+                expect(tags[groupKey]).to.deep.equal(CARRIED_GROUPS[groupKey]);
+                expect(parsedGroups[groupKey]).to.deep.equal(CARRIED_GROUPS[groupKey]);
+            }
+            expect(tags.exif).to.deep.equal({Model: {value: 'model'}});
+            expect(tags).to.not.have.property('Headline');
+        });
+
+        it('should merge the carried groups of a PNG raw profile top level, XMP without its raw packet, in flat mode', function () {
+            const {tags, parsedGroups} = buildCarriedGroupTags({
+                steps: [getPngTextStep(CARRIED_GROUPS)],
+                expanded: false,
+            });
+
+            expect(JSON.stringify(tags)).to.equal(JSON.stringify({
+                Headline: {value: 'headline'},
+                ClippingPathName: {value: 'path1'},
+                ProfileVersion: {value: '4.3'},
+                AutoRotate: {value: 0},
+                Model: {value: 'model'},
+                Rating: {value: '5'},
+            }));
+            expect(parsedGroups.xmp).to.deep.equal(CARRIED_GROUPS.xmp);
+            expect(parsedGroups.makerNotes).to.deep.equal(CARRIED_GROUPS.makerNotes);
+        });
+
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
+
+            it(`should only keep a carried group in the parsed groups when the group is not returned in ${mode} mode`, function () {
+                const {tags, parsedGroups} = buildCarriedGroupTags({
+                    steps: [getPngTextStep({makerNotes: CARRIED_GROUPS.makerNotes, xmp: CARRIED_GROUPS.xmp})],
+                    expanded,
+                    tagFilter: createTagFilter({returnGroups: {makerNotes: false, xmp: false}}),
+                });
+
+                expect(tags).to.not.have.property('makerNotes');
+                expect(tags).to.not.have.property('xmp');
+                expect(tags).to.not.have.property('AutoRotate');
+                expect(tags).to.not.have.property('Rating');
+                expect(parsedGroups.makerNotes).to.deep.equal(CARRIED_GROUPS.makerNotes);
+                expect(parsedGroups.xmp).to.deep.equal(CARRIED_GROUPS.xmp);
+            });
+
+            it(`should merge the carried groups from the tags returned for them in ${mode} mode`, function () {
+                const deps = createPipelineDeps();
+                deps.filterTagsForReturn = (groupKey, readTags) => {
+                    const returnedTags = objectAssign({}, readTags);
+                    delete returnedTags.Hidden;
+                    return returnedTags;
+                };
+
+                const {tags, parsedGroups} = buildCarriedGroupTags({
+                    steps: [getPngTextStep({makerNotes: {AutoRotate: {value: 0}, Hidden: {value: 1}}})],
+                    expanded,
+                    deps,
+                });
+
+                expect(expanded ? tags.makerNotes : tags).to.not.have.property('Hidden');
+                expect((expanded ? tags.makerNotes : tags).AutoRotate).to.deep.equal({value: 0});
+                expect(parsedGroups.makerNotes.Hidden).to.deep.equal({value: 1});
+            });
+        }
+
+        it('should keep a _raw tag of a carried group other than XMP in flat mode', function () {
+            const {tags} = buildCarriedGroupTags({
+                steps: [getPngTextStep({makerNotes: {_raw: {value: 'maker notes'}}})],
+                expanded: false,
+            });
+
+            expect(tags._raw).to.deep.equal({value: 'maker notes'});
+        });
+
+        it('should let Exif win over the maker notes, and ApplicationNotes XMP over Exif, in flat mode', function () {
+            const {tags} = buildCarriedGroupTags({
+                steps: [{
+                    type: 'processPngTextReadTags',
+                    readTags: {},
+                    embeddedExifTags: {LensModel: {value: 'exif'}, Rating: {value: 'exif'}},
+                    exifCarriedGroups: {
+                        makerNotes: {LensModel: {value: 'maker notes'}, Rating: {value: 'maker notes'}},
+                        xmp: {Rating: {value: 'xmp'}},
+                    },
+                }],
+                expanded: false,
+            });
+
+            expect(tags.LensModel.value).to.equal('exif');
+            expect(tags.Rating.value).to.equal('xmp');
+        });
+
+        it('should return the carried groups ahead of Exif and in reading order in expanded mode', function () {
+            const {tags} = buildCarriedGroupTags({
+                steps: [getPngTextStep({
+                    makerNotes: CARRIED_GROUPS.makerNotes,
+                    icc: CARRIED_GROUPS.icc,
+                    photoshop: CARRIED_GROUPS.photoshop,
+                    xmp: CARRIED_GROUPS.xmp,
+                    iptc: CARRIED_GROUPS.iptc,
+                })],
+                expanded: true,
+            });
+
+            expect(Object.keys(tags)).to.deep.equal(['iptc', 'xmp', 'photoshop', 'icc', 'makerNotes', 'exif', 'png']);
+        });
+
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
+
+            it(`should merge the carried groups of deferred raw profiles in order without mutating earlier groups in ${mode} mode`, function () {
+                const syncStep = getPngTextStep({makerNotes: {AutoRotate: {value: 'sync'}, LensType: {value: 'sync'}}});
+                const syncStepSnapshot = structuredClone(syncStep);
+
+                const {tags, parsedGroups} = buildCarriedGroupTags({
+                    steps: [syncStep, {type: 'processPngTextReadTagsDeferredList', deferredKey: 'pngText'}],
+                    deferredResults: {pngText: [
+                        {
+                            embeddedExifTags: {Model: {value: 'first'}},
+                            exifCarriedGroups: {makerNotes: {AutoRotate: {value: 'first'}, ShotInfo: {value: 'first'}}},
+                        },
+                        {
+                            embeddedExifTags: {Model: {value: 'second'}},
+                            exifCarriedGroups: {makerNotes: {AutoRotate: {value: 'second'}}, photoshop: CARRIED_GROUPS.photoshop},
+                        },
+                    ]},
+                    expanded,
+                });
+
+                const expectedMakerNotes = {
+                    AutoRotate: {value: 'second'},
+                    LensType: {value: 'sync'},
+                    ShotInfo: {value: 'first'},
+                };
+                expect(syncStep).to.deep.equal(syncStepSnapshot);
+                expect(parsedGroups.makerNotes).to.deep.equal(expectedMakerNotes);
+                expect(parsedGroups.photoshop).to.deep.equal(CARRIED_GROUPS.photoshop);
+                if (expanded) {
+                    expect(tags.makerNotes).to.deep.equal(expectedMakerNotes);
+                    expect(tags.photoshop).to.deep.equal(CARRIED_GROUPS.photoshop);
+                } else {
+                    expect(tags).to.deep.include(expectedMakerNotes);
+                    expect(tags.ClippingPathName).to.deep.equal({value: 'path1'});
+                }
+            });
+        }
+
+        describe('mergeBrobExifDeferred step', function () {
+            for (const expanded of [false, true]) {
+                const mode = expanded ? 'expanded' : 'flat';
+
+                it(`should merge the brob Exif, the groups it carries and its thumbnail in ${mode} mode`, function () {
+                    const thumbnail = {type: 'image/jpeg', image: 'brob'};
+
+                    const {tags, parsedGroups} = buildCarriedGroupTags({
+                        steps: [getBrobStep(), {type: 'thumbnail'}],
+                        deferredResults: {brobExif: {
+                            exifTags: {LensModel: {value: 'exif'}},
+                            carriedGroups: {
+                                makerNotes: {LensModel: {value: 'maker notes'}, AutoRotate: {value: 0}},
+                                xmp: CARRIED_GROUPS.xmp,
+                            },
+                            thumbnail,
+                        }},
+                        expanded,
+                    });
+
+                    expect(tags.Thumbnail).to.equal(thumbnail);
+                    expect(parsedGroups.exif).to.deep.equal({LensModel: {value: 'exif'}});
+                    expect(parsedGroups.makerNotes.AutoRotate).to.deep.equal({value: 0});
+                    expect(parsedGroups.xmp).to.deep.equal(CARRIED_GROUPS.xmp);
+                    if (expanded) {
+                        expect(Object.keys(tags)).to.deep.equal(['xmp', 'makerNotes', 'exif', 'Thumbnail']);
+                        expect(tags.exif).to.deep.equal({LensModel: {value: 'exif'}});
+                        expect(tags.makerNotes.LensModel).to.deep.equal({value: 'maker notes'});
+                        expect(tags.xmp).to.deep.equal(CARRIED_GROUPS.xmp);
+                    } else {
+                        expect(tags.LensModel).to.deep.equal({value: 'exif'});
+                        expect(tags.AutoRotate).to.deep.equal({value: 0});
+                        expect(tags.Rating).to.deep.equal({value: '5'});
+                        expect(tags).to.not.have.property('_raw');
+                    }
+                });
+            }
+
+            it('should merge the brob Exif into an existing parsed Exif group without mutating it', function () {
+                const parsedExifTags = {Make: {value: 'make'}};
+                const parsedGroups = {exif: parsedExifTags};
+
+                buildCarriedGroupTags({
+                    steps: [getBrobStep()],
+                    deferredResults: {brobExif: {exifTags: {Model: {value: 'model'}}, carriedGroups: {}}},
+                    expanded: true,
+                    parsedGroups,
+                });
+
+                expect(parsedExifTags).to.deep.equal({Make: {value: 'make'}});
+                expect(parsedGroups.exif).to.deep.equal({Make: {value: 'make'}, Model: {value: 'model'}});
+            });
+
+            it('should keep the brob Exif out of the returned tags when the exif group is not returned', function () {
+                const {tags, parsedGroups} = buildCarriedGroupTags({
+                    steps: [getBrobStep()],
+                    deferredResults: {brobExif: {exifTags: {Model: {value: 'model'}}, carriedGroups: {}}},
+                    expanded: true,
+                    tagFilter: createTagFilter({returnGroups: {exif: false}}),
+                });
+
+                expect(tags).to.deep.equal({});
+                expect(parsedGroups.exif).to.deep.equal({Model: {value: 'model'}});
+            });
+
+            it('should leave the tags alone when the brob Exif could not be read', function () {
+                const {tags, parsedGroups} = buildCarriedGroupTags({
+                    steps: [getBrobStep(), {type: 'thumbnail'}],
+                    deferredResults: {brobExif: undefined},
+                    expanded: true,
+                });
+
+                expect(tags).to.deep.equal({});
+                expect(parsedGroups).to.deep.equal({});
+            });
+
+            it('should add no exif group for an empty brob Exif but still return its thumbnail', function () {
+                const thumbnail = {type: 'image/jpeg', image: 'brob'};
+
+                const {tags, parsedGroups} = buildCarriedGroupTags({
+                    steps: [getBrobStep(), {type: 'thumbnail'}],
+                    deferredResults: {brobExif: {exifTags: {}, carriedGroups: {}, thumbnail}},
+                    expanded: true,
+                });
+
+                expect(tags).to.deep.equal({Thumbnail: thumbnail});
+                expect(parsedGroups).to.deep.equal({});
+            });
+
+            function getBrobStep() {
+                return {type: 'mergeBrobExifDeferred', deferredKey: 'brobExif'};
+            }
+        });
+
+        function getPngTextStep(exifCarriedGroups) {
+            return {
+                type: 'processPngTextReadTags',
+                readTags: {},
+                embeddedExifTags: {Model: {value: 'model'}},
+                exifCarriedGroups,
+            };
+        }
+
+        function buildCarriedGroupTags({
+            steps,
+            deferredResults = {},
+            expanded,
+            tagFilter = createTagFilter({}),
+            parsedGroups = {},
+            deps = createPipelineDeps(),
+        }) {
+            const tags = buildTagsFromMergeSteps({
+                mergeSteps: steps,
+                deferredResults,
+                parsedGroups,
+                expanded,
+                tagFilter,
                 dataView: {},
                 tiffHeaderOffset: undefined,
                 fileType: undefined,
