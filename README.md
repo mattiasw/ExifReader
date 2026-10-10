@@ -673,6 +673,11 @@ import {DOMParser, onErrorStopParsing} from '@xmldom/xmldom';
 const tags = ExifReader.load(fileBuffer, {domParser: new DOMParser({onError: onErrorStopParsing})});
 ```
 
+Use `xmldom` 0.9.12 or later. ExifReader limits how deeply XMP elements can
+nest and how many markup nodes a packet can have, and it checks those limits
+the way `xmldom` 0.9 reads the markup. With 0.8, a crafted file can get past
+them and make parsing slow.
+
 The `onError` option is needed to avoid a [seemingly infinite loop for some
 XMLs](https://github.com/xmldom/xmldom/issues/501). Unfortunately `linkedom` has
 the same problem but does not have this option and will therefore get stuck on
