@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `hasOwnProperty()` on it, or converting it to a string, could throw. The
   attribute names inside a qualifier that holds child elements are now kept
   in objects without a prototype, for the same reason.
+- `includeTags.exif` with a numeric GPS or Interoperability tag id, such as
+  `2` for `GPSLatitude` or `0x1001` for `RelatedImageWidth`, returned none of
+  those tags, because only a tag name added the `GPS Info IFD Pointer` or
+  `Interoperability IFD Pointer` dependency that makes the sub-IFD get read.
 
 ### Security
 

@@ -34,6 +34,21 @@ export const EXIF_POINTER_TAGS = {
     interoperabilityIfdPointer: 'Interoperability IFD Pointer',
 };
 
+// The two id sets mirror the keys of tag-names-gps-ifd.js and tag-names-interoperability-ifd.js.
+// Importing those files here instead would bring them into builds that leave Exif out.
+const GPS_IFD_TAG_IDS = getIdLookup([[0x0000, 0x001f]]);
+const INTEROPERABILITY_IFD_TAG_IDS = getIdLookup([[0x0001, 0x0002], [0x1000, 0x1002]]);
+
+function getIdLookup(idRanges) {
+    const lookup = Object.create(null);
+    for (let i = 0; i < idRanges.length; i++) {
+        for (let id = idRanges[i][0]; id <= idRanges[i][1]; id++) {
+            lookup[id] = true;
+        }
+    }
+    return lookup;
+}
+
 export const EXIF_DEPENDENCY_TAGS = {
     thumbnail: [
         'JPEGInterchangeFormat',
@@ -99,6 +114,14 @@ export function getExifTagDependenciesForInclude(includeTags) {
     function addPointerDependenciesFromExifTagSelectors(pointerSet, selectors) {
         for (let i = 0; i < selectors.length; i++) {
             const selector = selectors[i];
+            if (typeof selector === 'number') {
+                if (GPS_IFD_TAG_IDS[selector]) {
+                    pointerSet[EXIF_POINTER_TAGS.gpsInfoIfdPointer] = true;
+                }
+                if (INTEROPERABILITY_IFD_TAG_IDS[selector]) {
+                    pointerSet[EXIF_POINTER_TAGS.interoperabilityIfdPointer] = true;
+                }
+            }
             if (typeof selector !== 'string') {
                 continue;
             }
