@@ -29,8 +29,8 @@ You can try it out on the
 | JPEG XL&ast;&ast;&ast; | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **some**&ast;&ast;&ast;&ast; | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
 | TIFF                   | **yes** | **yes**                      | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | N/A           |
 | PNG                    | **yes** | **yes**                      | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
-| HEIC/HEIF              | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | no            |
-| AVIF                   | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | no            |
+| HEIC/HEIF              | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
+| AVIF                   | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
 | WebP                   | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
 | GIF                    | N/A     | N/A                          | N/A     | N/A                          | N/A     | N/A           | N/A                | N/A       | **yes**       |
 
@@ -285,23 +285,23 @@ For PNG, filtering is done with the `png` group only. (The `pngFile` and
 `pngText` groups exist in `expanded` output today, but `png` is the filtering
 key and those groups will be deprecated later.)
 
-| Group key     | Description                                      | Supports IDs |
-| ------------- | ------------------------------------------------ | ------------ |
-| `exif`        | Exif tags (including GPS IFD, interoperability). | yes          |
-| `iptc`        | IPTC tags.                                       | yes          |
-| `xmp`         | XMP tags.                                        | no           |
-| `icc`         | ICC profile tags.                                | no           |
-| `photoshop`   | Photoshop resource tags.                         | yes          |
-| `makerNotes`  | MakerNote tags (e.g. Canon/Pentax).              | yes          |
-| `mpf`         | MPF tags.                                        | yes          |
-| `file`        | JPEG file details and `FileType`.                | no           |
-| `jfif`        | JFIF tags.                                       | no           |
-| `png`         | PNG header, chunk, and text tags.                | no           |
-| `riff`        | WebP (RIFF) tags.                                | no           |
-| `gif`         | GIF tags.                                        | no           |
-| `gps`         | Computed GPS group (only when `expanded: true`). | no           |
-| `composite`   | Composite tags (e.g. FieldOfView).               | no           |
-| `thumbnail`   | Top-level `Thumbnail` output.                    | no           |
+| Group key     | Description                                                                   | Supports IDs |
+| ------------- | ----------------------------------------------------------------------------- | ------------ |
+| `exif`        | Exif tags (including GPS IFD, interoperability).                              | yes          |
+| `iptc`        | IPTC tags.                                                                    | yes          |
+| `xmp`         | XMP tags.                                                                     | no           |
+| `icc`         | ICC profile tags.                                                             | no           |
+| `photoshop`   | Photoshop resource tags.                                                      | yes          |
+| `makerNotes`  | MakerNote tags (e.g. Canon/Pentax).                                           | yes          |
+| `mpf`         | MPF tags.                                                                     | yes          |
+| `file`        | JPEG file details, image size of JPEG XL, HEIC/HEIF and AVIF, and `FileType`. | no           |
+| `jfif`        | JFIF tags.                                                                    | no           |
+| `png`         | PNG header, chunk, and text tags.                                             | no           |
+| `riff`        | WebP (RIFF) tags.                                                             | no           |
+| `gif`         | GIF tags.                                                                     | no           |
+| `gps`         | Computed GPS group (only when `expanded: true`).                              | no           |
+| `composite`   | Composite tags (e.g. FieldOfView).                                            | no           |
+| `thumbnail`   | Top-level `Thumbnail` output.                                                 | no           |
 
 **Important: dependency tags**
 
@@ -962,7 +962,7 @@ Possible modules to include or exclude:
 | `webp`        | WebP images.                                           |
 | `jxl`         | JPEG XL images.                                        |
 | `gif`         | GIF images.                                            |
-| `file`        | JPEG file details: image width, height etc.            |
+| `file`        | JPEG file details: image width, height etc. The image size of JPEG XL, HEIC/HEIF and AVIF files comes with their format module. |
 | `jfif`        | JFIF details in JPEG files: resolution, thumbnail etc. |
 | `png_file`    | PNG file details: image width, height etc.             |
 | `exif`        | Regular Exif tags. If excluded, will also exclude `photoshop`, `maker_notes`, and `thumbnail`. Also excludes the IPTC, XMP and ICC tags that are read from the Exif data, which in TIFF files is all of them. |

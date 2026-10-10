@@ -3,7 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView, getByteStringFromNumber, getConsoleWarnSpy} from './test-utils.js';
+import {getDataView, getByteStringFromNumber, getConsoleWarnSpy, swapProperties} from './test-utils.js';
+import Constants from '../../src/constants.js';
 import {parseBox, findOffsets, ITEM_INFO_TYPE_EXIF, ITEM_INFO_TYPE_MIME} from '../../src/image-header-iso-bmff.js';
 
 describe('image-header-iso-bmff', () => {
@@ -847,6 +848,147 @@ describe('image-header-iso-bmff', () => {
 
             expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 17});
         });
+
+        describe('pitm', () => {
+            it('should read a 16-bit item ID from a version 0 box', () => {
+                const dataView = getDataView(getFullBox('pitm', 0, getByteStringFromNumber(0x1234, 2)));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'pitm', itemId: 0x1234, length: 14});
+            });
+
+            it('should read a 32-bit item ID from a version 1 box', () => {
+                const dataView = getDataView(getFullBox('pitm', 1, getByteStringFromNumber(0x12345678, 4)));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'pitm', itemId: 0x12345678, length: 16});
+            });
+
+            it('should treat a box too short for its item ID as unknown', () => {
+                const tooShortForAVersion1Id = getFullBox('pitm', 1, getByteStringFromNumber(1, 2));
+                const dataView = getDataView(tooShortForAVersion1Id + '\x00\x00');
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 14});
+            });
+        });
+
+        describe('ispe', () => {
+            it('should point at the dimensions after the version and flags', () => {
+                const dataView = getDataView(buildIspeBox(4032, 3024));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'ispe', dimensionsOffset: 12, length: 20});
+            });
+
+            it('should point at the dimensions after an extended-size header', () => {
+                const EXTENDED_SIZE_FLAG = getByteStringFromNumber(1, 4);
+                const length = 28;
+                const dataView = getDataView(
+                    EXTENDED_SIZE_FLAG + 'ispe' + getByteStringFromNumber(0, 4) + getByteStringFromNumber(length, 4)
+                    + '\x00\x00\x00\x00' + getByteStringFromNumber(4032, 4) + getByteStringFromNumber(3024, 4)
+                );
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'ispe', dimensionsOffset: 20, length});
+            });
+
+            it('should treat a box shorter than its dimensions as unknown', () => {
+                const tooShort = getFullBox('ispe', 0, getByteStringFromNumber(4032, 4) + getByteStringFromNumber(3024, 3));
+                const dataView = getDataView(tooShort + '\x00');
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 19});
+            });
+
+            it('should treat a box whose dimensions run past its container as unknown', () => {
+                const dataView = getDataView(buildIspeBox(4032, 3024));
+
+                expect(parseBox(dataView, 0, 19)).to.deep.equal({type: undefined, length: 20});
+            });
+
+            it('should treat a box whose dimensions run past the data as unknown', () => {
+                const dataView = getDataView(buildIspeBox(4032, 3024).slice(0, 19));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 20});
+            });
+        });
+
+        describe('ipma', () => {
+            it('should read the version, the flags and where the entry count is', () => {
+                const dataView = getDataView(getFullBoxWithFlags('ipma', 1, 1, getByteStringFromNumber(0, 4)));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({
+                    type: 'ipma',
+                    version: 1,
+                    flags: 1,
+                    entryCountOffset: 12,
+                    end: 16,
+                    length: 16
+                });
+            });
+
+            it('should read all 24 bits of the flags', () => {
+                const dataView = getDataView(getFullBoxWithFlags('ipma', 0, 0xabcdef, getByteStringFromNumber(0, 4)));
+
+                expect(parseBox(dataView, 0).flags).to.equal(0xabcdef);
+            });
+
+            it('should end the box at its container when that comes first', () => {
+                const dataView = getDataView(getFullBoxWithFlags('ipma', 0, 0, getByteStringFromNumber(0, 4) + '\x00'));
+
+                expect(parseBox(dataView, 0, 16).end).to.equal(16);
+            });
+
+            it('should end the box at the data when that comes first', () => {
+                const overDeclaringIpma = withDeclaredLength(
+                    getFullBoxWithFlags('ipma', 0, 0, getByteStringFromNumber(0, 4)),
+                    OVER_DECLARED_BOX_LENGTH
+                );
+                const dataView = getDataView(overDeclaringIpma);
+
+                expect(parseBox(dataView, 0, OVER_DECLARED_BOX_LENGTH).end).to.equal(16);
+            });
+
+            it('should treat a box too short for its entry count as unknown', () => {
+                const tooShort = getFullBoxWithFlags('ipma', 0, 0, getByteStringFromNumber(0, 3));
+                const dataView = getDataView(tooShort + '\x00');
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 15});
+            });
+        });
+
+        describe('ipco property indexes', () => {
+            it('should keep an entry for an unknown property so the indexes line up', () => {
+                const dataView = getDataView(getBox('ipco', getBox('hvcC', '<config>') + buildIspeBox(12, 2)));
+
+                const {properties} = parseBox(dataView, 0);
+
+                expect(properties).to.have.lengthOf(2);
+                expect(properties[0].type).to.be.undefined;
+                expect(properties[1]).to.deep.equal({type: 'ispe', dimensionsOffset: 8 + 16 + 12, length: 20});
+            });
+
+            it('should share one entry between all unknown properties', () => {
+                const dataView = getDataView(getBox('ipco', getBox('hvcC', '<config>') + getBox('pixi', '<pixi>')));
+
+                const {properties} = parseBox(dataView, 0);
+
+                expect(properties).to.have.lengthOf(2);
+                expect(properties[0]).to.equal(properties[1]);
+            });
+
+            it('should keep a too short ispe as an unknown property', () => {
+                const tooShortIspe = getFullBox('ispe', 0, getByteStringFromNumber(12, 4));
+                const dataView = getDataView(getBox('ipco', tooShortIspe + buildIspeBox(12, 2)));
+
+                const {properties} = parseBox(dataView, 0);
+
+                expect(properties).to.have.lengthOf(2);
+                expect(properties[0].type).to.be.undefined;
+                expect(properties[1].type).to.equal('ispe');
+            });
+
+            it('should still drop unknown boxes from the other containers', () => {
+                const dataView = getDataView(getBox('iprp', getBox('free', '') + getBox('ipco', '')));
+
+                expect(parseBox(dataView, 0).subBoxes).to.deep.equal([{type: 'ipco', properties: [], length: 8}]);
+            });
+        });
     });
 
     describe('findOffsets', () => {
@@ -1318,6 +1460,285 @@ describe('image-header-iso-bmff', () => {
                 return warnSpy.callCount;
             }
         });
+
+        describe('primary item image spatial extents', () => {
+            const PRIMARY_ITEM_ID = 49;
+            const UNKNOWN_PROPERTY_BOX = getBox('hvcC', '<config>');
+            const COLR_PROPERTY_BOX = getBox('colr', 'nclx\x00\x01\x00\x0d\x00\x06\x80');
+
+            let restoreConstants;
+
+            afterEach(() => {
+                if (restoreConstants) {
+                    restoreConstants();
+                    restoreConstants = undefined;
+                }
+            });
+
+            it('should point at the ispe associated with the primary item', () => {
+                const ispe = buildIspeBox(12, 2);
+                const data = buildPrimaryItemMetaBox({
+                    properties: [UNKNOWN_PROPERTY_BOX, ispe],
+                    ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
+                });
+
+                const offsets = findOffsets(getDataView(data));
+
+                expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
+                expect(offsets.hasAppMarkers).to.be.false;
+            });
+
+            it('should pick the primary item\'s ispe over a tile\'s before it', () => {
+                const tileIspe = buildIspeBox(512, 512);
+                const primaryIspe = buildIspeBox(4032, 3024);
+                const thumbnailIspe = buildIspeBox(320, 240);
+                const data = buildPrimaryItemMetaBox({
+                    properties: [tileIspe, primaryIspe, thumbnailIspe],
+                    ipmas: [buildIpmaBox([
+                        {itemId: 1, associations: [1]},
+                        {itemId: PRIMARY_ITEM_ID, associations: [2]},
+                        {itemId: 50, associations: [3]},
+                    ])],
+                });
+
+                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                    .to.equal(getDimensionsOffset(data, primaryIspe));
+            });
+
+            it('should read 32-bit item IDs from a version 1 ipma', () => {
+                const LARGE_ITEM_ID = 0x10031;
+                const ispe = buildIspeBox(12, 2);
+                const data = buildPrimaryItemMetaBox({
+                    pitm: buildPitmBox(LARGE_ITEM_ID, 1),
+                    properties: [ispe],
+                    ipmas: [buildIpmaBox([{itemId: LARGE_ITEM_ID, associations: [1]}], {version: 1})],
+                });
+
+                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                    .to.equal(getDimensionsOffset(data, ispe));
+            });
+
+            it('should read 15-bit property indexes when flags bit 0 is set', () => {
+                const ispe = buildIspeBox(12, 2);
+                const unknownProperties = new Array(200).fill(UNKNOWN_PROPERTY_BOX);
+                const data = buildPrimaryItemMetaBox({
+                    properties: unknownProperties.concat([ispe]),
+                    ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [201]}], {flags: 1})],
+                });
+
+                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                    .to.equal(getDimensionsOffset(data, ispe));
+            });
+
+            it('should ignore the essential bit of a 7-bit property index', () => {
+                const ESSENTIAL = 0x80;
+                const ispe = buildIspeBox(12, 2);
+                const data = buildPrimaryItemMetaBox({
+                    properties: [UNKNOWN_PROPERTY_BOX, ispe],
+                    ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [ESSENTIAL | 2]}])],
+                });
+
+                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                    .to.equal(getDimensionsOffset(data, ispe));
+            });
+
+            it('should ignore the essential bit of a 15-bit property index', () => {
+                const ESSENTIAL = 0x8000;
+                const ispe = buildIspeBox(12, 2);
+                const unknownProperties = new Array(200).fill(UNKNOWN_PROPERTY_BOX);
+                const data = buildPrimaryItemMetaBox({
+                    properties: unknownProperties.concat([ispe]),
+                    ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [ESSENTIAL | 201]}], {flags: 1})],
+                });
+
+                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                    .to.equal(getDimensionsOffset(data, ispe));
+            });
+
+            it('should skip a too short ispe for a later one', () => {
+                const tooShortIspe = getFullBox('ispe', 0, getByteStringFromNumber(12, 4));
+                const ispe = buildIspeBox(12, 2);
+                const data = buildPrimaryItemMetaBox({
+                    properties: [tooShortIspe, ispe],
+                    ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
+                });
+
+                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                    .to.equal(getDimensionsOffset(data, ispe));
+            });
+
+            it('should look for the primary item in a later ipma', () => {
+                const ispe = buildIspeBox(12, 2);
+                const data = buildPrimaryItemMetaBox({
+                    properties: [ispe],
+                    ipmas: [
+                        buildIpmaBox([{itemId: 1, associations: []}]),
+                        buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}]),
+                    ],
+                });
+
+                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                    .to.equal(getDimensionsOffset(data, ispe));
+            });
+
+            it('should only use the first entry for the primary item', () => {
+                const data = buildPrimaryItemMetaBox({
+                    properties: [UNKNOWN_PROPERTY_BOX, buildIspeBox(12, 2)],
+                    ipmas: [
+                        buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}]),
+                        buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [2]}]),
+                    ],
+                });
+
+                expect(findOffsets(getDataView(data))).to.not.have.property('imageDimensionsOffset');
+            });
+
+            it('should find the ispe with Exif, XMP and ICC turned off', () => {
+                restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
+                const ispe = buildIspeBox(12, 2);
+                const data = buildPrimaryItemMetaBox({
+                    properties: [ispe],
+                    ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}])],
+                });
+
+                expect(findOffsets(getDataView(data))).to.deep.equal({
+                    imageDimensionsOffset: getDimensionsOffset(data, ispe)
+                });
+            });
+
+            it('should return nothing without a pitm with Exif, XMP and ICC turned off', () => {
+                restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
+                const data = buildPrimaryItemMetaBox({
+                    pitm: '',
+                    properties: [buildIspeBox(12, 2)],
+                    ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}])],
+                });
+
+                expect(findOffsets(getDataView(data))).to.deep.equal({});
+            });
+
+            describe('without a resolvable ispe', () => {
+                const ispe = buildIspeBox(12, 2);
+                const primaryToIspe = buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}]);
+
+                function expectNoOffset(data) {
+                    expect(findOffsets(getDataView(data))).to.not.have.property('imageDimensionsOffset');
+                }
+
+                it('should return no offset without a pitm', () => {
+                    expectNoOffset(buildPrimaryItemMetaBox({pitm: '', properties: [ispe], ipmas: [primaryToIspe]}));
+                });
+
+                it('should return no offset for a too short pitm', () => {
+                    const tooShortPitm = getFullBox('pitm', 1, getByteStringFromNumber(PRIMARY_ITEM_ID, 2));
+                    expectNoOffset(buildPrimaryItemMetaBox({pitm: tooShortPitm, properties: [ispe], ipmas: [primaryToIspe]}));
+                });
+
+                it('should return no offset without an iprp', () => {
+                    expectNoOffset(getFullBox('meta', 0, buildPitmBox(PRIMARY_ITEM_ID)));
+                });
+
+                it('should return no offset for an iprp without an ipco', () => {
+                    expectNoOffset(getFullBox('meta', 0, buildPitmBox(PRIMARY_ITEM_ID) + getBox('iprp', primaryToIspe)));
+                });
+
+                it('should return no offset without an ipma', () => {
+                    expectNoOffset(buildPrimaryItemMetaBox({properties: [ispe], ipmas: []}));
+                });
+
+                it('should return no offset when the primary item has no ipma entry', () => {
+                    expectNoOffset(buildPrimaryItemMetaBox({
+                        properties: [ispe],
+                        ipmas: [buildIpmaBox([{itemId: 1, associations: [1]}])],
+                    }));
+                });
+
+                it('should return no offset when the primary item has no ispe', () => {
+                    expectNoOffset(buildPrimaryItemMetaBox({
+                        properties: [UNKNOWN_PROPERTY_BOX, COLR_PROPERTY_BOX, ispe],
+                        ipmas: [buildIpmaBox([
+                            {itemId: PRIMARY_ITEM_ID, associations: [1, 2]},
+                            {itemId: 1, associations: [3]},
+                        ])],
+                    }));
+                });
+
+                it('should return no offset for property index 0', () => {
+                    expectNoOffset(buildPrimaryItemMetaBox({
+                        properties: [ispe],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [0]}])],
+                    }));
+                });
+
+                it('should return no offset for a property index past the last property', () => {
+                    expectNoOffset(buildPrimaryItemMetaBox({
+                        properties: [ispe],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [2]}])],
+                    }));
+                });
+
+                it('should return no offset when the primary item\'s only ispe is too short', () => {
+                    const tooShortIspe = getFullBox('ispe', 0, getByteStringFromNumber(12, 4));
+                    expectNoOffset(buildPrimaryItemMetaBox({properties: [tooShortIspe], ipmas: [primaryToIspe]}));
+                });
+
+                it('should return no offset when the ipma ends before the primary item\'s entry', () => {
+                    const ipma = buildIpmaBox([
+                        {itemId: 1, associations: [1]},
+                        {itemId: PRIMARY_ITEM_ID, associations: [1]},
+                    ]);
+                    const ENTRY_SIZE = 4;
+                    const endsInsideTheSecondEntry = withDeclaredLength(ipma, ipma.length - ENTRY_SIZE + 2);
+                    expectNoOffset(buildPrimaryItemMetaBox({properties: [ispe], ipmas: [endsInsideTheSecondEntry]}));
+                });
+
+                it('should return no offset when the ipma ends before the primary item\'s association', () => {
+                    const ipma = buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}]);
+                    const endsBeforeTheAssociation = withDeclaredLength(ipma, ipma.length - 1);
+                    expectNoOffset(buildPrimaryItemMetaBox({properties: [ispe], ipmas: [endsBeforeTheAssociation]}));
+                });
+
+                it('should return no offset when a 15-bit association runs past the ipma', () => {
+                    const ipma = buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}], {flags: 1});
+                    const endsInsideTheAssociation = withDeclaredLength(ipma, ipma.length - 1);
+                    expectNoOffset(buildPrimaryItemMetaBox({properties: [ispe], ipmas: [endsInsideTheAssociation]}));
+                });
+
+                it('should only read the associations inside the ipma', () => {
+                    // The entry declares more associations than the box holds,
+                    // and the byte after the box would point at the ispe.
+                    const entries = getByteStringFromNumber(PRIMARY_ITEM_ID, 2) + getByteStringFromNumber(255, 1)
+                        + getByteStringFromNumber(1, 1);
+                    const ipma = getFullBox('ipma', 0, getByteStringFromNumber(1, 4) + entries);
+                    const pastTheIpma = getByteStringFromNumber(2, 1);
+                    expectNoOffset(buildPrimaryItemMetaBox({
+                        properties: [UNKNOWN_PROPERTY_BOX, ispe],
+                        ipmas: [ipma + pastTheIpma],
+                    }));
+                });
+
+                it('should stop at the ipma end whatever entry count it declares', () => {
+                    // The bytes after the box would read as the primary item's entry.
+                    const otherItemEntry = getByteStringFromNumber(1, 2) + getByteStringFromNumber(1, 1)
+                        + getByteStringFromNumber(1, 1);
+                    const primaryItemEntry = getByteStringFromNumber(PRIMARY_ITEM_ID, 2) + getByteStringFromNumber(1, 1)
+                        + getByteStringFromNumber(1, 1);
+                    const ipma = getFullBox('ipma', 0, getByteStringFromNumber(0xffffffff, 4) + otherItemEntry);
+                    expectNoOffset(buildPrimaryItemMetaBox({properties: [ispe], ipmas: [ipma + primaryItemEntry]}));
+                });
+
+                it('should return no offset when the declared entry count ends the scan first', () => {
+                    const ipma = buildIpmaBox([
+                        {itemId: 1, associations: [1]},
+                        {itemId: PRIMARY_ITEM_ID, associations: [1]},
+                    ]);
+                    const ENTRY_COUNT_OFFSET = FULL_BOX_HEADER_SIZE;
+                    const declaringOneEntry = ipma.substring(0, ENTRY_COUNT_OFFSET)
+                        + getByteStringFromNumber(1, 4) + ipma.substring(ENTRY_COUNT_OFFSET + 4);
+                    expectNoOffset(buildPrimaryItemMetaBox({properties: [ispe], ipmas: [declaringOneEntry]}));
+                });
+            });
+        });
     });
 
     describe('malformed boxes', () => {
@@ -1619,8 +2040,40 @@ export function getBox(type, content) {
 }
 
 function getFullBox(type, version, content) {
-    const FLAGS = '\x00\x00\x00';
-    return getBox(type, String.fromCharCode(version) + FLAGS + content);
+    return getFullBoxWithFlags(type, version, 0, content);
+}
+
+function getFullBoxWithFlags(type, version, flags, content) {
+    const FLAGS_SIZE = 3;
+    return getBox(type, String.fromCharCode(version) + getByteStringFromNumber(flags, FLAGS_SIZE) + content);
+}
+
+function buildIspeBox(width, height) {
+    return getFullBox('ispe', 0, getByteStringFromNumber(width, 4) + getByteStringFromNumber(height, 4));
+}
+
+function buildPitmBox(itemId, version = 0) {
+    return getFullBox('pitm', version, getByteStringFromNumber(itemId, version === 0 ? 2 : 4));
+}
+
+function buildIpmaBox(entries, {version = 0, flags = 0} = {}) {
+    const itemIdSize = version < 1 ? 2 : 4;
+    const associationSize = (flags & 1) ? 2 : 1;
+    const entryBytes = entries.map(({itemId, associations}) =>
+        getByteStringFromNumber(itemId, itemIdSize)
+        + getByteStringFromNumber(associations.length, 1)
+        + associations.map((association) => getByteStringFromNumber(association, associationSize)).join('')
+    ).join('');
+    return getFullBoxWithFlags('ipma', version, flags, getByteStringFromNumber(entries.length, 4) + entryBytes);
+}
+
+// A meta box holding pitm and iprp > (ipco, ipma...), item 49 primary by default.
+function buildPrimaryItemMetaBox({pitm = buildPitmBox(49), properties, ipmas}) {
+    return getFullBox('meta', 0, pitm + getBox('iprp', getBox('ipco', properties.join('')) + ipmas.join('')));
+}
+
+function getDimensionsOffset(data, ispeBox) {
+    return data.indexOf(ispeBox) + FULL_BOX_HEADER_SIZE;
 }
 
 // Full-box header is 4 (length) + 4 (type) + 1 (version) + 3 (flags) = 12 bytes.

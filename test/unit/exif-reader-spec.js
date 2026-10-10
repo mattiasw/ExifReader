@@ -17,6 +17,7 @@ import TagNames from '../../src/tag-names.js';
 import MpfTags from '../../src/mpf-tags.js';
 import FileTags from '../../src/file-tags.js';
 import JxlFileTags from '../../src/jxl-file-tags.js';
+import IsoBmffFileTags from '../../src/iso-bmff-file-tags.js';
 import JfifTags from '../../src/jfif-tags.js';
 import IptcTags from '../../src/iptc-tags.js';
 import XmpTags from '../../src/xmp-tags.js';
@@ -1796,6 +1797,71 @@ describe('exif-reader', function () {
         swapTagsRead(JxlFileTags, myTags);
         const result = ExifReader.loadView(undefined, {expanded: true});
         expect(result.file).to.deep.equal(myTags);
+    });
+
+    describe('HEIC and AVIF file tags', () => {
+        const FILE_TYPE = {value: 'heic', description: 'HEIC'};
+        const myTags = {
+            'Image Width': {value: 4032, description: '4032px'},
+            'Image Height': {value: 3024, description: '3024px'},
+        };
+
+        beforeEach(() => {
+            swapImageHeader({fileType: FILE_TYPE, imageDimensionsOffset: OFFSET_TEST_VALUE});
+            swapTagsRead(IsoBmffFileTags, myTags);
+        });
+
+        it('should be able to find them', () => {
+            expect(ExifReader.loadView()).to.deep.equal({...myTags, FileType: FILE_TYPE});
+        });
+
+        it('should put them in the file group when expanded', () => {
+            const result = ExifReader.loadView(undefined, {expanded: true});
+            expect(result.file).to.deep.equal({...myTags, FileType: FILE_TYPE});
+        });
+
+        it('should not read them when a tag filter leaves out the file group', () => {
+            let readCount = 0;
+            swap(IsoBmffFileTags, {
+                read() {
+                    readCount++;
+                    return myTags;
+                }
+            });
+            ExifReader.loadView(undefined, {includeTags: {exif: true}});
+            expect(readCount).to.equal(0);
+        });
+
+        it('should hand them to the composite tags when a tag filter is active', () => {
+            let compositeInput;
+            swap(Composite, {
+                get(tags) {
+                    compositeInput = tags;
+                    return undefined;
+                }
+            });
+            const result = ExifReader.loadView(undefined, {includeTags: {composite: true}});
+            expect(compositeInput.file).to.have.all.keys('Image Width', 'Image Height');
+            expect(compositeInput.file['Image Width']).to.deep.equal(myTags['Image Width']);
+            expect(result).to.not.have.any.keys('Image Width', 'Image Height');
+        });
+
+        it('should read them with only HEIC support', () => {
+            swap(Constants, {USE_AVIF: false});
+            expect(ExifReader.loadView()).to.include.keys('Image Width', 'Image Height');
+        });
+
+        it('should read them with only AVIF support', () => {
+            swap(Constants, {USE_HEIC: false});
+            expect(ExifReader.loadView()).to.include.keys('Image Width', 'Image Height');
+        });
+
+        it('should not read them without HEIC and AVIF support', () => {
+            swap(Constants, {USE_HEIC: false, USE_AVIF: false});
+            const result = ExifReader.loadView();
+            expect(result).to.not.have.property('Image Width');
+            expect(result).to.not.have.property('Image Height');
+        });
     });
 
     it('should be able to find MPF APP segment', () => {
