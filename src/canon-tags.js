@@ -60,10 +60,11 @@ function read(
 function parseShotInfo(shotInfoData) {
     const tags = {};
 
-    if (shotInfoData[SHOT_INFO_AUTO_ROTATE] !== undefined) {
+    const autoRotate = shotInfoData[SHOT_INFO_AUTO_ROTATE];
+    if (Number.isFinite(autoRotate)) {
         tags['AutoRotate'] = {
-            value: shotInfoData[SHOT_INFO_AUTO_ROTATE],
-            description: getAutoRotateDescription(shotInfoData[SHOT_INFO_AUTO_ROTATE])
+            value: autoRotate,
+            description: getAutoRotateDescription(autoRotate)
         };
     }
 
