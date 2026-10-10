@@ -88,6 +88,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   about 84 MB without `includeOffsets`. `metadataRange.blocks` now records at
   most 4,096 of the metadata containers found in the file, the last one
   widened to cover the rest, so the same file peaks at about 86 MB.
+- 4.48.0 said that `@xmldom/xmldom` 0.8.15 or later on the 0.8 line was
+  enough for the `domParser` option. It is not enough for the limits 4.48.0
+  added on XMP element nesting (256 levels) and markup nodes (250,000):
+  ExifReader checks them the way `@xmldom/xmldom` 0.9 reads the markup, and
+  0.8 reads some malformed markup differently, so with 0.8 these limits do
+  not stop a crafted packet from making parsing slow or using a lot of
+  memory. With 0.8.15 a 1 MB packet blocked `load()` for about 27 seconds.
+  Use 0.9.12 or later for a parser you pass in `domParser`, and for the
+  `@xmldom/xmldom` at the top of your `node_modules` if you install without
+  optional dependencies or bundle ExifReader for Node.js with webpack, since
+  ExifReader then loads that copy.
 
 ## [4.48.0] - 2026-10-09
 
