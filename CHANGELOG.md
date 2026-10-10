@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `2` for `GPSLatitude` or `0x1001` for `RelatedImageWidth`, returned none of
   those tags, because only a tag name added the `GPS Info IFD Pointer` or
   `Interoperability IFD Pointer` dependency that makes the sub-IFD get read.
+- The `LensSpecification` description showed only the long-end maximum
+  aperture, so an 18-55 mm f/3.5-5.6 lens read `18-55 mm f/5.6`. It now shows
+  both apertures, `18-55 mm f/3.5-5.6`, and a single focal length for a prime
+  lens, `50 mm f/1.4` instead of `50-50 mm f/1.4`.
 
 ### Security
 
