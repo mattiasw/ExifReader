@@ -234,6 +234,18 @@ describe('tag-names-exif-ifd', () => {
         expect(TagNamesExifIfd[0x9212].description('Z')).to.equal('Unknown');
     });
 
+    it('should describe an ASCII-typed SecurityClassification by its text', () => {
+        expect(TagNamesExifIfd[0x9212].description(['C'])).to.equal('Confidential');
+    });
+
+    it('should describe a lookup-table value named after an Object.prototype member as unknown', () => {
+        for (const id of [0x8830, 0x9212, 0xa460]) {
+            for (const value of [['constructor'], ['__proto__'], ['toString']]) {
+                expect(TagNamesExifIfd[id].description(value), `0x${id.toString(16)} ${value}`).to.equal('Unknown');
+            }
+        }
+    });
+
     it('should have tag ImageHistory', () => {
         expect(TagNamesExifIfd[0x9213]).to.equal('ImageHistory');
     });

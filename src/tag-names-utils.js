@@ -50,6 +50,19 @@ function isString(item) {
     return typeof item === 'string';
 }
 
+/**
+ * Looks a tag value up in a table of descriptions, own properties only, so a
+ * value such as 'constructor' or ['__proto__'] does not find a member of
+ * Object.prototype.
+ * @param {Object} table Descriptions keyed by tag value.
+ * @param {*} value The tag value, used as a property key.
+ * @returns {string} The description, or 'Unknown' when the value is not a key.
+ */
+export function getTableDescription(table, value) {
+    const key = String(value);
+    return Object.prototype.hasOwnProperty.call(table, key) ? table[key] : 'Unknown';
+}
+
 export function getCalculatedGpsValue(value) {
     return (value[0][0] / value[0][1]) + (value[1][0] / value[1][1]) / 60 + (value[2][0] / value[2][1]) / 3600;
 }

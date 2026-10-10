@@ -274,6 +274,15 @@ describe('tag-names-0th-ifd', () => {
         expect(TagNames0thIfd[0x0153].description(['toString'])).to.equal('Unknown');
     });
 
+    it('should describe a lookup-table value named after an Object.prototype member as unknown', () => {
+        const ids = [0x00fe, 0x00ff, 0x0107, 0x010a, 0x0122, 0x014c, 0x0152, 0xc635, 0xc6fd, 0xc71a, 0xc7a3, 0xc7a4, 0xc7a6];
+        for (const id of ids) {
+            for (const value of [['constructor'], ['__proto__'], ['toString']]) {
+                expect(TagNames0thIfd[id].description(value), `0x${id.toString(16)} ${value}`).to.equal('Unknown');
+            }
+        }
+    });
+
     it('should have tag TargetPrinter', () => {
         expect(TagNames0thIfd[0x0151]).to.equal('TargetPrinter');
     });

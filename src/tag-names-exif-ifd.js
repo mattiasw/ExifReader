@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getEncodedString, getVersionString} from './tag-names-utils.js';
+import {getEncodedString, getTableDescription, getVersionString} from './tag-names-utils.js';
 import TagNamesCommon from './tag-names-common.js';
 
 export default {
@@ -28,7 +28,7 @@ export default {
     0x882b: 'SelfTimerMode',
     0x8830: {
         name: 'SensitivityType',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             1: 'Standard Output Sensitivity',
             2: 'Recommended Exposure Index',
             3: 'ISO Speed',
@@ -36,7 +36,7 @@ export default {
             5: 'Standard Output Sensitivity and ISO Speed',
             6: 'Recommended Exposure Index and ISO Speed',
             7: 'Standard Output Sensitivity, Recommended Exposure Index and ISO Speed'
-        })[value] || 'Unknown'
+        }, value)
     },
     0x8831: 'StandardOutputSensitivity',
     0x8832: 'RecommendedExposureIndex',
@@ -144,13 +144,13 @@ export default {
     0x9211: 'ImageNumber',
     0x9212: {
         name: 'SecurityClassification',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             'C': 'Confidential',
             'R': 'Restricted',
             'S': 'Secret',
             'T': 'Top Secret',
             'U': 'Unclassified'
-        })[value] || 'Unknown'
+        }, value)
     },
     0x9213: 'ImageHistory',
     0x9214: {
@@ -362,11 +362,11 @@ export default {
     0xa435: 'LensSerialNumber',
     0xa460: {
         name: 'CompositeImage',
-        description: (value) => ({
+        description: (value) => getTableDescription({
             1: 'Not a Composite Image',
             2: 'General Composite Image',
             3: 'Composite Image Captured While Shooting',
-        })[value] || 'Unknown'
+        }, value)
     },
     0xa461: 'SourceImageNumberOfCompositeImage',
     0xa462: 'SourceExposureTimesOfCompositeImage',
