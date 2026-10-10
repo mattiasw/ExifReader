@@ -440,6 +440,34 @@ describe('tag filtering options', function () {
         expect(tags.PixelYDimension).to.equal(undefined);
     });
 
+    it('includeTags.exif with the GPSLatitude id should read the GPS IFD', function () {
+        const tags = ExifReader.loadView(getDataView(getGpsLatitudeJpeg()), {
+            includeTags: {exif: [2]},
+        });
+
+        expect(tags.GPSLatitude.value).to.deep.equal([[57, 1], [38, 1], [56, 1]]);
+        expect(tags['GPS Info IFD Pointer']).to.equal(undefined);
+    });
+
+    it('includeTags.exif with the GPSLatitude id should read the GPS IFD when expanded', function () {
+        const tags = ExifReader.loadView(getDataView(getGpsLatitudeJpeg()), {
+            expanded: true,
+            includeTags: {exif: [2]},
+        });
+
+        expect(tags.exif.GPSLatitude.value).to.deep.equal([[57, 1], [38, 1], [56, 1]]);
+        expect(tags.exif['GPS Info IFD Pointer']).to.equal(undefined);
+    });
+
+    it('includeTags.exif with the RelatedImageWidth id should read the Interoperability IFD', function () {
+        const tags = ExifReader.loadView(getDataView(getRelatedImageWidthJpeg()), {
+            includeTags: {exif: [0x1001]},
+        });
+
+        expect(tags.RelatedImageWidth.value).to.equal(640);
+        expect(tags['Interoperability IFD Pointer']).to.equal(undefined);
+    });
+
     it('excludeTags.file: [FileType] should remove FileType', function () {
         fakeImageHeader({
             fileType: 'jpeg',
@@ -781,7 +809,6 @@ function getResizedFocalPlaneJpeg() {
  * @param {string} [trailingSegments] Segments placed after the Exif APP1.
  */
 function getExifJpeg(exifTags, trailingSegments = '') {
-    const IFD0_OFFSET = 8;
     const EXIF_IFD_OFFSET = 26;
     const IFD_ENTRY_LENGTH = 12;
     const RATIONAL_LENGTH = 8;
@@ -792,20 +819,61 @@ function getExifJpeg(exifTags, trailingSegments = '') {
             const valueOffset = EXIF_IFD_OFFSET + exifIfdLength + rationalTags.findIndex((entry) => entry.tag === tag) * RATIONAL_LENGTH;
             return getIfdEntry(tag, IFD_TYPE_RATIONAL, 1, getByteStringFromNumber(valueOffset, 4));
         }
-        return getIfdEntry(tag, IFD_TYPE_SHORT, 1, getByteStringFromNumber(short, 2) + '\x00\x00');
+        return getShortIfdEntry(tag, short);
     });
-    const rationalValues = rationalTags.map(({rational}) => {
-        return getByteStringFromNumber(rational[0], 4) + getByteStringFromNumber(rational[1], 4);
-    });
-    const tiffBlock = 'MM\x00\x2a' + getByteStringFromNumber(IFD0_OFFSET, 4)
-        + getByteStringFromNumber(1, 2)
-        + getIfdEntry(0x8769, IFD_TYPE_LONG, 1, getByteStringFromNumber(EXIF_IFD_OFFSET, 4))
-        + getByteStringFromNumber(0, 4)
-        + getByteStringFromNumber(exifTags.length, 2)
-        + entries.join('')
-        + getByteStringFromNumber(0, 4)
+    const rationalValues = rationalTags.map(({rational}) => getRationalBytes(rational));
+    const tiffBlock = getIfd([getPointerIfdEntry(0x8769, EXIF_IFD_OFFSET)])
+        + getIfd(entries)
         + rationalValues.join('');
+    return getTiffJpeg(tiffBlock, trailingSegments);
+}
+
+/**
+ * Builds a big-endian JPEG whose IFD0 points to a GPS IFD holding only
+ * GPSLatitude 57 deg 38' 56".
+ */
+function getGpsLatitudeJpeg() {
+    const GPS_IFD_OFFSET = 26;
+    const GPS_LATITUDE_OFFSET = 44;
+    const tiffBlock = getIfd([getPointerIfdEntry(0x8825, GPS_IFD_OFFSET)])
+        + getIfd([getIfdEntry(0x0002, IFD_TYPE_RATIONAL, 3, getByteStringFromNumber(GPS_LATITUDE_OFFSET, 4))])
+        + getRationalBytes([57, 1]) + getRationalBytes([38, 1]) + getRationalBytes([56, 1]);
+    return getTiffJpeg(tiffBlock);
+}
+
+/**
+ * Builds a big-endian JPEG whose IFD0 points to an Exif IFD whose only entry
+ * points to an Interoperability IFD holding only RelatedImageWidth 640.
+ */
+function getRelatedImageWidthJpeg() {
+    const EXIF_IFD_OFFSET = 26;
+    const INTEROPERABILITY_IFD_OFFSET = 44;
+    const tiffBlock = getIfd([getPointerIfdEntry(0x8769, EXIF_IFD_OFFSET)])
+        + getIfd([getPointerIfdEntry(0xa005, INTEROPERABILITY_IFD_OFFSET)])
+        + getIfd([getShortIfdEntry(0x1001, 640)]);
+    return getTiffJpeg(tiffBlock);
+}
+
+function getTiffJpeg(ifdsAfterHeader, trailingSegments = '') {
+    const IFD0_OFFSET = 8;
+    const tiffBlock = 'MM\x00\x2a' + getByteStringFromNumber(IFD0_OFFSET, 4) + ifdsAfterHeader;
     return '\xff\xd8' + getSegment('\xff\xe1', 'Exif\x00\x00' + tiffBlock) + trailingSegments + '\xff\xd9';
+}
+
+function getIfd(entries) {
+    return getByteStringFromNumber(entries.length, 2) + entries.join('') + getByteStringFromNumber(0, 4);
+}
+
+function getPointerIfdEntry(tag, offset) {
+    return getIfdEntry(tag, IFD_TYPE_LONG, 1, getByteStringFromNumber(offset, 4));
+}
+
+function getShortIfdEntry(tag, value) {
+    return getIfdEntry(tag, IFD_TYPE_SHORT, 1, getByteStringFromNumber(value, 2) + '\x00\x00');
+}
+
+function getRationalBytes([numerator, denominator]) {
+    return getByteStringFromNumber(numerator, 4) + getByteStringFromNumber(denominator, 4);
 }
 
 /**
