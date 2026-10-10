@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   supported. The custom build and tag filtering sections of the README no
   longer say that only TIFF files read IPTC, XMP and ICC tags from the Exif
   data.
+- The Exif `ExifVersion` and `FlashpixVersion`, the `InteroperabilityVersion`
+  and the MPF `MPFVersion` tags written as ASCII text, as some cameras do, now
+  have that text as their description, such as `0220`, instead of a single
+  wrong character.
 
 ### Security
 
