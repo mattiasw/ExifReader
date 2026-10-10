@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tags that the Exif data carries, as files with an `eXIf` chunk do. A
   `Raw profile type iptc` chunk in the same file takes precedence over IPTC
   tags in the Exif data.
+- HEIC/HEIF and AVIF files return the image width and height, as `Image Width`
+  and `Image Height` in the `file` group. They are the dimensions of the
+  primary image, so an iPhone photo reports the full photo size rather than
+  that of one of its tiles or its thumbnail.
 
 ### Fixed
 

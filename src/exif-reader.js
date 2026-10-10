@@ -21,6 +21,7 @@ import {getValueBudget, addDecompressedValueAllowance, takeEmbeddedExifThumbnail
 import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
 import JxlFileTags from './jxl-file-tags.js';
+import IsoBmffFileTags from './iso-bmff-file-tags.js';
 import JfifTags from './jfif-tags.js';
 import IptcTags from './iptc-tags.js';
 import XmpTags from './xmp-tags.js';
@@ -135,6 +136,7 @@ export function loadView(
         brobExifChunk,
         brobXmpChunk,
         jxlCodestreamOffset,
+        imageDimensionsOffset,
         metadataBlocks,
         metadataTruncated,
         exifDataView,
@@ -579,6 +581,24 @@ export function loadView(
         }
     }
 
+    if (
+        (Constants.USE_HEIC || Constants.USE_AVIF)
+        && imageDimensionsOffset !== undefined
+        && tagFilter.shouldParseGroup('file')
+    ) {
+        const readTags = IsoBmffFileTags.read(dataView, imageDimensionsOffset);
+        const parsedIsoBmffFileTags = filterTagsForParse('file', readTags, tagFilter);
+        parsedGroups.file = parsedIsoBmffFileTags;
+
+        if (tagFilter.shouldReturnGroup('file')) {
+            mergeSteps.push({
+                type: 'mergeGroupAssign',
+                groupKey: 'file',
+                parsedTags: parsedIsoBmffFileTags,
+            });
+        }
+    }
+
     if (Constants.USE_EXIF) {
         mergeSteps.push({type: 'gps'});
     }
@@ -961,6 +981,7 @@ function hasPotentialMetaData({
     vp8xChunkOffset,
     gifHeaderOffset,
     jxlCodestreamOffset,
+    imageDimensionsOffset,
 }) {
     return !!fileType
         || (
@@ -1018,6 +1039,10 @@ function hasPotentialMetaData({
         || (
             Constants.USE_JXL
             && jxlCodestreamOffset !== undefined
+        )
+        || (
+            (Constants.USE_HEIC || Constants.USE_AVIF)
+            && imageDimensionsOffset !== undefined
         );
 }
 
