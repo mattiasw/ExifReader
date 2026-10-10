@@ -329,7 +329,7 @@ interface PhotoshopTags {
 }
 
 interface CanonTags {
-    AutoRotate: {
+    AutoRotate?: {
         value: number;
         description: 'None' | 'Rotate 90 CW' | 'Rotate 180' | 'Rotate 270 CW' | 'Unknown';
     };

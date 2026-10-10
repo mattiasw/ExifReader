@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Orientation`, so `Orientation` in the flat result is optional again. It
   also marks `PentaxVersion`, `PentaxModelID`, `CameraOrientation`,
   `RollAngle` and `PitchAngle` optional, since a file may lack any of them.
+- The TypeScript type for Canon maker notes now marks `AutoRotate` optional,
+  since the library returns it only when the Canon `ShotInfo` tag holds it.
+  Reading `AutoRotate.value` without a check no longer type-checks.
 - In environments without `TextDecoder`, a PNG `tEXt` or `iTXt` chunk with
   empty text made `load()` fail. The tag now gets an empty value, as it does
   with `TextDecoder`.
