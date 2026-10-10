@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import {joinMapped} from './utils.js';
+
 export default {
     ApertureValue: (value) => Math.pow(Math.sqrt(2), value[0] / value[1]).toFixed(2),
     ColorSpace(value) {
@@ -13,21 +15,7 @@ export default {
         return 'Unknown';
     },
     ComponentsConfiguration(value) {
-        return value.map((character) => {
-            if (character === 0x31) {
-                return 'Y';
-            } else if (character === 0x32) {
-                return 'Cb';
-            } else if (character === 0x33) {
-                return 'Cr';
-            } else if (character === 0x34) {
-                return 'R';
-            } else if (character === 0x35) {
-                return 'G';
-            } else if (character === 0x36) {
-                return 'B';
-            }
-        }).join('');
+        return joinMapped(value, getComponentText, '');
     },
     Contrast(value) {
         if (value === 0) {
@@ -233,3 +221,19 @@ export default {
     XResolution: (value) => '' + Math.round(value[0] / value[1]),
     YResolution: (value) => '' + Math.round(value[0] / value[1])
 };
+
+function getComponentText(character) {
+    if (character === 0x31) {
+        return 'Y';
+    } else if (character === 0x32) {
+        return 'Cb';
+    } else if (character === 0x33) {
+        return 'Cr';
+    } else if (character === 0x34) {
+        return 'R';
+    } else if (character === 0x35) {
+        return 'G';
+    } else if (character === 0x36) {
+        return 'B';
+    }
+}

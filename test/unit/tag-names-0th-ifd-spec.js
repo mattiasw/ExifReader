@@ -218,6 +218,18 @@ describe('tag-names-0th-ifd', () => {
             .to.equal('30/100, 40/200, 50/300, 60/400, 70/500, 80/600');
     });
 
+    for (const [tag, name] of [[0x013e, 'WhitePoint'], [0x013f, 'PrimaryChromaticities']]) {
+        it(`should throw for a ${name} value that is not a list of rationals`, () => {
+            expect(() => TagNames0thIfd[tag].description([1, 2, 3])).to.throw(TypeError);
+            expect(() => TagNames0thIfd[tag].description([30, 100])).to.throw(TypeError);
+            expect(() => TagNames0thIfd[tag].description(['30', '100'])).to.throw(TypeError);
+        });
+
+        it(`should describe a negative ${name} rational as it is`, () => {
+            expect(TagNames0thIfd[tag].description([[-30, 100], [40, -200]])).to.equal('-30/100, 40/-200');
+        });
+    }
+
     it('should have tag HalftoneHints', () => {
         expect(TagNames0thIfd[0x0141]).to.equal('HalftoneHints');
     });
@@ -253,6 +265,13 @@ describe('tag-names-0th-ifd', () => {
         expect(TagNames0thIfd[0x0153].name).to.equal('SampleFormat');
         expect(TagNames0thIfd[0x0153].description([0, 1, 2, 3])).to.equal('Unknown, Unsigned, Signed, Float');
         expect(TagNames0thIfd[0x0153].description([4, 5, 6, 7])).to.equal('Undefined, Complex int, Complex float, Unknown');
+    });
+
+    it('should describe a SampleFormat sample that is not a format as unknown', () => {
+        expect(TagNames0thIfd[0x0153].description(['1'])).to.equal('Unsigned');
+        expect(TagNames0thIfd[0x0153].description(['constructor'])).to.equal('Unknown');
+        expect(TagNames0thIfd[0x0153].description(['__proto__'])).to.equal('Unknown');
+        expect(TagNames0thIfd[0x0153].description(['toString'])).to.equal('Unknown');
     });
 
     it('should have tag TargetPrinter', () => {

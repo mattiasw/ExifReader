@@ -101,6 +101,41 @@ function getChunkString(bytes, start, end, charCodes) {
     return String.fromCharCode.apply(null, charCodes);
 }
 
+// Smaller chunks measured a higher peak memory for 8 MiB values.
+export const JOIN_CHUNK_SIZE = 65536;
+
+/**
+ * Returns what `values.map(getText).join(separator)` returns, without building
+ * an array as long as `values`. Unlike `map`, a hole in a sparse array reaches
+ * `getText` as `undefined`.
+ * @param {Array} values
+ * @param {function(*): (string|undefined|null)} getText Called with the
+ *     element only, in index order.
+ * @param {string} separator
+ * @returns {string}
+ * @throws {TypeError} When `values` is not an array.
+ */
+export function joinMapped(values, getText, separator) {
+    if (!Array.isArray(values)) {
+        throw new TypeError('Expected an array.');
+    }
+
+    const texts = [];
+    const chunks = [];
+    for (let chunkStart = 0; chunkStart < values.length; chunkStart += JOIN_CHUNK_SIZE) {
+        chunks.push(getJoinedChunk(values, chunkStart, Math.min(chunkStart + JOIN_CHUNK_SIZE, values.length), getText, separator, texts));
+    }
+    return chunks.join(separator);
+}
+
+function getJoinedChunk(values, start, end, getText, separator, texts) {
+    for (let i = start; i < end; i++) {
+        texts[i - start] = getText(values[i]);
+    }
+    texts.length = end - start;
+    return texts.join(separator);
+}
+
 /**
  * Decodes a byte string (one byte per character) as UTF-8. A string that is
  * not valid UTF-8 is returned as it is, so single-byte encoded text stays

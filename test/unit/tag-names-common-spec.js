@@ -29,4 +29,20 @@ describe('tag-names-common', () => {
         expect(TagNamesCommon['LightSource'](255)).to.equal('Other light source');
         expect(TagNamesCommon['LightSource'](4711)).to.equal('Unknown');
     });
+
+    describe('ComponentsConfiguration', () => {
+        it('should describe YCbCr and RGB components', () => {
+            expect(TagNamesCommon.ComponentsConfiguration([0x31, 0x32, 0x33, 0x30])).to.equal('YCbCr');
+            expect(TagNamesCommon.ComponentsConfiguration([0x34, 0x35, 0x36, 0x30])).to.equal('RGB');
+        });
+
+        it('should ignore unknown bytes', () => {
+            expect(TagNamesCommon.ComponentsConfiguration([0x31, 0x00, 0x37, 0x36])).to.equal('YB');
+        });
+
+        it('should throw for a value that is not an array', () => {
+            expect(() => TagNamesCommon.ComponentsConfiguration(1)).to.throw(TypeError);
+            expect(() => TagNamesCommon.ComponentsConfiguration('<faulty value>')).to.throw(TypeError);
+        });
+    });
 });

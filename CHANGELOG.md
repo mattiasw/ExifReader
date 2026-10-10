@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the MPF `MPFVersion` tags written as ASCII text, as some cameras do, now
   have that text as their description, such as `0220`, instead of a single
   wrong character.
+- A `SampleFormat` tag stored as ASCII text with a sample named after an
+  `Object.prototype` member, such as `constructor`, was described as that
+  member, for example the source text of the `Object` function. Such a
+  sample is now described as `Unknown`.
 
 ### Security
 
@@ -48,6 +52,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seconds and raised peak memory to about 130 MB. The text is now converted
   in chunks, so the same file takes about 0.17 seconds and peaks at about
   120 MB.
+- The descriptions of the Exif `ComponentsConfiguration`, `WhitePoint` and
+  `PrimaryChromaticities` tags built a separate text for every element of the
+  value before joining them: a crafted TIFF with an 8 MiB
+  `ComponentsConfiguration` value raised peak memory to about 290 MB and
+  blocked `load()` for about 0.4 seconds. The description is now built in
+  chunks, so the same file peaks at about 235 MB and takes about 0.35
+  seconds. An 8 MiB list of fractions in `WhitePoint` or
+  `PrimaryChromaticities` now peaks at about 290 MB instead of about 365 MB.
+- A `WhitePoint` or `PrimaryChromaticities` value that was not a list of
+  fractions, such as 8 MiB of bytes, was described as `undefined/undefined`
+  for every element: a description of about 176 million characters that
+  raised peak memory to about 1,260 MB and blocked `load()` for about 2.3
+  seconds. Such a value is now described as its values joined with `, `, as
+  other tags are, so the same file peaks at about 450 MB and takes about 0.6
+  seconds.
 
 ## [4.48.1] - 2026-10-10
 

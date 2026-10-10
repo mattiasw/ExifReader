@@ -85,6 +85,63 @@ describe('utils', () => {
         });
     });
 
+    describe('joinMapped', () => {
+        const getText = (n) => (n % 7 === 0 ? undefined : 'v' + n);
+
+        function getRange(length) {
+            return Array.from({length}, (_, i) => i);
+        }
+
+        it('should give an empty string for an empty array', () => {
+            expect(Utils.joinMapped([], getText, '<>')).to.equal('');
+        });
+
+        it('should give what map and join give for a short array', () => {
+            const values = getRange(10);
+            expect(Utils.joinMapped(values, getText, '<>')).to.equal(values.map(getText).join('<>'));
+        });
+
+        for (const length of [Utils.JOIN_CHUNK_SIZE, Utils.JOIN_CHUNK_SIZE + 1, 2 * Utils.JOIN_CHUNK_SIZE + 3]) {
+            it(`should give what map and join give across chunk boundaries for length ${length}`, () => {
+                const values = getRange(length);
+                expect(Utils.joinMapped(values, getText, '<>')).to.equal(values.map(getText).join('<>'));
+            });
+        }
+
+        it('should join with an empty separator', () => {
+            expect(Utils.joinMapped([1, 2, 3], (n) => 'v' + n, '')).to.equal('v1v2v3');
+        });
+
+        it('should give an empty string for a null text', () => {
+            expect(Utils.joinMapped([1, 2, 3], (n) => (n === 2 ? null : 'v' + n), ', ')).to.equal('v1, , v3');
+        });
+
+        it('should pass a hole in a sparse array to getText as undefined', () => {
+            const values = [];
+            values[2] = 1;
+            const received = [];
+            Utils.joinMapped(values, (value) => received.push(value), '');
+            expect(received).to.deep.equal([undefined, undefined, 1]);
+        });
+
+        it('should let an error from getText through', () => {
+            const error = new Error('not a rational');
+            expect(() => Utils.joinMapped([1], () => {
+                throw error;
+            }, '')).to.throw(error);
+        });
+
+        it('should throw a TypeError for a string without mapping its characters', () => {
+            let calls = 0;
+            expect(() => Utils.joinMapped('<faulty value>', () => calls++, ', ')).to.throw(TypeError);
+            expect(calls).to.equal(0);
+        });
+
+        it('should throw a TypeError for a typed array', () => {
+            expect(() => Utils.joinMapped(new Uint8Array([1, 2]), getText, ', ')).to.throw(TypeError);
+        });
+    });
+
     describe('getBase64Image', () => {
         const RealBuffer = Buffer;
         const realBtoa = globalThis.btoa;
