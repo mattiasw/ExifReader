@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.48.1] - 2026-10-10
+
 ### Fixed
 
 - The TypeScript type for Pentax maker notes now names the K-3 III camera
@@ -51,11 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the same file peaks at about 220 MB and takes under 0.4 seconds. Real files
   carry a few dozen resources.
 - Reading `Thumbnail.base64`, or `base64` of an MPF image, used memory far
-  above the image size: for an 8 MiB thumbnail it took about 0.8 s and raised
-  peak memory about 355 MB above loading the file. The image is now converted
-  to base64 with `Buffer` in Node.js and in chunks elsewhere. The same read
-  now takes about 6 ms and raises peak memory by about 11 MB in Node.js, and
-  by about 45 MB in a browser-like environment without `Buffer`.
+  above the image size: for an 8 MiB thumbnail it took about 0.8 seconds and
+  raised peak memory about 355 MB above loading the file. The image is now
+  converted to base64 with `Buffer` in Node.js and in chunks elsewhere. The
+  same read now takes about 6 ms and raises peak memory by about 11 MB in
+  Node.js, and by about 45 MB in a browser-like environment without `Buffer`.
 - The descriptions of the Exif `UserComment` and the GPS
   `GPSProcessingMethod` and `GPSAreaInformation` tags converted their text
   one character at a time: a crafted TIFF with an 8 MiB `UserComment` raised
@@ -74,10 +76,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   about 565 MB and took about 0.7 seconds. It is now converted in chunks, so
   the same file peaks at about 105 MB and takes about 0.05 seconds.
 - A PNG made of many small text chunks used memory far above the file size:
-  8 MiB of empty tEXt chunks raised peak memory to about 265 MB with
-  `async: true`. This applied to tEXt, iTXt and zTXt chunks alike. Less is
-  now kept per text chunk while the file is read, and the same file now peaks
-  at about 126 MB.
+  8 MiB of empty `tEXt` chunks raised peak memory to about 265 MB with
+  `async: true`. This applied to `tEXt`, `iTXt` and `zTXt` chunks alike.
+  Less is now kept per text chunk while the file is read, and the same file
+  now peaks at about 126 MB.
 - An Exif `ApplicationNotes` tag stored as ASCII text or as two or more
   rational numbers was converted to XMP, although XMP writers store the
   packet in this tag as bytes: a crafted TIFF with an 8 MiB ASCII
@@ -2098,7 +2100,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.48.0...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.48.1...HEAD
+[4.48.1]: https://github.com/mattiasw/ExifReader/compare/v4.48.0...v4.48.1
 [4.48.0]: https://github.com/mattiasw/ExifReader/compare/v4.47.0...v4.48.0
 [4.47.0]: https://github.com/mattiasw/ExifReader/compare/v4.46.0...v4.47.0
 [4.46.0]: https://github.com/mattiasw/ExifReader/compare/v4.45.2...v4.46.0
