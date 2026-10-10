@@ -26,7 +26,7 @@ You can try it out on the
 | File type              | Exif    | IPTC                         | XMP     | ICC                          | MPF     | Photoshop     | MakerNote          | Thumbnail | Image details |
 | -----------------------|---------|------------------------------|---------|------------------------------|---------|---------------|--------------------|-----------|---------------|
 | JPEG                   | **yes** | **yes**                      | **yes** | **yes**                      | **yes** | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
-| JPEG XL&ast;&ast;&ast; | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **some**&ast;&ast;&ast;&ast; | no      | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
+| JPEG XL&ast;&ast;&ast; | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **some**&ast;&ast;&ast;&ast; | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
 | TIFF                   | **yes** | **yes**                      | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | N/A           |
 | PNG                    | **yes** | **yes**                      | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | **yes**       |
 | HEIC/HEIF              | **yes** | **yes**&ast;&ast;&ast;&ast;  | **yes** | **yes**                      | N/A     | **some**&ast; | **some**&ast;&ast; | **yes**   | no            |
@@ -48,6 +48,9 @@ You can try it out on the
     compression. This is supported in some environments when using
     `async: true`. See the [Asynchronous tags](#asynchronous-tags) and
     [Custom decompression](#custom-decompression) sections for details.
+    JPEG XL defines no MPF block. A JPEG recompressed to JPEG XL keeps its MPF
+    segment only in its JPEG reconstruction data, which ExifReader does not
+    read.
 - `****` = Read from the Exif data, where the `IPTC-NAA` and `ICC_Profile`
     tags can carry them, in the same way as for TIFF files. The HEIC/HEIF,
     AVIF and WebP formats define no IPTC block of their own. The ICC profile
