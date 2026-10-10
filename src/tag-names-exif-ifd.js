@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringValue, getEncodedString} from './tag-names-utils.js';
+import {getEncodedString, getVersionString} from './tag-names-utils.js';
 import TagNamesCommon from './tag-names-common.js';
 
 export default {
@@ -45,7 +45,7 @@ export default {
     0x8835: 'ISOSpeedLatitudezzz',
     0x9000: {
         'name': 'ExifVersion',
-        'description': (value) => getStringValue(value)
+        'description': getVersionString
     },
     0x9003: 'DateTimeOriginal',
     0x9004: 'DateTimeDigitized',
@@ -204,7 +204,7 @@ export default {
     },
     0xa000: {
         'name': 'FlashpixVersion',
-        'description': (value) => value.map((charCode) => String.fromCharCode(charCode)).join('')
+        'description': getVersionString
     },
     0xa001: {
         'name': 'ColorSpace',
