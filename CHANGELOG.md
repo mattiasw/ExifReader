@@ -59,6 +59,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   peak memory to about 550 MB and blocked `load()` for about 0.75 seconds.
   The text is now converted in chunks, so the same file peaks at about
   230 MB and takes about 0.3 seconds.
+- The descriptions of the Exif `ExifVersion` and `FlashpixVersion`, the
+  `InteroperabilityVersion` and the MPF `MPFVersion` tags converted their
+  value one character at a time: a crafted TIFF with an 8 MiB `ExifVersion`
+  raised peak memory to about 485 MB and blocked `load()` for about 0.65
+  seconds. The value is now converted in chunks, so the same file peaks at
+  about 235 MB and takes about 0.3 seconds.
 - In environments without `TextDecoder`, the text of an uncompressed PNG
   `tEXt` or `iTXt` chunk was converted one character at a time and used
   memory far above its size: an 8 MiB `tEXt` chunk raised peak memory to

@@ -5,6 +5,7 @@
 import {expect} from 'chai';
 import TagNamesExifIfd from '../../src/tag-names-exif-ifd.js';
 import TagNamesCommon from '../../src/tag-names-common.js';
+import {getVersionString} from '../../src/tag-names-utils.js';
 import {getCharacterArray} from '../../src/utils.js';
 
 describe('tag-names-exif-ifd', () => {
@@ -100,6 +101,7 @@ describe('tag-names-exif-ifd', () => {
 
     it('should have tag ExifVersion', () => {
         expect(TagNamesExifIfd[0x9000].description([0x30, 0x32, 0x32, 0x30])).to.equal('0220');
+        expect(TagNamesExifIfd[0x9000].description).to.equal(getVersionString);
     });
 
     it('should have tag DateTimeOriginal', () => {
@@ -306,6 +308,7 @@ describe('tag-names-exif-ifd', () => {
     it('should report correct name and description for FlashpixVersion', () => {
         expect(TagNamesExifIfd[0xa000].name).to.equal('FlashpixVersion');
         expect(TagNamesExifIfd[0xa000].description([0x30, 0x31, 0x30, 0x30])).to.equal('0100');
+        expect(TagNamesExifIfd[0xa000].description).to.equal(getVersionString);
     });
 
     it('should report correct name and description for ColorSpace', () => {

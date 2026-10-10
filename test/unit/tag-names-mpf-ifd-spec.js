@@ -4,11 +4,13 @@
 
 import {expect} from 'chai';
 import TagNamesMpfIfd from '../../src/tag-names-mpf-ifd.js';
+import {getVersionString} from '../../src/tag-names-utils.js';
 
 describe('tag-names-mpf-ifd', () => {
     it('should have tag MPFVersion', () => {
         expect(TagNamesMpfIfd[0xb000].name).to.equal('MPFVersion');
         expect(TagNamesMpfIfd[0xb000].description([48, 49, 48, 48])).to.equal('0100');
+        expect(TagNamesMpfIfd[0xb000].description).to.equal(getVersionString);
     });
 
     it('should have tag NumberOfImages', () => {

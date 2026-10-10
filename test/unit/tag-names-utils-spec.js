@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {getCharacterArray} from '../../src/utils.js';
-import {getStringValue, getEncodedString} from '../../src/tag-names-utils.js';
+import {getStringValue, getEncodedString, getVersionString} from '../../src/tag-names-utils.js';
 import {swapProperties} from './test-utils.js';
 
 describe('tag-names-utils', () => {
@@ -48,14 +48,14 @@ describe('tag-names-utils', () => {
 
     it('should convert long ASCII encoded text in chunks', () => {
         const text = getPrintableText(10000);
-        const {result, calls} = getEncodedStringCountingFromCharCode(getCharacterArray('ASCII\x00\x00\x00' + text));
+        const {result, calls} = getResultCountingFromCharCode(getEncodedString, getCharacterArray('ASCII\x00\x00\x00' + text));
         expect(result).to.equal(text);
         expect(calls).to.be.at.most(10);
     });
 
     it('should convert long text with undefined encoding in chunks', () => {
         const text = getPrintableText(10000);
-        const {result, calls} = getEncodedStringCountingFromCharCode(getCharacterArray('\x00'.repeat(8) + text));
+        const {result, calls} = getResultCountingFromCharCode(getEncodedString, getCharacterArray('\x00'.repeat(8) + text));
         expect(result).to.equal(text);
         expect(calls).to.be.at.most(10);
     });
@@ -63,6 +63,17 @@ describe('tag-names-utils', () => {
     it('should keep character codes wider than a byte in encoded text', () => {
         const value = getCharacterArray('ASCII\x00\x00\x00').concat([0x263a]);
         expect(getEncodedString(value)).to.equal('\u263a');
+    });
+
+    it('should get version string from character values', () => {
+        expect(getVersionString([0x30, 0x32, 0x32, 0x30])).to.equal('0220');
+    });
+
+    it('should convert a long version value in chunks', () => {
+        const text = getPrintableText(10000);
+        const {result, calls} = getResultCountingFromCharCode(getVersionString, getCharacterArray(text));
+        expect(result).to.equal(text);
+        expect(calls).to.be.at.most(10);
     });
 
     function getPrintableText(length) {
@@ -73,7 +84,7 @@ describe('tag-names-utils', () => {
         return text;
     }
 
-    function getEncodedStringCountingFromCharCode(value) {
+    function getResultCountingFromCharCode(convert, value) {
         const originalFromCharCode = String.fromCharCode;
         let fromCharCodeCalls = 0;
         restoreFromCharCode = swapProperties(String, {
@@ -82,7 +93,7 @@ describe('tag-names-utils', () => {
                 return originalFromCharCode.apply(String, charCodes);
             }
         });
-        const result = getEncodedString(value);
+        const result = convert(value);
         return {result, calls: fromCharCodeCalls};
     }
 });

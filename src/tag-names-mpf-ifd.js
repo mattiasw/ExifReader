@@ -2,12 +2,12 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringValue} from './tag-names-utils.js';
+import {getVersionString} from './tag-names-utils.js';
 
 export default {
     0xb000: {
         'name': 'MPFVersion',
-        'description': (value) => getStringValue(value)
+        'description': getVersionString
     },
     0xb001: 'NumberOfImages',
     0xb002: 'MPEntry',
