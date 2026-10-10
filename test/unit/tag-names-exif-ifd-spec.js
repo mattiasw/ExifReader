@@ -501,8 +501,17 @@ describe('tag-names-exif-ifd', () => {
         expect(TagNamesExifIfd[0xa432].description([[700, 10], [2000, 10], [40, 10], [40, 10]])).to.equal('70-200 mm f/4');
         expect(TagNamesExifIfd[0xa432].description([[17, 1], [85, 1], [0, 1], [0, 1]])).to.equal('17-85 mm f/0');
         expect(TagNamesExifIfd[0xa432].description([[24, 1], [105, 1], [0, 0], [0, 0]])).to.equal('24-105 mm f/?');
-        expect(TagNamesExifIfd[0xa432].description([[160, 10], [500, 10], [350, 100], [630, 100]])).to.equal('16-50 mm f/6.3');
-        expect(TagNamesExifIfd[0xa432].description([[4183519, 1048501], [4183519, 1048501], [9, 5], [9, 5]])).to.equal('3.99-3.99 mm f/1.8');
+        expect(TagNamesExifIfd[0xa432].description([[160, 10], [500, 10], [350, 100], [630, 100]])).to.equal('16-50 mm f/3.5-6.3');
+        expect(TagNamesExifIfd[0xa432].description([[18, 1], [55, 1], [35, 10], [56, 10]])).to.equal('18-55 mm f/3.5-5.6');
+        expect(TagNamesExifIfd[0xa432].description([[4183519, 1048501], [4183519, 1048501], [9, 5], [9, 5]])).to.equal('3.99 mm f/1.8');
+        expect(TagNamesExifIfd[0xa432].description([[50, 1], [50, 1], [14, 10], [14, 10]])).to.equal('50 mm f/1.4');
+        expect(TagNamesExifIfd[0xa432].description([[50, 1], [500, 10], [14, 10], [14, 10]])).to.equal('50 mm f/1.4');
+        expect(TagNamesExifIfd[0xa432].description([[24, 1], [70, 1], [0, 0], [28, 10]])).to.equal('24-70 mm f/2.8');
+        expect(TagNamesExifIfd[0xa432].description([[24, 1], [70, 1], [28, 10], [0, 0]])).to.equal('24-70 mm f/2.8');
+        expect(TagNamesExifIfd[0xa432].description([[50, 1], [0, 1], [14, 10], [14, 10]])).to.equal('50 mm f/1.4');
+        expect(TagNamesExifIfd[0xa432].description([[18, 1], [55, 1], [35, 10], [0, 1]])).to.equal('18-55 mm f/3.5');
+        expect(TagNamesExifIfd[0xa432].description([[700, 10], [2000, 10], [4, 1], [40, 10]])).to.equal('70-200 mm f/4');
+        expect(TagNamesExifIfd[0xa432].description([[2800, 100], [2800, 100], [392, 256], [421, 256]])).to.equal('28 mm f/1.53125-1.64453');
     });
 
     it('should have tag LensMake', () => {
