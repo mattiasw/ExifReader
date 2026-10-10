@@ -19,6 +19,7 @@ const SHOT_INFO_TAG_ID = 0x0004;
 const LENS_MODEL_TAG_ID = 0x0095;
 const TYPE_ASCII = 2;
 const TYPE_SHORT = 3;
+const TYPE_RATIONAL = 5;
 
 describe('canon-tags', () => {
     it('should be able to handle when there are no tags in a Canon IFD', () => {
@@ -36,6 +37,16 @@ describe('canon-tags', () => {
         const tags = CanonTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, ByteOrder.LITTLE_ENDIAN, false);
 
         expect(tags).to.deep.equal({});
+        expect(tags['ShotInfo']).to.be.undefined;
+    });
+
+    it('should leave out AutoRotate when its shot info value is not a number', () => {
+        const count = 30;
+        const dataView = getCanonDataView([getRationalValuesField(SHOT_INFO_TAG_ID, count)]);
+
+        const tags = CanonTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, ByteOrder.LITTLE_ENDIAN, false);
+
+        expect(tags['AutoRotate']).to.be.undefined;
         expect(tags['ShotInfo']).to.be.undefined;
     });
 
@@ -211,6 +222,11 @@ function getValues(config, size) {
 
 function getShortValuesField(id, values) {
     return {id, type: TYPE_SHORT, count: values.length, data: values.map((value) => getUint16(value)).join('')};
+}
+
+function getRationalValuesField(id, count) {
+    const data = Array.from({length: count}, (_, index) => getUint32(index + 1) + getUint32(index + 2)).join('');
+    return {id, type: TYPE_RATIONAL, count, data};
 }
 
 function getUint16(value) {

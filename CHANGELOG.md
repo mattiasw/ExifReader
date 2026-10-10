@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The TypeScript type for Canon maker notes now marks `AutoRotate` optional,
   since the library returns it only when the Canon `ShotInfo` tag holds it.
   Reading `AutoRotate.value` without a check no longer type-checks.
+- A Canon maker note whose `ShotInfo` tag is stored with a type other than
+  SHORT could return an `AutoRotate` value that is not a number, such as an
+  array for RATIONAL. Such a value is now left out.
 - In environments without `TextDecoder`, a PNG `tEXt` or `iTXt` chunk with
   empty text made `load()` fail. The tag now gets an empty value, as it does
   with `TextDecoder`.
