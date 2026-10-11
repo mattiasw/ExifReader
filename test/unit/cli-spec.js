@@ -4,8 +4,10 @@
 
 import {expect} from 'chai';
 import fs from 'fs';
+import {createRequire} from 'node:module';
 import os from 'os';
 import path from 'path';
+import {fileURLToPath} from 'url';
 import {parseArgs, run, checkLocalInstall, readConfigFile} from '../../bin/cli.js';
 import {configHash} from '../../bin/custom-build-marker.js';
 import {getConsoleWarnSpy} from './test-utils.js';
@@ -1227,6 +1229,44 @@ describe('cli', () => {
             const result = checkLocalInstall(process.cwd());
             expect(result.ok).to.equal(false);
             expect(result.message).to.be.a('string');
+        });
+
+        describe('when the running package has an exports map', () => {
+            const BIN_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'bin');
+            const PACKAGE_JSON = JSON.stringify({
+                name: 'exifreader',
+                version: '0.0.0',
+                main: 'dist/exif-reader.js',
+                exports: {'.': './dist/exif-reader.js', './package.json': './package.json'}
+            });
+            let root;
+            let runningCli;
+
+            before(() => {
+                root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'exifreader-cli-')));
+                fs.mkdirSync(path.join(root, 'running'));
+                fs.writeFileSync(path.join(root, 'running', 'package.json'), PACKAGE_JSON);
+                fs.cpSync(BIN_DIR, path.join(root, 'running', 'bin'), {recursive: true});
+                fs.mkdirSync(path.join(root, 'consumer', 'node_modules', 'exifreader'), {recursive: true});
+                fs.writeFileSync(path.join(root, 'consumer', 'package.json'), '{"private": true}');
+                fs.writeFileSync(path.join(root, 'consumer', 'node_modules', 'exifreader', 'package.json'), PACKAGE_JSON);
+                runningCli = createRequire(import.meta.url)(path.join(root, 'running', 'bin', 'cli.js'));
+            });
+
+            after(() => {
+                fs.rmSync(root, {recursive: true, force: true});
+            });
+
+            it('resolves the project\'s copy, not the running one', () => {
+                const result = runningCli.checkLocalInstall(path.join(root, 'consumer'));
+                expect(result.ok).to.equal(false);
+                expect(result.message).to.contain(path.join(root, 'consumer', 'node_modules', 'exifreader'));
+            });
+
+            it('does not resolve the running package from inside it', () => {
+                const result = runningCli.checkLocalInstall(path.join(root, 'running'));
+                expect(result.ok).to.equal(false);
+            });
         });
     });
 

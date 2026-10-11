@@ -8,6 +8,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const {createRequire} = require('module');
 const {readMarker, markerMatches} = require('./custom-build-marker');
 const {collectImagePaths, loadFullParser, resolveDomParser, analyzeImages, deriveConfig, writeConfigToPackageJson} = require('./analyze');
 const {verifyImages, loadCustomParser} = require('./verify-build');
@@ -547,7 +548,9 @@ function checkLocalInstall(cwd, options) {
 }
 
 function defaultResolve(cwd) {
-    return require.resolve('exifreader/package.json', {paths: [cwd]});
+    // The parent sits inside node_modules so Node skips package self-reference
+    // (an exports map enables it) and searches cwd's node_modules chain.
+    return createRequire(path.join(cwd, 'node_modules', 'noop.js')).resolve('exifreader/package.json');
 }
 
 function notInstalledMessage(isPnp) {
