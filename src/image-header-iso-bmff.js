@@ -76,7 +76,8 @@ export function parseBox(dataView, offset, containerEnd = dataView.byteLength) {
     // unparseable (return undefined) rather than throw a RangeError to the caller.
     try {
         const {length, contentOffset} = getBoxLength(dataView, offset);
-        if (length < BOX_MIN_LENGTH) {
+        // An extended-size box has a 16-byte header, not 8.
+        if (length < contentOffset - offset || contentOffset > containerEnd) {
             return undefined;
         }
 

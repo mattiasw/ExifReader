@@ -149,6 +149,53 @@ describe('image-header-jxl', () => {
         expect(offsets.tiffHeaderOffset).to.be.undefined;
     });
 
+    it('should stop at an extended-size xml box whose length is shorter than its 16-byte header', () => {
+        const dataView = getDataView(
+            JXL_SIGNATURE + FTYP_BOX
+            + getByteStringFromNumber(1, 4) + 'xml ' + getByteStringFromNumber(0, 4) + getByteStringFromNumber(8, 4)
+            + '<x/>'
+        );
+        const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+        expect(offsets.hasAppMarkers).to.be.false;
+        expect(offsets.xmpChunks).to.be.undefined;
+    });
+
+    it('should stop at an extended-size Exif box whose length is shorter than its 16-byte header', () => {
+        // The padding is a TIFF header offset field the buffer has room for but the box does not.
+        const dataView = getDataView(
+            JXL_SIGNATURE + FTYP_BOX
+            + getByteStringFromNumber(1, 4) + 'Exif' + getByteStringFromNumber(0, 4) + getByteStringFromNumber(8, 4)
+            + getByteStringFromNumber(0, 4)
+        );
+        const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+        expect(offsets.tiffHeaderOffset).to.be.undefined;
+    });
+
+    it('should not read an Exif box\'s TIFF header offset from the next box', () => {
+        const dataView = getDataView(
+            JXL_SIGNATURE + FTYP_BOX
+            + getByteStringFromNumber(8, 4) + 'Exif'
+            + getByteStringFromNumber(12, 4) + 'xml ' + '<x/>'
+        );
+        const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+        expect(offsets.tiffHeaderOffset).to.be.undefined;
+        expect(offsets.xmpChunks[0].dataOffset).to.equal(48);
+    });
+
+    it('should read the TIFF header offset of an Exif box that only just holds it', () => {
+        const dataView = getDataView(
+            JXL_SIGNATURE + FTYP_BOX
+            + getByteStringFromNumber(12, 4) + 'Exif' + getByteStringFromNumber(0, 4)
+        );
+        const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+        // signature(12) + ftyp(20) + box header(8) + prefix(4) = 44
+        expect(offsets.tiffHeaderOffset).to.equal(44);
+    });
+
     it('should handle file with only the JXL signature', () => {
         const dataView = getDataView(JXL_SIGNATURE);
         const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
@@ -242,6 +289,39 @@ describe('image-header-jxl', () => {
             const dataView = getDataView(getJxlData({brobXmp: true}));
             const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
 
+            expect(offsets.brobXmpChunk).to.be.undefined;
+        });
+
+        it('should skip a brob box too short for its original type and keep walking', () => {
+            // The short brob's would-be original type is the next box's length field.
+            const dataView = getDataView(getShortBrobData('xml '));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.brobXmpChunk).to.be.undefined;
+            expect(offsets.xmpChunks[0].dataOffset).to.equal(48);
+        });
+
+        it('should skip a brob box too short for an Exif original type and keep walking', () => {
+            const dataView = getDataView(getShortBrobData('Exif'));
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.brobExifChunk).to.be.undefined;
+            expect(offsets.xmpChunks[0].dataOffset).to.equal(48);
+        });
+
+        it('should accept a brob box that only just holds its original type', () => {
+            const dataView = getDataView(JXL_SIGNATURE + FTYP_BOX + getByteStringFromNumber(12, 4) + 'brob' + 'xml ');
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.brobXmpChunk).to.deep.equal({dataOffset: 44, length: 0});
+        });
+
+        it('should ignore a brob box truncated before its original type', () => {
+            const dataView = getDataView(JXL_SIGNATURE + FTYP_BOX + getByteStringFromNumber(256, 4) + 'brob');
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.hasAppMarkers).to.be.false;
+            expect(offsets.brobExifChunk).to.be.undefined;
             expect(offsets.brobXmpChunk).to.be.undefined;
         });
     });
@@ -363,6 +443,16 @@ describe('image-header-jxl', () => {
             const xmpBlocks = metadataBlocks.filter((block) => block.type === 'xmp');
             expect(xmpBlocks).to.have.lengthOf(2);
         });
+
+        it('should NOT emit a block for a brob box too short for its original type', () => {
+            const dataView = getDataView(getShortBrobData('Exif'));
+            const metadataBlocks = [];
+            ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
+            // The short brob is 32..40; the xml box after it takes 'Exif' as its length.
+            expect(metadataBlocks).to.deep.equal([
+                {type: 'xmp', start: 40, end: 40 + 0x45786966},
+            ]);
+        });
     });
 
     describe('codestream offset', () => {
@@ -398,6 +488,33 @@ describe('image-header-jxl', () => {
 
             expect(offsets.jxlCodestreamOffset).to.not.be.undefined;
             expect(offsets.hasAppMarkers).to.be.true;
+        });
+
+        it('should not read a jxlp box\'s sequence number from the next box', () => {
+            const dataView = getDataView(
+                JXL_SIGNATURE + FTYP_BOX + getByteStringFromNumber(8, 4) + 'jxlp' + getByteStringFromNumber(0, 4) + 'zzzz'
+            );
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.jxlCodestreamOffset).to.be.undefined;
+        });
+
+        it('should accept a jxlp box that only just holds its sequence number', () => {
+            const dataView = getDataView(
+                JXL_SIGNATURE + FTYP_BOX + getByteStringFromNumber(12, 4) + 'jxlp' + getByteStringFromNumber(0, 4)
+            );
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            // signature(12) + ftyp(20) + box header(8) + sequence number(4) = 44
+            expect(offsets.jxlCodestreamOffset).to.equal(44);
+        });
+
+        it('should ignore a jxlp box truncated before its sequence number', () => {
+            const dataView = getDataView(JXL_SIGNATURE + FTYP_BOX + getByteStringFromNumber(256, 4) + 'jxlp');
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+
+            expect(offsets.hasAppMarkers).to.be.false;
+            expect(offsets.jxlCodestreamOffset).to.be.undefined;
         });
     });
 });
@@ -444,4 +561,10 @@ function getJxlData({exif, xmp, unknownBox, brobExif, brobXmp, brobUnknown, jxlc
     }
 
     return data;
+}
+
+function getShortBrobData(originalType) {
+    // A length-8 brob has no content, so the next four bytes are both its
+    // would-be original type and the next box's length; that box is an xml box.
+    return JXL_SIGNATURE + FTYP_BOX + getByteStringFromNumber(8, 4) + 'brob' + originalType + 'xml ' + '<x/>';
 }

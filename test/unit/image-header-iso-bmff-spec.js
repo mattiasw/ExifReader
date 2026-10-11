@@ -2026,6 +2026,35 @@ describe('image-header-iso-bmff', () => {
                 );
                 expect(parseBox(dataView, 0)).to.be.undefined;
             });
+
+            it('should return undefined for a box whose extended size is shorter than its 16-byte header', () => {
+                const dataView = getDataView(getExtendedSizeFreeBox(8));
+                expect(parseBox(dataView, 0)).to.be.undefined;
+            });
+
+            it('should require an extended size of at least 16', () => {
+                expect(parseBox(getDataView(getExtendedSizeFreeBox(15)), 0)).to.be.undefined;
+                expect(parseBox(getDataView(getExtendedSizeFreeBox(16)), 0).length).to.equal(16);
+            });
+
+            it('should return undefined for an extended-size box whose header crosses the container end', () => {
+                const dataView = getDataView(getExtendedSizeFreeBox(16));
+                expect(parseBox(dataView, 0, 12)).to.be.undefined;
+                expect(parseBox(dataView, 0, 16).length).to.equal(16);
+            });
+
+            it('should stop walking the sub boxes of a container at such a header', () => {
+                const iprpWithChildHeaderCrossingItsEnd = withDeclaredLength(getBox('iprp', getExtendedSizeFreeBox(16)), 8 + 12);
+                const dataView = getDataView(iprpWithChildHeaderCrossingItsEnd);
+                expect(parseBox(dataView, 0).subBoxes).to.deep.equal([]);
+            });
+
+            function getExtendedSizeFreeBox(extendedSize) {
+                // The trailing bytes keep the version-byte check from also returning undefined.
+                return getByteStringFromNumber(1, 4) + 'free'
+                    + getByteStringFromNumber(0, 4) + getByteStringFromNumber(extendedSize, 4)
+                    + '\x00'.repeat(8);
+            }
         });
     });
 });
