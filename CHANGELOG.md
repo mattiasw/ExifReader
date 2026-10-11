@@ -63,6 +63,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seconds and raised peak memory to about 130 MB. The text is now converted
   in chunks, so the same file takes about 0.17 seconds and peaks at about
   120 MB.
+- The descriptions of IPTC datasets such as `Date Created` built their text
+  one character at a time, whatever the `Coded Character Set`: a crafted JPEG
+  with about 8 MiB of `Date Created` blocked `load()` for about 0.4 seconds
+  and raised peak memory to about 129 MB. The text is now converted in chunks,
+  so the same file takes about 0.16 seconds and peaks at about 110 MB.
 - The descriptions of the Exif `ComponentsConfiguration`, `WhitePoint` and
   `PrimaryChromaticities` tags built a separate text for every element of the
   value before joining them: a crafted TIFF with an 8 MiB

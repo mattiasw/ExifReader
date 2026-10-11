@@ -4,6 +4,7 @@
 
 import {expect} from 'chai';
 import {getCharacterArray} from '../../src/utils.js';
+import {swapProperties} from './test-utils.js';
 import TagNames from '../../src/iptc-tag-names.js';
 
 const IptcTagNames = TagNames['iptc'];
@@ -215,6 +216,27 @@ describe('iptc-tag-names', () => {
     it('should report correct name and description for Date Created', () => {
         expect(IptcTagNames[0x0237].name).to.equal('Date Created');
         expect(IptcTagNames[0x0237].description(getCharacterArray('19900127'))).to.equal('1990-01-27');
+    });
+
+    it('should describe a long Date Created from its date without one call per character', () => {
+        const value = getCharacterArray('20201231' + 'x'.repeat(10000));
+        const originalFromCharCode = String.fromCharCode;
+        let calls = 0;
+        const restore = swapProperties(String, {
+            fromCharCode(...charCodes) {
+                calls++;
+                return originalFromCharCode.apply(String, charCodes);
+            }
+        });
+
+        let description;
+        try {
+            description = IptcTagNames[0x0237].description(value);
+        } finally {
+            restore();
+        }
+        expect(description).to.equal('2020-12-31');
+        expect(calls).to.be.at.most(10);
     });
 
     it('should report correct name and description for Time Created', () => {
