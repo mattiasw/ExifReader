@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as ASCII text naming an `Object.prototype` member, such as `constructor`,
   was described as that member, for example the `Object` function, or as its
   source text. Such a value is now described as `Unknown`.
+- The IPTC `ObjectData Preview File Format Version` tag, when its value or the
+  `ObjectData Preview File Format` value was text naming an `Object.prototype`
+  member, such as `constructor` or `__proto__`, was described as that member,
+  for example the `Object` function. The tag is now described as its own text,
+  as other unknown versions are.
 - The Exif `SampleFormat` tag of an image with one sample per pixel, such as a
   grayscale TIFF, now has its format as its description, such as `Unsigned`,
   instead of `Unknown`.
