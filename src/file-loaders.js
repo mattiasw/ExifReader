@@ -6,9 +6,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-/* global Buffer, __non_webpack_require__ */
+/* global Buffer */
 
 import {dataUriToBuffer} from './utils.js';
+import NodeRequire from './node-require.js';
 
 export const HTTP_STATUS_OK = 200;
 export const HTTP_STATUS_SUCCESS_MAX = 299;
@@ -271,6 +272,9 @@ export function nodeGetRange(url, {start = 0, end, maxBytes} = {}) {
         }
 
         const get = requireNodeGet(url);
+        if (!get) {
+            return reject(new Error('Node http support is not available.'));
+        }
         get(url, options, (response) => {
             if ((response.statusCode >= HTTP_STATUS_OK) && (response.statusCode <= HTTP_STATUS_SUCCESS_MAX)) {
                 const totalSize = totalSizeFromNodeResponse(response);
@@ -358,10 +362,8 @@ function totalSizeFromRangeHeaders(contentRange, contentLength) {
 }
 
 function requireNodeGet(url) {
-    if (/^https:\/\//.test(url)) {
-        return __non_webpack_require__('https').get;
-    }
-    return __non_webpack_require__('http').get;
+    const http = NodeRequire.builtin(/^https:\/\//.test(url) ? 'https' : 'http');
+    return http && http.get;
 }
 
 /**
@@ -376,7 +378,10 @@ function requireNodeGet(url) {
  */
 export function readLocalFileRange(filename, {start = 0, end, totalSize} = {}) {
     return new Promise((resolve, reject) => {
-        const fs = requireNodeFs();
+        const fs = NodeRequire.builtin('fs');
+        if (!fs) {
+            return reject(new Error('Node file system support is not available.'));
+        }
         fs.open(filename, (openErr, fd) => {
             if (openErr) {
                 return reject(openErr);
@@ -415,14 +420,6 @@ function finishLocalRead(filename, closeErr, buffer, total, resolve) {
         console.warn(`Could not close file ${filename}:`, closeErr); // eslint-disable-line no-console
     }
     resolve({buffer, totalSize: total});
-}
-
-function requireNodeFs() {
-    try {
-        return __non_webpack_require__('fs');
-    } catch (error) {
-        return undefined;
-    }
 }
 
 /**

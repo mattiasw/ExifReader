@@ -35,6 +35,29 @@ const WEBPACK_DEPENDENCY_TYPES = ['esm', 'commonjs'];
 // Cloudflare's Wrangler bundles with these esbuild conditions and no module condition.
 const WRANGLER_CONDITION_NAMES = ['workerd', 'worker', 'browser'];
 
+const XMLDOM_PATH = path.join(ROOT_PATH, 'node_modules', '@xmldom', 'xmldom');
+const FIXTURE_PATH = path.join(ROOT_PATH, 'test', 'fixtures', 'images', 'test-iptc.jpg');
+const FIXTURE_SUB_LOCATION = 'My Sublocation';
+const FIXTURE_XMP_KEY = 'AuthorsPosition';
+const DOM_PARSER_WARNING = 'DOMParser is not available';
+const WITH_DOM_PARSER = 'with-dom-parser';
+const LOAD_SOURCES = ['path', 'url'];
+// Outside webpack the source gets no implicit @xmldom/xmldom; the dist's literal require finds it.
+const LOAD_LEGS = [
+    {script: 'consumer-load.cjs', loader: 'src', domParser: false, expectsXmp: false},
+    {script: 'consumer-load.mjs', loader: 'src', domParser: false, expectsXmp: false},
+    {script: 'consumer-load.mjs', loader: 'src', domParser: true, expectsXmp: true},
+    {script: 'consumer-load.cjs', loader: 'dist', domParser: false, expectsXmp: true},
+    {script: 'consumer-load.mjs', loader: 'dist', domParser: false, expectsXmp: true}
+];
+const DIST_NODE_MODULES = ['fs', 'http', 'https', '@xmldom/xmldom'];
+
+const OPTIONAL_PACKAGE = '@xmldom/xmldom';
+const BUNDLE_SPECIFIERS = ['exifreader', 'exifreader/dist/exif-reader.js'];
+const WEB_BUNDLE_SPECIFIER = 'exifreader/dist/exif-reader.js';
+// As in 4.49.0, the dist requires http and https with no try, so a web build stubs them.
+const WEB_FALLBACKS = {http: false, https: false};
+
 const TYPE_CONSUMERS_PATH = path.join(ROOT_PATH, 'test', 'types', 'packed');
 const TYPE_CONSUMER_FILES = ['consumer.ts', 'consumer.mts'];
 const TSC_PATH = path.join(ROOT_PATH, 'node_modules', 'typescript', 'bin', 'tsc');
@@ -66,6 +89,18 @@ describe('packaging', function () {
     it('ships src/package.json and no custom build marker in the npm tarball', () => {
         expect(packedFiles).to.include('src/package.json');
         expect(packedFiles).to.not.include('dist/.exifreader-custom-build.json');
+    });
+
+    it('ships a dist without webpack\'s __non_webpack_require__', () => {
+        const dist = fs.readFileSync(path.join(installedDir, 'dist', 'exif-reader.js'), 'utf8');
+        expect(dist).to.not.include('__non_webpack_require__');
+    });
+
+    DIST_NODE_MODULES.forEach((moduleName) => {
+        it(`ships a dist that requires ${moduleName} by a literal name`, () => {
+            const dist = fs.readFileSync(path.join(installedDir, 'dist', 'exif-reader.js'), 'utf8');
+            expect(dist).to.include(`require("${moduleName}")`);
+        });
     });
 
     it('declares src as side-effect-free ES modules and nothing else', () => {
@@ -197,6 +232,46 @@ describe('packaging', function () {
         });
     });
 
+    describe('loading a fixture by path and by URL', () => {
+        before(() => {
+            fs.cpSync(XMLDOM_PATH, path.join(consumerDir, 'node_modules', '@xmldom', 'xmldom'), {recursive: true});
+            fs.writeFileSync(path.join(consumerDir, 'consumer-load.cjs'), buildLoadScript('cjs'));
+            fs.writeFileSync(path.join(consumerDir, 'consumer-load.mjs'), buildLoadScript('mjs'));
+        });
+
+        LOAD_LEGS.forEach(({script, loader, domParser, expectsXmp}) => {
+            describe(`from ${script} through ${loader}${domParser ? ' with a domParser option' : ''}`, () => {
+                let results;
+
+                before(() => {
+                    results = runConsumerScript(script, [loader, FIXTURE_PATH, domParser ? WITH_DOM_PARSER : '']);
+                });
+
+                LOAD_SOURCES.forEach((source) => {
+                    it(`loads the fixture by ${source}`, () => {
+                        expect(results[source].error, 'load error').to.equal(undefined);
+                        expect(results[source].subLocation).to.equal(FIXTURE_SUB_LOCATION);
+                    });
+
+                    if (expectsXmp) {
+                        it(`parses XMP when loading by ${source}`, () => {
+                            expect(results[source].xmpKeys).to.include(FIXTURE_XMP_KEY);
+                        });
+                    } else {
+                        it(`leaves XMP unparsed when loading by ${source}`, () => {
+                            expect(results[source].xmpKeys).to.deep.equal([]);
+                        });
+                    }
+                });
+
+                it(expectsXmp ? 'has a DOMParser' : 'warns that no DOMParser is available', () => {
+                    const domParserWarnings = results.warnings.filter((warning) => warning.includes(DOM_PARSER_WARNING));
+                    expect(domParserWarnings.length > 0).to.equal(!expectsXmp);
+                });
+            });
+        });
+    });
+
     describe('types through the packed package', () => {
         before(() => {
             TYPE_CONSUMER_FILES.forEach((fileName) => {
@@ -221,11 +296,68 @@ describe('packaging', function () {
         });
     });
 
+    describe('bundling without @xmldom/xmldom', () => {
+        let bundleDir;
+
+        before(() => {
+            bundleDir = path.join(path.dirname(consumerDir), 'bundle-consumer');
+            fs.mkdirSync(path.join(bundleDir, 'node_modules'), {recursive: true});
+            fs.writeFileSync(path.join(bundleDir, 'package.json'), JSON.stringify({private: true}));
+            // A copy, not a symlink: webpack resolves a symlink to its real path, inside the shared consumer.
+            fs.cpSync(installedDir, path.join(bundleDir, 'node_modules', 'exifreader'), {recursive: true});
+        });
+
+        it(`cannot resolve ${OPTIONAL_PACKAGE} from the bundle consumer`, async () => {
+            const compiler = webpack({context: bundleDir, mode: 'production', target: 'node'});
+            try {
+                const resolved = await resolveWithWebpack(compiler, 'commonjs', bundleDir, OPTIONAL_PACKAGE).catch(() => null);
+                expect(resolved).to.equal(null);
+            } finally {
+                await closeCompiler(compiler);
+            }
+        });
+
+        BUNDLE_SPECIFIERS.forEach((specifier, index) => {
+            it(`builds an import of ${specifier} for Node without errors and runs the bundle`, async () => {
+                const entry = path.join(bundleDir, `entry-${index}.js`);
+                const outputPath = path.join(bundleDir, `out-${index}`);
+                fs.writeFileSync(entry, `import ExifReader from '${specifier}';\nprocess.stdout.write(typeof ExifReader.load);\n`);
+
+                const stats = await bundleWithWebpack({context: bundleDir, target: 'node', entry, outputPath});
+
+                const errors = stats.toJson({all: false, errors: true}).errors.map((error) => error.message);
+                expect(errors, errors.join('\n')).to.deep.equal([]);
+                const output = execFileSync(process.execPath, [path.join(outputPath, 'main.js')], {
+                    cwd: bundleDir,
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                    timeout: PACK_TIMEOUT_MS
+                });
+                expect(output.toString()).to.equal('function');
+            });
+        });
+
+        it(`builds an import of ${WEB_BUNDLE_SPECIFIER} for the web without errors when only http and https are stubbed`, async () => {
+            const entry = path.join(bundleDir, 'entry-web.js');
+            fs.writeFileSync(entry, `import ExifReader from '${WEB_BUNDLE_SPECIFIER}';\nexport default ExifReader.load;\n`);
+
+            const stats = await bundleWithWebpack({
+                context: bundleDir,
+                target: 'web',
+                entry,
+                outputPath: path.join(bundleDir, 'out-web'),
+                resolveOptions: {fallback: WEB_FALLBACKS}
+            });
+
+            const errors = stats.toJson({all: false, errors: true}).errors.map((error) => error.message);
+            expect(errors, errors.join('\n')).to.deep.equal([]);
+        });
+    });
+
     // With an exports map, self-reference beats the paths option, so every resolution
     // runs in a child process whose script lives in the consumer. A failing script
     // surfaces its stderr in the thrown error's message.
-    function runConsumerScript(scriptName) {
-        const output = execFileSync(process.execPath, [path.join(consumerDir, scriptName)], {
+    function runConsumerScript(scriptName, args = []) {
+        const output = execFileSync(process.execPath, [path.join(consumerDir, scriptName), ...args], {
             cwd: consumerDir,
             stdio: ['ignore', 'pipe', 'pipe'],
             timeout: PACK_TIMEOUT_MS
@@ -296,6 +428,61 @@ process.stdout.write(JSON.stringify({resolutions, blocked, staticDefaultImport: 
 `;
 }
 
+// Deleting fetch sends URLs through Node's http module. Each source catches its
+// own failure so one failing load still reports the other.
+function buildLoadScript(format) {
+    const scriptLocation = format === 'cjs' ? '__filename' : 'import.meta.url';
+    const body = `
+const fs = (await import('node:fs')).default;
+const http = (await import('node:http')).default;
+const {createRequire} = await import('node:module');
+const requireFromScript = createRequire(${scriptLocation});
+const [loader, fixturePath, domParserFlag] = process.argv.slice(2);
+
+const warnings = [];
+console.warn = (...args) => warnings.push(args.map(String).join(' '));
+delete globalThis.fetch;
+
+const fixtureBytes = fs.readFileSync(fixturePath);
+const server = http.createServer((request, response) => {
+    response.writeHead(200, {'content-length': fixtureBytes.length});
+    response.end(fixtureBytes);
+});
+await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+
+const exifReader = loader === 'src'
+    ? (await import('exifreader/src/exif-reader.js')).default
+    : requireFromScript('exifreader');
+const options = {expanded: true};
+if (domParserFlag === '${WITH_DOM_PARSER}') {
+    const {DOMParser, onErrorStopParsing} = requireFromScript('@xmldom/xmldom');
+    options.domParser = new DOMParser({onError: onErrorStopParsing});
+}
+
+async function summarizeLoad(source) {
+    try {
+        const tags = await exifReader.load(source, options);
+        const subLocation = tags.iptc && tags.iptc['Sub-location'];
+        return {
+            subLocation: subLocation && subLocation.description,
+            xmpKeys: Object.keys(tags.xmp || {})
+        };
+    } catch (error) {
+        return {error: error.message};
+    }
+}
+
+const results = {
+    path: await summarizeLoad(fixturePath),
+    url: await summarizeLoad('http://127.0.0.1:' + server.address().port + '/test-iptc.jpg')
+};
+server.closeAllConnections();
+server.close();
+process.stdout.write(JSON.stringify({...results, warnings}));
+`;
+    return format === 'cjs' ? `(async () => {${body}})();\n` : body;
+}
+
 function summarizeSource() {
     return `
 function summarize(value) {
@@ -354,4 +541,27 @@ function writeTsconfig(consumerDir, moduleResolution, module) {
 
 function toForwardSlashes(filePath) {
     return filePath.replace(/\\/g, '/');
+}
+
+function bundleWithWebpack({context, target, entry, outputPath, resolveOptions = {}}) {
+    const compiler = webpack({
+        context,
+        mode: 'production',
+        target,
+        entry,
+        output: {path: outputPath},
+        optimization: {minimize: false},
+        resolve: resolveOptions
+    });
+    return new Promise((resolve, reject) => {
+        compiler.run((runError, stats) => {
+            closeCompiler(compiler).then(() => (runError ? reject(runError) : resolve(stats)), reject);
+        });
+    });
+}
+
+function closeCompiler(compiler) {
+    return new Promise((resolve, reject) => {
+        compiler.close((error) => (error ? reject(error) : resolve()));
+    });
 }

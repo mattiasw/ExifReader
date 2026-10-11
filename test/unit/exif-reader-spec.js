@@ -236,9 +236,11 @@ describe('exif-reader', function () {
                 });
             });
 
-            it('should fail when Node.js\' require is missing', (done) => {
-                delete global.__non_webpack_require__;
-                ExifReader.load(URL).catch(() => done());
+            it('should fail when Node.js\' require is missing', async () => {
+                const error = await loadWithoutNodeModules(URL);
+
+                expect(error).to.be.an('error');
+                expect(error.message).to.equal('Node http support is not available.');
             });
 
             it('should fail when the get request fails', (done) => {
@@ -319,9 +321,11 @@ describe('exif-reader', function () {
                 });
             });
 
-            it('should fail when Node.js\' require is missing', (done) => {
-                delete global.__non_webpack_require__;
-                ExifReader.load(FILENAME).catch(() => done());
+            it('should fail when Node.js\' require is missing', async () => {
+                const error = await loadWithoutNodeModules(FILENAME);
+
+                expect(error).to.be.an('error');
+                expect(error.message).to.equal('Node file system support is not available.');
             });
 
             it('should fail if opening a file fails', (done) => {
@@ -4194,6 +4198,20 @@ describe('exif-reader', function () {
         });
     });
 });
+
+async function loadWithoutNodeModules(fileOrUrl) {
+    const restoreGlobals = swapProperties(globalThis, {__non_webpack_require__: undefined});
+    const restoreProcess = swapProperties(process, {getBuiltinModule: undefined, mainModule: undefined});
+    try {
+        await ExifReader.load(fileOrUrl);
+        return undefined;
+    } catch (error) {
+        return error;
+    } finally {
+        restoreProcess();
+        restoreGlobals();
+    }
+}
 
 // Shaped like a Buffer from the `buffer` package: a Uint8Array subclass with
 // the Node.js read methods, which Buffer.isBuffer() does not recognize.
