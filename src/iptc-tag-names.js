@@ -288,7 +288,7 @@ export default {
             },
             'description': (value) => {
                 if (value.length === 2) {
-                    const intValue = (value[0] << 8) + value[1];
+                    const intValue = getPreviewNumber(value);
                     if (intValue === 0) {
                         return 'No ObjectData';
                     } else if (intValue === 1) {
@@ -360,28 +360,29 @@ export default {
             'description': (value, tags) => {
                 // Format ID, Version ID, Version Description
                 const formatVersions = {
-                    '00': {'00': '1'},
-                    '01': {'01': '1', '02': '2', '03': '3', '04': '4'},
-                    '02': {'04': '4'},
-                    '03': {'01': '5.0', '02': '6.0'},
-                    '04': {'01': '1.40'},
-                    '05': {'01': '2'},
-                    '06': {'01': '1'},
-                    '11': {'01': '1.02'},
-                    '20': {'01': '3.1', '02': '4.0', '03': '5.0', '04': '5.5'},
-                    '21': {'02': '2.0'}
+                    0: {0: '1'},
+                    1: {1: '1', 2: '2', 3: '3', 4: '4'},
+                    2: {4: '4'},
+                    3: {1: '5.0', 2: '6.0'},
+                    4: {1: '1.40'},
+                    5: {1: '2'},
+                    6: {1: '1'},
+                    11: {1: '1.02'},
+                    20: {1: '3.1', 2: '4.0', 3: '5.0', 4: '5.5'},
+                    21: {2: '2.0'}
                 };
-                const stringValue = getStringValue(value);
+                const version = getPreviewNumber(value);
 
                 if (tags['ObjectData Preview File Format']) {
-                    const objectDataPreviewFileFormat = getStringValue(tags['ObjectData Preview File Format'].value);
-                    if (formatVersions[objectDataPreviewFileFormat]
-                        && formatVersions[objectDataPreviewFileFormat][stringValue]) {
-                        return formatVersions[objectDataPreviewFileFormat][stringValue];
+                    const format = getPreviewNumber(tags['ObjectData Preview File Format'].value);
+                    if (Object.prototype.hasOwnProperty.call(formatVersions, format)
+                        && Object.prototype.hasOwnProperty.call(formatVersions[format], version)) {
+                        return formatVersions[format][version];
                     }
                 }
 
-                return stringValue;
+                const versionNumber = getBinaryNumber(value);
+                return versionNumber === null ? getStringValue(value) : String(versionNumber);
             }
         },
         0x02ca: 'ObjectData Preview Data',
@@ -478,4 +479,21 @@ function getEncodingName(value) {
         return 'ISO-8859-8';
     }
     return 'Unknown';
+}
+
+// IIM stores 2:200 and 2:201 as 2-octet binary; two ASCII digits are the text form.
+function getPreviewNumber(value) {
+    const number = getBinaryNumber(value);
+    return number === null ? parseInt(getStringValue(value), 10) : number;
+}
+
+function getBinaryNumber(value) {
+    if (value.length !== 2 || (isAsciiDigit(value[0]) && isAsciiDigit(value[1]))) {
+        return null;
+    }
+    return (value[0] << 8) + value[1];
+}
+
+function isAsciiDigit(octet) {
+    return octet >= 0x30 && octet <= 0x39;
 }

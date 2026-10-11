@@ -32,6 +32,10 @@ const TYPE_IINF = 0x69696e66;
 const TYPE_INFE = 0x696e6665;
 const TYPE_IPCO = 0x6970636f;
 const TYPE_COLR = 0x636f6c72;
+const TYPE_PITM = 0x7069746d;
+const TYPE_IPMA = 0x69706d61;
+const TYPE_ISPE = 0x69737065;
+const TYPE_PIXI = 0x70697869;
 
 // const EXTENSION_TYPE_FDEL = 0x6664656c;
 
@@ -45,6 +49,12 @@ const MAX_INFE_STRING_LENGTH = 65536;
 
 export const BOX_TYPE_OFFSET = 4;
 export const BOX_MIN_LENGTH = 8;
+
+const FULL_BOX_VERSION_AND_FLAGS_SIZE = 4;
+
+// Every ipco child the parser does not know shares this entry, so an ipco
+// packed with them costs one array slot per child, not one object.
+const UNKNOWN_PROPERTY = {type: undefined};
 
 /**
  * Parses a ISO-BMFF box from the provided data view starting at the given offset.
@@ -67,7 +77,8 @@ export function parseBox(dataView, offset, containerEnd = dataView.byteLength) {
     // unparseable (return undefined) rather than throw a RangeError to the caller.
     try {
         const {length, contentOffset} = getBoxLength(dataView, offset);
-        if (length < BOX_MIN_LENGTH) {
+        // An extended-size box has a 16-byte header, not 8.
+        if (length < contentOffset - offset || contentOffset > containerEnd) {
             return undefined;
         }
 
@@ -109,11 +120,20 @@ export function parseBox(dataView, offset, containerEnd = dataView.byteLength) {
         if (type === TYPE_INFE) {
             return parseItemInformationEntryBox(dataView, offset, version, contentOffset + VERSION_SIZE, length, containerEnd);
         }
+        if (type === TYPE_PITM) {
+            return parsePrimaryItemBox(dataView, offset, version, contentOffset, length, containerEnd);
+        }
+        if (type === TYPE_IPMA) {
+            return parseItemPropertyAssociationBox(dataView, offset, version, contentOffset, length, containerEnd);
+        }
+        if (type === TYPE_ISPE) {
+            return parseImageSpatialExtentsBox(dataView, offset, contentOffset, length, containerEnd);
+        }
+        if (type === TYPE_PIXI) {
+            return parsePixelInformationBox(dataView, offset, version, contentOffset, length, containerEnd);
+        }
 
-        return {
-            type: undefined,
-            length
-        };
+        return getUnknownBox(length);
     } catch (error) {
         return undefined;
     }
@@ -210,6 +230,12 @@ function hasEmptyHighBits(dataView, offset) {
  *     rather than the source dataView.
  * @property {DataView=} xmpDataView Synthetic buffer when an XMP item
  *     spans multiple extents. xmpChunks then references this view.
+ * @property {number=} imageDimensionsOffset Offset of the primary item's
+ *     dimensions, the width and height fields of its ispe property; absent
+ *     when it cannot be resolved.
+ * @property {number=} pixelInformationOffset Offset of the num_channels
+ *     field of the primary item's pixi property; the per-channel bit depths
+ *     follow it. Absent when it cannot be resolved.
  */
 
 /**
@@ -220,13 +246,49 @@ function hasEmptyHighBits(dataView, offset) {
  *     receives one block per iloc extent (Exif/XMP) at the resolved file
  *     offset (cm 0 direct, cm 1 via the idat box) plus the ICC profile
  *     bytes. cm 2 (item_offset) items are skipped.
- * @returns {Offsets} The TIFF header offset, XMP chunks, ICC chunks, and
- *     whether any were found.
+ * @returns {Offsets} The TIFF header offset, XMP chunks, ICC chunks,
+ *     whether any of those were found, and the primary image's dimensions
+ *     and pixel information offsets.
  */
 export function findOffsets(dataView, metadataBlocks) {
+    const metaBox = findMetaBox(dataView);
+    const offsets = findMetadataOffsets(dataView, metaBox, metadataBlocks);
+    const {imageDimensionsOffset, pixelInformationOffset} = findPrimaryItemPropertyOffsets(dataView, metaBox);
+    if (imageDimensionsOffset !== undefined) {
+        offsets.imageDimensionsOffset = imageDimensionsOffset;
+    }
+    if (pixelInformationOffset !== undefined) {
+        offsets.pixelInformationOffset = pixelInformationOffset;
+    }
+    return offsets;
+}
+
+function findMetaBox(dataView) {
+    const BOX_LENGTH_SIZE = 4;
+    const BOX_TYPE_SIZE = 4;
+
+    let offset = 0;
+
+    while (offset + BOX_LENGTH_SIZE + BOX_TYPE_SIZE <= dataView.byteLength) {
+        const box = parseBox(dataView, offset);
+
+        if (box === undefined) {
+            break;
+        }
+
+        if (box.type === 'meta') {
+            return box;
+        }
+
+        offset += box.length;
+    }
+
+    return undefined;
+}
+
+function findMetadataOffsets(dataView, metaBox, metadataBlocks) {
     if (Constants.USE_EXIF || Constants.USE_XMP || Constants.USE_ICC) {
         const offsets = {};
-        const metaBox = findMetaBox(dataView);
 
         if (!metaBox) {
             return {hasAppMarkers: false};
@@ -260,29 +322,6 @@ export function findOffsets(dataView, metadataBlocks) {
     }
 
     return {};
-}
-
-function findMetaBox(dataView) {
-    const BOX_LENGTH_SIZE = 4;
-    const BOX_TYPE_SIZE = 4;
-
-    let offset = 0;
-
-    while (offset + BOX_LENGTH_SIZE + BOX_TYPE_SIZE <= dataView.byteLength) {
-        const box = parseBox(dataView, offset);
-
-        if (box === undefined) {
-            break;
-        }
-
-        if (box.type === 'meta') {
-            return box;
-        }
-
-        offset += box.length;
-    }
-
-    return undefined;
 }
 
 function warnIfUnsupportedFieldSize(metaBox) {
@@ -453,8 +492,7 @@ function findIccChunks(metaBox, metadataBlocks) {
     // This finds the first ICC chunk, but there could be one for each image
     // that is embedded in the file. If it turns out we need to match the ICC
     // chunk to a specific image, we need to check the "ipma" in addition to the
-    // "ipco" (currently we only extract the "ipco" so more code would be
-    // needed).
+    // "ipco", as findItemAssociations does for the primary item's ispe.
     try {
         const icc = metaBox.subBoxes.find((box) => box.type === 'iprp')
             .subBoxes.find((box) => box.type === 'ipco')
@@ -466,6 +504,95 @@ function findIccChunks(metaBox, metadataBlocks) {
         }
     } catch (error) {
         // Let it pass through.
+    }
+    return undefined;
+}
+
+// Resolves meta > pitm (the primary item) through meta > iprp > ipma (its
+// property indexes) to the ispe and pixi among meta > iprp > ipco's children.
+function findPrimaryItemPropertyOffsets(dataView, metaBox) {
+    // Every read below is bounded at parse time; the catch keeps a malformed
+    // box from failing the whole file when that bounding is ever wrong.
+    try {
+        if (!metaBox) {
+            return {};
+        }
+        const pitm = metaBox.subBoxes.find((box) => box.type === 'pitm');
+        const iprp = metaBox.subBoxes.find((box) => box.type === 'iprp');
+        if (!pitm || !iprp) {
+            return {};
+        }
+        const ipco = iprp.subBoxes.find((box) => box.type === 'ipco');
+        if (!ipco) {
+            return {};
+        }
+        const propertyIndexes = findItemPropertyIndexes(dataView, iprp.subBoxes, pitm.itemId);
+        if (!propertyIndexes) {
+            return {};
+        }
+        const ispe = findProperty(propertyIndexes, ipco.properties, 'ispe');
+        const pixi = findProperty(propertyIndexes, ipco.properties, 'pixi');
+        return {
+            imageDimensionsOffset: ispe && ispe.dimensionsOffset,
+            pixelInformationOffset: pixi && pixi.channelCountOffset,
+        };
+    } catch (error) {
+        return {};
+    }
+}
+
+function findItemPropertyIndexes(dataView, iprpSubBoxes, itemId) {
+    for (let i = 0; i < iprpSubBoxes.length; i++) {
+        if (iprpSubBoxes[i].type === 'ipma') {
+            const propertyIndexes = findItemPropertyIndexesInIpma(dataView, iprpSubBoxes[i], itemId);
+            if (propertyIndexes) {
+                return propertyIndexes;
+            }
+        }
+    }
+    return undefined;
+}
+
+// The scan is bounded by the box's bytes, not by the counts it declares.
+function findItemPropertyIndexesInIpma(dataView, ipma, itemId) {
+    const ENTRY_COUNT_SIZE = 4;
+    const ASSOCIATION_COUNT_SIZE = 1;
+    const itemIdSize = ipma.version === 0 ? 2 : 4;
+    const associationSize = (ipma.flags & 1) === 1 ? 2 : 1;
+
+    const entryCount = dataView.getUint32(ipma.entryCountOffset);
+    let offset = ipma.entryCountOffset + ENTRY_COUNT_SIZE;
+    for (let i = 0; i < entryCount && offset + itemIdSize + ASSOCIATION_COUNT_SIZE <= ipma.end; i++) {
+        const entryItemId = itemIdSize === 2 ? dataView.getUint16(offset) : dataView.getUint32(offset);
+        const count = dataView.getUint8(offset + itemIdSize);
+        offset += itemIdSize + ASSOCIATION_COUNT_SIZE;
+        if (entryItemId === itemId) {
+            const countWithinBox = Math.min(count, Math.floor((ipma.end - offset) / associationSize));
+            return readPropertyIndexes(dataView, offset, countWithinBox, associationSize);
+        }
+        offset += count * associationSize;
+    }
+    return undefined;
+}
+
+function readPropertyIndexes(dataView, offset, count, associationSize) {
+    // The top bit marks the property as essential; the rest is the 1-based index, 0 meaning no property.
+    const indexMask = associationSize === 2 ? 0x7fff : 0x7f;
+    const propertyIndexes = [];
+    for (let i = 0; i < count; i++) {
+        const associationOffset = offset + i * associationSize;
+        const association = associationSize === 2 ? dataView.getUint16(associationOffset) : dataView.getUint8(associationOffset);
+        propertyIndexes.push(association & indexMask);
+    }
+    return propertyIndexes;
+}
+
+function findProperty(propertyIndexes, properties, type) {
+    for (let i = 0; i < propertyIndexes.length; i++) {
+        const property = properties[propertyIndexes[i] - 1];
+        if (property !== undefined && property.type === type) {
+            return property;
+        }
     }
     return undefined;
 }
@@ -492,9 +619,19 @@ function parseItemPropertiesBox(dataView, startOffset, contentOffset, length, co
 function parseItemPropertyContainerBox(dataView, startOffset, contentOffset, length, containerEnd) {
     return {
         type: 'ipco',
-        properties: parseSubBoxes(dataView, contentOffset, length - (contentOffset - startOffset), containerEnd),
+        properties: parseProperties(dataView, contentOffset, length - (contentOffset - startOffset), containerEnd),
         length,
     };
+}
+
+// ipma refers to a property by its 1-based position among all ipco children,
+// so every child keeps its slot, known or not.
+function parseProperties(dataView, offset, length, containerEnd) {
+    const properties = [];
+    walkSubBoxes(dataView, offset, length, containerEnd, (box) => {
+        properties.push(box.type !== undefined ? box : UNKNOWN_PROPERTY);
+    });
+    return properties;
 }
 
 function parseColorInformationBox(dataView, contentOffset, length) {
@@ -542,6 +679,85 @@ function parseItemDataBox(contentOffset, length) {
     };
 }
 
+function parsePrimaryItemBox(dataView, startOffset, version, contentOffset, length, containerEnd) {
+    const itemIdOffset = contentOffset + FULL_BOX_VERSION_AND_FLAGS_SIZE;
+    const itemIdSize = version === 0 ? 2 : 4;
+    if (itemIdOffset + itemIdSize > getBoxEnd(dataView, startOffset, length, containerEnd)) {
+        return getUnknownBox(length);
+    }
+
+    return {
+        type: 'pitm',
+        itemId: version === 0 ? dataView.getUint16(itemIdOffset) : dataView.getUint32(itemIdOffset),
+        length
+    };
+}
+
+// Only the header is read here; the entries are scanned once the primary item
+// is known, so nothing is built per entry.
+function parseItemPropertyAssociationBox(dataView, startOffset, version, contentOffset, length, containerEnd) {
+    const ENTRY_COUNT_SIZE = 4;
+    const FLAGS_MASK = 0xffffff;
+    const entryCountOffset = contentOffset + FULL_BOX_VERSION_AND_FLAGS_SIZE;
+    const end = getBoxEnd(dataView, startOffset, length, containerEnd);
+    if (entryCountOffset + ENTRY_COUNT_SIZE > end) {
+        return getUnknownBox(length);
+    }
+
+    return {
+        type: 'ipma',
+        version,
+        flags: dataView.getUint32(contentOffset) & FLAGS_MASK,
+        entryCountOffset,
+        end,
+        length
+    };
+}
+
+function parseImageSpatialExtentsBox(dataView, startOffset, contentOffset, length, containerEnd) {
+    const DIMENSIONS_SIZE = 8;
+    const dimensionsOffset = contentOffset + FULL_BOX_VERSION_AND_FLAGS_SIZE;
+    if (dimensionsOffset + DIMENSIONS_SIZE > getBoxEnd(dataView, startOffset, length, containerEnd)) {
+        return getUnknownBox(length);
+    }
+
+    return {
+        type: 'ispe',
+        dimensionsOffset,
+        length
+    };
+}
+
+function parsePixelInformationBox(dataView, startOffset, version, contentOffset, length, containerEnd) {
+    const CHANNEL_COUNT_SIZE = 1;
+    const channelCountOffset = contentOffset + FULL_BOX_VERSION_AND_FLAGS_SIZE;
+    const end = getBoxEnd(dataView, startOffset, length, containerEnd);
+    if (version !== 0 || channelCountOffset + CHANNEL_COUNT_SIZE > end) {
+        return getUnknownBox(length);
+    }
+    const channelCount = dataView.getUint8(channelCountOffset);
+    if (channelCountOffset + CHANNEL_COUNT_SIZE + channelCount > end) {
+        return getUnknownBox(length);
+    }
+
+    return {
+        type: 'pixi',
+        channelCountOffset,
+        length
+    };
+}
+
+function getBoxEnd(dataView, startOffset, length, containerEnd) {
+    return Math.min(startOffset + length, containerEnd, dataView.byteLength);
+}
+
+function getUnknownBox(length) {
+    return {
+        type: undefined,
+        length
+    };
+}
+
 /**
  * @param {DataView} dataView
  * @param {number} offset The offset to start parsing from.
@@ -555,13 +771,22 @@ function parseSubBoxes(dataView, offset, length, containerEnd) {
         ITEM_INFO_TYPE_MIME,
     ];
 
+    const subBoxes = [];
+    walkSubBoxes(dataView, offset, length, containerEnd, (box) => {
+        if (box.type !== undefined && (box.itemType === undefined || ACCEPTED_ITEM_INFO_TYPES.indexOf(box.itemType) !== -1)) {
+            subBoxes.push(box);
+        }
+    });
+    return subBoxes;
+}
+
+function walkSubBoxes(dataView, offset, length, containerEnd, onBox) {
     // A sub box may declare any length it likes, so bound it by the bytes this
     // container has, and by the ones that are really there when the file is
     // truncated. An overrunning box still gets parsed for what fits, which is
     // what keeps a cut-off file returning the metadata it does contain.
     const subBoxesEnd = Math.min(offset + length, containerEnd);
 
-    const subBoxes = [];
     let currentOffset = offset;
     // Requiring room for a whole header keeps a box from taking its type from
     // the bytes after the container, which invents one out of two boxes.
@@ -570,12 +795,9 @@ function parseSubBoxes(dataView, offset, length, containerEnd) {
         if (box === undefined) {
             break;
         }
-        if (box.type !== undefined && (box.itemType === undefined || ACCEPTED_ITEM_INFO_TYPES.indexOf(box.itemType) !== -1)) {
-            subBoxes.push(box);
-        }
+        onBox(box);
         currentOffset += box.length;
     }
-    return subBoxes;
 }
 
 function parseItemInformationBox(dataView, startOffset, version, contentOffset, length, containerEnd) {

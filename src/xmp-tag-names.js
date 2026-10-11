@@ -44,7 +44,7 @@ export default {
     'exif:ColorSpace': (value) => TagNamesCommon.ColorSpace(parseNumber(value)),
     'exif:ComponentsConfiguration'(value, description) {
         if (/^\d, \d, \d, \d$/.test(description)) {
-            const numbers = description.split(', ').map((number) => number.charCodeAt(0));
+            const numbers = description.split(', ').map((number) => parseInt(number, 10));
             return TagNamesCommon.ComponentsConfiguration(numbers);
         }
         return description;

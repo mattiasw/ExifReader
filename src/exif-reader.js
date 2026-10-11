@@ -21,6 +21,7 @@ import {getValueBudget, addDecompressedValueAllowance, takeEmbeddedExifThumbnail
 import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
 import JxlFileTags from './jxl-file-tags.js';
+import IsoBmffFileTags from './iso-bmff-file-tags.js';
 import JfifTags from './jfif-tags.js';
 import IptcTags from './iptc-tags.js';
 import XmpTags from './xmp-tags.js';
@@ -135,6 +136,8 @@ export function loadView(
         brobExifChunk,
         brobXmpChunk,
         jxlCodestreamOffset,
+        imageDimensionsOffset,
+        pixelInformationOffset,
         metadataBlocks,
         metadataTruncated,
         exifDataView,
@@ -579,6 +582,24 @@ export function loadView(
         }
     }
 
+    if (
+        (Constants.USE_HEIC || Constants.USE_AVIF)
+        && (imageDimensionsOffset !== undefined || pixelInformationOffset !== undefined)
+        && tagFilter.shouldParseGroup('file')
+    ) {
+        const readTags = IsoBmffFileTags.read(dataView, imageDimensionsOffset, pixelInformationOffset);
+        const parsedIsoBmffFileTags = filterTagsForParse('file', readTags, tagFilter);
+        parsedGroups.file = parsedIsoBmffFileTags;
+
+        if (tagFilter.shouldReturnGroup('file')) {
+            mergeSteps.push({
+                type: 'mergeGroupAssign',
+                groupKey: 'file',
+                parsedTags: parsedIsoBmffFileTags,
+            });
+        }
+    }
+
     if (Constants.USE_EXIF) {
         mergeSteps.push({type: 'gps'});
     }
@@ -827,9 +848,8 @@ function isDataViewLike(dataView) {
 }
 
 function getBrobDataView(dataView, brobChunk) {
-    // The box length is untrusted and comes through negative for a box shorter
-    // than its header, so bound the view by the bytes present. The JXL header
-    // parser never reports a dataOffset past the end of the view.
+    // The box length is untrusted, so bound the view by the bytes present. The
+    // JXL header parser never reports a dataOffset past the end of the view.
     const length = Math.max(0, Math.min(brobChunk.length, dataView.byteLength - brobChunk.dataOffset));
     if (isDataViewLike(dataView)) {
         return new DataView(dataView.buffer, dataView.byteOffset + brobChunk.dataOffset, length);
@@ -961,6 +981,8 @@ function hasPotentialMetaData({
     vp8xChunkOffset,
     gifHeaderOffset,
     jxlCodestreamOffset,
+    imageDimensionsOffset,
+    pixelInformationOffset,
 }) {
     return !!fileType
         || (
@@ -1018,6 +1040,10 @@ function hasPotentialMetaData({
         || (
             Constants.USE_JXL
             && jxlCodestreamOffset !== undefined
+        )
+        || (
+            (Constants.USE_HEIC || Constants.USE_AVIF)
+            && (imageDimensionsOffset !== undefined || pixelInformationOffset !== undefined)
         );
 }
 

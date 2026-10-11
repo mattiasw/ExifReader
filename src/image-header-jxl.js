@@ -25,6 +25,7 @@ const TYPE_JXLC = 0x6a786c63;
 const TYPE_JXLP = 0x6a786c70;
 const JXLP_SEQUENCE_NUMBER_SIZE = 4;
 const BROB_ORIGINAL_TYPE_SIZE = 4;
+const EXIF_TIFF_HEADER_OFFSET_SIZE = 4;
 
 /**
  * Checks if the provided data view represents a JPEG XL file (container or
@@ -98,18 +99,17 @@ function findJxlOffsets(dataView, metadataBlocks) {
 
     while (offset + BOX_MIN_LENGTH <= dataView.byteLength) {
         const {length, contentOffset} = getBoxLength(dataView, offset);
-        if (length < BOX_MIN_LENGTH) {
+        if (length < contentOffset - offset) {
             break;
         }
+        const contentEnd = Math.min(offset + length, dataView.byteLength);
 
         const boxType = dataView.getUint32(offset + BOX_TYPE_OFFSET);
         let blockType;
 
         if (Constants.USE_EXIF && boxType === TYPE_EXIF) {
-            try {
+            if (contentOffset + EXIF_TIFF_HEADER_OFFSET_SIZE <= contentEnd) {
                 tiffHeaderOffset = getTiffHeaderOffset(dataView, contentOffset);
-            } catch (_error) {
-                // Truncated Exif data.
             }
             blockType = 'exif';
         }
@@ -129,7 +129,7 @@ function findJxlOffsets(dataView, metadataBlocks) {
         }
 
         if (boxType === TYPE_JXLP && jxlCodestreamOffset === undefined
-            && contentOffset + JXLP_SEQUENCE_NUMBER_SIZE <= dataView.byteLength) {
+            && contentOffset + JXLP_SEQUENCE_NUMBER_SIZE <= contentEnd) {
             const sequenceNumber = dataView.getUint32(contentOffset) & 0x7FFFFFFF;
             if (sequenceNumber === 0) {
                 jxlCodestreamOffset = contentOffset + JXLP_SEQUENCE_NUMBER_SIZE;
@@ -137,7 +137,7 @@ function findJxlOffsets(dataView, metadataBlocks) {
             }
         }
 
-        if (boxType === TYPE_BROB && contentOffset + BROB_ORIGINAL_TYPE_SIZE <= dataView.byteLength) {
+        if (boxType === TYPE_BROB && contentOffset + BROB_ORIGINAL_TYPE_SIZE <= contentEnd) {
             const originalType = dataView.getUint32(contentOffset);
             const compressedDataOffset = contentOffset + BROB_ORIGINAL_TYPE_SIZE;
             const compressedDataLength = length - (compressedDataOffset - offset);
