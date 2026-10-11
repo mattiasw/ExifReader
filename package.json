@@ -21,6 +21,23 @@
     "webpack.config.js"
   ],
   "types": "./exif-reader.d.ts",
+  "exports": {
+    ".": {
+      "types": "./exif-reader.d.ts",
+      "browser": "./src/exif-reader.js",
+      "node": "./dist/exif-reader.js",
+      "module": "./src/exif-reader.js",
+      "import": "./dist/exif-reader.js",
+      "require": "./dist/exif-reader.js",
+      "default": "./dist/exif-reader.js"
+    },
+    "./package.json": "./package.json",
+    "./src/exif-reader": "./src/exif-reader.js",
+    "./dist/exif-reader": "./dist/exif-reader.js",
+    "./src/composable/*": null,
+    "./src/*": "./src/*",
+    "./dist/*": "./dist/*"
+  },
   "bin": {
     "exifreader": "bin/cli.js"
   },
