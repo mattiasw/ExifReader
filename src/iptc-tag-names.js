@@ -375,8 +375,8 @@ export default {
 
                 if (tags['ObjectData Preview File Format']) {
                     const objectDataPreviewFileFormat = getStringValue(tags['ObjectData Preview File Format'].value);
-                    if (formatVersions[objectDataPreviewFileFormat]
-                        && formatVersions[objectDataPreviewFileFormat][stringValue]) {
+                    if (Object.prototype.hasOwnProperty.call(formatVersions, objectDataPreviewFileFormat)
+                        && Object.prototype.hasOwnProperty.call(formatVersions[objectDataPreviewFileFormat], stringValue)) {
                         return formatVersions[objectDataPreviewFileFormat][stringValue];
                     }
                 }

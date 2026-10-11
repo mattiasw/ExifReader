@@ -484,6 +484,23 @@ describe('iptc-tag-names', () => {
         expect(IptcTagNames[0x02c9].description(getCharacterArray('47'), {})).to.equal('47');
     });
 
+    it('should describe an ObjectData Preview File Format Version naming an Object.prototype member by its text', () => {
+        const formatVersions = [
+            ['01', 'constructor'],
+            ['01', '__proto__'],
+            ['__proto__', 'constructor'],
+            ['constructor', 'hasOwnProperty']
+        ];
+        for (const [format, version] of formatVersions) {
+            const tags = {
+                'ObjectData Preview File Format': {
+                    value: getCharacterArray(format)
+                }
+            };
+            expect(IptcTagNames[0x02c9].description(getCharacterArray(version), tags)).to.equal(version);
+        }
+    });
+
     it('should have tag ObjectData Preview Data', () => {
         expect(IptcTagNames[0x02ca]).to.equal('ObjectData Preview Data');
     });
