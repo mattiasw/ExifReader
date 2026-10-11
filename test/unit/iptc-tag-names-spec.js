@@ -449,6 +449,11 @@ describe('iptc-tag-names', () => {
         }
     });
 
+    it('should describe an ObjectData Preview File Format written as two ASCII digits', () => {
+        expect(IptcTagNames[0x02c8].description(getCharacterArray('11'))).to.equal('JPEG File Interchange (JFIF)');
+        expect(IptcTagNames[0x02c8].description(getCharacterArray('ab'))).to.equal('Unknown format 24930');
+    });
+
     it('should report correct name and description for ObjectData Preview File Format Version', () => {
         expect(IptcTagNames[0x02c9].name).to.equal('ObjectData Preview File Format Version');
         const formatVersions = [
@@ -478,6 +483,59 @@ describe('iptc-tag-names', () => {
             };
             expect(IptcTagNames[0x02c9].description(getCharacterArray(version[1]), tags)).to.equal(version[2]);
         }
+    });
+
+    it('should describe an ObjectData Preview File Format Version from its 2-octet binary values', () => {
+        const formatVersions = [
+            [0, 0, '1'],
+            [1, 1, '1'],
+            [1, 2, '2'],
+            [1, 3, '3'],
+            [1, 4, '4'],
+            [2, 4, '4'],
+            [3, 1, '5.0'],
+            [3, 2, '6.0'],
+            [4, 1, '1.40'],
+            [5, 1, '2'],
+            [6, 1, '1'],
+            [11, 1, '1.02'],
+            [20, 1, '3.1'],
+            [20, 2, '4.0'],
+            [20, 3, '5.0'],
+            [20, 4, '5.5'],
+            [21, 2, '2.0']
+        ];
+        for (const [format, version, description] of formatVersions) {
+            const tags = {
+                'ObjectData Preview File Format': {
+                    value: [format >> 8, format & 0xff]
+                }
+            };
+            expect(IptcTagNames[0x02c9].description([version >> 8, version & 0xff], tags)).to.equal(description);
+        }
+    });
+
+    it('should describe an ObjectData Preview File Format Version when only one of it and its format is binary', () => {
+        const textFormat = {'ObjectData Preview File Format': {value: getCharacterArray('11')}};
+        const binaryFormat = {'ObjectData Preview File Format': {value: [0, 11]}};
+        expect(IptcTagNames[0x02c9].description([0, 1], textFormat)).to.equal('1.02');
+        expect(IptcTagNames[0x02c9].description(getCharacterArray('01'), binaryFormat)).to.equal('1.02');
+    });
+
+    it('should describe an unknown binary ObjectData Preview File Format Version by its number', () => {
+        const binaryFormat = {'ObjectData Preview File Format': {value: [0, 11]}};
+        expect(IptcTagNames[0x02c9].description([0, 47], {})).to.equal('47');
+        expect(IptcTagNames[0x02c9].description([0, 9], binaryFormat)).to.equal('9');
+        expect(IptcTagNames[0x02c9].description([1, 0], {})).to.equal('256');
+    });
+
+    it('should read a 2-octet ObjectData Preview File Format Version with only one ASCII digit octet as binary', () => {
+        expect(IptcTagNames[0x02c9].description([0, 0x31], {})).to.equal('49');
+        expect(IptcTagNames[0x02c9].description([0x31, 0], {})).to.equal('12544');
+    });
+
+    it('should read an unknown ObjectData Preview File Format Version of two ASCII digits as text', () => {
+        expect(IptcTagNames[0x02c9].description(getCharacterArray('09'), {})).to.equal('09');
     });
 
     it('should report correct description for unknown ObjectData Preview File Format Version', () => {
