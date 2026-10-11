@@ -847,9 +847,8 @@ function isDataViewLike(dataView) {
 }
 
 function getBrobDataView(dataView, brobChunk) {
-    // The box length is untrusted and comes through negative for a box shorter
-    // than its header, so bound the view by the bytes present. The JXL header
-    // parser never reports a dataOffset past the end of the view.
+    // The box length is untrusted, so bound the view by the bytes present. The
+    // JXL header parser never reports a dataOffset past the end of the view.
     const length = Math.max(0, Math.min(brobChunk.length, dataView.byteLength - brobChunk.dataOffset));
     if (isDataViewLike(dataView)) {
         return new DataView(dataView.buffer, dataView.byteOffset + brobChunk.dataOffset, length);
