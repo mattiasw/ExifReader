@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# Every job only checks out and tests; nothing writes to the repository.
+permissions:
+  contents: read
+
 jobs:
   build:
     # The active LTS lines. The integration and build test suites have a
@@ -62,6 +66,46 @@ jobs:
       run: |
         PATH=$(echo "$PATH" | sed -e 's/:\/usr\/local\/bin://'):/usr/local/bin/npm:/usr/local/bin/node
         npm run test:build:custom
+  runtime-bun:
+    # Resolves and loads the packed package under Bun. The consumer gets the
+    # tarball extracted, not installed, like test/build/packaging.js does.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - name: Use Node.js 24.x
+      uses: actions/setup-node@v6
+      with:
+        node-version: 24.x
+    - name: Extract the packed package into a consumer
+      run: |
+        npm pack --ignore-scripts
+        mkdir -p "$RUNNER_TEMP/consumer/node_modules"
+        tar -xzf exifreader-*.tgz -C "$RUNNER_TEMP/consumer/node_modules"
+        mv "$RUNNER_TEMP/consumer/node_modules/package" "$RUNNER_TEMP/consumer/node_modules/exifreader"
+        echo '{"private": true}' > "$RUNNER_TEMP/consumer/package.json"
+        cp test/packaging/runtime-smoke.mjs "$RUNNER_TEMP/consumer/"
+    - uses: oven-sh/setup-bun@v2
+    - run: bun runtime-smoke.mjs "$GITHUB_WORKSPACE/test/fixtures/images/test.jpg"
+      working-directory: ${{ runner.temp }}/consumer
+  runtime-deno:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+    - name: Use Node.js 24.x
+      uses: actions/setup-node@v6
+      with:
+        node-version: 24.x
+    - name: Extract the packed package into a consumer
+      run: |
+        npm pack --ignore-scripts
+        mkdir -p "$RUNNER_TEMP/consumer/node_modules"
+        tar -xzf exifreader-*.tgz -C "$RUNNER_TEMP/consumer/node_modules"
+        mv "$RUNNER_TEMP/consumer/node_modules/package" "$RUNNER_TEMP/consumer/node_modules/exifreader"
+        echo '{"private": true}' > "$RUNNER_TEMP/consumer/package.json"
+        cp test/packaging/runtime-smoke.mjs "$RUNNER_TEMP/consumer/"
+    - uses: denoland/setup-deno@v2
+    - run: deno run --node-modules-dir=manual --allow-read runtime-smoke.mjs "$GITHUB_WORKSPACE/test/fixtures/images/test.jpg"
+      working-directory: ${{ runner.temp }}/consumer
   package-windows-basic:
     runs-on: windows-latest
     steps:

@@ -70,7 +70,7 @@ export default defineConfig([
         },
     },
     {
-        files: ['test/**/*.js'],
+        files: ['test/**/*.js', 'test/**/*.mjs'],
         languageOptions: {
             ecmaVersion: 2022,
             globals: {
