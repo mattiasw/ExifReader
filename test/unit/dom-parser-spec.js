@@ -5,11 +5,15 @@
 import {createRequire} from 'node:module';
 import {expect} from 'chai';
 import DOMParserModule from '../../src/dom-parser.js';
+import NodeRequire from '../../src/node-require.js';
+import {swapProperties} from './test-utils.js';
 
 describe('dom-parser', function () {
     let originalNonWebpackRequire;
+    let restore;
 
     beforeEach(() => {
+        restore = () => undefined;
         originalNonWebpackRequire = global.__non_webpack_require__;
         global.__non_webpack_require__ = createRequire(import.meta.url);
         this.originalDOMParser = global.DOMParser;
@@ -21,6 +25,7 @@ describe('dom-parser', function () {
     afterEach(() => {
         global.__non_webpack_require__ = originalNonWebpackRequire;
         global.DOMParser = this.originalDOMParser;
+        restore();
     });
 
     it('should return DOMParser if it is globally defined', () => {
@@ -31,6 +36,13 @@ describe('dom-parser', function () {
     it('should return DOMParser from the XMLDOM module if available', () => {
         const parser = DOMParserModule.get();
         expect(typeof parser.parseFromString('<tag>content</tag>', 'application/xml')).to.equal('object');
+    });
+
+    it('should load XMLDOM as an optional package', () => {
+        restore = swapProperties(NodeRequire, {
+            optionalPackage: (name) => (name === '@xmldom/xmldom' ? {DOMParser: MockDOMParser} : undefined)
+        });
+        expect(DOMParserModule.get() instanceof MockDOMParser).to.equal(true);
     });
 
     it('should return undefined if DOMParser was not available', () => {

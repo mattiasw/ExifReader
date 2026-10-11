@@ -70,6 +70,13 @@ export default defineConfig([
         },
     },
     {
+        files: ['src/**/*.js'],
+        rules: {
+            // A free reference makes Parcel 2 and webpack 4 bundle a process polyfill into browser builds.
+            'no-restricted-globals': ['error', 'event', {name: 'process', message: 'Reach process through globalThis.process.'}],
+        },
+    },
+    {
         files: ['test/**/*.js', 'test/**/*.mjs'],
         languageOptions: {
             ecmaVersion: 2022,

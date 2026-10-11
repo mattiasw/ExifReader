@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import NodeRequire from './node-require.js';
+
 export default {
     get
 };
@@ -15,8 +17,7 @@ function get(domParser) {
         return new DOMParser();
     }
     try {
-        // eslint-disable-next-line no-undef
-        const {DOMParser, onErrorStopParsing} = __non_webpack_require__('@xmldom/xmldom');
+        const {DOMParser, onErrorStopParsing} = NodeRequire.optionalPackage('@xmldom/xmldom');
         return new DOMParser({onError: onErrorStopParsing});
     } catch (error) {
         return undefined;

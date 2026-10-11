@@ -43,6 +43,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   module source, as webpack, Vite, Rollup and Parcel already did, where it
   used to pick the UMD file and fail on its `http` and `https` requires.
 
+### Fixed
+
+- Loading a file path or a URL in Node now works when exifreader is in an ES
+  module bundle made by a tool other than webpack (esbuild with
+  `format: 'esm'`, Vite's SSR build with exifreader in `ssr.noExternal`, and
+  the tools built on them), and when the ES module source is loaded directly
+  by Node, Bun or Deno. Before, only the UMD file loaded by Node itself and
+  webpack bundles could do this. Those setups need Node 20.16 or later on the
+  20 line, or 22.3 or later; the UMD file loaded by Node itself keeps working
+  on every supported version. The UMD file finds `@xmldom/xmldom` as before,
+  and bundlers include it when it is installed. Outside webpack the ES module
+  source gets no implicit `@xmldom/xmldom`: for XMP, pass the `domParser`
+  option, see
+  [Parsing XMP tags when not in a DOM environment](https://github.com/mattiasw/ExifReader#parsing-xmp-tags-when-not-in-a-dom-environment).
+
 ## [4.49.0] - 2026-10-11
 
 ### Added

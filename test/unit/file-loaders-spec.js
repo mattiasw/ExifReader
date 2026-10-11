@@ -8,6 +8,7 @@ import http from 'node:http';
 import {createRequire} from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {expect} from 'chai';
 import {
     fetchRange,
@@ -915,6 +916,29 @@ describe('file-loaders', () => {
                 expect(buffer.equals(fileBytes)).to.equal(true);
             });
         }
+    });
+
+    describe('loadFile without the webpack require', () => {
+        const FIXTURE_PATH = fileURLToPath(new URL('../fixtures/images/test-iptc.jpg', import.meta.url));
+
+        let restores;
+
+        beforeEach(() => {
+            restores = [
+                swapProperties(globalThis, {__non_webpack_require__: undefined}),
+                swapProperties(process, {mainModule: undefined})
+            ];
+        });
+
+        afterEach(() => {
+            restores.reverse().forEach((restore) => restore());
+        });
+
+        it('should read a local file through process.getBuiltinModule', async () => {
+            const buffer = await loadFile(FIXTURE_PATH);
+
+            expect(buffer.equals(fs.readFileSync(FIXTURE_PATH))).to.equal(true);
+        });
     });
 
     describe('loadFile with a data URI', () => {
