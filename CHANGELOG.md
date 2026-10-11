@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The package now declares an `exports` map. `exifreader`,
+  `exifreader/package.json`, `exifreader/src/*` and `exifreader/dist/*` resolve
+  as before, including the extension-less `exifreader/src/exif-reader` and
+  `exifreader/dist/exif-reader`, which now also resolve for ES module imports
+  in Node and Deno.
+- With Node, Deno, esbuild and Rollup, any other `src/` path now needs its
+  `.js` extension: `exifreader/src/tags.js` resolves, `exifreader/src/tags` no
+  longer does.
+- `bin/`, `webpack.config.js`, `babel.config.json` and `exif-reader.d.ts` can
+  no longer be imported by bare specifier. Nothing in the package resolves
+  them that way, and the CLI reads them by file path. TypeScript users still
+  get `exif-reader.d.ts` through the `types` condition and field.
+- The map has a `browser` condition that points at the ES module source, so
+  tools that apply the `browser` condition without the `module` condition
+  keep getting it: esbuild with an explicit `conditions` list, which is what
+  Cloudflare's Wrangler runs, bundles the source as before, and Metro
+  resolving for the web platform now gets the source instead of the UMD
+  file, with identical behaviour.
+- The map has a `node` condition that points at the UMD file, so bundlers
+  that target Node (esbuild with `platform: 'node'`, webpack with
+  `target: 'node'`, Bun's bundler with `--target=bun`, and other tools that
+  apply the `node` condition) bundle the same file Node loads. For webpack's
+  default Node configuration and for `bun build --target=bun` this changes
+  the bundled file from the ES module source to the UMD file. It parses
+  images the same way, and it bundles `@xmldom/xmldom` when that is installed
+  instead of loading it from `node_modules` at run time; when it is not
+  installed, webpack reports a missing optional module and the build still
+  works. Like any CommonJS file, the UMD file needs the bundler to support
+  CommonJS: Rollup needs `@rollup/plugin-commonjs`, and Vite's development
+  server needs exifreader left out of `ssr.noExternal`.
+- esbuild bundling `require()` for the browser now builds. It bundles the ES
+  module source, as webpack, Vite, Rollup and Parcel already did, where it
+  used to pick the UMD file and fail on its `http` and `https` requires.
+
 ## [4.49.0] - 2026-10-11
 
 ### Added

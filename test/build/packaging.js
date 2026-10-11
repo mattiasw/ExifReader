@@ -19,6 +19,8 @@ const SPECIFIERS = [
     {specifier: 'exifreader/src/exif-reader.js', file: 'src/exif-reader.js', shape: API_SHAPE},
     {specifier: 'exifreader/dist/exif-reader.js', file: 'dist/exif-reader.js', shape: API_SHAPE}
 ];
+const BLOCKED_SPECIFIERS = ['exifreader/bin/cli.js', 'exifreader/src/composable/core.js'];
+const NOT_EXPORTED_CODE = 'ERR_PACKAGE_PATH_NOT_EXPORTED';
 
 describe('packaging', function () {
     this.timeout(PACK_TIMEOUT_MS);
@@ -82,6 +84,12 @@ describe('packaging', function () {
             });
         });
 
+        BLOCKED_SPECIFIERS.forEach((specifier) => {
+            it(`refuses ${specifier} as not exported`, () => {
+                expect(results.blocked[specifier]).to.deep.equal({error: NOT_EXPORTED_CODE});
+            });
+        });
+
         it('lets a custom build find the copy the project installed', () => {
             expect(results.install).to.include({
                 ok: true,
@@ -103,6 +111,12 @@ describe('packaging', function () {
                 expect(result.error, 'resolution error').to.equal(undefined);
                 expect(result.resolved).to.equal(pathToFileURL(path.join(installedDir, file)).href);
                 expect(result.loaded).to.deep.equal(shape);
+            });
+        });
+
+        BLOCKED_SPECIFIERS.forEach((specifier) => {
+            it(`refuses ${specifier} as not exported`, () => {
+                expect(results.blocked[specifier]).to.deep.equal({error: NOT_EXPORTED_CODE});
             });
         });
 
@@ -168,13 +182,22 @@ ${specifiersSource()}.forEach((specifier) => {
     }
 });
 
+const blocked = {};
+${blockedSpecifiersSource()}.forEach((specifier) => {
+    try {
+        blocked[specifier] = {resolved: require.resolve(specifier)};
+    } catch (error) {
+        blocked[specifier] = {error: error.code || error.message};
+    }
+});
+
 let install;
 try {
     install = require('./node_modules/exifreader/bin/cli.js').checkLocalInstall(process.cwd());
 } catch (error) {
     install = {error: error.code || error.message};
 }
-process.stdout.write(JSON.stringify({resolutions, install}));
+process.stdout.write(JSON.stringify({resolutions, blocked, install}));
 `;
 }
 
@@ -194,7 +217,16 @@ for (const specifier of ${specifiersSource()}) {
     }
 }
 
-process.stdout.write(JSON.stringify({resolutions, staticDefaultImport: summarize(exifReader)}));
+const blocked = {};
+for (const specifier of ${blockedSpecifiersSource()}) {
+    try {
+        blocked[specifier] = {resolved: import.meta.resolve(specifier)};
+    } catch (error) {
+        blocked[specifier] = {error: error.code || error.message};
+    }
+}
+
+process.stdout.write(JSON.stringify({resolutions, blocked, staticDefaultImport: summarize(exifReader)}));
 `;
 }
 
@@ -217,4 +249,8 @@ function summarize(value) {
 
 function specifiersSource() {
     return JSON.stringify(SPECIFIERS.map(({specifier}) => specifier));
+}
+
+function blockedSpecifiersSource() {
+    return JSON.stringify(BLOCKED_SPECIFIERS);
 }
