@@ -86,6 +86,8 @@
     "test:e2e:chrome": "cypress run",
     "test:e2e:firefox": "cypress run --browser firefox",
     "test:types": "tsc --noEmit --project test/types",
+    "test:packaging:install": "npm install --prefix test/packaging/tools --no-package-lock --no-audit --no-fund --ignore-scripts",
+    "test:packaging": "node test/packaging/resolver-matrix.mjs",
     "test:all": "npm-run-all2 lint test:types coverage test:e2e:chrome test:integration test:build test:build:custom",
     "pre-commit": "npm-run-all2 lint test:types coverage test:build",
     "postinstall": "node bin/build.js --only-with-config",

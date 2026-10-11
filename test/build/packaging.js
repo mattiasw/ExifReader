@@ -3,11 +3,13 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 const {expect} = require('chai');
-const {execFileSync} = require('child_process');
+const {execFileSync, spawnSync} = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {pathToFileURL} = require('url');
+const webpack = require('webpack');
+const {packAndExtract} = require('../packaging/pack-tarball.js');
 
 const ROOT_PATH = path.join(__dirname, '..', '..');
 const PACK_TIMEOUT_MS = 60000;
@@ -17,10 +19,30 @@ const SPECIFIERS = [
     {specifier: 'exifreader', file: 'dist/exif-reader.js', shape: API_SHAPE},
     {specifier: 'exifreader/package.json', file: 'package.json', shape: {name: 'exifreader'}},
     {specifier: 'exifreader/src/exif-reader.js', file: 'src/exif-reader.js', shape: API_SHAPE},
-    {specifier: 'exifreader/dist/exif-reader.js', file: 'dist/exif-reader.js', shape: API_SHAPE}
+    {specifier: 'exifreader/dist/exif-reader.js', file: 'dist/exif-reader.js', shape: API_SHAPE},
+    {specifier: 'exifreader/src/exif-reader', file: 'src/exif-reader.js', shape: API_SHAPE},
+    {specifier: 'exifreader/dist/exif-reader', file: 'dist/exif-reader.js', shape: API_SHAPE}
 ];
 const BLOCKED_SPECIFIERS = ['exifreader/bin/cli.js', 'exifreader/src/composable/core.js'];
 const NOT_EXPORTED_CODE = 'ERR_PACKAGE_PATH_NOT_EXPORTED';
+
+// Bundlers that honour the module condition keep getting the ES module source;
+// those targeting Node stop at the node condition and get the UMD that Node loads.
+const WEBPACK_ROOT_FILE = 'src/exif-reader.js';
+const WEBPACK_NODE_ROOT_FILE = 'dist/exif-reader.js';
+const WEBPACK_NODE_MAIN_FIELDS = [['module', 'main'], ['main', 'module']];
+const WEBPACK_DEPENDENCY_TYPES = ['esm', 'commonjs'];
+// Cloudflare's Wrangler bundles with these esbuild conditions and no module condition.
+const WRANGLER_CONDITION_NAMES = ['workerd', 'worker', 'browser'];
+
+const TYPE_CONSUMERS_PATH = path.join(ROOT_PATH, 'test', 'types', 'packed');
+const TYPE_CONSUMER_FILES = ['consumer.ts', 'consumer.mts'];
+const TSC_PATH = path.join(ROOT_PATH, 'node_modules', 'typescript', 'bin', 'tsc');
+const TYPE_MODES = [
+    {moduleResolution: 'bundler', module: 'esnext'},
+    {moduleResolution: 'node16', module: 'node16'},
+    {moduleResolution: 'nodenext', module: 'nodenext'}
+];
 
 describe('packaging', function () {
     this.timeout(PACK_TIMEOUT_MS);
@@ -30,26 +52,9 @@ describe('packaging', function () {
     let installedDir;
     let packedFiles;
 
-    // The tarball is extracted, not installed: npm install would reach for the
-    // network and run postinstall on every commit.
     before(() => {
         tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'exifreader-packaging-'));
-        const pack = packTarball(tempRoot);
-        packedFiles = pack.files;
-
-        const projectDir = path.join(tempRoot, 'consumer');
-        const nodeModulesDir = path.join(projectDir, 'node_modules');
-        fs.mkdirSync(nodeModulesDir, {recursive: true});
-        fs.writeFileSync(path.join(projectDir, 'package.json'), JSON.stringify({private: true}));
-        // A bare archive name: GNU tar reads a Windows drive path as a remote host.
-        execFileSync('tar', ['-xzf', pack.tarballName, '-C', nodeModulesDir], {
-            cwd: pack.directory,
-            timeout: PACK_TIMEOUT_MS
-        });
-        fs.renameSync(path.join(nodeModulesDir, 'package'), path.join(nodeModulesDir, 'exifreader'));
-
-        consumerDir = fs.realpathSync(projectDir);
-        installedDir = path.join(consumerDir, 'node_modules', 'exifreader');
+        ({consumerDir, installedDir, packedFiles} = packAndExtract(tempRoot));
         fs.writeFileSync(path.join(consumerDir, 'consumer.cjs'), buildRequireScript());
         fs.writeFileSync(path.join(consumerDir, 'consumer.mjs'), buildImportScript());
     });
@@ -125,35 +130,96 @@ describe('packaging', function () {
         });
     });
 
-    // The throwaway cache and the destination go in as environment variables so
-    // no path passes through a shell, and skipping scripts keeps stdout parseable
-    // as JSON. Windows needs the .cmd name and a shell to run npm.
-    function packTarball(directory) {
-        const isWindows = process.platform === 'win32';
-        const packDestination = path.join(directory, 'pack');
-        fs.mkdirSync(packDestination);
-        const output = execFileSync(
-            isWindows ? 'npm.cmd' : 'npm',
-            ['pack', '--json', '--ignore-scripts'],
-            {
-                cwd: ROOT_PATH,
-                shell: isWindows,
-                stdio: ['ignore', 'pipe', 'pipe'],
-                timeout: PACK_TIMEOUT_MS,
-                env: {
-                    ...process.env,
-                    npm_config_cache: path.join(directory, 'cache'),
-                    npm_config_pack_destination: packDestination
-                }
-            }
-        ).toString();
-        const [packResult] = JSON.parse(output);
-        return {
-            directory: packDestination,
-            tarballName: packResult.filename,
-            files: packResult.files.map((file) => file.path)
-        };
-    }
+    describe('under webpack\'s resolver', () => {
+        let compiler;
+
+        before(() => {
+            compiler = webpack({context: consumerDir, mode: 'production'});
+        });
+
+        WEBPACK_DEPENDENCY_TYPES.forEach((dependencyType) => {
+            describe(`as ${dependencyType}`, () => {
+                it(`resolves exifreader to ${WEBPACK_ROOT_FILE} through the module condition`, async () => {
+                    const resolved = await resolveWithWebpack(compiler, dependencyType, consumerDir, 'exifreader');
+                    expect(toForwardSlashes(path.relative(installedDir, resolved))).to.equal(WEBPACK_ROOT_FILE);
+                });
+
+                SPECIFIERS.filter(({specifier}) => specifier !== 'exifreader').forEach(({specifier, file}) => {
+                    it(`resolves ${specifier} to its own file`, async () => {
+                        const resolved = await resolveWithWebpack(compiler, dependencyType, consumerDir, specifier);
+                        expect(toForwardSlashes(path.relative(installedDir, resolved))).to.equal(file);
+                    });
+                });
+
+                BLOCKED_SPECIFIERS.forEach((specifier) => {
+                    it(`refuses ${specifier} as not exported`, async () => {
+                        const error = await resolveWithWebpack(compiler, dependencyType, consumerDir, specifier)
+                            .then(() => undefined, (resolveError) => resolveError);
+                        expect(error, 'resolution error').to.be.an('error');
+                        expect(error.message).to.match(/is not exported/);
+                    });
+                });
+            });
+        });
+    });
+
+    describe('under webpack\'s resolver for target node', () => {
+        WEBPACK_NODE_MAIN_FIELDS.forEach((mainFields) => {
+            describe(`with mainFields ${mainFields.join(', ')}`, () => {
+                let compiler;
+
+                before(() => {
+                    compiler = webpack({context: consumerDir, mode: 'production', target: 'node', resolve: {mainFields}});
+                });
+
+                WEBPACK_DEPENDENCY_TYPES.forEach((dependencyType) => {
+                    it(`resolves exifreader to ${WEBPACK_NODE_ROOT_FILE} through the node condition as ${dependencyType}`, async () => {
+                        const resolved = await resolveWithWebpack(compiler, dependencyType, consumerDir, 'exifreader');
+                        expect(toForwardSlashes(path.relative(installedDir, resolved))).to.equal(WEBPACK_NODE_ROOT_FILE);
+                    });
+                });
+            });
+        });
+    });
+
+    describe('under webpack\'s resolver with Wrangler\'s conditions', () => {
+        let compiler;
+
+        before(() => {
+            compiler = webpack({context: consumerDir, mode: 'production', resolve: {conditionNames: WRANGLER_CONDITION_NAMES}});
+        });
+
+        WEBPACK_DEPENDENCY_TYPES.forEach((dependencyType) => {
+            it(`resolves exifreader to ${WEBPACK_ROOT_FILE} through the browser condition as ${dependencyType}`, async () => {
+                const resolved = await resolveWithWebpack(compiler, dependencyType, consumerDir, 'exifreader');
+                expect(toForwardSlashes(path.relative(installedDir, resolved))).to.equal(WEBPACK_ROOT_FILE);
+            });
+        });
+    });
+
+    describe('types through the packed package', () => {
+        before(() => {
+            TYPE_CONSUMER_FILES.forEach((fileName) => {
+                fs.copyFileSync(path.join(TYPE_CONSUMERS_PATH, fileName), path.join(consumerDir, fileName));
+            });
+        });
+
+        TYPE_MODES.forEach(({moduleResolution, module}) => {
+            it(`type-checks both consumers against exif-reader.d.ts under moduleResolution ${moduleResolution}`, () => {
+                const tsconfigPath = writeTsconfig(consumerDir, moduleResolution, module);
+
+                const result = spawnSync(process.execPath, [TSC_PATH, '-p', tsconfigPath, '--listFiles'], {
+                    cwd: consumerDir,
+                    encoding: 'utf8',
+                    timeout: PACK_TIMEOUT_MS
+                });
+
+                expect(result.status, [result.stdout, result.stderr, result.error].filter(Boolean).join('\n')).to.equal(0);
+                const listedFiles = result.stdout.split(/\r?\n/).map(toForwardSlashes);
+                expect(listedFiles).to.include(toForwardSlashes(path.join(installedDir, 'exif-reader.d.ts')));
+            });
+        });
+    });
 
     // With an exports map, self-reference beats the paths option, so every resolution
     // runs in a child process whose script lives in the consumer. A failing script
@@ -253,4 +319,39 @@ function specifiersSource() {
 
 function blockedSpecifiersSource() {
     return JSON.stringify(BLOCKED_SPECIFIERS);
+}
+
+function resolveWithWebpack(compiler, dependencyType, context, specifier) {
+    const resolver = compiler.resolverFactory.get('normal', {dependencyType});
+    return new Promise((resolve, reject) => {
+        resolver.resolve({}, context, specifier, {}, (error, resolved) => {
+            if (error) {
+                reject(error);
+            } else {
+                resolve(resolved);
+            }
+        });
+    });
+}
+
+function writeTsconfig(consumerDir, moduleResolution, module) {
+    const tsconfigPath = path.join(consumerDir, `tsconfig.${moduleResolution}.json`);
+    const tsconfig = {
+        compilerOptions: {
+            strict: true,
+            noEmit: true,
+            target: 'es2022',
+            module,
+            moduleResolution,
+            typeRoots: [path.join(ROOT_PATH, 'node_modules', '@types')],
+            types: ['node']
+        },
+        files: TYPE_CONSUMER_FILES
+    };
+    fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 4));
+    return tsconfigPath;
+}
+
+function toForwardSlashes(filePath) {
+    return filePath.replace(/\\/g, '/');
 }

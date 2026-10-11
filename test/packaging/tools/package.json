@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "description": "On-demand scratch project for the resolver matrix, see ../README.md",
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "esbuild": "0.28.2",
+    "metro-resolver": "0.87.1",
+    "parcel": "2.16.4",
+    "rollup": "4.64.5",
+    "typescript": "5.9.3",
+    "vite": "8.3.4"
+  }
+}
