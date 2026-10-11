@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.49.0] - 2026-10-11
+
 ### Added
 
 - JPEG XL files with a Brotli-compressed Exif box return the thumbnail, the
@@ -51,14 +53,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a text value naming an `Object.prototype` member, such as `constructor`,
   was described as that member, for example the `Object` function. It is now
   described as the version name for its preview file format, such as `1.02`
-  for JFIF version 1, as the version number when the pair is unknown, or as
-  its own text when it is text that names no known version.
+  for JFIF version 1, as the version number when the format and version pair
+  is unknown, or as its own text when it is text that names no known version.
 - The Exif `SampleFormat` tag of an image with one sample per pixel, such as a
   grayscale TIFF, now has its format as its description, such as `Unsigned`,
   instead of `Unknown`.
 - The Exif `ComponentsConfiguration` tag now has its components as its
   description, such as `YCbCr`, instead of an empty text. The description read
   the component bytes as ASCII digits, which files do not store.
+- A box in a JPEG XL, HEIC/HEIF or AVIF file with too few bytes for its own
+  header, or in JPEG XL for the 4-byte field its content starts with, had the
+  missing bytes read from the data after it. A JPEG XL file with such an
+  `Exif` or `jxlp` box could then return Exif tags or an image width and
+  height read from there. The content of such a box is no longer read, or
+  reading stops at that box.
 
 ### Security
 
@@ -2186,7 +2194,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.48.1...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.49.0...HEAD
+[4.49.0]: https://github.com/mattiasw/ExifReader/compare/v4.48.1...v4.49.0
 [4.48.1]: https://github.com/mattiasw/ExifReader/compare/v4.48.0...v4.48.1
 [4.48.0]: https://github.com/mattiasw/ExifReader/compare/v4.47.0...v4.48.0
 [4.47.0]: https://github.com/mattiasw/ExifReader/compare/v4.46.0...v4.47.0
