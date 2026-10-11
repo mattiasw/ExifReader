@@ -137,6 +137,7 @@ export function loadView(
         brobXmpChunk,
         jxlCodestreamOffset,
         imageDimensionsOffset,
+        pixelInformationOffset,
         metadataBlocks,
         metadataTruncated,
         exifDataView,
@@ -583,10 +584,10 @@ export function loadView(
 
     if (
         (Constants.USE_HEIC || Constants.USE_AVIF)
-        && imageDimensionsOffset !== undefined
+        && (imageDimensionsOffset !== undefined || pixelInformationOffset !== undefined)
         && tagFilter.shouldParseGroup('file')
     ) {
-        const readTags = IsoBmffFileTags.read(dataView, imageDimensionsOffset);
+        const readTags = IsoBmffFileTags.read(dataView, imageDimensionsOffset, pixelInformationOffset);
         const parsedIsoBmffFileTags = filterTagsForParse('file', readTags, tagFilter);
         parsedGroups.file = parsedIsoBmffFileTags;
 
@@ -981,6 +982,7 @@ function hasPotentialMetaData({
     gifHeaderOffset,
     jxlCodestreamOffset,
     imageDimensionsOffset,
+    pixelInformationOffset,
 }) {
     return !!fileType
         || (
@@ -1041,7 +1043,7 @@ function hasPotentialMetaData({
         )
         || (
             (Constants.USE_HEIC || Constants.USE_AVIF)
-            && imageDimensionsOffset !== undefined
+            && (imageDimensionsOffset !== undefined || pixelInformationOffset !== undefined)
         );
 }
 

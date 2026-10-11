@@ -18,9 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Raw profile type iptc` chunk in the same file takes precedence over IPTC
   tags in the Exif data.
 - HEIC/HEIF and AVIF files return the image width and height, as `Image Width`
-  and `Image Height` in the `file` group. They are the dimensions of the
-  primary image, so an iPhone photo reports the full photo size rather than
-  that of one of its tiles or its thumbnail.
+  and `Image Height` in the `file` group, and the number of color components
+  and their bit depth, as `Color Components` and `Bits Per Sample`.
+  `Bits Per Sample` is left out when the components differ in bit depth. These
+  describe the primary image, so an iPhone photo reports the full photo size
+  rather than that of one of its tiles or its thumbnail.
 
 ### Fixed
 

@@ -908,6 +908,76 @@ describe('image-header-iso-bmff', () => {
             });
         });
 
+        describe('pixi', () => {
+            const PADDING = '\x00\x00\x00\x00';
+
+            it('should point at the channel count after the version and flags', () => {
+                const dataView = getDataView(buildPixiBox([8, 8, 8]));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'pixi', channelCountOffset: 12, length: 16});
+            });
+
+            it('should point at the channel count after an extended-size header', () => {
+                const EXTENDED_SIZE_FLAG = getByteStringFromNumber(1, 4);
+                const length = 24;
+                const dataView = getDataView(
+                    EXTENDED_SIZE_FLAG + 'pixi' + getByteStringFromNumber(0, 4) + getByteStringFromNumber(length, 4)
+                    + '\x00\x00\x00\x00' + '\x03\x08\x08\x08'
+                );
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'pixi', channelCountOffset: 20, length});
+            });
+
+            it('should accept a box with no channels', () => {
+                const dataView = getDataView(buildPixiBox([]) + PADDING);
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'pixi', channelCountOffset: 12, length: 13});
+            });
+
+            it('should treat a box ending before the channel count at the end of the data as unknown', () => {
+                const dataView = getDataView(getFullBox('pixi', 0, ''));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 12});
+            });
+
+            it('should treat a box ending before the channel count as unknown', () => {
+                const dataView = getDataView(getFullBox('pixi', 0, '') + PADDING);
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 12});
+            });
+
+            it('should accept bit depths that exactly fill the box', () => {
+                const dataView = getDataView(buildPixiBox([10, 8, 8]) + PADDING);
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'pixi', channelCountOffset: 12, length: 16});
+            });
+
+            it('should treat a box shorter than its bit depths as unknown', () => {
+                const tooShort = getFullBox('pixi', 0, '\x03\x08\x08');
+                const dataView = getDataView(tooShort + PADDING);
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 15});
+            });
+
+            it('should treat a box whose bit depths run past its container as unknown', () => {
+                const dataView = getDataView(buildPixiBox([8, 8, 8]) + PADDING);
+
+                expect(parseBox(dataView, 0, 15)).to.deep.equal({type: undefined, length: 16});
+            });
+
+            it('should treat a box whose bit depths run past the data as unknown', () => {
+                const dataView = getDataView(buildPixiBox([8, 8, 8]).slice(0, 15));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 16});
+            });
+
+            it('should treat a box of another version as unknown', () => {
+                const dataView = getDataView(getFullBox('pixi', 1, '\x03\x08\x08\x08'));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 16});
+            });
+        });
+
         describe('ipma', () => {
             it('should read the version, the flags and where the entry count is', () => {
                 const dataView = getDataView(getFullBoxWithFlags('ipma', 1, 1, getByteStringFromNumber(0, 4)));
@@ -964,7 +1034,7 @@ describe('image-header-iso-bmff', () => {
             });
 
             it('should share one entry between all unknown properties', () => {
-                const dataView = getDataView(getBox('ipco', getBox('hvcC', '<config>') + getBox('pixi', '<pixi>')));
+                const dataView = getDataView(getBox('ipco', getBox('hvcC', '<config>') + getBox('pasp', '<pasp>')));
 
                 const {properties} = parseBox(dataView, 0);
 
@@ -975,6 +1045,26 @@ describe('image-header-iso-bmff', () => {
             it('should keep a too short ispe as an unknown property', () => {
                 const tooShortIspe = getFullBox('ispe', 0, getByteStringFromNumber(12, 4));
                 const dataView = getDataView(getBox('ipco', tooShortIspe + buildIspeBox(12, 2)));
+
+                const {properties} = parseBox(dataView, 0);
+
+                expect(properties).to.have.lengthOf(2);
+                expect(properties[0].type).to.be.undefined;
+                expect(properties[1].type).to.equal('ispe');
+            });
+
+            it('should keep a pixi at its index', () => {
+                const dataView = getDataView(getBox('ipco', getBox('hvcC', '<config>') + buildPixiBox([8, 8, 8])));
+
+                const {properties} = parseBox(dataView, 0);
+
+                expect(properties).to.have.lengthOf(2);
+                expect(properties[1]).to.deep.equal({type: 'pixi', channelCountOffset: 8 + 16 + 12, length: 16});
+            });
+
+            it('should keep a too short pixi as an unknown property', () => {
+                const tooShortPixi = getFullBox('pixi', 0, '\x03\x08\x08');
+                const dataView = getDataView(getBox('ipco', tooShortPixi + buildIspeBox(12, 2)));
 
                 const {properties} = parseBox(dataView, 0);
 
@@ -1738,6 +1828,120 @@ describe('image-header-iso-bmff', () => {
                     expectNoOffset(buildPrimaryItemMetaBox({properties: [ispe], ipmas: [declaringOneEntry]}));
                 });
             });
+
+            describe('pixel information', () => {
+                it('should pick the primary item\'s pixi over a tile\'s before it and a thumbnail\'s after it', () => {
+                    const tilePixi = buildPixiBox([10, 10, 10]);
+                    const primaryPixi = buildPixiBox([8, 8, 8]);
+                    const thumbnailPixi = buildPixiBox([12, 12, 12]);
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [tilePixi, primaryPixi, thumbnailPixi],
+                        ipmas: [buildIpmaBox([
+                            {itemId: 1, associations: [1]},
+                            {itemId: PRIMARY_ITEM_ID, associations: [2]},
+                            {itemId: 50, associations: [3]},
+                        ])],
+                    });
+
+                    expect(findOffsets(getDataView(data)).pixelInformationOffset)
+                        .to.equal(getChannelCountOffset(data, primaryPixi));
+                });
+
+                it('should not use a pixi associated only with another item', () => {
+                    const ispe = buildIspeBox(12, 2);
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [ispe, buildPixiBox([8, 8, 8])],
+                        ipmas: [buildIpmaBox([
+                            {itemId: PRIMARY_ITEM_ID, associations: [1]},
+                            {itemId: 1, associations: [2]},
+                        ])],
+                    });
+
+                    const offsets = findOffsets(getDataView(data));
+
+                    expect(offsets).to.not.have.property('pixelInformationOffset');
+                    expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
+                });
+
+                it('should return no offset without a pixi', () => {
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [buildIspeBox(12, 2)],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}])],
+                    });
+
+                    expect(findOffsets(getDataView(data))).to.not.have.property('pixelInformationOffset');
+                });
+
+                it('should return no offset when the primary item\'s only pixi is too short', () => {
+                    const ispe = buildIspeBox(12, 2);
+                    const tooShortPixi = getFullBox('pixi', 0, '\x03\x08\x08');
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [ispe, tooShortPixi],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
+                    });
+
+                    const offsets = findOffsets(getDataView(data));
+
+                    expect(offsets).to.not.have.property('pixelInformationOffset');
+                    expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
+                });
+
+                it('should resolve the ispe and a pixi after it from one association list', () => {
+                    const ispe = buildIspeBox(12, 2);
+                    const pixi = buildPixiBox([8, 8, 8]);
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [ispe, pixi],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
+                    });
+
+                    const offsets = findOffsets(getDataView(data));
+
+                    expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
+                    expect(offsets.pixelInformationOffset).to.equal(getChannelCountOffset(data, pixi));
+                });
+
+                it('should resolve a pixi and the ispe after it from one association list', () => {
+                    const pixi = buildPixiBox([8, 8, 8]);
+                    const ispe = buildIspeBox(12, 2);
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [pixi, ispe],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
+                    });
+
+                    const offsets = findOffsets(getDataView(data));
+
+                    expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
+                    expect(offsets.pixelInformationOffset).to.equal(getChannelCountOffset(data, pixi));
+                });
+
+                it('should find the ispe and the pixi with Exif, XMP and ICC turned off', () => {
+                    restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
+                    const ispe = buildIspeBox(12, 2);
+                    const pixi = buildPixiBox([8, 8, 8]);
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [ispe, pixi],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
+                    });
+
+                    expect(findOffsets(getDataView(data))).to.deep.equal({
+                        imageDimensionsOffset: getDimensionsOffset(data, ispe),
+                        pixelInformationOffset: getChannelCountOffset(data, pixi),
+                    });
+                });
+
+                it('should find the pixi without an ispe', () => {
+                    restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
+                    const pixi = buildPixiBox([8, 8, 8]);
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [UNKNOWN_PROPERTY_BOX, pixi],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
+                    });
+
+                    expect(findOffsets(getDataView(data))).to.deep.equal({
+                        pixelInformationOffset: getChannelCountOffset(data, pixi),
+                    });
+                });
+            });
         });
     });
 
@@ -2081,6 +2285,14 @@ function buildIspeBox(width, height) {
     return getFullBox('ispe', 0, getByteStringFromNumber(width, 4) + getByteStringFromNumber(height, 4));
 }
 
+function buildPixiBox(depths) {
+    return getFullBox(
+        'pixi',
+        0,
+        getByteStringFromNumber(depths.length, 1) + depths.map((depth) => getByteStringFromNumber(depth, 1)).join('')
+    );
+}
+
 function buildPitmBox(itemId, version = 0) {
     return getFullBox('pitm', version, getByteStringFromNumber(itemId, version === 0 ? 2 : 4));
 }
@@ -2103,6 +2315,10 @@ function buildPrimaryItemMetaBox({pitm = buildPitmBox(49), properties, ipmas}) {
 
 function getDimensionsOffset(data, ispeBox) {
     return data.indexOf(ispeBox) + FULL_BOX_HEADER_SIZE;
+}
+
+function getChannelCountOffset(data, pixiBox) {
+    return data.indexOf(pixiBox) + FULL_BOX_HEADER_SIZE;
 }
 
 // Full-box header is 4 (length) + 4 (type) + 1 (version) + 3 (flags) = 12 bytes.

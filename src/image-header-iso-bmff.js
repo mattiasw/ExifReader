@@ -35,6 +35,7 @@ const TYPE_COLR = 0x636f6c72;
 const TYPE_PITM = 0x7069746d;
 const TYPE_IPMA = 0x69706d61;
 const TYPE_ISPE = 0x69737065;
+const TYPE_PIXI = 0x70697869;
 
 // const EXTENSION_TYPE_FDEL = 0x6664656c;
 
@@ -127,6 +128,9 @@ export function parseBox(dataView, offset, containerEnd = dataView.byteLength) {
         }
         if (type === TYPE_ISPE) {
             return parseImageSpatialExtentsBox(dataView, offset, contentOffset, length, containerEnd);
+        }
+        if (type === TYPE_PIXI) {
+            return parsePixelInformationBox(dataView, offset, version, contentOffset, length, containerEnd);
         }
 
         return getUnknownBox(length);
@@ -229,6 +233,9 @@ function hasEmptyHighBits(dataView, offset) {
  * @property {number=} imageDimensionsOffset Offset of the primary item's
  *     dimensions, the width and height fields of its ispe property; absent
  *     when it cannot be resolved.
+ * @property {number=} pixelInformationOffset Offset of the num_channels
+ *     field of the primary item's pixi property; the per-channel bit depths
+ *     follow it. Absent when it cannot be resolved.
  */
 
 /**
@@ -241,14 +248,17 @@ function hasEmptyHighBits(dataView, offset) {
  *     bytes. cm 2 (item_offset) items are skipped.
  * @returns {Offsets} The TIFF header offset, XMP chunks, ICC chunks,
  *     whether any of those were found, and the primary image's dimensions
- *     offset.
+ *     and pixel information offsets.
  */
 export function findOffsets(dataView, metadataBlocks) {
     const metaBox = findMetaBox(dataView);
     const offsets = findMetadataOffsets(dataView, metaBox, metadataBlocks);
-    const imageDimensionsOffset = findPrimaryImageDimensionsOffset(dataView, metaBox);
+    const {imageDimensionsOffset, pixelInformationOffset} = findPrimaryItemPropertyOffsets(dataView, metaBox);
     if (imageDimensionsOffset !== undefined) {
         offsets.imageDimensionsOffset = imageDimensionsOffset;
+    }
+    if (pixelInformationOffset !== undefined) {
+        offsets.pixelInformationOffset = pixelInformationOffset;
     }
     return offsets;
 }
@@ -499,39 +509,44 @@ function findIccChunks(metaBox, metadataBlocks) {
 }
 
 // Resolves meta > pitm (the primary item) through meta > iprp > ipma (its
-// property indexes) to the ispe among meta > iprp > ipco's children.
-function findPrimaryImageDimensionsOffset(dataView, metaBox) {
+// property indexes) to the ispe and pixi among meta > iprp > ipco's children.
+function findPrimaryItemPropertyOffsets(dataView, metaBox) {
     // Every read below is bounded at parse time; the catch keeps a malformed
     // box from failing the whole file when that bounding is ever wrong.
     try {
         if (!metaBox) {
-            return undefined;
+            return {};
         }
         const pitm = metaBox.subBoxes.find((box) => box.type === 'pitm');
         const iprp = metaBox.subBoxes.find((box) => box.type === 'iprp');
         if (!pitm || !iprp) {
-            return undefined;
+            return {};
         }
         const ipco = iprp.subBoxes.find((box) => box.type === 'ipco');
         if (!ipco) {
-            return undefined;
+            return {};
         }
-        const associations = findItemAssociations(dataView, iprp.subBoxes, pitm.itemId);
-        if (!associations) {
-            return undefined;
+        const propertyIndexes = findItemPropertyIndexes(dataView, iprp.subBoxes, pitm.itemId);
+        if (!propertyIndexes) {
+            return {};
         }
-        return findImageDimensionsOffset(dataView, associations, ipco.properties);
+        const ispe = findProperty(propertyIndexes, ipco.properties, 'ispe');
+        const pixi = findProperty(propertyIndexes, ipco.properties, 'pixi');
+        return {
+            imageDimensionsOffset: ispe && ispe.dimensionsOffset,
+            pixelInformationOffset: pixi && pixi.channelCountOffset,
+        };
     } catch (error) {
-        return undefined;
+        return {};
     }
 }
 
-function findItemAssociations(dataView, iprpSubBoxes, itemId) {
+function findItemPropertyIndexes(dataView, iprpSubBoxes, itemId) {
     for (let i = 0; i < iprpSubBoxes.length; i++) {
         if (iprpSubBoxes[i].type === 'ipma') {
-            const associations = findItemAssociationsInIpma(dataView, iprpSubBoxes[i], itemId);
-            if (associations) {
-                return associations;
+            const propertyIndexes = findItemPropertyIndexesInIpma(dataView, iprpSubBoxes[i], itemId);
+            if (propertyIndexes) {
+                return propertyIndexes;
             }
         }
     }
@@ -539,12 +554,11 @@ function findItemAssociations(dataView, iprpSubBoxes, itemId) {
 }
 
 // The scan is bounded by the box's bytes, not by the counts it declares.
-function findItemAssociationsInIpma(dataView, ipma, itemId) {
+function findItemPropertyIndexesInIpma(dataView, ipma, itemId) {
     const ENTRY_COUNT_SIZE = 4;
     const ASSOCIATION_COUNT_SIZE = 1;
-    const itemIdSize = ipma.version < 1 ? 2 : 4;
-    const hasLargeIndexes = (ipma.flags & 1) === 1;
-    const associationSize = hasLargeIndexes ? 2 : 1;
+    const itemIdSize = ipma.version === 0 ? 2 : 4;
+    const associationSize = (ipma.flags & 1) === 1 ? 2 : 1;
 
     const entryCount = dataView.getUint32(ipma.entryCountOffset);
     let offset = ipma.entryCountOffset + ENTRY_COUNT_SIZE;
@@ -553,22 +567,31 @@ function findItemAssociationsInIpma(dataView, ipma, itemId) {
         const count = dataView.getUint8(offset + itemIdSize);
         offset += itemIdSize + ASSOCIATION_COUNT_SIZE;
         if (entryItemId === itemId) {
-            return {offset, count, associationSize, indexMask: hasLargeIndexes ? 0x7fff : 0x7f, end: ipma.end};
+            const countWithinBox = Math.min(count, Math.floor((ipma.end - offset) / associationSize));
+            return readPropertyIndexes(dataView, offset, countWithinBox, associationSize);
         }
         offset += count * associationSize;
     }
     return undefined;
 }
 
-function findImageDimensionsOffset(dataView, associations, properties) {
-    const {offset, count, associationSize, indexMask, end} = associations;
-    for (let i = 0; i < count && offset + (i + 1) * associationSize <= end; i++) {
+function readPropertyIndexes(dataView, offset, count, associationSize) {
+    // The top bit marks the property as essential; the rest is the 1-based index, 0 meaning no property.
+    const indexMask = associationSize === 2 ? 0x7fff : 0x7f;
+    const propertyIndexes = [];
+    for (let i = 0; i < count; i++) {
         const associationOffset = offset + i * associationSize;
         const association = associationSize === 2 ? dataView.getUint16(associationOffset) : dataView.getUint8(associationOffset);
-        // The index is 1-based, 0 meaning no property; the top bit marks the property as essential.
-        const property = properties[(association & indexMask) - 1];
-        if (property !== undefined && property.type === 'ispe') {
-            return property.dimensionsOffset;
+        propertyIndexes.push(association & indexMask);
+    }
+    return propertyIndexes;
+}
+
+function findProperty(propertyIndexes, properties, type) {
+    for (let i = 0; i < propertyIndexes.length; i++) {
+        const property = properties[propertyIndexes[i] - 1];
+        if (property !== undefined && property.type === type) {
+            return property;
         }
     }
     return undefined;
@@ -701,6 +724,25 @@ function parseImageSpatialExtentsBox(dataView, startOffset, contentOffset, lengt
     return {
         type: 'ispe',
         dimensionsOffset,
+        length
+    };
+}
+
+function parsePixelInformationBox(dataView, startOffset, version, contentOffset, length, containerEnd) {
+    const CHANNEL_COUNT_SIZE = 1;
+    const channelCountOffset = contentOffset + FULL_BOX_VERSION_AND_FLAGS_SIZE;
+    const end = getBoxEnd(dataView, startOffset, length, containerEnd);
+    if (version !== 0 || channelCountOffset + CHANNEL_COUNT_SIZE > end) {
+        return getUnknownBox(length);
+    }
+    const channelCount = dataView.getUint8(channelCountOffset);
+    if (channelCountOffset + CHANNEL_COUNT_SIZE + channelCount > end) {
+        return getUnknownBox(length);
+    }
+
+    return {
+        type: 'pixi',
+        channelCountOffset,
         length
     };
 }

@@ -25,4 +25,59 @@ describe('iso-bmff-file-tags', () => {
 
         expect(IsoBmffFileTags.read(dataView, PADDING.length)).to.deep.equal({});
     });
+
+    describe('pixel information', () => {
+        function getPixi(depths) {
+            return getByteStringFromNumber(depths.length, 1)
+                + depths.map((depth) => getByteStringFromNumber(depth, 1)).join('');
+        }
+
+        function readPixi(data) {
+            return IsoBmffFileTags.read(getDataView(PADDING + data), undefined, PADDING.length);
+        }
+
+        it('should read the color components and the shared bit depth', () => {
+            expect(readPixi(getPixi([8, 8, 8]))).to.deep.equal({
+                'Color Components': {value: 3, description: '3'},
+                'Bits Per Sample': {value: 8, description: '8'},
+            });
+        });
+
+        it('should leave out the bits per sample when the first depth differs', () => {
+            expect(readPixi(getPixi([10, 8, 8]))).to.deep.equal({
+                'Color Components': {value: 3, description: '3'},
+            });
+        });
+
+        it('should leave out the bits per sample when the last depth differs', () => {
+            expect(readPixi(getPixi([8, 8, 10]))).to.deep.equal({
+                'Color Components': {value: 3, description: '3'},
+            });
+        });
+
+        it('should leave out the bits per sample when there are no channels', () => {
+            expect(readPixi(getPixi([]))).to.deep.equal({
+                'Color Components': {value: 0, description: '0'},
+            });
+        });
+
+        it('should return no tags when the bit depths are cut off', () => {
+            expect(readPixi(getPixi([8, 8, 8]).slice(0, 3))).to.deep.equal({});
+        });
+
+        it('should return no tags when the channel count is past the data', () => {
+            expect(readPixi('')).to.deep.equal({});
+        });
+
+        it('should return all tags in order when both offsets are given', () => {
+            const dimensions = getByteStringFromNumber(WIDTH, 4) + getByteStringFromNumber(HEIGHT, 4);
+            const dataView = getDataView(PADDING + dimensions + getPixi([8, 8, 8]));
+
+            const result = IsoBmffFileTags.read(dataView, PADDING.length, PADDING.length + dimensions.length);
+
+            expect(Object.keys(result)).to.deep.equal(['Image Width', 'Image Height', 'Color Components', 'Bits Per Sample']);
+            expect(result['Image Width']).to.deep.equal({value: WIDTH, description: `${WIDTH}px`});
+            expect(result['Bits Per Sample']).to.deep.equal({value: 8, description: '8'});
+        });
+    });
 });
