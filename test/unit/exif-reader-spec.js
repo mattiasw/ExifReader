@@ -1862,6 +1862,54 @@ describe('exif-reader', function () {
             expect(result).to.not.have.property('Image Width');
             expect(result).to.not.have.property('Image Height');
         });
+
+        describe('pixel information', () => {
+            const pixiTags = {
+                'Color Components': {value: 3, description: '3'},
+                'Bits Per Sample': {value: 8, description: '8'},
+            };
+            let readCalls;
+
+            beforeEach(() => {
+                readCalls = [];
+                swap(IsoBmffFileTags, {
+                    read(...args) {
+                        readCalls.push(args);
+                        return pixiTags;
+                    }
+                });
+            });
+
+            it('should read them when only the pixel information offset is set', () => {
+                swapImageHeader({fileType: FILE_TYPE, pixelInformationOffset: OFFSET_TEST_VALUE});
+                const result = ExifReader.loadView(undefined, {expanded: true});
+                expect(readCalls.map((args) => args.slice(1))).to.deep.equal([[undefined, OFFSET_TEST_VALUE]]);
+                expect(result.file).to.deep.equal({...pixiTags, FileType: FILE_TYPE});
+            });
+
+            it('should pass both offsets on when both are set', () => {
+                swapImageHeader({
+                    fileType: FILE_TYPE,
+                    imageDimensionsOffset: OFFSET_TEST_VALUE,
+                    pixelInformationOffset: SECOND_OFFSET_TEST_VALUE,
+                });
+                ExifReader.loadView();
+                expect(readCalls.map((args) => args.slice(1))).to.deep.equal([[OFFSET_TEST_VALUE, SECOND_OFFSET_TEST_VALUE]]);
+            });
+
+            it('should not read them when a tag filter leaves out the file group', () => {
+                swapImageHeader({fileType: FILE_TYPE, pixelInformationOffset: OFFSET_TEST_VALUE});
+                ExifReader.loadView(undefined, {includeTags: {exif: true}});
+                expect(readCalls).to.have.lengthOf(0);
+            });
+
+            it('should not read them without either offset', () => {
+                swapImageHeader({fileType: FILE_TYPE});
+                const result = ExifReader.loadView(undefined, {expanded: true});
+                expect(readCalls).to.have.lengthOf(0);
+                expect(result.file).to.deep.equal({FileType: FILE_TYPE});
+            });
+        });
     });
 
     it('should be able to find MPF APP segment', () => {

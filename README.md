@@ -294,7 +294,7 @@ key and those groups will be deprecated later.)
 | `photoshop`   | Photoshop resource tags.                                                      | yes          |
 | `makerNotes`  | MakerNote tags (e.g. Canon/Pentax).                                           | yes          |
 | `mpf`         | MPF tags.                                                                     | yes          |
-| `file`        | JPEG file details, image size of JPEG XL, HEIC/HEIF and AVIF, and `FileType`. | no           |
+| `file`        | JPEG file details, image details of JPEG XL, HEIC/HEIF and AVIF, and `FileType`. | no           |
 | `jfif`        | JFIF tags.                                                                    | no           |
 | `png`         | PNG header, chunk, and text tags.                                             | no           |
 | `riff`        | WebP (RIFF) tags.                                                             | no           |
@@ -962,7 +962,7 @@ Possible modules to include or exclude:
 | `webp`        | WebP images.                                           |
 | `jxl`         | JPEG XL images.                                        |
 | `gif`         | GIF images.                                            |
-| `file`        | JPEG file details: image width, height etc. The image size of JPEG XL, HEIC/HEIF and AVIF files comes with their format module. |
+| `file`        | JPEG file details: image width, height etc. The image details of JPEG XL, HEIC/HEIF and AVIF files come with their format module. |
 | `jfif`        | JFIF details in JPEG files: resolution, thumbnail etc. |
 | `png_file`    | PNG file details: image width, height etc.             |
 | `exif`        | Regular Exif tags. If excluded, will also exclude `photoshop`, `maker_notes`, and `thumbnail`. Also excludes the IPTC, XMP and ICC tags that are read from the Exif data, which in TIFF files is all of them. |
