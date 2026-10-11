@@ -60,6 +60,47 @@ describe('utils', () => {
         expect(Utils.tryDecodeUtf8ByteString('abc\xc5\xc4\xd6')).to.equal(undefined);
     });
 
+    describe('getStringValueFromArray', () => {
+        it('should convert character codes to a string in chunks, not one call per character', () => {
+            const charCodes = [];
+            for (let i = 0; i < 8192 + 2; i++) {
+                charCodes.push(0x41 + (i % 26));
+            }
+            const expected = charCodes.map((charCode) => String.fromCharCode(charCode)).join('');
+            const originalFromCharCode = String.fromCharCode;
+            let calls = 0;
+            const restore = swapProperties(String, {
+                fromCharCode(...args) {
+                    calls++;
+                    return originalFromCharCode.apply(String, args);
+                }
+            });
+
+            try {
+                expect(Utils.getStringValueFromArray(charCodes)).to.equal(expected);
+            } finally {
+                restore();
+            }
+            expect(calls).to.equal(2);
+        });
+
+        it('should keep character codes wider than a byte', () => {
+            expect(Utils.getStringValueFromArray([0x263a, 0x41])).to.equal('\u263aA');
+        });
+
+        it('should skip the holes of a sparse array', () => {
+            const sparse = [65];
+            sparse[2] = 66;
+            expect(Utils.getStringValueFromArray(sparse)).to.equal('AB');
+        });
+
+        it('should throw a TypeError for a value that is not an array', () => {
+            expect(() => Utils.getStringValueFromArray('<faulty value>')).to.throw(TypeError);
+            expect(() => Utils.getStringValueFromArray('')).to.throw(TypeError);
+            expect(() => Utils.getStringValueFromArray(42)).to.throw(TypeError);
+        });
+    });
+
     describe('getByteString', () => {
         it('should convert a byte range to a string in chunks, not one call per byte', () => {
             const bytes = new Uint8Array(8192 + 2);
