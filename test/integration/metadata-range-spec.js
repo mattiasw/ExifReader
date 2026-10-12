@@ -92,6 +92,91 @@ describe('metadataRange / includeOffsets — real fixtures', function () {
         });
     });
 
+    describe('PNG (test.png)', () => {
+        for (const async of [false, true]) {
+            describe(`async: ${async}`, () => {
+                let tags;
+                let fileSize;
+
+                before(async () => {
+                    const buffer = fs.readFileSync(path.join(FIXTURES, 'test.png'));
+                    fileSize = buffer.length;
+                    tags = await ExifReader.load(buffer, {
+                        expanded: true,
+                        includeOffsets: true,
+                        async,
+                        domParser,
+                    });
+                });
+
+                it('returns a metadataRange object', () => {
+                    expect(tags.metadataRange).to.be.an('object');
+                });
+
+                it('reports complete:true for a well-formed file', () => {
+                    expect(tags.metadataRange.complete).to.equal(true);
+                });
+
+                it('reports end within the file', () => {
+                    expect(tags.metadataRange.end).to.be.above(0);
+                    expect(tags.metadataRange.end).to.be.at.most(fileSize);
+                });
+
+                it('starts at the first chunk after the 8-byte signature and ends after the tIME chunk', () => {
+                    expect(tags.metadataRange.start).to.equal(8);
+                    expect(tags.metadataRange.end).to.equal(2266);
+                });
+
+                it('emits blocks sorted by start with no negative or zero-length entries', () => {
+                    const {blocks} = tags.metadataRange;
+                    for (let i = 0; i < blocks.length; i++) {
+                        expect(blocks[i].end).to.be.above(blocks[i].start);
+                        if (i > 0) {
+                            expect(blocks[i].start).to.be.at.least(blocks[i - 1].start);
+                        }
+                    }
+                });
+
+                it('block ends never exceed the file size', () => {
+                    for (const block of tags.metadataRange.blocks) {
+                        expect(block.end).to.be.at.most(fileSize);
+                    }
+                });
+
+                if (async) {
+                    it('emits the IHDR, zTXt, XMP, pHYs and tIME blocks', () => {
+                        expect(tags.metadataRange.blocks).to.deep.equal([
+                            {type: 'file', start: 8, end: 33},
+                            {type: 'png', start: 33, end: 1808},
+                            {type: 'xmp', start: 1808, end: 2208},
+                            {type: 'png', start: 2226, end: 2247},
+                            {type: 'png', start: 2247, end: 2266},
+                        ]);
+                    });
+
+                    it('reads the compressed raw profile into exif, Thumbnail and a pngText copy of png', () => {
+                        expect(Object.keys(tags)).to.deep.equal(['xmp', 'png', 'pngFile', 'exif', 'Thumbnail', 'file', 'metadataRange', 'pngText']);
+                        expect(Object.keys(tags.exif)).to.have.lengthOf(8);
+                        expect(tags.pngText).to.deep.equal(tags.png);
+                    });
+                } else {
+                    it('emits the IHDR, XMP, pHYs and tIME blocks but not the zTXt one', () => {
+                        expect(tags.metadataRange.blocks).to.deep.equal([
+                            {type: 'file', start: 8, end: 33},
+                            {type: 'xmp', start: 1808, end: 2208},
+                            {type: 'png', start: 2226, end: 2247},
+                            {type: 'png', start: 2247, end: 2266},
+                        ]);
+                    });
+
+                    it('skips the compressed raw profile, so there is no exif, Thumbnail or pngText', () => {
+                        expect(Object.keys(tags)).to.deep.equal(['xmp', 'png', 'pngFile', 'file', 'metadataRange']);
+                    });
+                }
+            });
+        }
+    });
+
     describe('HEIC (test.heic)', () => {
         let tags;
         let fileSize;
