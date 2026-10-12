@@ -175,12 +175,7 @@ export default {
         }
         return 'Unknown';
     },
-    FocalLengthIn35mmFilm(value) {
-        if (value === 0) {
-            return 'Unknown';
-        }
-        return value + ' mm';
-    },
+    FocalLengthIn35mmFilm,
     SceneCaptureType(value) {
         if (value === 0) {
             return 'Standard';
@@ -236,4 +231,11 @@ function getComponentText(component) {
     } else if (component === 6) {
         return 'B';
     }
+}
+
+export function FocalLengthIn35mmFilm(value) {
+    if (value === 0) {
+        return 'Unknown';
+    }
+    return value + ' mm';
 }
