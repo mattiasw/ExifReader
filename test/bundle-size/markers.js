@@ -107,21 +107,18 @@ const MODULE_PROBES = {
         {label: 'tag-names-gps-ifd.js', when: whenIncludedInFull('exif')},
         {label: 'tag-names-interoperability-ifd.js', when: whenIncludedInFull('exif')},
         // Only reached from descriptions in the dictionaries above.
-        {label: 'tag-names-utils.js:getEncodedString', when: whenIncludedInFull('exif')},
-        {label: 'image-header-jpeg.js:warnAboutMultipleExifSegments', when: whenIncluded('jpeg', 'exif')}
+        {label: 'tag-names-utils.js:getEncodedString', when: whenIncludedInFull('exif')}
     ],
     iptc: [
         // Read from JPEG APP13, from the Exif IPTC-NAA tag and from PNG text.
         {label: 'iptc-tags.js', when: whenIncluded('iptc')},
-        {label: 'iptc-tag-names.js', when: whenIncludedInFull('iptc')},
-        {label: 'image-header-jpeg.js:APP13_IPTC_IDENTIFIER', when: whenIncluded('jpeg', 'iptc')}
+        {label: 'iptc-tag-names.js', when: whenIncludedInFull('iptc')}
     ],
     xmp: [
         {label: 'xml.js', when: whenIncluded('xmp')},
         {label: 'xmp-tags.js', when: whenIncluded('xmp')},
         {label: 'xmp-namespaces.js', when: whenIncluded('xmp')},
-        {label: 'xmp-tag-names.js', when: whenIncluded('xmp')},
-        {label: 'image-header-iso-bmff.js:findIinfXmpItemId', when: (modules) => isoBmffIsIncluded(modules) && !!modules.xmp}
+        {label: 'xmp-tag-names.js', when: whenIncluded('xmp')}
     ],
     icc: [
         {label: 'icc-tags.js', when: whenIncluded('icc')},
@@ -144,8 +141,8 @@ const MODULE_PROBES = {
         {label: 'thumbnail.js', when: whenIncluded('exif', 'thumbnail')}
     ],
     jpeg: [
-        {label: 'image-header-jpeg.js:warnAboutMultipleExifSegments', when: whenIncluded('jpeg', 'exif')},
-        {label: 'image-header-jpeg.js:APP13_IPTC_IDENTIFIER', when: whenIncluded('jpeg', 'iptc')}
+        {label: 'image-header-jpeg.js:warnAboutMultipleExifSegments', when: whenIncluded('jpeg')},
+        {label: 'image-header-jpeg.js:APP13_IPTC_IDENTIFIER', when: whenIncluded('jpeg')}
     ],
     png: [
         {label: 'png-tags.js', when: whenIncluded('png')},
@@ -155,10 +152,12 @@ const MODULE_PROBES = {
     heic: [
         {label: 'image-header-heic.js', when: whenIncluded('heic')},
         // Both ISO-BMFF finders import the shared box parser.
-        {label: 'image-header-iso-bmff.js:parseItemInformationBox', when: isoBmffIsIncluded}
+        {label: 'image-header-iso-bmff.js:parseItemInformationBox', when: isoBmffIsIncluded},
+        {label: 'image-header-iso-bmff.js:findIinfXmpItemId', when: isoBmffIsIncluded}
     ],
     avif: [
-        {label: 'image-header-iso-bmff.js:parseItemInformationBox', when: isoBmffIsIncluded}
+        {label: 'image-header-iso-bmff.js:parseItemInformationBox', when: isoBmffIsIncluded},
+        {label: 'image-header-iso-bmff.js:findIinfXmpItemId', when: isoBmffIsIncluded}
     ],
     jxl: [
         {label: 'jxl-file-tags.js', when: whenIncluded('jxl')}
@@ -184,8 +183,8 @@ const BLIND_SPOTS = {
         reason: 'image-header-avif.js has no unique literal, and the ISO-BMFF finder it shares with heic cannot show whether avif is there in a heic build'
     },
     exif: {
-        when: (modules) => Array.isArray(modules.exif) && !modules.jpeg,
-        reason: 'given as a tag list, every other exif-only literal sits in the filtered dictionaries or descriptions they reference; only the JPEG finder carries one outside them'
+        when: (modules) => Array.isArray(modules.exif),
+        reason: 'given as a tag list, every exif-only literal sits in the filtered dictionaries or descriptions they reference'
     },
     file: {
         when: (modules) => !modules.jpeg,
@@ -198,10 +197,6 @@ const BLIND_SPOTS = {
     png_file: {
         when: (modules) => !modules.png,
         reason: 'png-file-tags.js is only reached through the PNG finder, so a build without png cannot show whether png_file is there'
-    },
-    jpeg: {
-        when: (modules) => !modules.exif && !modules.iptc,
-        reason: 'the unique literals of image-header-jpeg.js sit in its exif and iptc branches, so a build without both cannot show whether the JPEG finder is there'
     }
 };
 
@@ -217,6 +212,7 @@ const UNPROBEABLE_REASONS = {
     'composite.js': NO_UNIQUE_LITERAL,
     'constants.js': NO_UNIQUE_LITERAL,
     'dom-parser.js': NO_UNIQUE_LITERAL,
+    'ifd-types.js': NO_UNIQUE_LITERAL,
     'image-header-avif.js': NO_UNIQUE_LITERAL,
     'image-header-iso-bmff-iloc.js': NO_UNIQUE_LITERAL,
     'image-header-iso-bmff-utils.js': NO_UNIQUE_LITERAL,

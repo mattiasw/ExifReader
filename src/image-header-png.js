@@ -5,7 +5,6 @@
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
 import {getStringFromDataView, pushMetadataBlock} from './utils.js';
-import Constants from './constants.js';
 
 export default {
     isPngFile,
@@ -70,11 +69,11 @@ function findPngOffsets(dataView, async, metadataBlocks) {
             && getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === TYPE_IEND) {
             sawIEnd = true;
         }
-        if (Constants.USE_PNG_FILE && isPngImageHeaderChunk(dataView, offset)) {
+        if (isPngImageHeaderChunk(dataView, offset)) {
             offsets.hasAppMarkers = true;
             offsets.pngHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
             blockType = 'file';
-        } else if (Constants.USE_XMP && isPngXmpChunk(dataView, offset)) {
+        } else if (isPngXmpChunk(dataView, offset)) {
             const dataOffset = getPngXmpDataOffset(dataView, offset);
             if (dataOffset !== undefined) {
                 offsets.hasAppMarkers = true;
@@ -95,7 +94,7 @@ function findPngOffsets(dataView, async, metadataBlocks) {
             offsets.hasAppMarkers = true;
             offsets.tiffHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
             blockType = 'exif';
-        } else if (Constants.USE_ICC && async && isPngIccpChunk(dataView, offset)) {
+        } else if (async && isPngIccpChunk(dataView, offset)) {
             const iccHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
             const iccHeader = parseIccHeader(dataView, iccHeaderOffset, chunkDataLength);
             if (iccHeader !== undefined) {

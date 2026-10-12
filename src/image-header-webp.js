@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {getStringFromDataView, pushMetadataBlock} from './utils.js';
-import Constants from './constants.js';
 
 export default {
     isWebpFile,
@@ -53,7 +52,7 @@ function findOffsets(dataView, metadataBlocks) {
         const chunkSize = dataView.getUint32(offset + CHUNK_SIZE_OFFSET, true);
         let blockType;
 
-        if (Constants.USE_EXIF && (chunkId === 'EXIF')) {
+        if (chunkId === 'EXIF') {
             hasAppMarkers = true;
             if (getStringFromDataView(dataView, offset + CHUNK_HEADER_SIZE, EXIF_IDENTIFIER.length) === EXIF_IDENTIFIER) {
                 tiffHeaderOffset = offset + CHUNK_HEADER_SIZE + EXIF_IDENTIFIER.length;
@@ -61,14 +60,14 @@ function findOffsets(dataView, metadataBlocks) {
                 tiffHeaderOffset = offset + CHUNK_HEADER_SIZE;
             }
             blockType = 'exif';
-        } else if (Constants.USE_XMP && (chunkId === 'XMP ')) {
+        } else if (chunkId === 'XMP ') {
             hasAppMarkers = true;
             xmpChunks = [{
                 dataOffset: offset + CHUNK_HEADER_SIZE,
                 length: chunkSize
             }];
             blockType = 'xmp';
-        } else if (Constants.USE_ICC && (chunkId === 'ICCP')) {
+        } else if (chunkId === 'ICCP') {
             hasAppMarkers = true;
             iccChunks = [{
                 offset: offset + CHUNK_HEADER_SIZE,

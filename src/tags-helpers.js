@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import Constants from './constants.js';
 import Types from './types.js';
 import {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './ifd-types.js';
 import {IFD_ENTRY_LENGTH, TIFF_HEADER_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
@@ -86,7 +85,7 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
 
 /**
  * Reads the tags of an IFD, and for a 0th IFD also those of the thumbnail IFD
- * it points to.
+ * it points to when tagNames has a dictionary for IFD_TYPE_1ST.
  *
  * @param {{remaining: number, ifdEntriesRemaining: number, decompressedAllowanceRemaining: number}} [valueBudget] -
  * Caps the total size of the decoded tag values and the number of IFD entries
@@ -98,6 +97,8 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
  * @param {Object} tagNames - Tag dictionaries keyed by IFD type, then by tag code,
  * passed in so that a caller composing its own does not bundle every dictionary.
  * Every IFD type read needs a dictionary, `{}` if empty; a missing one throws.
+ * The thumbnail IFD is the exception: without an IFD_TYPE_1ST dictionary it is
+ * not read and its entries are not charged to the value budget.
  * @returns {Object} The read tags, keyed by tag name.
  */
 export function readIfd(
@@ -160,7 +161,7 @@ export function readIfd(
         offset += FIELD_SIZE;
     }
 
-    if (Constants.USE_THUMBNAIL && !ranOutOfIfdEntries && (offset + Types.getTypeSize('LONG') <= dataView.byteLength)) {
+    if (tagNames[IFD_TYPE_1ST] !== undefined && !ranOutOfIfdEntries && (offset + Types.getTypeSize('LONG') <= dataView.byteLength)) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
         if (nextIfdOffset >= TIFF_HEADER_LENGTH && ifdType === IFD_TYPE_0TH) {
             if (tagFilter.shouldParseGroup('thumbnail')) {

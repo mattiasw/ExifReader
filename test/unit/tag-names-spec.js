@@ -3,25 +3,12 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import Constants from '../../src/constants.js';
 import TagNames from '../../src/tag-names.js';
 import TagNames0thIfd from '../../src/tag-names-0th-ifd.js';
 import TagNamesGpsIfd from '../../src/tag-names-gps-ifd.js';
 import TagNamesInteroperabilityIfd from '../../src/tag-names-interoperability-ifd.js';
-import {swapProperties} from './test-utils.js';
-
-const EXIF_IFD_TYPES = ['0th', '1st', 'exif', 'gps', 'interoperability'];
-
-const restoreFunctions = [];
-let reimportCount = 0;
 
 describe('tag-names', () => {
-    afterEach(() => {
-        while (restoreFunctions.length > 0) {
-            restoreFunctions.pop()();
-        }
-    });
-
     it('should have 0th IFD tag names', () => {
         expect(TagNames['0th']).to.not.be.undefined;
     });
@@ -46,59 +33,25 @@ describe('tag-names', () => {
         expect(TagNames['canon']).to.not.be.undefined;
     });
 
-    it('should leave out the Exif tag names when Exif tags have been excluded', async () => {
-        const tagNames = await getTagNamesBuiltWith({USE_EXIF: false});
-
-        for (const ifdType of EXIF_IFD_TYPES) {
-            expect(tagNames[ifdType]).to.deep.equal({});
-        }
+    it('should have Pentax IFD tag names', () => {
+        expect(TagNames['pentax']).to.not.be.undefined;
     });
 
-    it('should leave the MPF and maker note tag names to their own flags when Exif tags have been excluded', async () => {
-        const tagNames = await getTagNamesBuiltWith({USE_EXIF: false});
-
-        for (const ifdType of ['mpf', 'canon', 'pentax']) {
-            expect(Object.keys(tagNames[ifdType])).to.not.be.empty;
-        }
+    it('should have the thumbnail IFD tag names', () => {
+        expect(TagNames['1st']).to.equal(TagNames0thIfd);
     });
 
-    it('should have the Exif tag names when Exif tags have been included', async () => {
-        const tagNames = await getTagNamesBuiltWith({USE_EXIF: true});
-
-        for (const ifdType of EXIF_IFD_TYPES) {
-            expect(Object.keys(tagNames[ifdType])).to.not.be.empty;
-        }
-        expect(tagNames['0th']).to.equal(tagNames['exif']);
-        expect(tagNames['1st']).to.equal(TagNames0thIfd);
-        expect(tagNames['gps']).to.equal(TagNamesGpsIfd);
-        expect(tagNames['interoperability']).to.equal(TagNamesInteroperabilityIfd);
+    it('should share one merged dictionary between the 0th and Exif IFDs', () => {
+        expect(TagNames['0th']).to.equal(TagNames['exif']);
+        expect(TagNames['0th'][0x010f]).to.equal('Make');
+        expect(TagNames['exif'][0x829a]).to.not.be.undefined;
     });
 
-    it('should leave out the MPF tag names when MPF tags have been excluded', async () => {
-        const tagNames = await getTagNamesBuiltWith({USE_MPF: false});
-
-        expect(tagNames['mpf']).to.deep.equal({});
-        for (const ifdType of ['canon', 'pentax']) {
-            expect(Object.keys(tagNames[ifdType])).to.not.be.empty;
+    it('should have a non-empty dictionary for every IFD type', () => {
+        for (const ifdType of ['0th', '1st', 'exif', 'gps', 'interoperability', 'mpf', 'canon', 'pentax']) {
+            expect(Object.keys(TagNames[ifdType]), ifdType).to.not.be.empty;
         }
-    });
-
-    it('should leave out the maker note tag names when maker notes have been excluded', async () => {
-        const tagNames = await getTagNamesBuiltWith({USE_MAKER_NOTES: false});
-
-        for (const ifdType of ['canon', 'pentax']) {
-            expect(tagNames[ifdType]).to.deep.equal({});
-        }
-        expect(Object.keys(tagNames['mpf'])).to.not.be.empty;
+        expect(TagNames['gps']).to.equal(TagNamesGpsIfd);
+        expect(TagNames['interoperability']).to.equal(TagNamesInteroperabilityIfd);
     });
 });
-
-// The dictionary is built while the module is evaluated, so a swapped constant
-// only shows in a fresh instance of it. The query string forces one, while the
-// constants module it imports stays the shared, already swapped instance.
-function getTagNamesBuiltWith(flags) {
-    restoreFunctions.push(swapProperties(Constants, flags));
-    reimportCount += 1;
-    return import(`../../src/tag-names.js?build=${reimportCount}`)
-        .then((tagNamesModule) => tagNamesModule.default);
-}

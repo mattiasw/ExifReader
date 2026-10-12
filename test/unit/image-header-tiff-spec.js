@@ -3,7 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from './test-utils.js';
+import {getDataView, swapProperties} from './test-utils.js';
+import Constants from '../../src/constants.js';
 import ImageHeaderTiff from '../../src/image-header-tiff.js';
 
 describe('image-header-tiff', () => {
@@ -33,5 +34,17 @@ describe('image-header-tiff', () => {
             hasAppMarkers: true,
             tiffHeaderOffset: 0,
         });
+    });
+
+    it('should return tiffHeaderOffset 0 even if Exif is excluded from custom build', () => {
+        const restoreConstants = swapProperties(Constants, {USE_EXIF: false});
+        try {
+            expect(ImageHeaderTiff.findTiffOffsets()).to.deep.equal({
+                hasAppMarkers: true,
+                tiffHeaderOffset: 0,
+            });
+        } finally {
+            restoreConstants();
+        }
     });
 });

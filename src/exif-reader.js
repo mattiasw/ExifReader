@@ -7,7 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getDataViewFromBytes, getByteString, getStringValueFromArray, assertPromiseSupport, setProperty} from './utils.js';
+import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getDataViewFromBytes, getByteString, getStringValueFromArray, assertPromiseSupport, setProperty, MAX_METADATA_BLOCKS} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import Constants from './constants.js';
@@ -16,7 +16,11 @@ import ByteOrder from './byte-order.js';
 import {getTiffHeaderOffset} from './image-header-iso-bmff.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
-import TagNames from './tag-names.js';
+import TagNames0thIfd from './tag-names-0th-ifd.js';
+import TagNamesExifIfd from './tag-names-exif-ifd.js';
+import TagNamesGpsIfd from './tag-names-gps-ifd.js';
+import TagNamesInteroperabilityIfd from './tag-names-interoperability-ifd.js';
+import {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_EXIF, IFD_TYPE_GPS, IFD_TYPE_INTEROPERABILITY} from './ifd-types.js';
 import {getValueBudget, addDecompressedValueAllowance, takeEmbeddedExifThumbnail} from './tags-helpers.js';
 import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
@@ -50,6 +54,8 @@ const BROB_XMP_SIZE_ALLOWANCE = 64 * 1024;
 // total, plus room for a typical thumbnail.
 const EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE = 2;
 const EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE = 64 * 1024;
+// The USE_EXIF gate is what lets a build without Exif drop the dictionaries.
+const TAG_NAMES_0TH_AND_EXIF_IFDS = Constants.USE_EXIF ? objectAssign({}, TagNames0thIfd, TagNamesExifIfd) : {};
 
 export default {
     load,
@@ -315,14 +321,13 @@ export function loadView(
                 .then((decompressedDataView) => {
                     const brobTiffHeaderOffset = getTiffHeaderOffset(decompressedDataView, 0);
                     addDecompressedValueAllowance(valueBudget, decompressedDataView.byteLength);
-                    const {tags: readTags, byteOrder: brobByteOrder} = Tags.read(
+                    const {tags: readTags, byteOrder: brobByteOrder} = readExifTags(
                         decompressedDataView,
                         brobTiffHeaderOffset,
                         includeUnknown,
                         computed,
                         tagFilter,
-                        valueBudget,
-                        TagNames
+                        valueBudget
                     );
                     const thumbnail = takeEmbeddedExifThumbnail(
                         readTags,
@@ -475,7 +480,11 @@ export function loadView(
             decompressConfig,
             valueBudget,
             readEmbeddedExifThumbnail,
-            readEmbeddedExifCarriedGroups
+            readEmbeddedExifCarriedGroups,
+            {
+                exif: Constants.USE_EXIF ? readExifTags : undefined,
+                iptc: Constants.USE_IPTC ? IptcTags.read : undefined,
+            }
         );
         pngTextIsAsync = !!readTagsPromise;
 
@@ -600,7 +609,7 @@ export function loadView(
     if (expanded && includeOffsets) {
         mergeSteps.push({
             type: 'metadataRange',
-            metadataBlocks,
+            metadataBlocks: getParsedMetadataBlocks(metadataBlocks, fileType),
             metadataTruncated: !!metadataTruncated,
         });
     }
@@ -854,7 +863,7 @@ function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed
     // view is only missing in unit tests that fake the tag readers.
     const valueBudget = dataView === undefined ? undefined : getValueBudget(dataView);
     try {
-        const {tags, byteOrder} = Tags.read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget, TagNames);
+        const {tags, byteOrder} = readExifTags(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget);
         return {tags, byteOrder, valueBudget};
     } catch (error) {
         // A malformed TIFF header (an out-of-bounds offset or an invalid byte
@@ -863,6 +872,60 @@ function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed
         // same {tags, byteOrder, valueBudget} shape so callers can destructure
         // safely.
         return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN, valueBudget};
+    }
+}
+
+function readExifTags(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
+    return Tags.read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget, getExifTagNames());
+}
+
+// Only the IFDs Tags.read walks; the MPF and maker note readers carry their own
+// dictionaries. Without a thumbnail dictionary the thumbnail IFD is not read.
+function getExifTagNames() {
+    // Assigned rather than computed keys, which Babel compiles to a helper call each.
+    const tagNames = {};
+    tagNames[IFD_TYPE_0TH] = TAG_NAMES_0TH_AND_EXIF_IFDS;
+    tagNames[IFD_TYPE_EXIF] = TAG_NAMES_0TH_AND_EXIF_IFDS;
+    tagNames[IFD_TYPE_GPS] = TagNamesGpsIfd;
+    tagNames[IFD_TYPE_INTEROPERABILITY] = TagNamesInteroperabilityIfd;
+    if (Constants.USE_THUMBNAIL) {
+        tagNames[IFD_TYPE_1ST] = TagNames0thIfd;
+    }
+    return tagNames;
+}
+
+// Finders report every kind they find; list only the kinds this build parses.
+function getParsedMetadataBlocks(metadataBlocks, fileType) {
+    if (!metadataBlocks) {
+        return metadataBlocks;
+    }
+    const format = fileType && fileType.value;
+    const isCapped = metadataBlocks.length >= MAX_METADATA_BLOCKS;
+    const lastIndex = metadataBlocks.length - 1;
+    return metadataBlocks.filter((block, index) => isParsedMetadataBlock(format, block.type)
+        // At the cap the last block was widened over every later block, so it stays.
+        || (isCapped && index === lastIndex));
+}
+
+function isParsedMetadataBlock(format, blockType) {
+    switch (blockType) {
+        case 'file':
+            return format === 'png' ? Constants.USE_PNG_FILE : Constants.USE_FILE;
+        case 'exif':
+            // The PNG finder never gated eXIf, so it is listed in every build.
+            return format === 'png' || Constants.USE_EXIF;
+        case 'jfif':
+            return Constants.USE_JFIF;
+        case 'xmp':
+            return Constants.USE_XMP;
+        case 'iptc':
+            return Constants.USE_IPTC;
+        case 'icc':
+            return Constants.USE_ICC;
+        case 'mpf':
+            return Constants.USE_MPF;
+        default:
+            return true;
     }
 }
 

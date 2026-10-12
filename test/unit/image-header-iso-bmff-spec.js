@@ -1088,6 +1088,36 @@ describe('image-header-iso-bmff', () => {
             expect(findOffsets(dataView)).to.deep.equal({hasAppMarkers: false});
         });
 
+        it('should report app markers for a meta box with only an Exif item', () => {
+            const EXIF_ITEM_ID = 2;
+            const exifData = buildExifBlock('<Exif data>');
+            const metaBox = getFullBox(
+                'meta',
+                0,
+                buildIinfBox([{itemId: EXIF_ITEM_ID, itemType: ITEM_INFO_TYPE_EXIF}])
+                + buildIlocBox({
+                    version: 0,
+                    items: [{itemId: EXIF_ITEM_ID, baseOffset: 0, extents: [{extentOffset: 200, extentLength: exifData.length}]}],
+                })
+            );
+
+            const offsets = findOffsets(getDataView(metaBox.padEnd(200, '\x00') + exifData));
+
+            expect(offsets.hasAppMarkers).to.be.true;
+            expect(offsets.tiffHeaderOffset).to.be.a('number');
+            expect(offsets.xmpChunks).to.be.undefined;
+            expect(offsets.iccChunks).to.be.undefined;
+        });
+
+        it('should report app markers for a meta box with only an ICC profile', () => {
+            const dataView = getDataView(getFullBox('meta', 0, buildIprpColrBox('<ICC content>')));
+
+            const offsets = findOffsets(dataView);
+
+            expect(offsets.hasAppMarkers).to.be.true;
+            expect(offsets.iccChunks).to.have.lengthOf(1);
+        });
+
         it('should find offsets', () => {
             const EXIF_ITEM_ID = 2;
             const XMP_ITEM_ID = 3;
@@ -1183,6 +1213,43 @@ describe('image-header-iso-bmff', () => {
                     {type: 'xmp', start: baseOffsetValue + XMP_EXTENT_OFFSET, end: baseOffsetValue + XMP_EXTENT_OFFSET + 256},
                     {type: 'icc', start: 116, end: 116 + 17},
                 ]);
+            });
+
+            it('should report Exif, XMP and ICC even if they are excluded from custom build', () => {
+                const EXIF_ITEM_ID = 2;
+                const XMP_ITEM_ID = 3;
+                const xmpData = '<x:xmpmeta/>';
+                const exifData = buildExifBlock('<Exif data>');
+                const metaBox = getFullBox(
+                    'meta',
+                    0,
+                    buildIinfBox([
+                        {itemId: EXIF_ITEM_ID, itemType: ITEM_INFO_TYPE_EXIF},
+                        {itemId: XMP_ITEM_ID, itemType: ITEM_INFO_TYPE_MIME, contentType: 'application/rdf+xml'},
+                    ])
+                    + buildIprpColrBox('<ICC content>')
+                    + buildIlocBox({
+                        version: 0,
+                        items: [
+                            {itemId: EXIF_ITEM_ID, baseOffset: 0, extents: [{extentOffset: 200, extentLength: exifData.length}]},
+                            {itemId: XMP_ITEM_ID, baseOffset: 0, extents: [{extentOffset: 300, extentLength: xmpData.length}]},
+                        ],
+                    })
+                );
+                const data = metaBox.padEnd(200, '\x00') + exifData.padEnd(100, '\x00') + xmpData;
+                const restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
+                try {
+                    const metadataBlocks = [];
+                    const offsets = findOffsets(getDataView(data), metadataBlocks);
+
+                    expect(offsets.hasAppMarkers).to.be.true;
+                    expect(offsets.tiffHeaderOffset).to.be.a('number');
+                    expect(offsets.xmpChunks).to.deep.equal([{dataOffset: 300, length: xmpData.length}]);
+                    expect(offsets.iccChunks).to.have.lengthOf(1);
+                    expect(metadataBlocks.map((block) => block.type)).to.deep.equal(['exif', 'xmp', 'icc']);
+                } finally {
+                    restoreConstants();
+                }
             });
 
             it('should resolve constructionMethod 1 (idat) Exif items to file offsets via the idat box', () => {
@@ -1518,6 +1585,16 @@ describe('image-header-iso-bmff', () => {
                 expect(countWarnings(() => findOffsets(dataView))).to.equal(1);
             });
 
+            it('should warn even if Exif, XMP and ICC are excluded from custom build', () => {
+                const dataView = getDataView(getFullBox('meta', 0, buildSizedIlocExifIinfBox() + build64BitIlocBoxWithManyExtents()));
+                const restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
+                try {
+                    expect(countWarnings(() => findOffsets(dataView))).to.equal(1);
+                } finally {
+                    restoreConstants();
+                }
+            });
+
             it('should not warn for an iloc box with 4-byte fields', () => {
                 const ilocBox = buildIlocBox({
                     version: 0,
@@ -1555,15 +1632,6 @@ describe('image-header-iso-bmff', () => {
             const PRIMARY_ITEM_ID = 49;
             const UNKNOWN_PROPERTY_BOX = getBox('hvcC', '<config>');
             const COLR_PROPERTY_BOX = getBox('colr', 'nclx\x00\x01\x00\x0d\x00\x06\x80');
-
-            let restoreConstants;
-
-            afterEach(() => {
-                if (restoreConstants) {
-                    restoreConstants();
-                    restoreConstants = undefined;
-                }
-            });
 
             it('should point at the ispe associated with the primary item', () => {
                 const ispe = buildIspeBox(12, 2);
@@ -1683,28 +1751,30 @@ describe('image-header-iso-bmff', () => {
                 expect(findOffsets(getDataView(data))).to.not.have.property('imageDimensionsOffset');
             });
 
-            it('should find the ispe with Exif, XMP and ICC turned off', () => {
-                restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
+            it('should find the ispe and no pixi when the primary item has only an ispe', () => {
                 const ispe = buildIspeBox(12, 2);
                 const data = buildPrimaryItemMetaBox({
                     properties: [ispe],
                     ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}])],
                 });
 
-                expect(findOffsets(getDataView(data))).to.deep.equal({
-                    imageDimensionsOffset: getDimensionsOffset(data, ispe)
-                });
+                const offsets = findOffsets(getDataView(data));
+
+                expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
+                expect(offsets).to.not.have.property('pixelInformationOffset');
             });
 
-            it('should return nothing without a pitm with Exif, XMP and ICC turned off', () => {
-                restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
+            it('should return neither an ispe nor a pixi offset without a pitm', () => {
                 const data = buildPrimaryItemMetaBox({
                     pitm: '',
-                    properties: [buildIspeBox(12, 2)],
-                    ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}])],
+                    properties: [buildIspeBox(12, 2), buildPixiBox([8, 8, 8])],
+                    ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
                 });
 
-                expect(findOffsets(getDataView(data))).to.deep.equal({});
+                const offsets = findOffsets(getDataView(data));
+
+                expect(offsets).to.not.have.property('imageDimensionsOffset');
+                expect(offsets).to.not.have.property('pixelInformationOffset');
             });
 
             describe('without a resolvable ispe', () => {
@@ -1914,8 +1984,7 @@ describe('image-header-iso-bmff', () => {
                     expect(offsets.pixelInformationOffset).to.equal(getChannelCountOffset(data, pixi));
                 });
 
-                it('should find the ispe and the pixi with Exif, XMP and ICC turned off', () => {
-                    restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
+                it('should find only the ispe and the pixi offsets of an otherwise empty meta box', () => {
                     const ispe = buildIspeBox(12, 2);
                     const pixi = buildPixiBox([8, 8, 8]);
                     const data = buildPrimaryItemMetaBox({
@@ -1924,22 +1993,24 @@ describe('image-header-iso-bmff', () => {
                     });
 
                     expect(findOffsets(getDataView(data))).to.deep.equal({
+                        hasAppMarkers: false,
+                        iccChunks: undefined,
                         imageDimensionsOffset: getDimensionsOffset(data, ispe),
                         pixelInformationOffset: getChannelCountOffset(data, pixi),
                     });
                 });
 
                 it('should find the pixi without an ispe', () => {
-                    restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
                     const pixi = buildPixiBox([8, 8, 8]);
                     const data = buildPrimaryItemMetaBox({
                         properties: [UNKNOWN_PROPERTY_BOX, pixi],
                         ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
                     });
 
-                    expect(findOffsets(getDataView(data))).to.deep.equal({
-                        pixelInformationOffset: getChannelCountOffset(data, pixi),
-                    });
+                    const offsets = findOffsets(getDataView(data));
+
+                    expect(offsets.pixelInformationOffset).to.equal(getChannelCountOffset(data, pixi));
+                    expect(offsets).to.not.have.property('imageDimensionsOffset');
                 });
             });
         });
