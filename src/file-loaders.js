@@ -423,7 +423,8 @@ function finishLocalRead(filename, closeErr, buffer, total, resolve) {
 }
 
 /**
- * Range-aware browser `File` reader. Uses `file.slice(start, end)` plus
+ * Range-aware `File`/`Blob` reader. Slices with `file.slice(start, end)` for a
+ * partial range, then reads with `Blob.prototype.arrayBuffer`, falling back to
  * `FileReader.readAsArrayBuffer`.
  *
  * @param {File} file
@@ -431,18 +432,33 @@ function finishLocalRead(filename, closeErr, buffer, total, resolve) {
  * @returns {Promise<{buffer: ArrayBuffer, totalSize: number|undefined}>}
  */
 export function readFileObjectRange(file, {start = 0, end} = {}) {
+    return new Promise((resolve) => {
+        const totalSize = typeof file.size === 'number' ? file.size : undefined;
+        const blob = sliceFileObject(file, start, end, totalSize);
+        resolve(readBlob(blob).then((buffer) => ({buffer, totalSize})));
+    });
+}
+
+function sliceFileObject(file, start, end, totalSize) {
+    const hasSlice = file && typeof file.slice === 'function';
+    if (hasSlice && (start > 0 || (end !== undefined && end !== Infinity))) {
+        const sliceEnd = (end === undefined || end === Infinity) ? totalSize : end;
+        return file.slice(start, sliceEnd);
+    }
+    return file;
+}
+
+function readBlob(blob) {
+    if (typeof blob.arrayBuffer === 'function') {
+        return Promise.resolve(blob.arrayBuffer());
+    }
+
+    // IE, Safari before 14, Chrome before 76 and Firefox before 69 lack Blob.prototype.arrayBuffer.
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        const totalSize = typeof file.size === 'number' ? file.size : undefined;
-        reader.onload = (readerEvent) => resolve({buffer: readerEvent.target.result, totalSize});
+        reader.onload = (readerEvent) => resolve(readerEvent.target.result);
         reader.onerror = () => reject(reader.error);
-        const hasSlice = file && typeof file.slice === 'function';
-        if (hasSlice && (start > 0 || (end !== undefined && end !== Infinity))) {
-            const sliceEnd = (end === undefined || end === Infinity) ? totalSize : end;
-            reader.readAsArrayBuffer(file.slice(start, sliceEnd));
-        } else {
-            reader.readAsArrayBuffer(file);
-        }
+        reader.readAsArrayBuffer(blob);
     });
 }
 

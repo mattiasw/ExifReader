@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `ExifReader.load(file)` with a `File` in Node and Bun no longer rejects with
+  `ReferenceError: FileReader is not defined`. A `File` is now read with
+  `Blob.prototype.arrayBuffer`, and `FileReader` is still used in browsers that
+  lack it. A `Blob` that is not a `File`, such as one from Node's
+  `fs.openAsBlob` or from `response.blob()`, is still rejected: wrap it as
+  `new File([blob], 'name')`.
+
 ## [4.50.0] - 2026-10-12
 
 ### Changed
