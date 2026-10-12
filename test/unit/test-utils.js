@@ -2,14 +2,23 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import {expect} from 'chai';
+
 export {
     getArrayBuffer,
     getDataView,
     concatDataViews,
     getByteStringFromNumber,
     getConsoleWarnSpy,
-    swapProperties
+    swapProperties,
+    LINEAR_TIME_TIMEOUT_MS,
+    expectTimeRatioBelow,
+    expectAsyncTimeRatioBelow
 };
+
+// Per-test timeout of a linear-time guard: only a regression far slower at full size reaches it.
+const LINEAR_TIME_TIMEOUT_MS = 20000;
+const MIN_TIMED_RUN_MS = 50;
 
 function getArrayBuffer(data) {
     return Buffer.from(Array.from(data).map((character) => character.charCodeAt(0)));
@@ -102,4 +111,60 @@ function swapProperties(target, replacement) {
             delete target[key];
         }
     };
+}
+
+/**
+ * Asserts that run() takes less than maxRatio times as long as baseline(),
+ * timed in the same process so that machine load and coverage slow both
+ * alike. The baseline runs twice and the faster run counts, so the first run
+ * warms the JIT. A run under 50 ms is not checked, because timer and GC noise
+ * dominate there. The convention is a baseline at 1/8 of the run's input size
+ * with maxRatio 24, three times linear growth.
+ *
+ * @param {Function} baseline - The work under test on a smaller input.
+ * @param {Function} run - The work under test on the full-size input.
+ * @param {number} maxRatio - The bound on run time over baseline time.
+ * @returns {*} The result of run().
+ */
+function expectTimeRatioBelow(baseline, run, maxRatio) {
+    const baselineMs = Math.min(getRunTime(baseline), getRunTime(baseline));
+    const start = performance.now();
+    const result = run();
+    expectRatioBelow(performance.now() - start, baselineMs, maxRatio);
+    return result;
+}
+
+function getRunTime(work) {
+    const start = performance.now();
+    work();
+    return performance.now() - start;
+}
+
+/**
+ * The same check as expectTimeRatioBelow for closures that return promises.
+ *
+ * @param {Function} baseline - Returns a promise for the work on a smaller input.
+ * @param {Function} run - Returns a promise for the work on the full-size input.
+ * @param {number} maxRatio - The bound on run time over baseline time.
+ * @returns {Promise<*>} The result run() resolves to.
+ */
+async function expectAsyncTimeRatioBelow(baseline, run, maxRatio) {
+    const baselineMs = Math.min(await getAsyncRunTime(baseline), await getAsyncRunTime(baseline));
+    const start = performance.now();
+    const result = await run();
+    expectRatioBelow(performance.now() - start, baselineMs, maxRatio);
+    return result;
+}
+
+async function getAsyncRunTime(work) {
+    const start = performance.now();
+    await work();
+    return performance.now() - start;
+}
+
+function expectRatioBelow(runMs, baselineMs, maxRatio) {
+    if (runMs < MIN_TIMED_RUN_MS) {
+        return;
+    }
+    expect(runMs, `run ${runMs.toFixed(1)} ms, baseline ${baselineMs.toFixed(1)} ms`).to.be.below(maxRatio * baselineMs);
 }

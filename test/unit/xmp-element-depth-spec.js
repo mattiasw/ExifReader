@@ -5,9 +5,10 @@
 import {expect} from 'chai';
 import {DOMParser as XmldomDomParser, Document as XmldomDocument, DOMImplementation as XmldomDomImplementation, onErrorStopParsing} from '@xmldom/xmldom';
 import {exceedsMarkupBounds} from '../../src/xmp-element-depth.js';
-import {swapProperties} from './test-utils.js';
+import {swapProperties, LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow} from './test-utils.js';
 
 const BOUND = 256;
+const SIZE = 2 * 1024 * 1024;
 
 // xmldom reads every character up to a space as whitespace, \u0080 too, and the
 // line ends its normalizeLineEndings turns into \n.
@@ -428,8 +429,9 @@ describe('xmp-element-depth', () => {
         });
     });
 
-    describe('running time', () => {
-        const SIZE = 2 * 1024 * 1024;
+    describe('running time', function () {
+        this.timeout(LINEAR_TIME_TIMEOUT_MS);
+        this.retries(2);
 
         for (const [name, unit] of [
             ['many tags with an unclosed double quote', '<a b="x '],
@@ -441,19 +443,16 @@ describe('xmp-element-depth', () => {
             ['many self-closing siblings', '<a b="1"/>']
         ]) {
             it(`should scan ${name} in linear time`, function () {
-                this.timeout(10000);
-                expectLinearScan(unit.repeat(Math.ceil(SIZE / unit.length)));
+                expectLinearScan((size) => unit.repeat(Math.ceil(size / unit.length)));
             });
         }
 
         it('should scan a tag with many attributes and no > in linear time', function () {
-            this.timeout(10000);
-            expectLinearScan('<a' + ' b="1"'.repeat(Math.ceil(SIZE / 6)));
+            expectLinearScan((size) => '<a' + ' b="1"'.repeat(Math.ceil(size / 6)));
         });
 
         it('should scan a tag with many quotes and no > in linear time', function () {
-            this.timeout(10000);
-            expectLinearScan('<a b="' + '\''.repeat(SIZE));
+            expectLinearScan((size) => '<a b="' + '\''.repeat(size));
         });
 
         for (const [name, unit] of [
@@ -465,8 +464,7 @@ describe('xmp-element-depth', () => {
             ['many attributes without a value', ' b']
         ]) {
             it(`should scan a tag with ${name} and no > in linear time`, function () {
-                this.timeout(10000);
-                expectLinearScan('<a b' + unit.repeat(Math.ceil(SIZE / unit.length)));
+                expectLinearScan((size) => '<a b' + unit.repeat(Math.ceil(size / unit.length)));
             });
         }
     });
@@ -510,10 +508,14 @@ function getXmldomDepth(parser, xmlString) {
     return maxDepth;
 }
 
-function expectLinearScan(xmlString) {
-    const start = Date.now();
-    exceedsMarkupBounds(xmlString, Infinity);
-    expect(Date.now() - start).to.be.below(1000);
+function expectLinearScan(getXmlString) {
+    const baselineXmlString = getXmlString(SIZE / 8);
+    const xmlString = getXmlString(SIZE);
+    expectTimeRatioBelow(
+        () => exceedsMarkupBounds(baselineXmlString, Infinity),
+        () => exceedsMarkupBounds(xmlString, Infinity),
+        24
+    );
 }
 
 const DEEP = 300;
