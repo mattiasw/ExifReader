@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.50.0] - 2026-10-12
+
 ### Changed
 
 - The package now declares an `exports` map. `exifreader`,
@@ -22,40 +24,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   them that way, and the CLI reads them by file path. TypeScript users still
   get `exif-reader.d.ts` through the `types` condition and field.
 - The map has a `browser` condition that points at the ES module source, so
-  tools that apply the `browser` condition without the `module` condition
-  keep getting it: esbuild with an explicit `conditions` list, which is what
-  Cloudflare's Wrangler runs, bundles the source as before, and Metro
-  resolving for the web platform now gets the source instead of the UMD
-  file, with identical behaviour.
-- The map has a `node` condition that points at the UMD file, so bundlers
-  that target Node (esbuild with `platform: 'node'`, webpack with
-  `target: 'node'`, Bun's bundler with `--target=bun`, and other tools that
-  apply the `node` condition) bundle the same file Node loads. For webpack's
-  default Node configuration and for `bun build --target=bun` this changes
-  the bundled file from the ES module source to the UMD file. It parses
-  images the same way, and it bundles `@xmldom/xmldom` when that is installed
-  instead of loading it from `node_modules` at run time; when it is not
-  installed, webpack reports a missing optional module and the build still
-  works. Like any CommonJS file, the UMD file needs the bundler to support
-  CommonJS: Rollup needs `@rollup/plugin-commonjs`, and Vite's development
-  server needs exifreader left out of `ssr.noExternal`.
-- esbuild bundling `require()` for the browser now builds. It bundles the ES
-  module source, as webpack, Vite, Rollup and Parcel already did, where it
-  used to pick the UMD file and fail on its `http` and `https` requires.
+  tools that apply the `browser` condition without the `module` condition keep
+  getting it: esbuild with an explicit `conditions` list, which is what
+  Cloudflare's Wrangler runs, bundles the source as before. Metro resolving for
+  the web platform now gets the source instead of the UMD file, with identical
+  behavior.
+- The map has a `node` condition that points at the UMD file, so bundlers that
+  target Node (esbuild with `platform: 'node'`, webpack with `target: 'node'`,
+  Bun's bundler with `--target=bun`, and other tools that apply the `node`
+  condition) bundle the same file Node loads. For webpack's default Node
+  configuration and for `bun build --target=bun` this changes the bundled file
+  from the ES module source to the UMD file. It parses images the same way, and
+  the bundler includes `@xmldom/xmldom` in the bundle when that package is
+  installed, instead of loading it from `node_modules` at run time. When
+  `@xmldom/xmldom` is not installed, webpack reports a missing optional module
+  and the build still works. Like any CommonJS file, the UMD file needs the
+  bundler to support CommonJS: Rollup needs `@rollup/plugin-commonjs`, and
+  Vite's development server needs exifreader left out of `ssr.noExternal`.
 
 ### Fixed
 
+- Bundling `require('exifreader')` for the browser with esbuild now works.
+  esbuild now bundles the ES module source, as webpack, Vite, Rollup and Parcel
+  already did, instead of picking the UMD file and failing on its `http` and
+  `https` requires.
 - Loading a file path or a URL in Node now works when exifreader is in an ES
   module bundle made by a tool other than webpack (esbuild with
   `format: 'esm'`, Vite's SSR build with exifreader in `ssr.noExternal`, and
-  the tools built on them), and when the ES module source is loaded directly
-  by Node, Bun or Deno. Before, only the UMD file loaded by Node itself and
-  webpack bundles could do this. Those setups need Node 20.16 or later on the
-  20 line, or 22.3 or later; the UMD file loaded by Node itself keeps working
-  on every supported version. The UMD file finds `@xmldom/xmldom` as before,
-  and bundlers include it when it is installed. Outside webpack the ES module
-  source gets no implicit `@xmldom/xmldom`: for XMP, pass the `domParser`
-  option, see
+  the tools built on them), and when the ES module source is loaded directly by
+  Node, Bun or Deno. Before, only the UMD file loaded by Node itself and
+  webpack bundles could do this. On Node, those setups need 20.16 or later on
+  the 20 line, or 22.3 or later. The UMD file loaded by Node itself keeps
+  working on every supported version. The UMD file finds `@xmldom/xmldom` as
+  before, and bundlers include it when it is installed. Outside webpack the ES
+  module source gets no implicit `@xmldom/xmldom`: for XMP, pass the
+  `domParser` option as described in
   [Parsing XMP tags when not in a DOM environment](https://github.com/mattiasw/ExifReader#parsing-xmp-tags-when-not-in-a-dom-environment).
 
 ## [4.49.0] - 2026-10-11
@@ -2245,7 +2248,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.49.0...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.50.0...HEAD
+[4.50.0]: https://github.com/mattiasw/ExifReader/compare/v4.49.0...v4.50.0
 [4.49.0]: https://github.com/mattiasw/ExifReader/compare/v4.48.1...v4.49.0
 [4.48.1]: https://github.com/mattiasw/ExifReader/compare/v4.48.0...v4.48.1
 [4.48.0]: https://github.com/mattiasw/ExifReader/compare/v4.47.0...v4.48.0
