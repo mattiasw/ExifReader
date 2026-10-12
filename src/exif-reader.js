@@ -618,7 +618,9 @@ export function loadView(
         // A plain property here would keep the import alive for the bundler, so
         // a build with neither Exif nor XMP would still carry composite.js.
         Composite: (Constants.USE_EXIF || Constants.USE_XMP) ? Composite : undefined,
-        Thumbnail,
+        // A plain property here would keep the import alive for the bundler, so
+        // a build without Exif thumbnails would still carry thumbnail.js.
+        Thumbnail: (Constants.USE_EXIF && Constants.USE_THUMBNAIL) ? Thumbnail : undefined,
     };
 
     if (async) {

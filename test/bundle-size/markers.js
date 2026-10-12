@@ -206,9 +206,7 @@ const BLIND_SPOTS = {
 };
 
 // Labels whose marker ships even in builds that exclude their module.
-const KNOWN_SURVIVORS = {
-    'thumbnail.js': 'exif-reader.js passes Thumbnail as a plain property of pipelineDependencies, which keeps the import alive in every build'
-};
+const KNOWN_SURVIVORS = {};
 
 const NO_UNIQUE_LITERAL = 'no string literal unique to it in code';
 const FINDER_WITHOUT_LITERAL = 'a format finder with no literal of its own, so no probe shows the finder itself';
