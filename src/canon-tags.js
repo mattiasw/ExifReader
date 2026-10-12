@@ -11,7 +11,7 @@
 
 import {objectAssign} from './utils.js';
 import {readIfd} from './tags-helpers.js';
-import {IFD_TYPE_CANON} from './tag-names.js';
+import TagNames, {IFD_TYPE_CANON} from './tag-names.js';
 
 const SHOT_INFO_AUTO_ROTATE = 27; // First position is size.
 const CAMERA_SETTINGS_LENS_TYPE = 22; // First position is size.
@@ -42,7 +42,8 @@ function read(
         computed,
         tagFilter,
         'makerNotes',
-        valueBudget
+        valueBudget,
+        TagNames
     );
 
     if (tags['ShotInfo']) {

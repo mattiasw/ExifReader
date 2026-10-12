@@ -8,6 +8,7 @@ import {getStringValueFromArray, getStringFromDataView, decompress, setProperty,
 import TagDecoder from './tag-decoder.js';
 import {PNG_CHUNK_LENGTH_OFFSET, PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_DATA_OFFSET, PNG_CHUNK_TYPE_SIZE, TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
 import Tags from './tags.js';
+import TagNames from './tag-names.js';
 import IptcTags from './iptc-tags.js';
 import Constants from './constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
@@ -230,7 +231,8 @@ function getTagsFromTextTag({name, value, description}, includeUnknown, computed
                 includeUnknown,
                 computed,
                 tagFilter,
-                valueBudget
+                valueBudget,
+                TagNames
             );
             const result = {embeddedExifTags};
             if (readCarriedGroups) {

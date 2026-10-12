@@ -16,6 +16,7 @@ import ByteOrder from './byte-order.js';
 import {getTiffHeaderOffset} from './image-header-iso-bmff.js';
 import ImageHeader from './image-header.js';
 import Tags from './tags.js';
+import TagNames from './tag-names.js';
 import {getValueBudget, addDecompressedValueAllowance, takeEmbeddedExifThumbnail} from './tags-helpers.js';
 import MpfTags from './mpf-tags.js';
 import FileTags from './file-tags.js';
@@ -320,7 +321,8 @@ export function loadView(
                         includeUnknown,
                         computed,
                         tagFilter,
-                        valueBudget
+                        valueBudget,
+                        TagNames
                     );
                     const thumbnail = takeEmbeddedExifThumbnail(
                         readTags,
@@ -852,7 +854,7 @@ function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed
     // view is only missing in unit tests that fake the tag readers.
     const valueBudget = dataView === undefined ? undefined : getValueBudget(dataView);
     try {
-        const {tags, byteOrder} = Tags.read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget);
+        const {tags, byteOrder} = Tags.read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget, TagNames);
         return {tags, byteOrder, valueBudget};
     } catch (error) {
         // A malformed TIFF header (an out-of-bounds offset or an invalid byte

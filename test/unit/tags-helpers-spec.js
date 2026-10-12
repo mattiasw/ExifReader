@@ -11,8 +11,27 @@
 import {expect} from 'chai';
 import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import TagNames from '../../src/tag-names.js';
-import {readIfd, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, addDecompressedIptcAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING, takeEmbeddedExifThumbnail} from '../../src/tags-helpers.js';
+import {readIfd as readIfdWithTagNames, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, addDecompressedIptcAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING, takeEmbeddedExifThumbnail} from '../../src/tags-helpers.js';
 import ByteOrder from '../../src/byte-order.js';
+
+// readIfd takes the tag dictionaries as its last argument. The tests below
+// call it positionally with the arguments they care about, so this forwards
+// the real TagNames and lets every omitted argument fall back to its default.
+function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown, computed, tagFilter, groupKey, valueBudget) {
+    return readIfdWithTagNames(
+        dataView,
+        ifdType,
+        offsetOrigin,
+        offset,
+        byteOrder,
+        includeUnknown,
+        computed,
+        tagFilter,
+        groupKey,
+        valueBudget,
+        TagNames
+    );
+}
 
 describe('tags-helpers', () => {
     let restoreTagNames;
@@ -114,6 +133,29 @@ describe('tags-helpers', () => {
         expect(tags['MyExifTag'].id).to.equal(0x4711);
         expect(tags['MyExifTag'].description).to.equal(0x42);
         expect(tags['MyExifTag'].__offset).to.be.undefined;
+    });
+
+    it('should name tags from the tag dictionaries it is given', () => {
+        // Field count + two fields + offset to next IFD.
+        const dataView = getDataView(
+            '\x00\x02'
+            + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00'
+            + '\x47\x12\x00\x01\x00\x00\x00\x01\x43\x00\x00\x00'
+            + '\x00\x00\x00\x00'
+        );
+        const tagNames = {
+            '0th': {
+                0x4711: 'MyTag',
+                0x4712: {name: 'MyDescribedTag', description: (value) => `Described ${value}`}
+            },
+            '1st': {}
+        };
+
+        const tags = readIfdWithTagNames(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, undefined, undefined, tagNames);
+
+        expect(tags['MyTag'].value).to.equal(0x42);
+        expect(tags['MyDescribedTag'].value).to.equal(0x43);
+        expect(tags['MyDescribedTag'].description).to.equal('Described 67');
     });
 
     it('should be able to read a one-field IFD and pass on the offset for MakerNote', () => {
@@ -329,6 +371,14 @@ describe('tags-helpers', () => {
 
     it('should be able to read RATIONAL tag', () => {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyRationalTag'}});
+        // Field count + offsetted RATIONAL field + offset to next IFD + value 9/2 at offset 0x12.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x05\x00\x00\x00\x01\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\x00\x00\x00\x09\x00\x00\x00\x02');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyRationalTag'].description).to.equal('4.5');
+    });
+
+    it('should describe a RATIONAL tag by its quotient when its dictionary entry has a name but no description function', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: {name: 'MyRationalTag'}}});
         // Field count + offsetted RATIONAL field + offset to next IFD + value 9/2 at offset 0x12.
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x05\x00\x00\x00\x01\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\x00\x00\x00\x09\x00\x00\x00\x02');
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);

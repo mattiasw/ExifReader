@@ -4,7 +4,7 @@
 
 import ByteOrder from './byte-order.js';
 import Types from './types.js';
-import {IFD_TYPE_MPF} from './tag-names.js';
+import TagNames, {IFD_TYPE_MPF} from './tag-names.js';
 import {deferInit, getBase64Image} from './utils.js';
 import {readIfd, get0thIfdOffset} from './tags-helpers.js';
 
@@ -48,7 +48,8 @@ function read(
             computed,
             tagFilter,
             'mpf',
-            valueBudget
+            valueBudget,
+            TagNames
         );
         return addMpfImages(dataView, dataOffset, tags, byteOrder);
     } catch (error) {

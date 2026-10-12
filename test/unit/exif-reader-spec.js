@@ -1019,6 +1019,47 @@ describe('exif-reader', function () {
         expect(result.MakerNote).to.deep.equal({value: [1, 2, 3]});
     });
 
+    it('should pass the tag dictionaries to the Exif read', () => {
+        swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE});
+        let capturedTagNames;
+        swap(Tags, {
+            read(...args) {
+                capturedTagNames = args[6];
+                return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
+            }
+        });
+
+        ExifReader.loadView();
+
+        expect(capturedTagNames).to.equal(TagNames);
+    });
+
+    it('should pass the tag dictionaries to the Exif read of brob Exif data', async () => {
+        const decompressedBuffer = new ArrayBuffer(OFFSET_TEST_VALUE + 100);
+        new DataView(decompressedBuffer).setUint32(0, OFFSET_TEST_VALUE - 4);
+        swapImageHeader({
+            fileType: {value: 'jxl', description: 'JPEG XL'},
+            brobExifChunk: {dataOffset: 0, length: 10}
+        });
+        let capturedTagNames;
+        swap(Tags, {
+            read(...args) {
+                capturedTagNames = args[6];
+                return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
+            }
+        });
+
+        await ExifReader.loadView(
+            new DataView(new ArrayBuffer(10)),
+            {
+                async: true,
+                decompress: {brotli: () => Promise.resolve(decompressedBuffer)}
+            }
+        );
+
+        expect(capturedTagNames).to.equal(TagNames);
+    });
+
     it('should size the decoded-value budget of brob Exif data from the file plus 4 times the decompressed data', async () => {
         const decompressedLength = OFFSET_TEST_VALUE + 100;
         const decompressedBuffer = new ArrayBuffer(decompressedLength);

@@ -14,6 +14,7 @@ import {
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../src/image-header-png.js';
 import PngTextTags from '../../src/png-text-tags.js';
 import Tags from '../../src/tags.js';
+import TagNames from '../../src/tag-names.js';
 import IptcTags from '../../src/iptc-tags.js';
 import Constants from '../../src/constants.js';
 import {getStringFromDataView, withDecompressBudget} from '../../src/utils.js';
@@ -504,6 +505,23 @@ describe('png-text-tags', () => {
             expect(result.embeddedIptcTags).to.be.undefined;
             expect(result.readTags).to.deep.equal({});
             expect(result.readTagsPromise).to.be.undefined;
+        });
+
+        it('should pass the tag dictionaries to the Exif read of a tEXt Exif raw profile', () => {
+            let passedTagNames;
+            restoreTagReaders = swapProperties(Tags, {
+                read: (...args) => {
+                    passedTagNames = args[6];
+                    return {tags: {}};
+                }
+            });
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM'))
+            ]);
+
+            PngTextTags.read(dataView, chunks);
+
+            expect(passedTagNames).to.equal(TagNames);
         });
 
         it('should not return the internal offset on MakerNote in a tEXt Exif raw profile', () => {

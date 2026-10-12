@@ -10,14 +10,26 @@
 import {expect} from 'chai';
 import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import TagNames from '../../src/tag-names.js';
-import Tags from '../../src/tags.js';
+import TagsModule from '../../src/tags.js';
 import ByteOrder from '../../src/byte-order.js';
+
+// Tags.read takes the tag dictionaries as its last argument. The tests below
+// call it positionally with the arguments they care about, so this forwards
+// the real TagNames and lets every omitted argument fall back to its default.
+const Tags = {
+    read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
+        return TagsModule.read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget, TagNames);
+    }
+};
 
 describe('tags', () => {
     let restoreTagNames;
 
     afterEach(() => {
-        restoreTagNames();
+        if (restoreTagNames) {
+            restoreTagNames();
+            restoreTagNames = undefined;
+        }
     });
 
     it('should be able to read 0th IFD', () => {
@@ -32,6 +44,18 @@ describe('tags', () => {
 
         expect(byteOrder).to.equal(ByteOrder.BIG_ENDIAN);
         expect(tags['MyExifTag'].description).to.equal(0x42);
+    });
+
+    it('should name tags from the tag dictionaries it is given', () => {
+        const dataView = getDataView(
+            '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x08'
+            + '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00'
+        );
+        const tagNames = {'0th': {0x4711: 'MyTag'}, '1st': {}, 'exif': {}, 'gps': {}, 'interoperability': {}};
+
+        const {tags} = TagsModule.read(dataView, 0, false, false, undefined, undefined, tagNames);
+
+        expect(tags['MyTag'].description).to.equal(0x42);
     });
 
     it('should be able to read 1st IFD (thumbnail) following 0th IFD', () => {
