@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import vm from 'node:vm';
 import {deflateSync, crc32} from 'node:zlib';
 import {expect} from 'chai';
-import {getCharacterArray, getBase64Image, getDataView as getDataViewOrWrapper} from '../../src/utils.js';
+import {getCharacterArray, getBase64Image} from '../../src/utils.js';
 import * as ExifReader from '../../src/exif-reader.js';
 import exifErrors from '../../src/errors.js';
 import ByteOrder from '../../src/byte-order.js';
@@ -406,23 +406,18 @@ describe('exif-reader', function () {
         });
     });
 
-    it('should fall back on DataView wrapper if a full DataView implementation is not available', () => {
-        const myTags = {MyTag: 42};
-        const bufferLikeData = getBufferLikeData('\x00\x00\x00\x00');
-        let capturedDataView;
-        swap(ImageHeader, {
-            parseAppMarkers(dataView) {
-                capturedDataView = dataView;
-                return {fileDataOffset: OFFSET_TEST_VALUE};
-            }
-        });
-        swapTagsRead(FileTags, myTags);
+    it('should return the same tags for a Uint8Array as for its ArrayBuffer', () => {
+        const image = getExifJpegWithThumbnail('\xff\xd8\xff\xdbTHUMBNAIL\xff\xd9');
 
-        expect(ExifReader.load(bufferLikeData)).to.deep.equal(myTags);
-        // Only the fallback wrapper can carry this input. A native DataView
-        // would have rejected it in its constructor.
-        expect(capturedDataView).to.not.be.an.instanceOf(DataView);
-        expect(capturedDataView.buffer).to.equal(bufferLikeData);
+        const bufferTags = ExifReader.load(getArrayBuffer(image));
+        const uint8ArrayTags = ExifReader.load(new Uint8Array(getArrayBuffer(image)));
+
+        expect(uint8ArrayTags.Thumbnail.type).to.equal('image/jpeg');
+        expect(uint8ArrayTags).to.deep.equal(bufferTags);
+    });
+
+    it('should throw a TypeError for a Buffer-like object that is not a typed array', () => {
+        expect(() => ExifReader.load(getBufferLikeData('\x00\x00\x00\x00'))).to.throw(TypeError, /typed array/);
     });
 
     it('should fail when there is no Exif data', () => {
@@ -1658,9 +1653,9 @@ describe('exif-reader', function () {
         });
     });
 
-    describe('brob data from input only the DataView wrapper can read', () => {
+    describe('brob data from a Uint8Array window into a larger buffer', () => {
         it('should pass the brob Exif data to the decompress step', async () => {
-            const {promise, getCaptured} = loadBufferLikeBrob(getJxlWithBrobExif());
+            const {promise, getCaptured} = loadWindowedBrob(getJxlWithBrobExif());
 
             expect(promise).to.be.instanceOf(Promise);
             await promise;
@@ -1668,7 +1663,7 @@ describe('exif-reader', function () {
         });
 
         it('should pass the brob XMP data to the decompress step', async () => {
-            const {promise, getCaptured} = loadBufferLikeBrob(getJxlWithBrob('xml ', 'BROTLI_XMP_DATA'));
+            const {promise, getCaptured} = loadWindowedBrob(getJxlWithBrob('xml ', 'BROTLI_XMP_DATA'));
 
             expect(promise).to.be.instanceOf(Promise);
             await promise;
@@ -1676,18 +1671,18 @@ describe('exif-reader', function () {
         });
 
         it('should bound the brob data by the bytes present when the box declares a larger length', async () => {
-            const {promise, getCaptured} = loadBufferLikeBrob(getJxlWithBrob('Exif', 'TRUNCATED', 100));
+            const {promise, getCaptured} = loadWindowedBrob(getJxlWithBrob('Exif', 'TRUNCATED', 100));
 
             expect(promise).to.be.instanceOf(Promise);
             await promise;
             expect(getCaptured()).to.equal('TRUNCATED');
         });
 
-        function loadBufferLikeBrob(jxl) {
+        function loadWindowedBrob(jxl) {
             let captured;
             let promise;
             expect(() => {
-                promise = ExifReader.load(getBufferLikeData(jxl), {
+                promise = ExifReader.load(getUint8ArrayWindow(jxl), {
                     async: true,
                     decompress: {
                         brotli: (bytes) => {
@@ -1698,6 +1693,13 @@ describe('exif-reader', function () {
                 });
             }).to.not.throw();
             return {promise, getCaptured: () => captured};
+        }
+
+        function getUint8ArrayWindow(jxl) {
+            const padding = 16;
+            const bytes = new Uint8Array(padding + jxl.length + padding).fill(0x5a);
+            bytes.set(getCharacterArray(jxl), padding);
+            return bytes.subarray(padding, padding + jxl.length);
         }
     });
 
@@ -2692,9 +2694,24 @@ describe('exif-reader', function () {
                 expect(tags.metadataRange.requests).to.equal(0);
             });
 
+            it('should attach an ArrayBuffer of only the window bytes when the input is a Uint8Array window', async () => {
+                swapForAutoTest({end: 50});
+
+                const parent = new Uint8Array(8192);
+                parent.fill(0xee);
+                parent.fill(0xaa, 64, 164);
+
+                const tags = await ExifReader.load(parent.subarray(64, 164), AUTO_OPTIONS);
+
+                expect(tags.metadataRange.buffer).to.be.instanceOf(ArrayBuffer);
+                expect(tags.metadataRange.buffer.byteLength).to.equal(50);
+                const bytes = Array.from(new Uint8Array(tags.metadataRange.buffer));
+                expect(bytes.every((byte) => byte === 0xaa)).to.equal(true);
+            });
+
             it('should not leak bytes past a Buffer-polyfill view when it is a window into a larger buffer', async () => {
                 // A Buffer from the `buffer` package fails Buffer.isBuffer(), so
-                // it reaches the ArrayBuffer.isView branch of sliceInputBuffer.
+                // it reaches the typed-array branch of sliceInputBuffer.
                 swapForAutoTest({end: 4096});
 
                 const parent = new Uint8Array(8192);
@@ -3457,13 +3474,45 @@ describe('exif-reader', function () {
             expect(getDataViewReachingParser(dataView)).to.equal(dataView);
         });
 
-        it('should not copy a DataViewWrapper before parsing it', () => {
-            const dataView = getDataViewOrWrapper(getBufferLikeData(getExifJpegWithThumbnail(THUMBNAIL)));
+        it('should hand the parser a self-contained view when load is given a Uint8Array window', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL);
+            const bytes = getUint8ArrayWindow(image);
+            expect(bytes.byteOffset).to.be.above(0);
 
-            const parsedDataView = getDataViewReachingParser(dataView);
+            const parsedDataView = getDataViewReachingParser(bytes, ExifReader.load);
 
-            expect(parsedDataView).to.not.be.an.instanceOf(DataView);
-            expect(parsedDataView).to.equal(dataView);
+            expect(parsedDataView.byteOffset).to.equal(0);
+            expect(parsedDataView.buffer.byteLength).to.equal(image.length);
+        });
+
+        it('should hand the parser a self-contained view when load is given a Node Buffer window', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL);
+            const buffer = getBufferWindow(image);
+            expect(Buffer.isBuffer(buffer)).to.equal(true);
+            expect(buffer.byteOffset).to.be.above(0);
+
+            const parsedDataView = getDataViewReachingParser(buffer, ExifReader.load);
+
+            expect(parsedDataView.byteOffset).to.equal(0);
+            expect(parsedDataView.buffer.byteLength).to.equal(image.length);
+        });
+
+        it('should not return bytes from outside a Uint8Array window passed to load', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL);
+
+            const tags = ExifReader.load(getUint8ArrayWindow(image));
+
+            expect(getBytes(tags.Thumbnail.image)).to.not.include(OUTSIDE_BYTE);
+            expect(tags).to.deep.equal(ExifReader.load(getArrayBuffer(image)));
+        });
+
+        it('should not return bytes from outside a Node Buffer window passed to load', () => {
+            const image = getExifJpegWithThumbnail(THUMBNAIL);
+
+            const tags = ExifReader.load(getBufferWindow(image));
+
+            expect(getBytes(tags.Thumbnail.image)).to.not.include(OUTSIDE_BYTE);
+            expect(tags).to.deep.equal(ExifReader.load(getArrayBuffer(image)));
         });
 
         it('should not return bytes from outside the window of a DataView from another realm', () => {
@@ -3487,6 +3536,16 @@ describe('exif-reader', function () {
         function getWindowedDataView(image) {
             const buffer = getPaddedBuffer(PADDING_LENGTH + image.length + PADDING_LENGTH, image, PADDING_LENGTH);
             return new DataView(buffer, PADDING_LENGTH, image.length);
+        }
+
+        function getUint8ArrayWindow(image) {
+            const buffer = getPaddedBuffer(PADDING_LENGTH + image.length + PADDING_LENGTH, image, PADDING_LENGTH);
+            return new Uint8Array(buffer, PADDING_LENGTH, image.length);
+        }
+
+        function getBufferWindow(image) {
+            const buffer = getPaddedBuffer(PADDING_LENGTH + image.length + PADDING_LENGTH, image, PADDING_LENGTH);
+            return Buffer.from(buffer, PADDING_LENGTH, image.length);
         }
 
         function getTrailingPaddedDataView(image) {
@@ -3523,7 +3582,7 @@ describe('exif-reader', function () {
 
         // The tags cannot show whether the view was copied, since every raw-byte
         // tag is built with ArrayBuffer.prototype.slice, which always allocates.
-        function getDataViewReachingParser(dataView) {
+        function getDataViewReachingParser(data, load = ExifReader.loadView) {
             let parsedDataView;
             swapImageHeaderDynamic((view) => {
                 parsedDataView = view;
@@ -3531,7 +3590,7 @@ describe('exif-reader', function () {
             });
             swapTagsRead(FileTags, {MyTag: 42});
 
-            expect(ExifReader.loadView(dataView)).to.deep.equal({MyTag: 42});
+            expect(load(data)).to.deep.equal({MyTag: 42});
 
             return parsedDataView;
         }
@@ -4517,9 +4576,8 @@ function getAsciiPrefix(dataView, length) {
 }
 
 function getBufferLikeData(data) {
-    // Exposes the Node Buffer read API without being a Buffer or an
-    // ArrayBuffer, so the native DataView constructor rejects it and the
-    // fallback wrapper is the only way to read it.
+    // Exposes the Node Buffer read API without being a Buffer, a typed array
+    // or an ArrayBuffer, like a Buffer polyfill from before 2015.
     const buffer = Buffer.from(data, 'binary');
     return {
         length: buffer.length,

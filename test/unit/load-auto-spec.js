@@ -4,6 +4,7 @@
 
 import {expect} from 'chai';
 import {makeLoadAuto} from '../../src/load-auto.js';
+import {swapProperties} from './test-utils.js';
 
 describe('load-auto', () => {
     describe('sliceInputBuffer (via loadAdaptiveFromMemory, typed array branch)', () => {
@@ -44,6 +45,28 @@ describe('load-auto', () => {
             const loadAuto = makeLoadAuto(loadFromDataReturning(-3));
             return loadAuto(view, {expanded: true, includeOffsets: true}).then((tags) => {
                 expect(tags.metadataRange.buffer.byteLength).to.equal(0);
+            });
+        });
+
+        describe('without ArrayBuffer.isView', () => {
+            let restore;
+
+            beforeEach(() => {
+                restore = swapProperties(ArrayBuffer, {isView: undefined});
+            });
+
+            afterEach(() => {
+                restore();
+            });
+
+            it('slices only the bytes of the typed array view', () => {
+                const view = makeView();
+                const loadAuto = makeLoadAuto(loadFromDataReturning(3));
+                return loadAuto(view, {expanded: true, includeOffsets: true}).then((tags) => {
+                    const buffer = tags.metadataRange.buffer;
+                    expect(buffer).to.be.instanceOf(ArrayBuffer);
+                    expect(Array.from(new Uint8Array(buffer))).to.deep.equal([0xAA, 0xAA, 0xAA]);
+                });
             });
         });
     });

@@ -18,7 +18,7 @@ function get(dataView, thumbnailTags, tiffHeaderOffset) {
 
         if (fitsInDataView(dataView, offset, length)) {
             thumbnailTags.type = 'image/jpeg';
-            const byteOffset = dataView.byteOffset || 0;
+            const byteOffset = dataView.byteOffset;
             thumbnailTags.image = dataView.buffer.slice(byteOffset + offset, byteOffset + offset + length);
             deferInit(thumbnailTags, 'base64', function () {
                 return getBase64Image(this.image);

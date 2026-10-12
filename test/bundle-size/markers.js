@@ -26,7 +26,6 @@ const SRC_PATH = path.join(__dirname, '..', '..', 'src');
 // mapped to a string literal only that file contains. A marker written with
 // its single quotes matches only the quoted literal, in either quote style.
 const MODULE_MARKERS = {
-    'dataview.js': 'DataView: Passed buffer type is unsupported.',
     'errors.js': 'No Exif data',
     'file-loaders.js': 'Content-Range',
     'image-header.js': 'Invalid image format',
@@ -78,7 +77,6 @@ const MODULE_MARKERS = {
 // The parsing core, whose markers have to be in every build. An absence here
 // also means the probe read an empty or wrong file.
 const ALWAYS_PRESENT_MODULES = [
-    'dataview.js',
     'errors.js',
     'file-loaders.js',
     'image-header.js',

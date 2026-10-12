@@ -183,7 +183,8 @@ local file path and will make a network request or read from the file system.
 Never pass an untrusted or user-controlled string to `load()`. Doing so lets an
 attacker make the process fetch arbitrary URLs (server-side request forgery) or
 open arbitrary local files. For untrusted image data, always pass the bytes
-themselves (an `ArrayBuffer`, a `Buffer`, or a browser `File`), never a string.
+themselves (an `ArrayBuffer`, a typed array such as `Uint8Array` or `Buffer`, or
+a browser `File`), never a string.
 
 **Tip:** To read metadata from an `HTMLImageElement`, wait for its `load` event
 and call `ExifReader.load(image.src)`. The browser should reuse the cached file.
@@ -197,6 +198,7 @@ const tags = ExifReader.load(fileBuffer);
 Where `fileBuffer` is one of
 
 *  `ArrayBuffer` or `SharedArrayBuffer` (browser, Node.js)
+*  any typed array such as `Uint8Array`, or a `DataView` (browser, Node.js)
 *  `Buffer` (Node.js)
 
 See the [examples site](https://mattiasw.github.io/ExifReader/) for more
@@ -390,8 +392,9 @@ does not fit inside the part you read, no ICC tags are returned for it. Use
 yourself.
 
 Note that this option only works when ExifReader handles the loading of the
-file. If e.g. an already loaded ArrayBuffer or Buffer is passed into ExifReader,
-the whole file will already have been loaded into memory and it's too late.
+file. If e.g. an already loaded ArrayBuffer, typed array or Buffer is passed
+into ExifReader, the whole file will already have been loaded into memory and
+it's too late.
 More specifically the length option will work for 1. local files when running
 through Node.js, 2. remote files when passing a URL, and 3. browser File objects
 (e.g., from form file fields). For remote files accessed through a web browser,
@@ -420,8 +423,11 @@ const tags = await ExifReader.load(url, {
 tags.metadataRange.end       // exact byte count needed for the metadata
 tags.metadataRange.buffer    // bytes [0, end), sliced from what we read.
                              //   Same kind as the input (ArrayBuffer,
-                             //   SharedArrayBuffer or Node Buffer). Save
-                             //   this to disk to keep only the
+                             //   SharedArrayBuffer or Node Buffer). For a
+                             //   typed array or DataView input it is an
+                             //   ArrayBuffer (a SharedArrayBuffer when the
+                             //   view is over one) holding only the view's
+                             //   bytes. Save this to disk to keep only the
                              //   metadata-bearing prefix.
 tags.metadataRange.fetched   // bytes actually read. May be greater than
                              //   `end` because the loop reads in fixed-size
@@ -442,10 +448,10 @@ Exif/XMP `iloc` entries point near the end of the file typically take two.
 - Local file path via Node `fs`
 - Browser `File` object via `File.slice`
 
-It is also accepted for in-memory inputs (`ArrayBuffer`, `SharedArrayBuffer`
-and Node.js `Buffer`) as a convenience. There is no IO loop to run in that
-case, but `metadataRange.buffer` is still attached as the trimmed slice of
-what you passed in.
+It is also accepted for in-memory inputs (`ArrayBuffer`, `SharedArrayBuffer`,
+Node.js `Buffer`, any other typed array and `DataView`) as a convenience. There
+is no IO loop to run in that case, but `metadataRange.buffer` is still attached
+as the trimmed slice of what you passed in.
 
 Requirements and caveats:
 

@@ -5,7 +5,6 @@
 import {expect} from 'chai';
 import {getDataView, getArrayBuffer} from './test-utils.js';
 import Thumbnail from '../../src/thumbnail.js';
-import DataViewWrapper from '../../src/dataview.js';
 
 const OFFSET_TEST_VALUE = 4;
 const COMPRESSION_JPEG = 6;
@@ -84,21 +83,6 @@ describe('thumbnail', () => {
         const image = '\x47\x11\x48\x12\x49\x13';
         const content = '\x00\x00\x00\x00\x00\x01' + image + '\x02\x03';
         const dataView = getPaddedDataView(content, 5);
-
-        const result = Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE);
-
-        expect(Array.from(new Uint8Array(result.image))).to.deep.equal(Array.from(getArrayBuffer(image)));
-    });
-
-    it('should extract the thumbnail when the data is a Buffer behind the DataView fallback', () => {
-        // The fallback wrapper has no byteOffset property, so the offset the
-        // slice is based on has to hold up for that shape too.
-        const thumbnailTags = {
-            JPEGInterchangeFormat: {value: 2},
-            JPEGInterchangeFormatLength: {value: 6}
-        };
-        const image = '\x47\x11\x48\x12\x49\x13';
-        const dataView = new DataViewWrapper(Buffer.from('\x00\x00\x00\x00\x00\x01' + image + '\x02\x03', 'binary'));
 
         const result = Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE);
 
@@ -240,16 +224,6 @@ describe('thumbnail', () => {
             JPEGInterchangeFormatLength: {value: 6}
         };
         const dataView = getDataView('\x00\x00\x00\x00\x00\x01\x47\x11\x48\x12\x49\x13\x02\x03');
-
-        expectNoThumbnail(dataView, thumbnailTags, OFFSET_TEST_VALUE);
-    });
-
-    it('should not extract a thumbnail past the end of the data behind the DataView fallback', () => {
-        const thumbnailTags = {
-            JPEGInterchangeFormat: {value: 2},
-            JPEGInterchangeFormatLength: {value: 9}
-        };
-        const dataView = new DataViewWrapper(Buffer.from('\x00\x00\x00\x00\x00\x01\x47\x11\x48\x12\x49\x13\x02\x03', 'binary'));
 
         expectNoThumbnail(dataView, thumbnailTags, OFFSET_TEST_VALUE);
     });

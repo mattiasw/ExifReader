@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ExifReader.load` accepts any typed array, such as a `Uint8Array`, and a
+  `DataView`, including a window into a larger buffer (GitHub issue #532).
+
+### Changed
+
+- A Node `Buffer` that spans its whole underlying `ArrayBuffer` is no longer
+  copied before parsing (a pooled or sliced `Buffer` still is), so, as with an
+  `ArrayBuffer`, a typed array or a `DataView`, it must not be modified while an
+  async load runs.
+- An unsupported input to `load` throws a `TypeError` that names the accepted
+  types instead of `Error: DataView: Passed buffer type is unsupported.`
+
+### Removed
+
+- Objects that only imitate a Node `Buffer`, with `readUInt8` and the other read
+  methods but without being a typed array, are no longer accepted. A Node
+  `Buffer` is a `Uint8Array` and still works. In 4.50.0 such objects worked
+  only for TIFF and GIF files; every other format threw a `TypeError` from
+  inside the parser.
+
 ### Fixed
 
 - `ExifReader.load(file)` with a `File` in Node and Bun no longer rejects with

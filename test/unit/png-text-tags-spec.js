@@ -17,7 +17,6 @@ import Tags from '../../src/tags.js';
 import IptcTags from '../../src/iptc-tags.js';
 import Constants from '../../src/constants.js';
 import {getStringFromDataView, withDecompressBudget} from '../../src/utils.js';
-import DataViewWrapper from '../../src/dataview.js';
 import {crc32} from 'node:zlib';
 
 describe('png-text-tags', () => {
@@ -110,24 +109,10 @@ describe('png-text-tags', () => {
         });
     });
 
-    it('should read a tEXt tag from a Node Buffer backed DataView wrapper', () => {
-        const tagDatatEXt = 'MyTag0\x00My value.';
-        const textChunks = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(tagDatatEXt)}]);
-        const dataView = toBufferBackedDataView(textChunks.dataView);
-        const chunks = textChunks.chunks;
-
-        const {readTags} = PngTextTags.read(dataView, chunks);
-
-        expect(readTags['MyTag0']).to.deep.equal({
-            value: 'My value.',
-            description: 'My value.'
-        });
-    });
-
-    it('should read an uncompressed iTXt tag from a Node Buffer backed DataView wrapper', () => {
+    it('should read an uncompressed iTXt tag relative to the DataView when it has a non-zero byteOffset', () => {
         const text = 'My value.';
         const textChunks = buildTextChunks([getChunkFromDataView(TYPE_ITXT, getItextDataView('MyTagUtf8', 'en', 'MyTagUtf8', text))]);
-        const dataView = toBufferBackedDataView(textChunks.dataView);
+        const dataView = getPaddedDataView(textChunks.dataView, 4);
         const chunks = textChunks.chunks;
 
         const {readTags} = PngTextTags.read(dataView, chunks);
@@ -138,11 +123,11 @@ describe('png-text-tags', () => {
         });
     });
 
-    it('should read a compressed zTXt tag from a Node Buffer backed DataView wrapper', async () => {
+    it('should read a compressed zTXt tag relative to the DataView when it has a non-zero byteOffset', async () => {
         const textChunks = buildTextChunks([
             getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.'))
         ]);
-        const dataView = toBufferBackedDataView(textChunks.dataView);
+        const dataView = getPaddedDataView(textChunks.dataView, 4);
         const chunks = textChunks.chunks;
 
         const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
@@ -1821,11 +1806,6 @@ describe('png-text-tags', () => {
 
     function stringToHex(text) {
         return text.split('').map((char) => char.charCodeAt(0).toString(16).padStart(2, '0')).join('');
-    }
-
-    function toBufferBackedDataView(dataView) {
-        const bytes = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
-        return new DataViewWrapper(Buffer.from(bytes));
     }
 
     function getPaddedDataView(contentDataView, pad) {

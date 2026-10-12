@@ -2,14 +2,36 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import DataViewWrapper from './dataview.js';
-
 export function getDataView(data, byteOffset, byteLength) {
-    try {
-        return new DataView(data, byteOffset, byteLength);
-    } catch (error) {
-        return new DataViewWrapper(data, byteOffset, byteLength);
+    return new DataView(data, byteOffset, byteLength);
+}
+
+/**
+ * Views the bytes of an ArrayBuffer, a SharedArrayBuffer, any typed array (a
+ * Node Buffer included) or a DataView, without copying them.
+ * @param {ArrayBuffer|SharedArrayBuffer|ArrayBufferView} data
+ * @returns {DataView} A view over the same bytes as `data`.
+ * @throws {TypeError} If `data` is none of the accepted types.
+ */
+export function getDataViewFromBytes(data) {
+    if (isArrayBufferViewLike(data)) {
+        return new DataView(data.buffer, data.byteOffset, data.byteLength);
     }
+    try {
+        return new DataView(data);
+    } catch (error) {
+        throw new TypeError('Passed data type is unsupported. Pass an ArrayBuffer, SharedArrayBuffer, DataView, a typed array such as a Uint8Array or Node Buffer, or a File.');
+    }
+}
+
+/**
+ * Tells a typed array or DataView by its shape: older runtimes lack the native check.
+ */
+export function isArrayBufferViewLike(data) {
+    return !!data
+        && !!data.buffer
+        && (typeof data.byteOffset === 'number')
+        && (typeof data.byteLength === 'number');
 }
 
 export function getStringFromDataView(dataView, offset, length) {

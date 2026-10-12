@@ -8,7 +8,7 @@
  */
 /* global Buffer */
 
-import {dataUriToBuffer} from './utils.js';
+import {dataUriToBuffer, isArrayBufferViewLike} from './utils.js';
 import NodeRequire from './node-require.js';
 
 export const HTTP_STATUS_OK = 200;
@@ -496,7 +496,7 @@ function bufferToBytes(b) {
     if (typeof Buffer !== 'undefined' && Buffer.isBuffer(b)) {
         return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
     }
-    if (ArrayBuffer.isView(b)) {
+    if (isArrayBufferViewLike(b)) {
         return new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
     }
     return new Uint8Array(b);
