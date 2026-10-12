@@ -9,6 +9,17 @@ const {rimrafSync} = require('rimraf');
 const {execSync, execFileSync, spawnSync} = require('child_process');
 const Exif = require('./exif');
 const configurations = require('./custom-builds.json');
+const parseConfig = require('../../bin/parse-config');
+const {
+    UNPROBEABLE_MODULES,
+    UNPROBEABLE_REASONS,
+    BLIND_SPOTS,
+    KNOWN_SURVIVORS,
+    assertMarkersAreUnique,
+    assertProbeTableIsConsistent,
+    getUnaccountedModules,
+    checkBundle
+} = require('../bundle-size/markers');
 
 const FIXTURES_PATH = path.join(__dirname, '..', 'fixtures');
 const MARKER_FILE_NAME = '.exifreader-custom-build.json';
@@ -24,9 +35,36 @@ describe('custom configuration image outputs', () => {
         cleanUp();
     });
 
+    describe('string probes', () => {
+        it('uses markers that occur in exactly one source file', () => {
+            assertMarkersAreUnique();
+        });
+
+        it('keeps the probe table consistent with the build modules', () => {
+            assertProbeTableIsConsistent(Object.keys(parseConfig({include: {}})));
+        });
+
+        it('accounts for every source file', () => {
+            expect(getUnaccountedModules()).to.deep.equal([]);
+        });
+
+        UNPROBEABLE_MODULES.forEach((fileName) => {
+            it.skip(`has no string probe for ${fileName}: ${UNPROBEABLE_REASONS[fileName]}`);
+        });
+
+        Object.keys(BLIND_SPOTS).forEach((moduleName) => {
+            it.skip(`has a blind spot for module ${moduleName}: ${BLIND_SPOTS[moduleName].reason}`);
+        });
+
+        Object.keys(KNOWN_SURVIVORS).forEach((label) => {
+            it.skip(`tolerates the known survivor ${label}: ${KNOWN_SURVIVORS[label]}`);
+        });
+    });
+
     configurations.filter((configuration) => !filter || (configuration.id === filter)).forEach((configuration) => {
         describe(`configuration "${configuration.id}"`, function () {
             this.timeout(120000);
+            const modules = getModuleMap(configuration.config);
 
             describe('initial build', () => {
                 before(() => {
@@ -49,6 +87,14 @@ describe('custom configuration image outputs', () => {
                         expect(customSize).to.be.below(fullSize * configuration.maxDistRatio);
                     });
                 }
+
+                it('drops the string probes of every excluded module', () => {
+                    expect(checkBundle(readInstalledBundle(), modules).surviving).to.deep.equal([]);
+                });
+
+                it('keeps the string probes of every included module', () => {
+                    expect(checkBundle(readInstalledBundle(), modules).missing).to.deep.equal([]);
+                });
 
                 fs.readdirSync(path.join(FIXTURES_PATH, 'images')).forEach((imageName) => {
                     it(`matches stored image output for ${imageName}`, async () => {
@@ -197,6 +243,17 @@ describe('custom configuration image outputs', () => {
 
     function installedDistDir() {
         return path.join(TEMP_PROJECT_DIR, 'node_modules', 'exifreader', 'dist');
+    }
+
+    function getModuleMap(config) {
+        if (config.include) {
+            return parseConfig({include: config.include});
+        }
+        return parseConfig({exclude: Object.keys(config.exclude).filter((key) => !!config.exclude[key])});
+    }
+
+    function readInstalledBundle() {
+        return fs.readFileSync(path.join(installedDistDir(), 'exif-reader.js'), 'utf8');
     }
 
     function siblingPath(fileName) {
