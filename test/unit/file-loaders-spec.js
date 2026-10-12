@@ -15,6 +15,7 @@ import {
     loadFile,
     loadFileObject,
     nodeGetRange,
+    readFileObjectRange,
     HTTP_STATUS_RANGE_NOT_SATISFIABLE
 } from '../../src/file-loaders.js';
 import {swapProperties} from './test-utils.js';
@@ -997,6 +998,148 @@ describe('file-loaders', () => {
             expect(sliceCalls).to.deep.equal([[0, 10]]);
             expect(readerCalls).to.deep.equal([file.sliceResult]);
             expect(buffer.byteLength).to.equal(10);
+        });
+    });
+
+    describe('readFileObjectRange with stub files', () => {
+        let restoreGlobals;
+        let readerCalls;
+        let sliceCalls;
+        let file;
+
+        beforeEach(() => {
+            ({readerCalls, restoreGlobals} = stubFileReader());
+            ({file, sliceCalls} = createStubFile());
+        });
+
+        afterEach(() => {
+            restoreGlobals();
+        });
+
+        it('should slice up to the file size when only a start is given', async () => {
+            await readFileObjectRange(file, {start: 20});
+
+            expect(sliceCalls).to.deep.equal([[20, 32]]);
+        });
+
+        it('should slice up to the file size when the end is Infinity', async () => {
+            await readFileObjectRange(file, {start: 20, end: Infinity});
+
+            expect(sliceCalls).to.deep.equal([[20, 32]]);
+        });
+
+        it('should read the file whole when it has no slice method', async () => {
+            const wholeBuffer = new ArrayBuffer(8);
+            const sliceless = {size: 8, arrayBuffer: () => Promise.resolve(wholeBuffer)};
+
+            const {buffer, totalSize} = await readFileObjectRange(sliceless, {start: 2, end: 6});
+
+            expect(buffer).to.equal(wholeBuffer);
+            expect(totalSize).to.equal(8);
+        });
+
+        it('should read a slice through FileReader when the slice lacks arrayBuffer', async () => {
+            file.arrayBuffer = () => Promise.reject(new Error('arrayBuffer called on the whole file'));
+
+            const {buffer} = await readFileObjectRange(file, {start: 0, end: 10});
+
+            expect(readerCalls).to.deep.equal([file.sliceResult]);
+            expect(buffer.byteLength).to.equal(10);
+        });
+    });
+
+    describe('reading a real File without FileReader', () => {
+        const BYTES = Uint8Array.from({length: 32}, (_, index) => index + 1);
+        let restoreGlobals;
+        let file;
+
+        beforeEach(() => {
+            restoreGlobals = swapProperties(globalThis, {FileReader: undefined});
+            file = new File([BYTES], 'test.jpg');
+        });
+
+        afterEach(() => {
+            restoreGlobals();
+        });
+
+        it('should load the whole file', async () => {
+            const buffer = await loadFileObject(file);
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from(BYTES));
+        });
+
+        it('should load the first bytes up to a numeric length', async () => {
+            const buffer = await loadFileObject(file, {length: 10});
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from(BYTES.slice(0, 10)));
+        });
+
+        it('should read a bounded range and report the total size', async () => {
+            const {buffer, totalSize} = await readFileObjectRange(file, {start: 4, end: 12});
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from(BYTES.slice(4, 12)));
+            expect(totalSize).to.equal(file.size);
+        });
+
+        it('should read from a start offset to the end of the file', async () => {
+            const {buffer, totalSize} = await readFileObjectRange(file, {start: 20});
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from(BYTES.slice(20)));
+            expect(totalSize).to.equal(file.size);
+        });
+
+        it('should read the whole file for an infinite end', async () => {
+            const {buffer} = await readFileObjectRange(file, {start: 0, end: Infinity});
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from(BYTES));
+        });
+    });
+
+    describe('reading a File where Blob.prototype.arrayBuffer is missing', () => {
+        const BYTES = Uint8Array.from({length: 32}, (_, index) => index + 1);
+        let restoreFileReader;
+        let restoreArrayBuffer;
+        let readerCalls;
+        let file;
+
+        beforeEach(() => {
+            readerCalls = [];
+            file = new File([BYTES], 'test.jpg');
+            class ReadingFileReader {
+                readAsArrayBuffer(blob) {
+                    readerCalls.push(blob);
+                    new Response(blob).arrayBuffer().then(
+                        (result) => this.onload({target: {result}}),
+                        (error) => {
+                            this.error = error;
+                            this.onerror();
+                        }
+                    );
+                }
+            }
+            restoreFileReader = swapProperties(globalThis, {FileReader: ReadingFileReader});
+            restoreArrayBuffer = swapProperties(Blob.prototype, {arrayBuffer: undefined});
+        });
+
+        afterEach(() => {
+            restoreArrayBuffer();
+            restoreFileReader();
+        });
+
+        it('should read the whole file through FileReader', async () => {
+            const buffer = await loadFileObject(file);
+
+            expect(readerCalls).to.deep.equal([file]);
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from(BYTES));
+        });
+
+        it('should read a slice through FileReader', async () => {
+            const {buffer, totalSize} = await readFileObjectRange(file, {start: 4, end: 12});
+
+            expect(readerCalls).to.have.lengthOf(1);
+            expect(readerCalls[0]).to.not.equal(file);
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from(BYTES.slice(4, 12)));
+            expect(totalSize).to.equal(file.size);
         });
     });
 

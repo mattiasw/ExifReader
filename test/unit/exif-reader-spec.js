@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import fs from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import vm from 'node:vm';
 import {deflateSync, crc32} from 'node:zlib';
 import {expect} from 'chai';
@@ -9,7 +11,7 @@ import {getCharacterArray, getBase64Image, getDataView as getDataViewOrWrapper} 
 import * as ExifReader from '../../src/exif-reader.js';
 import exifErrors from '../../src/errors.js';
 import ByteOrder from '../../src/byte-order.js';
-import {getArrayBuffer, getDataView, getByteStringFromNumber, swapProperties} from './test-utils.js';
+import {getArrayBuffer, getDataView, getByteStringFromNumber, getConsoleWarnSpy, swapProperties} from './test-utils.js';
 import Constants from '../../src/constants.js';
 import ImageHeader from '../../src/image-header.js';
 import Tags from '../../src/tags.js';
@@ -3346,6 +3348,46 @@ describe('exif-reader', function () {
                 expect(tags.metadataRange.buffer).to.be.instanceOf(ArrayBuffer);
             });
         });
+    });
+
+    describe('loading a real File object', () => {
+        const FIXTURE_PATH = fileURLToPath(new URL('../fixtures/images/test.jpg', import.meta.url));
+        const AUTO_FILE_OPTIONS = {length: 'auto', expanded: true, includeOffsets: true};
+
+        let bytes;
+        let file;
+        let warnSpy;
+
+        beforeEach(() => {
+            warnSpy = getConsoleWarnSpy();
+            bytes = fs.readFileSync(FIXTURE_PATH);
+            file = new File([bytes], 'test.jpg');
+        });
+
+        afterEach(() => {
+            warnSpy.reset();
+        });
+
+        it('should return the same tags as for the bytes of the file', async () => {
+            const tags = await ExifReader.load(file);
+
+            expect(tags).to.deep.equal(ExifReader.load(bytes));
+        });
+
+        it('should return the same expanded tags as for the bytes of the file with adaptive loading', async () => {
+            const fileTags = await ExifReader.load(file, AUTO_FILE_OPTIONS);
+            const byteTags = await ExifReader.load(bytes, AUTO_FILE_OPTIONS);
+
+            const {metadataRange: fileRange, ...fileGroups} = fileTags;
+            const {metadataRange: byteRange, ...byteGroups} = byteTags;
+            expect(Object.keys(fileGroups)).to.include('exif');
+            expect(fileGroups).to.deep.equal(byteGroups);
+            expect(pickReadResult(fileRange)).to.deep.equal(pickReadResult(byteRange));
+        });
+
+        function pickReadResult({start, end, complete, blocks}) {
+            return {start, end, complete, blocks};
+        }
     });
 
     describe('narrow caller-supplied DataView windows', () => {
