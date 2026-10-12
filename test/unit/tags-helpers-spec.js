@@ -13,8 +13,9 @@ import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils
 import TagNames from '../../src/tag-names.js';
 import {readIfd as readIfdWithTagNames, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, addDecompressedIptcAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING, takeEmbeddedExifThumbnail} from '../../src/tags-helpers.js';
 import ByteOrder from '../../src/byte-order.js';
+import {createTagFilter} from '../../src/tag-filter.js';
 
-// readIfd takes the tag dictionaries as its last argument. The tests below
+// readIfd takes the tag dictionaries after the value budget. The tests below
 // call it positionally with the arguments they care about, so this forwards
 // the real TagNames and lets every omitted argument fall back to its default.
 function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown, computed, tagFilter, groupKey, valueBudget) {
@@ -1012,6 +1013,43 @@ describe('tags-helpers', () => {
             const budget = {remaining: 100, ifdEntriesRemaining: 10};
             const tagNames = {'0th': THREE_TAG_NAMES['0th']};
             const tags = readIfdWithTagNames(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget, tagNames);
+            expect(tags['MyTag0'].value).to.equal(0);
+            expect(tags).to.not.have.property('Thumbnail');
+            expect(budget.ifdEntriesRemaining).to.equal(8);
+        });
+
+        it('should read the thumbnail IFD when told to, even when the tag filter does not parse the thumbnail group', () => {
+            const dataView = getDataView(getIfdWithThumbnailIfd());
+            const budget = {remaining: 100, ifdEntriesRemaining: 10};
+            const tagFilter = createTagFilter({excludeTags: {thumbnail: true}});
+            const tags = readIfdWithTagNames(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, tagFilter, 'exif', budget, THREE_TAG_NAMES, true);
+            expect(tags['Thumbnail']).to.deep.equal({});
+            expect(budget.ifdEntriesRemaining).to.equal(7);
+        });
+
+        it('should not read the thumbnail IFD, nor charge its entries, when told not to', () => {
+            const dataView = getDataView(getIfdWithThumbnailIfd());
+            const budget = {remaining: 100, ifdEntriesRemaining: 10};
+            const tags = readIfdWithTagNames(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget, THREE_TAG_NAMES, false);
+            expect(tags['MyTag0'].value).to.equal(0);
+            expect(tags).to.not.have.property('Thumbnail');
+            expect(budget.ifdEntriesRemaining).to.equal(8);
+        });
+
+        it('should by default not read the thumbnail IFD when the tag filter does not parse the thumbnail group', () => {
+            const dataView = getDataView(getIfdWithThumbnailIfd());
+            const budget = {remaining: 100, ifdEntriesRemaining: 10};
+            const tagFilter = createTagFilter({excludeTags: {thumbnail: true}});
+            const tags = readIfdWithTagNames(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, tagFilter, 'exif', budget, THREE_TAG_NAMES);
+            expect(tags).to.not.have.property('Thumbnail');
+            expect(budget.ifdEntriesRemaining).to.equal(8);
+        });
+
+        it('should not follow the next-IFD offset of an IFD other than the 0th, even when told to read the thumbnail IFD', () => {
+            const dataView = getDataView(getIfdWithThumbnailIfd());
+            const budget = {remaining: 100, ifdEntriesRemaining: 10};
+            const tagNames = {exif: THREE_TAG_NAMES['0th'], '1st': THREE_TAG_NAMES['1st']};
+            const tags = readIfdWithTagNames(dataView, 'exif', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget, tagNames, true);
             expect(tags['MyTag0'].value).to.equal(0);
             expect(tags).to.not.have.property('Thumbnail');
             expect(budget.ifdEntriesRemaining).to.equal(8);

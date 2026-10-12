@@ -876,11 +876,21 @@ function readExifTagsSafely(dataView, tiffHeaderOffset, includeUnknown, computed
 }
 
 function readExifTags(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
-    return Tags.read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget, getExifTagNames());
+    return Tags.read(
+        dataView,
+        tiffHeaderOffset,
+        includeUnknown,
+        computed,
+        tagFilter,
+        valueBudget,
+        getExifTagNames(),
+        shouldReadThumbnailIfd(tagFilter)
+    );
 }
 
 // Only the IFDs Tags.read walks; the MPF and maker note readers carry their own
-// dictionaries. Without a thumbnail dictionary the thumbnail IFD is not read.
+// dictionaries. The thumbnail one must be there whenever shouldReadThumbnailIfd
+// is true, since reading an IFD without its dictionary throws.
 function getExifTagNames() {
     // Assigned rather than computed keys, which Babel compiles to a helper call each.
     const tagNames = {};
@@ -892,6 +902,10 @@ function getExifTagNames() {
         tagNames[IFD_TYPE_1ST] = TagNames0thIfd;
     }
     return tagNames;
+}
+
+function shouldReadThumbnailIfd(tagFilter) {
+    return Constants.USE_THUMBNAIL && tagFilter.shouldParseGroup('thumbnail');
 }
 
 // Finders report every kind they find; list only the kinds this build parses.

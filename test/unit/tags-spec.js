@@ -12,8 +12,9 @@ import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils
 import TagNames from '../../src/tag-names.js';
 import TagsModule from '../../src/tags.js';
 import ByteOrder from '../../src/byte-order.js';
+import {createTagFilter} from '../../src/tag-filter.js';
 
-// Tags.read takes the tag dictionaries as its last argument. The tests below
+// Tags.read takes the tag dictionaries after the value budget. The tests below
 // call it positionally with the arguments they care about, so this forwards
 // the real TagNames and lets every omitted argument fall back to its default.
 const Tags = {
@@ -59,15 +60,7 @@ describe('tags', () => {
     });
 
     it('should be able to read 1st IFD (thumbnail) following 0th IFD', () => {
-        const dataView = getDataView(
-            // TIFF header + field count + field + offset to next IFD.
-            '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x08'
-            + '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x1c'
-            // Padding.
-            + '\x01\x02'
-            // Field count + field + offset to next IFD.
-            + '\x00\x01' + '\x48\x12\x00\x01\x00\x00\x00\x01\x43\x00\x00\x00' + '\x00\x00\x00\x00'
-        );
+        const dataView = getTiffWithThumbnailIfd();
         restoreTagNames = swapProperties(TagNames, {
             '0th': {
                 0x4711: 'MyExifTag1'
@@ -81,6 +74,34 @@ describe('tags', () => {
 
         expect(tags['MyExifTag1'].description).to.equal(0x42);
         expect(tags['Thumbnail']['MyExifTag2'].description).to.equal(0x43);
+    });
+
+    describe('thumbnail IFD argument', () => {
+        const TAG_NAMES = {'0th': {0x4711: 'MyExifTag1'}, '1st': {0x4812: 'MyExifTag2'}, exif: {}, gps: {}, interoperability: {}};
+
+        it('should not read the thumbnail IFD when told not to', () => {
+            const {tags} = TagsModule.read(getTiffWithThumbnailIfd(), 0, false, false, undefined, undefined, TAG_NAMES, false);
+
+            expect(tags['MyExifTag1'].description).to.equal(0x42);
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should read the thumbnail IFD when told to, even when the tag filter does not parse the thumbnail group', () => {
+            const tagFilter = createTagFilter({excludeTags: {thumbnail: true}});
+
+            const {tags} = TagsModule.read(getTiffWithThumbnailIfd(), 0, false, false, tagFilter, undefined, TAG_NAMES, true);
+
+            expect(tags['MyExifTag1'].description).to.equal(0x42);
+            expect(tags['Thumbnail']).to.deep.equal({});
+        });
+
+        it('should by default not read the thumbnail IFD when the tag filter does not parse the thumbnail group', () => {
+            const tagFilter = createTagFilter({excludeTags: {thumbnail: true}});
+
+            const {tags} = TagsModule.read(getTiffWithThumbnailIfd(), 0, false, false, tagFilter, undefined, TAG_NAMES);
+
+            expect(tags).to.not.have.property('Thumbnail');
+        });
     });
 
     it('should be able to read Exif IFD through the 0th IFD pointer', () => {
@@ -379,6 +400,18 @@ describe('tags', () => {
         expect(valueBudget.ifdEntriesRemaining).to.equal(0);
     });
 });
+
+function getTiffWithThumbnailIfd() {
+    return getDataView(
+        // TIFF header + field count + field + offset to next IFD.
+        '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x08'
+        + '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x1c'
+        // Padding.
+        + '\x01\x02'
+        // Field count + field + offset to next IFD.
+        + '\x00\x01' + '\x48\x12\x00\x01\x00\x00\x00\x01\x43\x00\x00\x00' + '\x00\x00\x00\x00'
+    );
+}
 
 // A TIFF whose 0th IFD starts with Exif and GPS IFD pointers back at itself,
 // followed by in-slot SHORT fields of tag 0x4711.

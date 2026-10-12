@@ -29,10 +29,11 @@ function read(
     computed = false,
     tagFilter = undefined,
     valueBudget = getValueBudget(dataView),
-    tagNames = undefined
+    tagNames = undefined,
+    readThumbnailIfd = undefined
 ) {
     const byteOrder = ByteOrder.getByteOrder(dataView, tiffHeaderOffset);
-    let tags = read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget, tagNames);
+    let tags = read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget, tagNames, readThumbnailIfd);
     for (let i = 0; i < SUB_IFDS.length; i++) {
         tags = readSubIfd(SUB_IFDS[i], tags, dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget, tagNames);
     }
@@ -40,7 +41,7 @@ function read(
     return {tags, byteOrder};
 }
 
-function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget, tagNames) {
+function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, computed, tagFilter, valueBudget, tagNames, readThumbnailIfd) {
     const ifdOffset = get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder);
     if (ifdOffset === undefined) {
         return {};
@@ -56,7 +57,8 @@ function read0thIfd(dataView, tiffHeaderOffset, byteOrder, includeUnknown, compu
         tagFilter,
         'exif',
         valueBudget,
-        tagNames
+        tagNames,
+        readThumbnailIfd
     );
 }
 

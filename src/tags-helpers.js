@@ -85,7 +85,7 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
 
 /**
  * Reads the tags of an IFD, and for a 0th IFD also those of the thumbnail IFD
- * it points to when tagNames has a dictionary for IFD_TYPE_1ST.
+ * it points to when readThumbnailIfd is set.
  *
  * @param {{remaining: number, ifdEntriesRemaining: number, decompressedAllowanceRemaining: number}} [valueBudget] -
  * Caps the total size of the decoded tag values and the number of IFD entries
@@ -97,8 +97,10 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
  * @param {Object} tagNames - Tag dictionaries keyed by IFD type, then by tag code,
  * passed in so that a caller composing its own does not bundle every dictionary.
  * Every IFD type read needs a dictionary, `{}` if empty; a missing one throws.
- * The thumbnail IFD is the exception: without an IFD_TYPE_1ST dictionary it is
- * not read and its entries are not charged to the value budget.
+ * @param {boolean} [readThumbnailIfd] - Whether a 0th IFD follows its next-IFD
+ * offset into the thumbnail IFD, whose entries are otherwise not charged to the
+ * value budget. Defaults to whether tagNames has an IFD_TYPE_1ST dictionary and
+ * tagFilter parses the thumbnail group.
  * @returns {Object} The read tags, keyed by tag name.
  */
 export function readIfd(
@@ -112,7 +114,8 @@ export function readIfd(
     tagFilter = NOOP_TAG_FILTER,
     groupKey = 'exif',
     valueBudget = getValueBudget(dataView),
-    tagNames
+    tagNames,
+    readThumbnailIfd = tagNames[IFD_TYPE_1ST] !== undefined && tagFilter.shouldParseGroup('thumbnail')
 ) {
     const FIELD_COUNT_SIZE = Types.getTypeSize('SHORT');
     const FIELD_SIZE = IFD_ENTRY_LENGTH;
@@ -161,24 +164,22 @@ export function readIfd(
         offset += FIELD_SIZE;
     }
 
-    if (tagNames[IFD_TYPE_1ST] !== undefined && !ranOutOfIfdEntries && (offset + Types.getTypeSize('LONG') <= dataView.byteLength)) {
+    if (readThumbnailIfd && !ranOutOfIfdEntries && (offset + Types.getTypeSize('LONG') <= dataView.byteLength)) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
         if (nextIfdOffset >= TIFF_HEADER_LENGTH && ifdType === IFD_TYPE_0TH) {
-            if (tagFilter.shouldParseGroup('thumbnail')) {
-                tags['Thumbnail'] = readIfd(
-                    dataView,
-                    IFD_TYPE_1ST,
-                    offsetOrigin,
-                    offsetOrigin + nextIfdOffset,
-                    byteOrder,
-                    includeUnknown,
-                    computed,
-                    tagFilter,
-                    'thumbnail',
-                    valueBudget,
-                    tagNames
-                );
-            }
+            tags['Thumbnail'] = readIfd(
+                dataView,
+                IFD_TYPE_1ST,
+                offsetOrigin,
+                offsetOrigin + nextIfdOffset,
+                byteOrder,
+                includeUnknown,
+                computed,
+                tagFilter,
+                'thumbnail',
+                valueBudget,
+                tagNames
+            );
         }
     }
 
