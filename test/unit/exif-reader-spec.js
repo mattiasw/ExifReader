@@ -2889,55 +2889,66 @@ describe('exif-reader', function () {
     describe('Exif tag dictionaries', () => {
         const TIFF = getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]});
         const READ_SITES = {
-            'a JPEG Exif segment': () => ExifReader.loadView(getDataView(getJpeg(getExifSegment(TIFF)))),
-            'a PNG Exif raw profile': () => ExifReader.loadView(getDataView(getInventoryPng(getTextChunk('Raw profile type exif', getExifRawProfile(TIFF))))),
-            'a JPEG XL brob Exif box': () => ExifReader.loadView(
+            'a JPEG Exif segment': (options) => ExifReader.loadView(getDataView(getJpeg(getExifSegment(TIFF))), options),
+            'a PNG Exif raw profile': (options) => ExifReader.loadView(getDataView(getInventoryPng(getTextChunk('Raw profile type exif', getExifRawProfile(TIFF)))), options),
+            'a JPEG XL brob Exif box': (options) => ExifReader.loadView(
                 getDataView(getJxl(getBrobBox('Exif', getByteStringFromNumber(0, 4) + TIFF))),
-                {async: true}
+                {...options, async: true}
             ),
         };
 
-        function recordTagNames() {
-            const passedTagNames = [];
+        function recordReads() {
+            const reads = [];
             swap(Tags, {
                 read(...args) {
-                    passedTagNames.push(args[6]);
+                    reads.push({tagNames: args[6], readThumbnailIfd: args[7]});
                     return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
                 }
             });
-            return passedTagNames;
+            return reads;
         }
 
         for (const site of Object.keys(READ_SITES)) {
-            it(`should pass the Exif IFD dictionaries to the read of ${site}`, async () => {
-                const passedTagNames = recordTagNames();
+            it(`should pass the Exif IFD dictionaries to the read of ${site} and tell it to read the thumbnail IFD`, async () => {
+                const reads = recordReads();
 
                 await READ_SITES[site]();
 
-                expect(passedTagNames).to.have.lengthOf(1);
-                const tagNames = passedTagNames[0];
+                expect(reads).to.have.lengthOf(1);
+                const {tagNames, readThumbnailIfd} = reads[0];
                 expect(Object.keys(tagNames).sort()).to.deep.equal(['0th', '1st', 'exif', 'gps', 'interoperability']);
                 expect(tagNames['0th']).to.equal(tagNames['exif']);
                 expect(tagNames['0th']).to.deep.equal(TagNames['0th']);
                 expect(tagNames['1st']).to.equal(TagNames0thIfd);
                 expect(tagNames['gps']).to.equal(TagNamesGpsIfd);
                 expect(tagNames['interoperability']).to.equal(TagNamesInteroperabilityIfd);
-            });
-
-            it(`should leave out the thumbnail IFD dictionary from the read of ${site} without USE_THUMBNAIL`, async () => {
-                swap(Constants, {USE_THUMBNAIL: false});
-                const passedTagNames = recordTagNames();
-
-                await READ_SITES[site]();
-
-                expect(passedTagNames).to.have.lengthOf(1);
-                expect(Object.keys(passedTagNames[0]).sort()).to.deep.equal(['0th', 'exif', 'gps', 'interoperability']);
+                expect(readThumbnailIfd).to.equal(true);
             });
         }
 
+        it('should leave out the thumbnail IFD dictionary and not read the thumbnail IFD without USE_THUMBNAIL', async () => {
+            swap(Constants, {USE_THUMBNAIL: false});
+            const reads = recordReads();
+
+            await READ_SITES['a JPEG Exif segment']();
+
+            expect(reads).to.have.lengthOf(1);
+            expect(Object.keys(reads[0].tagNames).sort()).to.deep.equal(['0th', 'exif', 'gps', 'interoperability']);
+            expect(reads[0].readThumbnailIfd).to.equal(false);
+        });
+
+        it('should not read the thumbnail IFD when the thumbnail group is excluded', async () => {
+            const reads = recordReads();
+
+            await READ_SITES['a JPEG Exif segment']({excludeTags: {thumbnail: true}});
+
+            expect(reads).to.have.lengthOf(1);
+            expect(reads[0].readThumbnailIfd).to.equal(false);
+        });
+
         it('should not read raw profiles in PNG text without USE_EXIF and USE_IPTC', () => {
             swap(Constants, {USE_EXIF: false, USE_IPTC: false});
-            const passedTagNames = recordTagNames();
+            const reads = recordReads();
             let iptcReads = 0;
             swap(IptcTags, {
                 read() {
@@ -2951,7 +2962,7 @@ describe('exif-reader', function () {
                 getTextChunk('Raw profile type iptc', getIptcRawProfile(getNaaBlock([headline('Headline')])))
             )));
 
-            expect(passedTagNames).to.have.lengthOf(0);
+            expect(reads).to.have.lengthOf(0);
             expect(iptcReads).to.equal(0);
         });
 
