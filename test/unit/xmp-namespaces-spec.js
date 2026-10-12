@@ -4,6 +4,7 @@
 
 import {expect} from 'chai';
 import {isMissingNamespaceError, addMissingNamespaces} from '../../src/xmp-namespaces.js';
+import {LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow} from './test-utils.js';
 
 describe('xmp-namespaces', function () {
     describe('isMissingNamespaceError', function () {
@@ -59,10 +60,19 @@ describe('xmp-namespaces', function () {
         });
 
         // The Chrome check used to retry the text between the two parts from
-        // every start part on the line, which is quadratic and makes this time out.
+        // every start part on the line, which is quadratic and fails the time ratio
+        // against a line an eighth as long.
         it('should classify a long line of Chrome parse error starts in linear time', function () {
-            this.timeout(4000);
-            expect(isMissingNamespaceError({message: 'Namespace prefix '.repeat(40000)})).to.be.false;
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
+            this.retries(2);
+            const baselineMessage = 'Namespace prefix '.repeat(40000 / 8);
+            const message = 'Namespace prefix '.repeat(40000);
+
+            expect(expectTimeRatioBelow(
+                () => isMissingNamespaceError({message: baselineMessage}),
+                () => isMissingNamespaceError({message}),
+                24
+            )).to.be.false;
         });
     });
 
@@ -492,12 +502,27 @@ describe('xmp-namespaces', function () {
         // The number of distinct prefixes grows with the size of the XMP packet, so
         // both the declared and the used prefixes have to be looked up in constant
         // time to keep a large packet from blocking the CPU. Looking either of them
-        // up with Array.indexOf takes seconds instead of milliseconds here, which
-        // makes this time out.
+        // up with Array.indexOf grows quadratically, which fails the time ratio
+        // against a packet with an eighth of the prefixes.
         it('should handle a large number of distinct prefixes without slowing down quadratically', function () {
-            this.timeout(4000);
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
+            this.retries(2);
             const numberOfDeclarations = 30000;
             const numberOfUsages = 90000;
+            const baselineXmlString = getXmlStringWithPrefixes(numberOfDeclarations / 8, numberOfUsages / 8);
+            const xmlString = getXmlStringWithPrefixes(numberOfDeclarations, numberOfUsages);
+
+            const result = expectTimeRatioBelow(
+                () => addMissingNamespaces(baselineXmlString),
+                () => addMissingNamespaces(xmlString),
+                24
+            );
+
+            expect(result.match(/xmlns:p\d+=/g)).to.have.lengthOf(numberOfUsages);
+            expect(result.match(/xmlns:d\d+=/g)).to.have.lengthOf(numberOfDeclarations);
+        });
+
+        function getXmlStringWithPrefixes(numberOfDeclarations, numberOfUsages) {
             const declarations = [];
             const usages = [];
             for (let i = 0; i < numberOfDeclarations; i++) {
@@ -507,19 +532,15 @@ describe('xmp-namespaces', function () {
             for (let i = 0; i < numberOfUsages; i++) {
                 usages.push(`p${i}:v`);
             }
-            const xmlString = `<root${declarations.join('')}><x:child>${usages.join(' ')}</x:child></root>`;
-            const result = addMissingNamespaces(xmlString);
-
-            expect(result.match(/xmlns:p\d+=/g)).to.have.lengthOf(numberOfUsages);
-            expect(result.match(/xmlns:d\d+=/g)).to.have.lengthOf(numberOfDeclarations);
-        });
+            return `<root${declarations.join('')}><x:child>${usages.join(' ')}</x:child></root>`;
+        }
 
         // A long run of prefix-like characters without a colon produces no
         // usages at all, but used to make the usage scan re-read the rest of
         // the run from each position in it that could start a prefix. That
         // is quadratic time, so this times out unless the scan is linear.
         it('should handle a large colon-free run without slowing down quadratically', function () {
-            this.timeout(4000);
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
             const filler = 'a.'.repeat(262144);
             const xmlString = `<root><x:child>${filler}</x:child></root>`;
             const result = addMissingNamespaces(xmlString);
@@ -531,28 +552,40 @@ describe('xmp-namespaces', function () {
         // The declaration matches have to be merged with the root start tag's
         // attribute value spans in one forward pass. Looking up each match's
         // span with a scan over all the spans does on the order of 10^9 span
-        // comparisons here, which makes this time out.
+        // comparisons here, which fails the time ratio against an eighth of the
+        // attributes.
         it('should handle a large number of attribute values without slowing down quadratically', function () {
-            this.timeout(4000);
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
+            this.retries(2);
             const numberOfAttributes = 50000;
+            const baselineXmlString = getXmlStringWithAttributeValues(numberOfAttributes / 8);
+            const xmlString = getXmlStringWithAttributeValues(numberOfAttributes);
+
+            const result = expectTimeRatioBelow(
+                () => addMissingNamespaces(baselineXmlString),
+                () => addMissingNamespaces(xmlString),
+                24
+            );
+
+            expect(result.match(/xmlns:a\d+=/g)).to.have.lengthOf(2 * numberOfAttributes);
+            expect(result.match(/xmlns:d\d+=/g)).to.have.lengthOf(numberOfAttributes);
+        });
+
+        function getXmlStringWithAttributeValues(numberOfAttributes) {
             const attributes = [];
             const usages = [];
             for (let i = 0; i < numberOfAttributes; i++) {
                 attributes.push(` n${i}='xmlns:a${i}="u"' xmlns:d${i}="w${i}"`);
                 usages.push(`d${i}:v a${i}:v`);
             }
-            const xmlString = `<root${attributes.join('')}><x:child>${usages.join(' ')}</x:child></root>`;
-            const result = addMissingNamespaces(xmlString);
-
-            expect(result.match(/xmlns:a\d+=/g)).to.have.lengthOf(2 * numberOfAttributes);
-            expect(result.match(/xmlns:d\d+=/g)).to.have.lengthOf(numberOfAttributes);
-        });
+            return `<root${attributes.join('')}><x:child>${usages.join(' ')}</x:child></root>`;
+        }
 
         // A root scan that re-reads or re-copies the rest of the input for
         // each construct it skips does on the order of 10^11 character
         // operations here, which makes this time out.
         it('should skip a large number of comments without slowing down quadratically', function () {
-            this.timeout(4000);
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
             const comments = '<!-- <b:note> -->'.repeat(100000);
             const xmlString = `${comments}<root><x:child>1</x:child></root>`;
             const result = addMissingNamespaces(xmlString);

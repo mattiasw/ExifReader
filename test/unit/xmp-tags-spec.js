@@ -7,7 +7,7 @@ import {expect} from 'chai';
 const SURROUNDING_SIZE = 200;
 import {DOMParser as XmldomDomParser, onErrorStopParsing} from '@xmldom/xmldom';
 import {DOMParser as LinkedomDomParser} from 'linkedom';
-import {getConsoleWarnSpy, getDataView, swapProperties} from './test-utils.js';
+import {getConsoleWarnSpy, getDataView, swapProperties, LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow} from './test-utils.js';
 import {createRequire} from 'node:module';
 import DataViewWrapper from '../../src/dataview.js';
 import DomParserModule from '../../src/dom-parser.js';
@@ -27,6 +27,10 @@ const MAX_MARKUP_NODES = 250000;
 const NESTED_XML_STRING_ELEMENT_DEPTH = 2;
 // The top-level properties are the first level, so the outermost nested tag's members are the second.
 const DEEPEST_ALLOWED_LEVEL = MAX_NESTING_DEPTH - 1;
+const NESTED_READ_BOUND_MS = 1000;
+// Under coverage, reading long text took up to 8.4 times as long as reading it inside a processing
+// instruction; a regression that walks its characters took 85 times as long or more.
+const MAX_LONG_TEXT_RATIO = 24;
 const NESTING_SHAPES = {
     'rdf:parseType="Resource"': {
         nest: (leaf, inner) => `<xmp:s rdf:parseType="Resource"><xmp:t>${leaf}</xmp:t>${inner}</xmp:s>`,
@@ -278,23 +282,42 @@ describe('xmp-tags', function () {
                     expectMyXMPTagValue(`<xmp:MyXMPTag>caf${'\xC3'}<![CDATA[${'\xA9'}]]></xmp:MyXMPTag>`, 'café');
                 });
 
-                it('should read an element with thousands of text nodes in linear time', () => {
-                    expectMyXMPTagValue(`<xmp:MyXMPTag>${'a&amp;'.repeat(10000)}</xmp:MyXMPTag>`, 'a&'.repeat(10000));
+                it('should read an element with thousands of text nodes in linear time', function () {
+                    this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                    this.retries(2);
+                    const {xmlString, tags} = readInLinearTime(
+                        (count) => getMyXMPTagXmlString(`<xmp:MyXMPTag>${'a&amp;'.repeat(count)}</xmp:MyXMPTag>`),
+                        10000
+                    );
+                    const value = 'a&'.repeat(10000);
+                    expect(tags).to.deep.equal({
+                        _raw: xmlString,
+                        MyXMPTag: {value, attributes: {}, description: value}
+                    });
                 });
 
-                it('should find rdf:RDF after thousands of comments in linear time', () => {
-                    const xmlString = `${META_ELEMENT_START}
-                        ${'<!-- c -->'.repeat(10000)}
+                it('should find rdf:RDF after thousands of comments in linear time', function () {
+                    this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                    this.retries(2);
+                    const {tags} = readInLinearTime(
+                        (count) => `${META_ELEMENT_START}
+                        ${'<!-- c -->'.repeat(count)}
                         ${getXmlString('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:MyXMPTag="4711"></rdf:Description>')}
-                    ${META_ELEMENT_END}`;
-                    const dataView = getDataView(xmlString);
-                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    ${META_ELEMENT_END}`,
+                        10000
+                    );
                     expect(tags.MyXMPTag).to.deep.equal({value: '4711', attributes: {}, description: '4711'});
                 });
 
-                it('should read a long text value in linear time', () => {
+                it('should read a long text value in linear time', function () {
+                    this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                    this.retries(2);
                     const text = 'A'.repeat(8 * 1024 * 1024);
-                    expectMyXMPTagValue(`<xmp:MyXMPTag>${text}</xmp:MyXMPTag>`, text);
+                    expectMyXMPTagInLinearTime(
+                        (content) => `<xmp:MyXMPTag>${content}</xmp:MyXMPTag>`,
+                        text,
+                        {value: text, attributes: {}, description: text}
+                    );
                 });
 
                 it('should not enumerate the characters of a text value', () => {
@@ -326,45 +349,60 @@ describe('xmp-tags', function () {
                     expect(tags.MyXMPTag1.value).to.deep.equal([{value: 'def', attributes: {}, description: 'def'}]);
                 });
 
-                it('should read a long text value in a list item in linear time', () => {
+                it('should read a long text value in a list item in linear time', function () {
+                    this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                    this.retries(2);
                     const text = 'A'.repeat(8 * 1024 * 1024);
-                    expectMyXMPTag(
-                        `<xmp:MyXMPTag><rdf:Bag><rdf:li>${text}</rdf:li></rdf:Bag></xmp:MyXMPTag>`,
+                    expectMyXMPTagInLinearTime(
+                        (content) => `<xmp:MyXMPTag><rdf:Bag><rdf:li>${content}</rdf:li></rdf:Bag></xmp:MyXMPTag>`,
+                        text,
                         {value: [{value: text, attributes: {}, description: text}], attributes: {}, description: text}
                     );
                 });
 
-                it('should ignore long text directly inside a resource structure in linear time', () => {
-                    const text = 'A'.repeat(1024 * 1024);
-                    expectMyXMPTag(
-                        `<xmp:MyXMPTag rdf:parseType="Resource">${text}</xmp:MyXMPTag>`,
+                it('should ignore long text directly inside a resource structure in linear time', function () {
+                    this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                    this.retries(2);
+                    expectMyXMPTagInLinearTime(
+                        (content) => `<xmp:MyXMPTag rdf:parseType="Resource">${content}</xmp:MyXMPTag>`,
+                        'A'.repeat(1024 * 1024),
                         {value: {}, attributes: {}, description: ''}
                     );
                 });
 
-                it('should ignore long text directly inside a nested rdf:Description in linear time', () => {
-                    const text = 'A'.repeat(1024 * 1024);
-                    expectMyXMPTag(
-                        `<xmp:MyXMPTag><rdf:Description>${text}</rdf:Description></xmp:MyXMPTag>`,
+                it('should ignore long text directly inside a nested rdf:Description in linear time', function () {
+                    this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                    this.retries(2);
+                    expectMyXMPTagInLinearTime(
+                        (content) => `<xmp:MyXMPTag><rdf:Description>${content}</rdf:Description></xmp:MyXMPTag>`,
+                        'A'.repeat(1024 * 1024),
                         {value: {}, attributes: {}, description: ''}
                     );
                 });
 
-                it('should ignore long text directly inside rdf:RDF in linear time', () => {
-                    const tags = XmpTags.read(getXmlString('A'.repeat(8 * 1024 * 1024)), [], domParser);
+                it('should ignore long text directly inside rdf:RDF in linear time', function () {
+                    this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                    this.retries(2);
+                    const text = 'A'.repeat(8 * 1024 * 1024);
+                    const referenceXmlString = getXmlString(`<?t ${text}?>`);
+                    const xmlString = getXmlString(text);
+                    const tags = expectTimeRatioBelow(
+                        () => XmpTags.read(referenceXmlString, [], domParser),
+                        () => XmpTags.read(xmlString, [], domParser),
+                        MAX_LONG_TEXT_RATIO
+                    );
                     expect(Object.keys(tags)).to.deep.equal(['_raw']);
                 });
 
-                it('should drop a structure with rdf:value and a nested rdf:Description holding long text in linear time', () => {
-                    const text = 'A'.repeat(6 * 1024 * 1024);
-                    const xmlString = getXmlString(`
+                it('should drop a structure with rdf:value and a nested rdf:Description holding long text in linear time', function () {
+                    this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                    this.retries(2);
+                    const {xmlString, tags} = readLongTextInLinearTime((content) => getXmlString(`
                         <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
                             <xmp:MyXMPTag0>4711</xmp:MyXMPTag0>
-                            <xmp:MyXMPTag rdf:parseType="Resource"><rdf:value>x</rdf:value><rdf:Description>${text}</rdf:Description></xmp:MyXMPTag>
+                            <xmp:MyXMPTag rdf:parseType="Resource"><rdf:value>x</rdf:value><rdf:Description>${content}</rdf:Description></xmp:MyXMPTag>
                         </rdf:Description>
-                    `);
-                    const dataView = getDataView(xmlString);
-                    const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    `), 'A'.repeat(6 * 1024 * 1024));
                     expect(tags).to.deep.equal({
                         _raw: xmlString,
                         MyXMPTag0: {value: '4711', attributes: {}, description: '4711'}
@@ -423,13 +461,60 @@ describe('xmp-tags', function () {
                 // Only linkedom rebuilds the attribute list on every access, and xmldom's own
                 // parsing of this many attributes is slow enough to time out on a loaded machine.
                 if (domParserName === 'linkedom') {
-                    it('should read an element with thousands of attributes in linear time', () => {
-                        const attributes = Array.from({length: 10000}, (_, index) => ` xmp:MyXMPTag${index}="${index}"`).join('');
-                        const xmlString = getXmlString(`<rdf:Description xmlns:xmp="http://ns.example.com/xmp"${attributes}></rdf:Description>`);
-                        const dataView = getDataView(xmlString);
-                        const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
+                    it('should read an element with thousands of attributes in linear time', function () {
+                        this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                        this.retries(2);
+                        const {tags} = readInLinearTime((count) => {
+                            const attributes = Array.from({length: count}, (_, index) => ` xmp:MyXMPTag${index}="${index}"`).join('');
+                            return getXmlString(`<rdf:Description xmlns:xmp="http://ns.example.com/xmp"${attributes}></rdf:Description>`);
+                        }, 10000);
                         expect(tags.MyXMPTag9999).to.deep.equal({value: '9999', attributes: {}, description: '9999'});
                     });
+                }
+
+                function readInLinearTime(getXmlStringForCount, count) {
+                    const baselineXmlString = getXmlStringForCount(count / 8);
+                    const baselineDataView = getDataView(baselineXmlString);
+                    const xmlString = getXmlStringForCount(count);
+                    const dataView = getDataView(xmlString);
+                    const tags = expectTimeRatioBelow(
+                        () => XmpTags.read(baselineDataView, [{dataOffset: 0, length: baselineXmlString.length}], domParser),
+                        () => XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser),
+                        24
+                    );
+                    return {xmlString, tags};
+                }
+
+                function expectMyXMPTagInLinearTime(getElement, text, tag) {
+                    const {xmlString, tags} = readLongTextInLinearTime((content) => getMyXMPTagXmlString(getElement(content)), text);
+                    expect(tags).to.deep.equal({
+                        _raw: xmlString,
+                        MyXMPTag: tag
+                    });
+                }
+
+                // The reader skips processing instructions, so the same text inside one measures
+                // the parse of a same-size packet without reading the text. xmldom parses a
+                // comment several times slower than text, so a comment would hide the reading.
+                function readLongTextInLinearTime(getXmlStringForText, text) {
+                    const referenceXmlString = getXmlStringForText(`<?t ${text}?>`);
+                    const referenceDataView = getDataView(referenceXmlString);
+                    const xmlString = getXmlStringForText(text);
+                    const dataView = getDataView(xmlString);
+                    const tags = expectTimeRatioBelow(
+                        () => XmpTags.read(referenceDataView, [{dataOffset: 0, length: referenceXmlString.length}], domParser),
+                        () => XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser),
+                        MAX_LONG_TEXT_RATIO
+                    );
+                    return {xmlString, tags};
+                }
+
+                function getMyXMPTagXmlString(element) {
+                    return getXmlString(`
+                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
+                            ${element}
+                        </rdf:Description>
+                    `);
                 }
 
                 function expectMyXMPTagValue(element, value) {
@@ -437,11 +522,7 @@ describe('xmp-tags', function () {
                 }
 
                 function expectMyXMPTag(element, tag) {
-                    const xmlString = getXmlString(`
-                        <rdf:Description xmlns:xmp="http://ns.example.com/xmp">
-                            ${element}
-                        </rdf:Description>
-                    `);
+                    const xmlString = getMyXMPTagXmlString(element);
                     const dataView = getDataView(xmlString);
                     const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}], domParser);
                     expect(tags).to.deep.equal({
@@ -2715,13 +2796,14 @@ describe('xmp-tags', function () {
                             expectNestedLevels(tags, shape, DEEPEST_ALLOWED_LEVEL);
                         });
 
-                        it('should read a value nested to the element depth bound fast and with bounded descriptions', () => {
+                        it('should read a value nested to the element depth bound fast and with bounded descriptions', function () {
+                            this.timeout(LINEAR_TIME_TIMEOUT_MS);
                             // The deepest level adds its xmp:t element.
                             const levels = Math.floor((MAX_ELEMENT_DEPTH - NESTED_XML_STRING_ELEMENT_DEPTH - 1) / shape.elementsPerLevel);
                             const xmlString = getNestedXmlString(getNestedStructures(shape, levels, getLongLeaf));
                             const {tags, milliseconds} = readTimed(xmlString, domParser);
                             expect(tags.s.value).to.exist;
-                            expect(milliseconds).to.be.below(1000);
+                            expect(milliseconds).to.be.below(NESTED_READ_BOUND_MS);
                             expect(getSummedDescriptionLength(tags)).to.be.at.most(MAX_NESTING_DEPTH * xmlString.length);
                         });
                     });
@@ -2740,7 +2822,8 @@ describe('xmp-tags', function () {
                         expect(tags.sibling.value).to.equal('ok');
                     });
 
-                    it('should read lists nested to the element depth bound fast and with bounded descriptions', () => {
+                    it('should read lists nested to the element depth bound fast and with bounded descriptions', function () {
+                        this.timeout(LINEAR_TIME_TIMEOUT_MS);
                         // xmp:v and its rdf:Seq hold the levels, each an rdf:li, rdf:value and rdf:Seq,
                         // and the innermost item adds an rdf:li and rdf:value.
                         const levels = Math.floor((MAX_ELEMENT_DEPTH - NESTED_XML_STRING_ELEMENT_DEPTH - 2 - 2) / 3);
@@ -2748,12 +2831,13 @@ describe('xmp-tags', function () {
                         const {tags, milliseconds} = readTimed(xmlString, domParser);
                         expect(tags.v).to.be.undefined;
                         expect(tags.sibling.value).to.equal('ok');
-                        expect(milliseconds).to.be.below(1000);
+                        expect(milliseconds).to.be.below(NESTED_READ_BOUND_MS);
                         expect(getSummedDescriptionLength(tags)).to.be.at.most(MAX_NESTING_DEPTH * xmlString.length);
                     });
                 });
 
-                it('should bound the descriptions of lists nested directly in list items at twice the cap', () => {
+                it('should bound the descriptions of lists nested directly in list items at twice the cap', function () {
+                    this.timeout(LINEAR_TIME_TIMEOUT_MS);
                     const leaf = 'x'.repeat(100000);
                     for (let pairs = 1; pairs <= 4 * MAX_NESTING_DEPTH; pairs++) {
                         const xmlString = getNestedXmlString(getDirectlyNestedLists(pairs, leaf));
@@ -2761,7 +2845,7 @@ describe('xmp-tags', function () {
                         expect(getSummedDescriptionLength(tags), `pairs ${pairs}`).to.be.at.most(2 * MAX_NESTING_DEPTH * xmlString.length);
                         expect(tags.s.description.includes(leaf), `pairs ${pairs}`).to.equal(pairs < 2 * MAX_NESTING_DEPTH);
                         expect(tags.sibling.value, `pairs ${pairs}`).to.equal('ok');
-                        expect(milliseconds, `pairs ${pairs}`).to.be.below(1000);
+                        expect(milliseconds, `pairs ${pairs}`).to.be.below(NESTED_READ_BOUND_MS);
                     }
                 });
 
@@ -2895,22 +2979,35 @@ describe('xmp-tags', function () {
         });
 
         // Every trailer start used to be tried against every trailer end on
-        // the line, which is cubic time and makes this time out.
+        // the line, which is cubic time and fails the time ratio against an
+        // eighth of the candidates.
         it('should trim a packet with many trailer candidates on one line in linear time', function () {
-            this.timeout(4000);
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
+            this.retries(2);
+            const baselineXmlString = '<?xpacket end=""?>'.repeat(1600 / 8) + '\n';
             const xmlString = '<?xpacket end=""?>'.repeat(1600) + '\n';
 
-            expect(readWithStubParser(xmlString)).to.equal(xmlString);
+            expect(expectTimeRatioBelow(
+                () => readWithStubParser(baselineXmlString),
+                () => readWithStubParser(xmlString),
+                24
+            )).to.equal(xmlString);
         });
 
         // With no usable trailer end, every trailer start on the last line used
-        // to scan the rest of the line, which is quadratic time and makes this
-        // time out.
+        // to scan the rest of the line, which is quadratic time and fails the
+        // time ratio against an eighth of the starts.
         it('should search a last line of many trailer starts in linear time', function () {
-            this.timeout(4000);
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
+            this.retries(2);
+            const baselineXmlString = '<?xpacket end="'.repeat(40000 / 8) + '"?>';
             const xmlString = '<?xpacket end="'.repeat(40000) + '"?>';
 
-            expect(readWithStubParser(xmlString)).to.equal(xmlString);
+            expect(expectTimeRatioBelow(
+                () => readWithStubParser(baselineXmlString),
+                () => readWithStubParser(xmlString),
+                24
+            )).to.equal(xmlString);
         });
     });
 
@@ -2934,16 +3031,20 @@ describe('xmp-tags', function () {
             ['the same prefix', () => ['<rdf:x xmlns:b="u">', '</rdf:x>']],
             ['a distinct prefix', (level) => [`<p${level}:x xmlns:p${level}="u">`, `</p${level}:x>`]]
         ]) {
-            it(`should not parse a megabyte packet whose elements each declare ${name} one inside the next`, () => {
+            it(`should not parse a megabyte packet whose elements each declare ${name} one inside the next`, function () {
+                this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                this.retries(2);
+                const baselineXmlString = getXmlString(getDeclaringElementTower(1024 * 1024 / 8, getLevel));
                 const xmlString = getXmlString(getDeclaringElementTower(1024 * 1024, getLevel));
 
-                const start = Date.now();
-                const {tags, received} = readWithRecordingParser(xmlString);
-                const milliseconds = Date.now() - start;
+                const {tags, received} = expectTimeRatioBelow(
+                    () => readWithRecordingParser(baselineXmlString),
+                    () => readWithRecordingParser(xmlString),
+                    24
+                );
 
                 expect(received).to.deep.equal([]);
                 expect(tags).to.deep.equal({});
-                expect(milliseconds).to.be.below(1000);
             });
         }
 

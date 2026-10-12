@@ -5,6 +5,7 @@
 import {expect} from 'chai';
 import TagNames0thIfd from '../../src/tag-names-0th-ifd.js';
 import TagNamesCommon from '../../src/tag-names-common.js';
+import {LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow} from './test-utils.js';
 
 describe('tag-names-0th-ifd', () => {
     it('should have tag ProcessingSoftware', () => {
@@ -432,13 +433,25 @@ describe('tag-names-0th-ifd', () => {
     });
 
     // Trimming the trailing null characters with a regex was quadratic in the length
-    // of a run of them and took seconds here, which makes this time out.
+    // of a run of them and took seconds here, which fails the time ratio against a
+    // run an eighth as long.
     it('should not slow down quadratically on a long run of null characters in an XP tag value', function () {
-        this.timeout(1000);
-        const bytes = new Array(160002).fill(0);
-        bytes[160000] = 97;
-        expect(TagNames0thIfd[0x9c9b].description(bytes)).to.equal('\u0000'.repeat(80000) + 'a');
+        this.timeout(LINEAR_TIME_TIMEOUT_MS);
+        this.retries(2);
+        const baselineBytes = getXpBytesWithNullRun(20000);
+        const bytes = getXpBytesWithNullRun(160000);
+        expect(expectTimeRatioBelow(
+            () => TagNames0thIfd[0x9c9b].description(baselineBytes),
+            () => TagNames0thIfd[0x9c9b].description(bytes),
+            24
+        )).to.equal('\u0000'.repeat(80000) + 'a');
     });
+
+    function getXpBytesWithNullRun(length) {
+        const bytes = new Array(length + 2).fill(0);
+        bytes[length] = 97;
+        return bytes;
+    }
 
     it('should not use a bare number XP tag value as a length', () => {
         expect(TagNames0thIfd[0x9c9b].description(5)).to.equal('');

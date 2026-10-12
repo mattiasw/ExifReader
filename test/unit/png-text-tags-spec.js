@@ -3,7 +3,14 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView, concatDataViews, swapProperties} from './test-utils.js';
+import {
+    getDataView,
+    concatDataViews,
+    swapProperties,
+    LINEAR_TIME_TIMEOUT_MS,
+    expectTimeRatioBelow,
+    expectAsyncTimeRatioBelow
+} from './test-utils.js';
 import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../src/image-header-png.js';
 import PngTextTags from '../../src/png-text-tags.js';
 import Tags from '../../src/tags.js';
@@ -774,21 +781,29 @@ describe('png-text-tags', () => {
             }
         });
 
-        it('should merge the tags of 10000 tEXt Exif raw profiles well under a second', () => {
+        it('should merge the tags of 10000 tEXt Exif raw profiles well under a second', function () {
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
+            this.retries(2);
             const NUMBER_OF_CHUNKS = 10000;
-            const textChunks = [];
-            for (let i = 0; i < NUMBER_OF_CHUNKS; i++) {
-                textChunks.push(getTextChunk('Raw profile type exif', getRawProfileValue('exif', getExifWithOneUnknownTag(0x5000 + i))));
-            }
-            const {dataView, chunks} = buildTextChunks(textChunks);
+            const baseline = buildExifRawProfileChunks(NUMBER_OF_CHUNKS / 8);
+            const {dataView, chunks} = buildExifRawProfileChunks(NUMBER_OF_CHUNKS);
 
-            const start = performance.now();
-            const result = PngTextTags.read(dataView, chunks, false, true);
-            const elapsed = performance.now() - start;
+            const result = expectTimeRatioBelow(
+                () => PngTextTags.read(baseline.dataView, baseline.chunks, false, true),
+                () => PngTextTags.read(dataView, chunks, false, true),
+                24
+            );
 
             expect(Object.keys(result.embeddedExifTags)).to.have.lengthOf(NUMBER_OF_CHUNKS);
-            expect(elapsed).to.be.below(1000);
         });
+
+        function buildExifRawProfileChunks(numberOfChunks) {
+            const textChunks = [];
+            for (let i = 0; i < numberOfChunks; i++) {
+                textChunks.push(getTextChunk('Raw profile type exif', getRawProfileValue('exif', getExifWithOneUnknownTag(0x5000 + i))));
+            }
+            return buildTextChunks(textChunks);
+        }
 
         const EVERY_NIBBLE_DATA = '\x01\x23\x45\x67\x89\xab\xcd\xef\xfe\xdc\xba\x98\x76\x54\x32\x10';
 
@@ -1208,23 +1223,31 @@ describe('png-text-tags', () => {
         const MAX_COMPRESSED_TEXT_CHUNKS = 255;
         const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;
 
-        it('should decompress only the first 255 of 8000 zTXt chunks, in chunk order, well under a second', async () => {
+        it('should decompress only the first 255 of 8000 zTXt chunks, in chunk order, well under a second', async function () {
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
+            this.retries(2);
             const compressedValue = new Uint8Array((await compress(Uint8Array.from([0x76]))).buffer);
-            const {dataView, chunks} = buildTextChunks(
-                Array.from({length: 8000}, (_, index) => getZtxtChunk('k' + index, compressedValue))
+            const baseline = buildZtxtChunks(MAX_COMPRESSED_TEXT_CHUNKS, compressedValue);
+            const {dataView, chunks} = buildZtxtChunks(8000, compressedValue);
+
+            // The 7745 chunks past the cap are only header-parsed; decompressing all 8000 is about 31 times the baseline.
+            const tags = await expectAsyncTimeRatioBelow(
+                () => PngTextTags.read(baseline.dataView, baseline.chunks, true).readTagsPromise,
+                () => PngTextTags.read(dataView, chunks, true).readTagsPromise,
+                8
             );
 
-            const start = performance.now();
-            const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
-            const tags = await readTagsPromise;
-            const elapsed = performance.now() - start;
-
-            expect(elapsed).to.be.below(500);
             expect(tags).to.have.lengthOf(MAX_COMPRESSED_TEXT_CHUNKS);
             for (let i = 0; i < MAX_COMPRESSED_TEXT_CHUNKS; i++) {
                 expect(tags[i]).to.deep.equal({readTags: {['k' + i]: {value: 'v', description: 'v'}}});
             }
         });
+
+        function buildZtxtChunks(numberOfChunks, compressedValue) {
+            return buildTextChunks(
+                Array.from({length: numberOfChunks}, (_, index) => getZtxtChunk('k' + index, compressedValue))
+            );
+        }
 
         it('should call a custom decompression function for at most 255 chunks', async () => {
             let calls = 0;

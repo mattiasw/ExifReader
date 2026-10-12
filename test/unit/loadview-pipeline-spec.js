@@ -6,7 +6,7 @@ import {expect} from 'chai';
 import {objectAssign} from '../../src/utils.js';
 import Constants from '../../src/constants.js';
 import Thumbnail from '../../src/thumbnail.js';
-import {swapProperties} from './test-utils.js';
+import {swapProperties, LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow} from './test-utils.js';
 import {
     addPngTextReadTagsToTagsAndGroups,
     applyMergeStep,
@@ -983,28 +983,35 @@ describe('loadView pipeline module', function () {
     });
     describe('processPngTextReadTagsDeferredList step', function () {
         const MANY_ITEMS = 8000;
-        const MERGE_BUDGET_MS = 200;
 
         it('should merge many deferred items in linear time in flat mode', function () {
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
+            this.retries(2);
+            const baselineItems = getSingleTagItems(MANY_ITEMS / 8);
             const items = getSingleTagItems(MANY_ITEMS);
 
-            const start = performance.now();
-            const {tags} = buildDeferredPngTextTags({items, expanded: false});
-            const elapsed = performance.now() - start;
+            const {tags} = expectTimeRatioBelow(
+                () => buildDeferredPngTextTags({items: baselineItems, expanded: false}),
+                () => buildDeferredPngTextTags({items, expanded: false}),
+                24
+            );
 
-            expect(elapsed).to.be.below(MERGE_BUDGET_MS);
             expect(Object.keys(tags)).to.have.lengthOf(MANY_ITEMS);
             expect(tags[`k${MANY_ITEMS - 1}`].value).to.equal(MANY_ITEMS - 1);
         });
 
         it('should merge many deferred items in linear time in expanded mode', function () {
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
+            this.retries(2);
+            const baselineItems = getSingleTagItems(MANY_ITEMS / 8);
             const items = getSingleTagItems(MANY_ITEMS);
 
-            const start = performance.now();
-            const {tags} = buildDeferredPngTextTags({items, expanded: true});
-            const elapsed = performance.now() - start;
+            const {tags} = expectTimeRatioBelow(
+                () => buildDeferredPngTextTags({items: baselineItems, expanded: true}),
+                () => buildDeferredPngTextTags({items, expanded: true}),
+                24
+            );
 
-            expect(elapsed).to.be.below(MERGE_BUDGET_MS);
             expect(Object.keys(tags.png)).to.have.lengthOf(MANY_ITEMS);
             expect(Object.keys(tags.pngText)).to.have.lengthOf(MANY_ITEMS);
         });
