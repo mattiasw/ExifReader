@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   async load runs.
 - An unsupported input to `load` throws a `TypeError` that names the accepted
   types instead of `Error: DataView: Passed buffer type is unsupported.`
+- Custom builds now contain the format detection code for every metadata kind
+  the included file formats can carry. Measured on six configurations,
+  including the README examples, custom builds are between about 2.2 KB
+  smaller and 0.6 KB larger than in 4.50.0 (minified, before gzip).
+- A custom build with `png` and without `xmp` no longer returns a PNG's XMP
+  iTXt chunk as the PNG text tag `XML:com.adobe.xmp` (nor a `pngText` group made
+  from that chunk alone), and no longer lists it in `metadataRange`, so
+  `length: 'auto'` rejects a PNG whose only listed chunk was that one.
+- A custom build can now print the warnings the full build prints while
+  locating metadata: the HEIC/AVIF warning about 64-bit `iloc` fields in
+  builds with none of `exif`, `xmp` and `icc`, the HEIC/AVIF warning about
+  `iloc` construction method 2 for an Exif item in builds without `exif` and
+  for an XMP item in builds without `xmp`, and the warning about several Exif
+  segments in a JPEG in builds without `exif`.
 
 ### Removed
 

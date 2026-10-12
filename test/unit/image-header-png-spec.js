@@ -385,7 +385,7 @@ describe('image-header-png', () => {
         });
     });
 
-    it('should handle when PNG file tags have been excluded in a custom build', () => {
+    it('should report the image header even if PNG file tags are excluded from custom build', () => {
         restoreConstants = swapProperties(Constants, {USE_PNG: true, USE_PNG_FILE: false});
         const chunkLength = '\x00\x00\x00\x02';
         const chunkType = 'IHDR';
@@ -401,7 +401,57 @@ describe('image-header-png', () => {
             + chunkLength + chunkType + chunkData + crcChecksum
         );
 
-        expect(ImageHeaderPng.findPngOffsets(dataView)).to.deep.equal({hasAppMarkers: false});
+        expect(ImageHeaderPng.findPngOffsets(dataView)).to.deep.equal({
+            hasAppMarkers: true,
+            pngHeaderOffset: PNG_IMAGE_START.length + 16 + 8,
+        });
+    });
+
+    it('should report an XMP iTXt chunk as XMP, not as text, even if XMP is excluded from custom build', () => {
+        restoreConstants = swapProperties(Constants, {USE_XMP: false});
+        const xmpPrefix = 'XML:com.adobe.xmp\x00';
+        const chunkAdditionalFields = '\x00\x00\x00\x00';
+        const chunkLength = `\x00\x00\x00${String.fromCharCode(xmpPrefix.length + chunkAdditionalFields.length + 2)}`;
+        const dataView = getDataView(
+            PNG_IMAGE_START
+            + chunkLength + 'iTXt' + xmpPrefix + chunkAdditionalFields + '\x47\x11' + '\x00\x00\x00\x00'
+        );
+        const metadataBlocks = [];
+
+        expect(ImageHeaderPng.findPngOffsets(dataView, false, metadataBlocks)).to.deep.equal({
+            hasAppMarkers: true,
+            xmpChunks: [{
+                dataOffset: PNG_IMAGE_START.length + 8 + xmpPrefix.length + chunkAdditionalFields.length,
+                length: 2,
+            }],
+        });
+        expect(metadataBlocks.map((block) => block.type)).to.deep.equal(['xmp']);
+    });
+
+    describe('iCCP and the async option', () => {
+        const chunkDataHeader = 'ProfileName\x00\x00';
+        const compressedProfile = '<compressed profile>';
+        const iccpChunk = `\x00\x00\x00${String.fromCharCode(chunkDataHeader.length + compressedProfile.length)}`
+            + 'iCCP' + chunkDataHeader + compressedProfile + '\x00\x00\x00\x00';
+
+        it('should report an iCCP chunk when async even if ICC is excluded from custom build', () => {
+            restoreConstants = swapProperties(Constants, {USE_ICC: false});
+            const metadataBlocks = [];
+
+            const offsets = ImageHeaderPng.findPngOffsets(getDataView(PNG_IMAGE_START + iccpChunk), true, metadataBlocks);
+
+            expect(offsets.iccChunks).to.have.lengthOf(1);
+            expect(metadataBlocks.map((block) => block.type)).to.deep.equal(['icc']);
+        });
+
+        it('should not report an iCCP chunk when not async', () => {
+            const metadataBlocks = [];
+
+            const offsets = ImageHeaderPng.findPngOffsets(getDataView(PNG_IMAGE_START + iccpChunk), false, metadataBlocks);
+
+            expect(offsets).to.deep.equal({hasAppMarkers: false});
+            expect(metadataBlocks).to.deep.equal([]);
+        });
     });
 
     describe('metadataBlocks', () => {

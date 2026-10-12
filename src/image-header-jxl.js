@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import Constants from './constants.js';
 import {getBoxLength, getTiffHeaderOffset, BOX_TYPE_OFFSET, BOX_MIN_LENGTH} from './image-header-iso-bmff.js';
 import {pushMetadataBlock} from './utils.js';
 
@@ -107,14 +106,14 @@ function findJxlOffsets(dataView, metadataBlocks) {
         const boxType = dataView.getUint32(offset + BOX_TYPE_OFFSET);
         let blockType;
 
-        if (Constants.USE_EXIF && boxType === TYPE_EXIF) {
+        if (boxType === TYPE_EXIF) {
             if (contentOffset + EXIF_TIFF_HEADER_OFFSET_SIZE <= contentEnd) {
                 tiffHeaderOffset = getTiffHeaderOffset(dataView, contentOffset);
             }
             blockType = 'exif';
         }
 
-        if (Constants.USE_XMP && boxType === TYPE_XML) {
+        if (boxType === TYPE_XML) {
             xmpChunks = [{
                 dataOffset: contentOffset,
                 length: length - (contentOffset - offset)
@@ -146,7 +145,7 @@ function findJxlOffsets(dataView, metadataBlocks) {
             // brob(Exif) box must surface as an `exif` block even if a
             // plain Exif box already won the parsing race. The brob*Chunk
             // variables stay guarded to avoid double-parsing.
-            if (Constants.USE_EXIF && originalType === TYPE_EXIF) {
+            if (originalType === TYPE_EXIF) {
                 blockType = 'exif';
                 if (tiffHeaderOffset === undefined && !brobExifChunk) {
                     brobExifChunk = {
@@ -155,7 +154,7 @@ function findJxlOffsets(dataView, metadataBlocks) {
                     };
                 }
             }
-            if (Constants.USE_XMP && originalType === TYPE_XML) {
+            if (originalType === TYPE_XML) {
                 blockType = 'xmp';
                 if (!xmpChunks && !brobXmpChunk) {
                     brobXmpChunk = {

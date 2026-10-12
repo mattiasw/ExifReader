@@ -91,20 +91,24 @@ describe('image-header-jxl', () => {
         }]);
     });
 
-    it('should ignore Exif data if it is excluded from custom build', () => {
+    it('should report Exif data even if it is excluded from custom build', () => {
         restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: true});
 
         const dataView = getDataView(getJxlData({exif: true}));
+        const metadataBlocks = [];
 
-        expect(ImageHeaderJxl.findJxlOffsets(dataView).tiffHeaderOffset).to.be.undefined;
+        expect(ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks).tiffHeaderOffset).to.be.a('number');
+        expect(metadataBlocks.map((block) => block.type)).to.deep.equal(['exif']);
     });
 
-    it('should ignore XMP data if it is excluded from custom build', () => {
+    it('should report XMP data even if it is excluded from custom build', () => {
         restoreConstants = swapProperties(Constants, {USE_EXIF: true, USE_XMP: false});
 
         const dataView = getDataView(getJxlData({xmp: true}));
+        const metadataBlocks = [];
 
-        expect(ImageHeaderJxl.findJxlOffsets(dataView).xmpChunks).to.be.undefined;
+        expect(ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks).xmpChunks).to.have.lengthOf(1);
+        expect(metadataBlocks.map((block) => block.type)).to.deep.equal(['xmp']);
     });
 
     it('should handle non-zero TIFF header offset prefix in Exif box', () => {
@@ -274,22 +278,26 @@ describe('image-header-jxl', () => {
             expect(offsets.brobXmpChunk).to.be.undefined;
         });
 
-        it('should ignore brob Exif when USE_EXIF is false', () => {
+        it('should report brob Exif when USE_EXIF is false', () => {
             restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: true});
 
             const dataView = getDataView(getJxlData({brobExif: true}));
-            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+            const metadataBlocks = [];
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
 
-            expect(offsets.brobExifChunk).to.be.undefined;
+            expect(offsets.brobExifChunk).to.be.an('object');
+            expect(metadataBlocks.map((block) => block.type)).to.deep.equal(['exif']);
         });
 
-        it('should ignore brob XMP when USE_XMP is false', () => {
+        it('should report brob XMP when USE_XMP is false', () => {
             restoreConstants = swapProperties(Constants, {USE_EXIF: true, USE_XMP: false});
 
             const dataView = getDataView(getJxlData({brobXmp: true}));
-            const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
+            const metadataBlocks = [];
+            const offsets = ImageHeaderJxl.findJxlOffsets(dataView, metadataBlocks);
 
-            expect(offsets.brobXmpChunk).to.be.undefined;
+            expect(offsets.brobXmpChunk).to.be.an('object');
+            expect(metadataBlocks.map((block) => block.type)).to.deep.equal(['xmp']);
         });
 
         it('should skip a brob box too short for its original type and keep walking', () => {
@@ -481,8 +489,6 @@ describe('image-header-jxl', () => {
         });
 
         it('should detect codestream even without metadata boxes', () => {
-            restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false});
-
             const dataView = getDataView(getJxlData({jxlc: true}));
             const offsets = ImageHeaderJxl.findJxlOffsets(dataView);
 

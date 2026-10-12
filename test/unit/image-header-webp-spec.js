@@ -39,12 +39,6 @@ describe('image-header-webp', () => {
         expect(offsets.tiffHeaderOffset).to.equal(38);
     });
 
-    it('should ignore Exif data if it is excluded from custom build', () => {
-        restoreConstants = swapProperties(Constants, {USE_EXIF: false});
-
-        expect(ImageHeaderWebp.findOffsets(getWebpDataView()).tiffHeaderOffset).to.be.undefined;
-    });
-
     it('should find VP8X chunk', () => {
         const offsets = ImageHeaderWebp.findOffsets(getWebpDataView());
 
@@ -62,12 +56,6 @@ describe('image-header-webp', () => {
         }]);
     });
 
-    it('should ignore XMP data if it is excluded from custom build', () => {
-        restoreConstants = swapProperties(Constants, {USE_XMP: false});
-
-        expect(ImageHeaderWebp.findOffsets(getWebpDataView()).xmpChunks).to.be.undefined;
-    });
-
     it('should find ICC chunk', () => {
         const offsets = ImageHeaderWebp.findOffsets(getWebpDataView());
 
@@ -80,10 +68,16 @@ describe('image-header-webp', () => {
         }]);
     });
 
-    it('should ignore ICC data if it is excluded from custom build', () => {
-        restoreConstants = swapProperties(Constants, {USE_ICC: false});
+    it('should report every metadata kind whatever the custom-build flags say', () => {
+        restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
+        const metadataBlocks = [];
 
-        expect(ImageHeaderWebp.findOffsets(getWebpDataView()).iccChunks).to.be.undefined;
+        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView(), metadataBlocks);
+
+        expect(offsets.tiffHeaderOffset).to.equal(32);
+        expect(offsets.xmpChunks).to.have.lengthOf(1);
+        expect(offsets.iccChunks).to.have.lengthOf(1);
+        expect(metadataBlocks.map((block) => block.type)).to.include.members(['exif', 'xmp', 'icc']);
     });
 
     it('should handle when a chunk has odd size and padded data at the end', () => {

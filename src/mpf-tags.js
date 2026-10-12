@@ -4,7 +4,8 @@
 
 import ByteOrder from './byte-order.js';
 import Types from './types.js';
-import TagNames, {IFD_TYPE_MPF} from './tag-names.js';
+import TagNamesMpfIfd from './tag-names-mpf-ifd.js';
+import {IFD_TYPE_MPF} from './ifd-types.js';
 import {deferInit, getBase64Image} from './utils.js';
 import {readIfd, get0thIfdOffset} from './tags-helpers.js';
 
@@ -49,12 +50,19 @@ function read(
             tagFilter,
             'mpf',
             valueBudget,
-            TagNames
+            getTagNames()
         );
         return addMpfImages(dataView, dataOffset, tags, byteOrder);
     } catch (error) {
         return {};
     }
+}
+
+// Assigned rather than a computed key, which Babel compiles to a helper call.
+function getTagNames() {
+    const tagNames = {};
+    tagNames[IFD_TYPE_MPF] = TagNamesMpfIfd;
+    return tagNames;
 }
 
 function addMpfImages(dataView, dataOffset, tags, byteOrder) {

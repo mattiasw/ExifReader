@@ -997,6 +997,26 @@ describe('tags-helpers', () => {
             expect(budget.ifdEntriesRemaining).to.equal(0);
         });
 
+        it('should read the thumbnail IFD when the dictionaries have one for it', () => {
+            const dataView = getDataView(getIfdWithThumbnailIfd());
+            const budget = {remaining: 100, ifdEntriesRemaining: 10};
+            const tags = readIfdWithTagNames(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget, THREE_TAG_NAMES);
+            expect(tags['Thumbnail']).to.deep.equal({
+                MyThumbnailTag: {id: 0x4714, value: 0, description: 0}
+            });
+            expect(budget.ifdEntriesRemaining).to.equal(7);
+        });
+
+        it('should not read the thumbnail IFD, nor charge its entries, without a dictionary for it', () => {
+            const dataView = getDataView(getIfdWithThumbnailIfd());
+            const budget = {remaining: 100, ifdEntriesRemaining: 10};
+            const tagNames = {'0th': THREE_TAG_NAMES['0th']};
+            const tags = readIfdWithTagNames(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget, tagNames);
+            expect(tags['MyTag0'].value).to.equal(0);
+            expect(tags).to.not.have.property('Thumbnail');
+            expect(budget.ifdEntriesRemaining).to.equal(8);
+        });
+
         it('should not follow the next-IFD offset of an IFD cut short by the entry count', () => {
             restoreTagNames = swapProperties(TagNames, THREE_TAG_NAMES);
             const dataView = getDataView(getIfdWithThumbnailIfd());

@@ -3,7 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getConsoleWarnSpy, getDataView} from './test-utils.js';
+import {getConsoleWarnSpy, getDataView, swapProperties} from './test-utils.js';
+import Constants from '../../src/constants.js';
 import ImageHeaderJpeg from '../../src/image-header-jpeg.js';
 
 const JPEG_IMAGE_START = '\xff\xd8\xff\xe0\x00\x07JFIF\x00';
@@ -508,6 +509,45 @@ describe('image-header-jpeg', () => {
             expect(iccBlocks).to.have.lengthOf(2);
             expect(iccBlocks[0]).to.deep.equal({type: 'icc', start: 2, end: 164});
             expect(iccBlocks[1]).to.deep.equal({type: 'icc', start: 164, end: 230});
+        });
+
+        it('should report every metadata kind whatever the custom-build flags say', () => {
+            const restoreConstants = swapProperties(Constants, {
+                USE_FILE: false,
+                USE_JFIF: false,
+                USE_EXIF: false,
+                USE_XMP: false,
+                USE_IPTC: false,
+                USE_ICC: false,
+                USE_MPF: false,
+            });
+            try {
+                const dataView = getDataView(
+                    '\xff\xd8'
+                    + `${SOF0_MARKER}\x00\x04\x47\x11`
+                    + `${APP0_MARKER}\x00\x07JFIF\x00`
+                    + `${APP1_MARKER}\x00\x08Exif\x00\x00`
+                    + MINIMAL_XMP_SEGMENT
+                    + MINIMAL_EXTENDED_XMP_SEGMENT
+                    + '\xff\xed\x00\x14Photoshop 3.0\x008BIM'
+                    + MINIMAL_ICC_SEGMENT
+                    + '\xff\xe2\x00\x06MPF\x00\x4d\x4d'
+                );
+                const metadataBlocks = [];
+                const offsets = ImageHeaderJpeg.findJpegOffsets(dataView, metadataBlocks);
+                expect(offsets.fileDataOffset).to.equal(4);
+                expect(offsets.jfifDataOffset).to.equal(10);
+                expect(offsets.tiffHeaderOffset).to.equal(27);
+                expect(offsets.xmpChunks).to.have.lengthOf(2);
+                expect(offsets.iptcDataOffset).to.be.a('number');
+                expect(offsets.iccChunks).to.have.lengthOf(1);
+                expect(offsets.mpfDataOffset).to.be.a('number');
+                expect(metadataBlocks.map((block) => block.type)).to.deep.equal(
+                    ['file', 'jfif', 'exif', 'xmp', 'xmp', 'iptc', 'icc', 'mpf']
+                );
+            } finally {
+                restoreConstants();
+            }
         });
 
         it('should not emit a block for a segment that is cut off before its chunk bytes', () => {

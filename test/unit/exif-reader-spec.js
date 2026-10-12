@@ -34,6 +34,41 @@ import Vp8xTags from '../../src/vp8x-tags.js';
 import GifFileTags from '../../src/gif-file-tags.js';
 import Thumbnail from '../../src/thumbnail.js';
 import Composite from '../../src/composite.js';
+import TagNames0thIfd from '../../src/tag-names-0th-ifd.js';
+import TagNamesGpsIfd from '../../src/tag-names-gps-ifd.js';
+import TagNamesInteroperabilityIfd from '../../src/tag-names-interoperability-ifd.js';
+import {
+    TAG_MAKE,
+    ascii,
+    getTiff,
+    getNaaBlock,
+    headline,
+    getIccProfile,
+    getXmpPacket,
+    getJpeg,
+    getExifSegment,
+    getXmpSegment,
+    getExtendedXmpSegment,
+    getIptcSegment,
+    getIccSegment,
+    getMpfSegment,
+    getJfifSegment,
+    getSof0Segment,
+    getPng as getInventoryPng,
+    getTextChunk,
+    getExifRawProfile,
+    getIptcRawProfile,
+    getExifChunk,
+    getIccpChunk,
+    getXmpChunk,
+    getPhysChunk,
+    deflate as deflateText,
+    getJxl,
+    getBox,
+    getExifBox,
+    getXmlBox,
+    getBrobBox,
+} from './loadview-inventory-images.js';
 
 const OFFSET_TEST_VALUE = 4711;
 const XMP_FIELD_LENGTH_TEST_VALUE = 47;
@@ -1017,47 +1052,6 @@ describe('exif-reader', function () {
         );
 
         expect(result.MakerNote).to.deep.equal({value: [1, 2, 3]});
-    });
-
-    it('should pass the tag dictionaries to the Exif read', () => {
-        swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE});
-        let capturedTagNames;
-        swap(Tags, {
-            read(...args) {
-                capturedTagNames = args[6];
-                return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
-            }
-        });
-
-        ExifReader.loadView();
-
-        expect(capturedTagNames).to.equal(TagNames);
-    });
-
-    it('should pass the tag dictionaries to the Exif read of brob Exif data', async () => {
-        const decompressedBuffer = new ArrayBuffer(OFFSET_TEST_VALUE + 100);
-        new DataView(decompressedBuffer).setUint32(0, OFFSET_TEST_VALUE - 4);
-        swapImageHeader({
-            fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: 10}
-        });
-        let capturedTagNames;
-        swap(Tags, {
-            read(...args) {
-                capturedTagNames = args[6];
-                return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
-            }
-        });
-
-        await ExifReader.loadView(
-            new DataView(new ArrayBuffer(10)),
-            {
-                async: true,
-                decompress: {brotli: () => Promise.resolve(decompressedBuffer)}
-            }
-        );
-
-        expect(capturedTagNames).to.equal(TagNames);
     });
 
     it('should size the decoded-value budget of brob Exif data from the file plus 4 times the decompressed data', async () => {
@@ -2668,6 +2662,306 @@ describe('exif-reader', function () {
             expect(mpfImageBlocks).to.deep.equal([]);
             expect(tags.metadataRange.end).to.equal(200);
         });
+
+        describe('in custom builds', () => {
+            const OFFSETS_OPTIONS = {expanded: true, includeOffsets: true};
+
+            beforeEach(() => {
+                // Node has no DOMParser; the blocks under test do not depend on the XMP tags.
+                swap(XmpTags, {read: () => ({})});
+            });
+
+            function getBlockTypes(tags) {
+                return tags.metadataRange.blocks.map((block) => block.type);
+            }
+
+            describe('jpeg', () => {
+                const JPEG = getJpeg(
+                    getSof0Segment(),
+                    getJfifSegment(),
+                    getExifSegment(getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]})),
+                    getXmpSegment(getXmpPacket({Label: 'standard'})),
+                    getExtendedXmpSegment('0'.repeat(32), 4, 0, 'more'),
+                    getIptcSegment(getNaaBlock([headline('Headline')])),
+                    getIccSegment(getIccProfile('TEST')),
+                    getMpfSegment(getTiff())
+                );
+                const ALL_KINDS = ['file', 'jfif', 'exif', 'xmp', 'xmp', 'iptc', 'icc', 'mpf'];
+
+                it('should list every kind in the full build', () => {
+                    const tags = ExifReader.loadView(getDataView(JPEG), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(ALL_KINDS);
+                });
+
+                it('should leave out xmp without USE_XMP', () => {
+                    swap(Constants, {USE_XMP: false});
+
+                    const tags = ExifReader.loadView(getDataView(JPEG), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['file', 'jfif', 'exif', 'iptc', 'icc', 'mpf']);
+                });
+
+                it('should leave out each other kind without its flag', () => {
+                    const KIND_FLAGS = {file: 'USE_FILE', jfif: 'USE_JFIF', exif: 'USE_EXIF', iptc: 'USE_IPTC', icc: 'USE_ICC', mpf: 'USE_MPF'};
+                    for (const kind of Object.keys(KIND_FLAGS)) {
+                        const restoreConstants = swapProperties(Constants, {[KIND_FLAGS[kind]]: false});
+                        try {
+                            const tags = ExifReader.loadView(getDataView(JPEG), OFFSETS_OPTIONS);
+
+                            expect(getBlockTypes(tags), kind).to.deep.equal(ALL_KINDS.filter((type) => type !== kind));
+                        } finally {
+                            restoreConstants();
+                        }
+                    }
+                });
+
+                it('should let file follow USE_FILE, not USE_PNG_FILE', () => {
+                    swap(Constants, {USE_PNG_FILE: false});
+
+                    const tags = ExifReader.loadView(getDataView(JPEG), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(ALL_KINDS);
+                });
+
+                it('should keep the widened last block of a capped list whatever its kind', async () => {
+                    const MINIMAL_XMP_SEGMENT = getXmpSegment('');
+                    const exifSegment = getExifSegment(getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]}));
+                    const SOS = '\xff\xda\x00\x04\x00\x00';
+                    const jpeg = '\xff\xd8' + MINIMAL_XMP_SEGMENT.repeat(4096) + exifSegment + SOS;
+                    const exifSegmentEnd = 2 + MINIMAL_XMP_SEGMENT.length * 4096 + exifSegment.length;
+                    swap(Constants, {USE_XMP: false});
+
+                    const tags = ExifReader.loadView(getDataView(jpeg), OFFSETS_OPTIONS);
+
+                    expect(tags.metadataRange.end).to.equal(exifSegmentEnd);
+                    expect(tags.metadataRange.blocks).to.have.lengthOf(1);
+
+                    const autoTags = await ExifReader.load(getArrayBuffer(jpeg), {length: 'auto', expanded: true, includeOffsets: true});
+
+                    expect(autoTags.exif.Make.description).to.equal('Make');
+                });
+            });
+
+            describe('png', () => {
+                const PNG = getInventoryPng(
+                    getExifChunk(getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]})),
+                    getXmpChunk(getXmpPacket({Label: 'png'})),
+                    getTextChunk('Comment', 'Text'),
+                    getPhysChunk(),
+                    getIccpChunk('Profile', 0, deflateText(getIccProfile('TEST')))
+                );
+                const ALL_KINDS = ['file', 'exif', 'xmp', 'png', 'png', 'icc'];
+
+                function loadPng(png = PNG) {
+                    return ExifReader.loadView(getDataView(png), {expanded: true, includeOffsets: true, async: true});
+                }
+
+                it('should list every kind in the full build', async () => {
+                    expect(getBlockTypes(await loadPng())).to.deep.equal(ALL_KINDS);
+                });
+
+                it('should keep the eXIf exif block without USE_EXIF', async () => {
+                    swap(Constants, {USE_EXIF: false});
+
+                    expect(getBlockTypes(await loadPng())).to.deep.equal(ALL_KINDS);
+                });
+
+                it('should let file follow USE_PNG_FILE', async () => {
+                    swap(Constants, {USE_PNG_FILE: false});
+
+                    expect(getBlockTypes(await loadPng())).to.deep.equal(['exif', 'xmp', 'png', 'png', 'icc']);
+                });
+
+                it('should let file follow USE_PNG_FILE, not USE_FILE', async () => {
+                    swap(Constants, {USE_FILE: false});
+
+                    expect(getBlockTypes(await loadPng())).to.deep.equal(ALL_KINDS);
+                });
+
+                it('should leave out icc without USE_ICC', async () => {
+                    swap(Constants, {USE_ICC: false});
+
+                    expect(getBlockTypes(await loadPng())).to.deep.equal(['file', 'exif', 'xmp', 'png', 'png']);
+                });
+
+                it('should leave out xmp without USE_XMP, and not read the XMP iTXt chunk as text', async () => {
+                    swap(Constants, {USE_XMP: false});
+
+                    const tags = await loadPng();
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['file', 'exif', 'png', 'png', 'icc']);
+                    expect(tags.pngText).to.have.property('Comment');
+                    expect(tags.pngText).to.not.have.property('XML:com.adobe.xmp');
+                });
+
+                it('should not make a pngText group from the XMP iTXt chunk alone without USE_XMP', async () => {
+                    swap(Constants, {USE_XMP: false});
+
+                    const tags = await loadPng(getInventoryPng(getXmpChunk(getXmpPacket({Label: 'png'}))));
+
+                    expect(tags).to.not.have.property('pngText');
+                    expect(getBlockTypes(tags)).to.deep.equal(['file']);
+                });
+            });
+
+            describe('heic', () => {
+                it('should list every kind in the full build', () => {
+                    const tags = ExifReader.loadView(getDataView(getHeic()), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['icc', 'exif', 'xmp']);
+                });
+
+                it('should leave out xmp without USE_XMP', () => {
+                    swap(Constants, {USE_XMP: false});
+
+                    const tags = ExifReader.loadView(getDataView(getHeic()), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['icc', 'exif']);
+                });
+
+                it('should leave out exif without USE_EXIF and icc without USE_ICC', () => {
+                    swap(Constants, {USE_EXIF: false, USE_ICC: false});
+
+                    const tags = ExifReader.loadView(getDataView(getHeic()), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['xmp']);
+                });
+            });
+
+            describe('jxl', () => {
+                const TIFF = getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]});
+                const JXL = getJxl(
+                    getExifBox(TIFF),
+                    getXmlBox(getXmpPacket({Label: 'jxl'})),
+                    getBrobBox('Exif', getByteStringFromNumber(0, 4) + TIFF)
+                );
+
+                it('should list every kind in the full build', () => {
+                    const tags = ExifReader.loadView(getDataView(JXL), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['exif', 'xmp', 'exif']);
+                });
+
+                it('should leave out plain and brob exif without USE_EXIF', () => {
+                    swap(Constants, {USE_EXIF: false});
+
+                    const tags = ExifReader.loadView(getDataView(JXL), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['xmp']);
+                });
+
+                it('should leave out xmp without USE_XMP', () => {
+                    swap(Constants, {USE_XMP: false});
+
+                    const tags = ExifReader.loadView(getDataView(JXL), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['exif', 'exif']);
+                });
+            });
+
+            describe('webp', () => {
+                it('should list every kind in the full build', () => {
+                    const tags = ExifReader.loadView(getDataView(getWebpWithMetadata()), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['riff', 'exif', 'xmp', 'icc']);
+                });
+
+                it('should leave out icc without USE_ICC', () => {
+                    swap(Constants, {USE_ICC: false});
+
+                    const tags = ExifReader.loadView(getDataView(getWebpWithMetadata()), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['riff', 'exif', 'xmp']);
+                });
+
+                it('should leave out exif and xmp without their flags', () => {
+                    swap(Constants, {USE_EXIF: false, USE_XMP: false});
+
+                    const tags = ExifReader.loadView(getDataView(getWebpWithMetadata()), OFFSETS_OPTIONS);
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['riff', 'icc']);
+                });
+            });
+        });
+    });
+
+    describe('Exif tag dictionaries', () => {
+        const TIFF = getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]});
+        const READ_SITES = {
+            'a JPEG Exif segment': () => ExifReader.loadView(getDataView(getJpeg(getExifSegment(TIFF)))),
+            'a PNG Exif raw profile': () => ExifReader.loadView(getDataView(getInventoryPng(getTextChunk('Raw profile type exif', getExifRawProfile(TIFF))))),
+            'a JPEG XL brob Exif box': () => ExifReader.loadView(
+                getDataView(getJxl(getBrobBox('Exif', getByteStringFromNumber(0, 4) + TIFF))),
+                {async: true}
+            ),
+        };
+
+        function recordTagNames() {
+            const passedTagNames = [];
+            swap(Tags, {
+                read(...args) {
+                    passedTagNames.push(args[6]);
+                    return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
+                }
+            });
+            return passedTagNames;
+        }
+
+        for (const site of Object.keys(READ_SITES)) {
+            it(`should pass the Exif IFD dictionaries to the read of ${site}`, async () => {
+                const passedTagNames = recordTagNames();
+
+                await READ_SITES[site]();
+
+                expect(passedTagNames).to.have.lengthOf(1);
+                const tagNames = passedTagNames[0];
+                expect(Object.keys(tagNames).sort()).to.deep.equal(['0th', '1st', 'exif', 'gps', 'interoperability']);
+                expect(tagNames['0th']).to.equal(tagNames['exif']);
+                expect(tagNames['0th']).to.deep.equal(TagNames['0th']);
+                expect(tagNames['1st']).to.equal(TagNames0thIfd);
+                expect(tagNames['gps']).to.equal(TagNamesGpsIfd);
+                expect(tagNames['interoperability']).to.equal(TagNamesInteroperabilityIfd);
+            });
+
+            it(`should leave out the thumbnail IFD dictionary from the read of ${site} without USE_THUMBNAIL`, async () => {
+                swap(Constants, {USE_THUMBNAIL: false});
+                const passedTagNames = recordTagNames();
+
+                await READ_SITES[site]();
+
+                expect(passedTagNames).to.have.lengthOf(1);
+                expect(Object.keys(passedTagNames[0]).sort()).to.deep.equal(['0th', 'exif', 'gps', 'interoperability']);
+            });
+        }
+
+        it('should not read raw profiles in PNG text without USE_EXIF and USE_IPTC', () => {
+            swap(Constants, {USE_EXIF: false, USE_IPTC: false});
+            const passedTagNames = recordTagNames();
+            let iptcReads = 0;
+            swap(IptcTags, {
+                read() {
+                    iptcReads++;
+                    return {};
+                }
+            });
+
+            ExifReader.loadView(getDataView(getInventoryPng(
+                getTextChunk('Raw profile type exif', getExifRawProfile(TIFF)),
+                getTextChunk('Raw profile type iptc', getIptcRawProfile(getNaaBlock([headline('Headline')])))
+            )));
+
+            expect(passedTagNames).to.have.lengthOf(0);
+            expect(iptcReads).to.equal(0);
+        });
+
+        it('should read the IPTC raw profile in PNG text with USE_IPTC', () => {
+            const tags = ExifReader.loadView(getDataView(getInventoryPng(
+                getTextChunk('Raw profile type iptc', getIptcRawProfile(getNaaBlock([headline('Headline')])))
+            )), {expanded: true});
+
+            expect(tags.iptc['Headline'].description).to.equal('Headline');
+        });
     });
 
     describe('length: "auto"', () => {
@@ -3748,10 +4042,14 @@ describe('exif-reader', function () {
 
         it('should bound the IFD entries read from the Exif of compressed PNG text chunks by the input size', async () => {
             let calls = 0;
-            swap(TagNames, {'0th': {0x4711: {name: 'CountedTag', description: (value) => {
+            const countedTag = {name: 'CountedTag', description: (value) => {
                 calls++;
                 return value;
-            }}}});
+            }};
+            const read = Tags.read;
+            swap(Tags, {
+                read: (...args) => read(...args.slice(0, 6), Object.assign({}, args[6], {'0th': {0x4711: countedTag}}))
+            });
             const chunkCount = 4;
             const entryCount = 8000;
             const png = getPngWithCompressedExifChunks(chunkCount, getInSlotEntriesTiff(entryCount));
@@ -4591,6 +4889,57 @@ function swapForCustomBuild(appMarkersValue, useFlags) {
     // Constants is a shared module object, so swapping properties on it
     // reaches every importer, including loadview-pipeline.
     swap(Constants, useFlags);
+}
+
+// A HEIC whose meta box points at an Exif item and an XMP item after it and
+// carries an ICC profile in iprp > ipco > colr.
+function getHeic() {
+    const EXIF_ITEM_ID = 1;
+    const XMP_ITEM_ID = 2;
+    const exifItem = getByteStringFromNumber(6, 4) + 'Exif\x00\x00' + getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]});
+    const xmpItem = getXmpPacket({Label: 'heic'});
+    const ftyp = getBox('ftyp', 'heic' + '\x00\x00\x00\x00' + 'mif1heic');
+    const getMeta = (exifOffset, xmpOffset) => getIsoBmffFullBox('meta', 0,
+        getIsoBmffFullBox('iinf', 0, getByteStringFromNumber(2, 2)
+            + getIsoBmffFullBox('infe', 2, getByteStringFromNumber(EXIF_ITEM_ID, 2) + '\x00\x00' + 'Exif' + '\x00')
+            + getIsoBmffFullBox('infe', 2, getByteStringFromNumber(XMP_ITEM_ID, 2) + '\x00\x00' + 'mime' + '\x00' + 'application/rdf+xml\x00'))
+        + getBox('iprp', getBox('ipco', getBox('colr', 'prof' + getIccProfile('TEST'))))
+        + getIsoBmffFullBox('iloc', 0, '\x44\x40' + getByteStringFromNumber(2, 2)
+            + getIlocItem(EXIF_ITEM_ID, exifOffset, exifItem.length)
+            + getIlocItem(XMP_ITEM_ID, xmpOffset, xmpItem.length))
+    );
+    const metaLength = getMeta(0, 0).length;
+    const exifOffset = ftyp.length + metaLength;
+    return ftyp + getMeta(exifOffset, exifOffset + exifItem.length) + exifItem + xmpItem;
+}
+
+function getIsoBmffFullBox(type, version, content) {
+    return getBox(type, String.fromCharCode(version) + '\x00\x00\x00' + content);
+}
+
+function getIlocItem(itemId, offset, length) {
+    const DATA_REFERENCE_INDEX = '\x00\x00';
+    const BASE_OFFSET = getByteStringFromNumber(0, 4);
+    const EXTENT_COUNT = getByteStringFromNumber(1, 2);
+    return getByteStringFromNumber(itemId, 2) + DATA_REFERENCE_INDEX + BASE_OFFSET + EXTENT_COUNT
+        + getByteStringFromNumber(offset, 4) + getByteStringFromNumber(length, 4);
+}
+
+// A WebP with a VP8X chunk, then EXIF, XMP and ICCP chunks.
+function getWebpWithMetadata() {
+    const chunks = getWebpChunk('VP8X', '\x00'.repeat(10))
+        + getWebpChunk('EXIF', getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]}))
+        + getWebpChunk('XMP ', getXmpPacket({Label: 'webp'}))
+        + getWebpChunk('ICCP', getIccProfile('TEST'));
+    return 'RIFF' + getLittleEndianByteString(4 + chunks.length) + 'WEBP' + chunks;
+}
+
+function getWebpChunk(id, data) {
+    return id + getLittleEndianByteString(data.length) + data + (data.length % 2 === 1 ? '\x00' : '');
+}
+
+function getLittleEndianByteString(number) {
+    return getByteStringFromNumber(number, 4).split('').reverse().join('');
 }
 
 function swap(target, replacement) {

@@ -16,9 +16,21 @@ import PngTextTags from '../../src/png-text-tags.js';
 import Tags from '../../src/tags.js';
 import TagNames from '../../src/tag-names.js';
 import IptcTags from '../../src/iptc-tags.js';
-import Constants from '../../src/constants.js';
 import {getStringFromDataView, withDecompressBudget} from '../../src/utils.js';
 import {crc32} from 'node:zlib';
+
+// The raw-profile readers exif-reader.js injects in the full build, calling the
+// module objects at call time so that the tests can swap their read functions.
+const RAW_PROFILE_READERS = {
+    exif: (...args) => Tags.read(...args, TagNames),
+    iptc: (...args) => IptcTags.read(...args),
+};
+const READ_PARAMETER_COUNT = 10;
+
+function readPngText(...args) {
+    const paddedArgs = args.concat(new Array(READ_PARAMETER_COUNT - args.length).fill(undefined));
+    return PngTextTags.read(...paddedArgs, RAW_PROFILE_READERS);
+}
 
 describe('png-text-tags', () => {
     let restoreTagReaders;
@@ -38,7 +50,7 @@ describe('png-text-tags', () => {
             {type: TYPE_ITXT, bytes: toBytes(tagDataiTXt)},
         ]);
 
-        const {readTags} = PngTextTags.read(dataView, chunks);
+        const {readTags} = readPngText(dataView, chunks);
 
         expect(readTags['MyTag0']).to.deep.equal({
             value: 'My value.',
@@ -56,7 +68,7 @@ describe('png-text-tags', () => {
         const dataView = getPaddedDataView(textChunks.dataView, 4);
         const chunks = [0];
 
-        const {readTags} = PngTextTags.read(dataView, chunks);
+        const {readTags} = readPngText(dataView, chunks);
 
         expect(readTags['MyTag0']).to.deep.equal({
             value: 'My value.',
@@ -70,7 +82,7 @@ describe('png-text-tags', () => {
             {type: TYPE_ITXT, bytes: toBytes(tagData), declaredLength: 100, withCrc: false}
         ]);
 
-        const {readTags} = PngTextTags.read(dataView, chunks);
+        const {readTags} = readPngText(dataView, chunks);
 
         expect(readTags['Comment']).to.deep.equal({
             value: '',
@@ -83,7 +95,7 @@ describe('png-text-tags', () => {
             {type: TYPE_TEXT, bytes: toBytes('MyTag\x00abc'), declaredLength: 100, withCrc: false}
         ]);
 
-        const {readTags} = PngTextTags.read(dataView, chunks);
+        const {readTags} = readPngText(dataView, chunks);
 
         expect(readTags['MyTag']).to.deep.equal({
             value: 'abc',
@@ -99,7 +111,7 @@ describe('png-text-tags', () => {
 
         let readTags;
         try {
-            ({readTags} = PngTextTags.read(dataView, chunks));
+            ({readTags} = readPngText(dataView, chunks));
         } finally {
             restoreGlobal();
         }
@@ -116,7 +128,7 @@ describe('png-text-tags', () => {
         const dataView = getPaddedDataView(textChunks.dataView, 4);
         const chunks = textChunks.chunks;
 
-        const {readTags} = PngTextTags.read(dataView, chunks);
+        const {readTags} = readPngText(dataView, chunks);
 
         expect(readTags['MyTagUtf8 (en)']).to.deep.equal({
             value: text,
@@ -131,7 +143,7 @@ describe('png-text-tags', () => {
         const dataView = getPaddedDataView(textChunks.dataView, 4);
         const chunks = textChunks.chunks;
 
-        const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+        const {readTagsPromise} = readPngText(dataView, chunks, true);
         const tags = await readTagsPromise;
 
         expect(tags[0].readTags['MyTag']).to.deep.equal({
@@ -143,7 +155,7 @@ describe('png-text-tags', () => {
     it('should read compressed zTXt tags', async () => {
         const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.'))]);
 
-        const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+        const {readTagsPromise} = readPngText(dataView, chunks, true);
         const tags = await readTagsPromise;
 
         expect(tags[0].readTags['MyTag']).to.deep.equal({
@@ -156,7 +168,7 @@ describe('png-text-tags', () => {
         const text = 'My emoji value: 🏔️✨';
         const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ITXT, getItextDataView('MyTagUtf8', 'en', 'MyTagUtf8', text))]);
 
-        const {readTags} = PngTextTags.read(dataView, chunks);
+        const {readTags} = readPngText(dataView, chunks);
 
         expect(readTags['MyTagUtf8 (en)']).to.deep.equal({
             value: text,
@@ -170,7 +182,7 @@ describe('png-text-tags', () => {
     //     const text = 'My compressed iTXt value.';
     //     const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ITXT, await getCompressedTagData(TYPE_ITXT, 'MyTag', text))]);
 
-    //     const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+    //     const {readTagsPromise} = readPngText(dataView, chunks, true);
     //     const tags = await readTagsPromise;
 
     //     expect(tags[0]['MyTag (en-uk)']).to.deep.equal({
@@ -186,7 +198,7 @@ describe('png-text-tags', () => {
         const EXIF_DATA = 'Exif\0\0<Exif\ndata>';
         const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'Raw profile type exif', `\nexif\n${('' + EXIF_DATA.length).padStart(8, ' ')}\n${stringToHex(EXIF_DATA)}`))]);
 
-        const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+        const {readTagsPromise} = readPngText(dataView, chunks, true);
         const tags = await readTagsPromise;
 
         expect(tags[0].embeddedExifTags).to.equal(EXIF_DATA.substring(6));
@@ -208,7 +220,7 @@ describe('png-text-tags', () => {
         const decompressConfig = {deflate: (bytes) => bytes};
         const valueBudget = {remaining: 1000, ifdEntriesRemaining: 1000, decompressedAllowanceRemaining: 1024 * 1024};
 
-        await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
+        await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
 
         expect(passedBudgets).to.have.lengthOf(2);
         expect(passedBudgets[0]).to.equal(valueBudget);
@@ -225,7 +237,7 @@ describe('png-text-tags', () => {
         ]);
         const decompressConfig = {deflate: (bytes) => bytes};
 
-        const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+        const tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
         expect(tags[0].embeddedExifTags).to.deep.equal({Model: {value: 'abc'}, MakerNote: {value: [1, 2, 3]}});
     });
@@ -256,7 +268,7 @@ describe('png-text-tags', () => {
             decompressedIptcAllowanceRemaining: 8192
         };
 
-        await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
+        await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
 
         expect(seenAtRead).to.deep.equal([{
             byteLength: exifData.length,
@@ -295,7 +307,7 @@ describe('png-text-tags', () => {
             decompressedIptcAllowanceRemaining: 8192
         };
 
-        await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
+        await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
 
         expect(seenAtRead).to.deep.equal([{
             byteLength: iptcData.length,
@@ -314,7 +326,7 @@ describe('png-text-tags', () => {
         const IPTC_DATA = '<IPTC data>';
         const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'Raw profile type iptc', `\niptc\n${('' + IPTC_DATA.length).padStart(8, ' ')}\n${stringToHex(IPTC_DATA)}`))]);
 
-        const {readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+        const {readTagsPromise} = readPngText(dataView, chunks, true);
         const tags = await readTagsPromise;
 
         expect(tags[0].embeddedIptcTags).to.equal(IPTC_DATA);
@@ -323,7 +335,7 @@ describe('png-text-tags', () => {
     it('should ignore tags that use compression when async is not passed', async () => {
         const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'MyTag', 'My compressed zTXt value.'))]);
 
-        const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks);
+        const {readTags, readTagsPromise} = readPngText(dataView, chunks);
 
         expect(readTagsPromise).to.be.undefined;
         expect(readTags).to.deep.equal({});
@@ -342,7 +354,7 @@ describe('png-text-tags', () => {
             deflate: () => Uint8Array.from(value, (c) => c.charCodeAt(0))
         };
 
-        const {readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+        const {readTagsPromise} = readPngText(dataView, chunks, true, false, false, undefined, decompressConfig);
         const tags = await readTagsPromise;
 
         expect(tags[0].readTags[name]).to.deep.equal({
@@ -376,7 +388,7 @@ describe('png-text-tags', () => {
         const decompressConfig = {deflate: (bytes) => bytes};
 
         try {
-            const tags = await PngTextTags.read(dataView, chunks, true, false, false, tagFilter, decompressConfig).readTagsPromise;
+            const tags = await readPngText(dataView, chunks, true, false, false, tagFilter, decompressConfig).readTagsPromise;
 
             expect(readCalls).to.equal(0);
             expect(tags).to.deep.equal([{}, {}, {readTags: {MyTag: {value: 'My value.', description: 'My value.'}}}]);
@@ -390,7 +402,7 @@ describe('png-text-tags', () => {
         const tagFilter = {shouldParseGroup: (group) => group !== 'png'};
         const decompressConfig = {deflate: (bytes) => bytes};
 
-        const tags = await PngTextTags.read(dataView, chunks, true, false, false, tagFilter, decompressConfig).readTagsPromise;
+        const tags = await readPngText(dataView, chunks, true, false, false, tagFilter, decompressConfig).readTagsPromise;
 
         expect(tags).to.deep.equal([{}]);
     });
@@ -399,7 +411,7 @@ describe('png-text-tags', () => {
         const {dataView, chunks} = buildTextChunks([getZtxtChunk('', toBytes('My value.'))]);
         const decompressConfig = {deflate: (bytes) => bytes};
 
-        const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+        const tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
         expect(tags).to.deep.equal([{}]);
     });
@@ -408,7 +420,7 @@ describe('png-text-tags', () => {
         const tagData = '__proto__\x00hello';
         const {dataView, chunks} = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(tagData)}]);
 
-        const {readTags} = PngTextTags.read(dataView, chunks);
+        const {readTags} = readPngText(dataView, chunks);
 
         expect(Object.keys(readTags)).to.deep.equal(['__proto__']);
         expect(Object.getPrototypeOf(readTags)).to.equal(Object.prototype);
@@ -421,7 +433,7 @@ describe('png-text-tags', () => {
     it('should keep a compressed tag with the keyword __proto__ as an own tag', async () => {
         const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, '__proto__', 'hello'))]);
 
-        const tags = await PngTextTags.read(dataView, chunks, true).readTagsPromise;
+        const tags = await readPngText(dataView, chunks, true).readTagsPromise;
 
         expect(Object.keys(tags[0])).to.deep.equal(['readTags']);
         const readTags = tags[0].readTags;
@@ -437,7 +449,7 @@ describe('png-text-tags', () => {
         const tagData = 'hasOwnProperty\x00hello';
         const {dataView, chunks} = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(tagData)}]);
 
-        const {readTags} = PngTextTags.read(dataView, chunks);
+        const {readTags} = readPngText(dataView, chunks);
 
         expect(Object.keys(readTags)).to.deep.equal(['hasOwnProperty_']);
         expect(readTags.hasOwnProperty_).to.deep.equal({
@@ -450,7 +462,7 @@ describe('png-text-tags', () => {
     it('should append _ to a compressed tag with the keyword of an Object.prototype method', async () => {
         const {dataView, chunks} = buildTextChunks([getChunkFromDataView(TYPE_ZTXT, await getCompressedTagData(TYPE_ZTXT, 'toString', 'hello'))]);
 
-        const tags = await PngTextTags.read(dataView, chunks, true).readTagsPromise;
+        const tags = await readPngText(dataView, chunks, true).readTagsPromise;
 
         const readTags = tags[0].readTags;
         expect(Object.keys(readTags)).to.deep.equal(['toString_']);
@@ -465,7 +477,7 @@ describe('png-text-tags', () => {
         const tagData = '__exif\x00FROMFILE';
         const {dataView, chunks} = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(tagData)}]);
 
-        const {readTags} = PngTextTags.read(dataView, chunks);
+        const {readTags} = readPngText(dataView, chunks);
 
         expect(readTags).to.deep.equal({__exif: {value: 'FROMFILE', description: 'FROMFILE'}});
     });
@@ -477,7 +489,7 @@ describe('png-text-tags', () => {
         ]);
         const decompressConfig = {deflate: (bytes) => bytes};
 
-        const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+        const tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
         expect(tags).to.deep.equal([
             {readTags: {__exif: {value: 'FROMFILE', description: 'FROMFILE'}}},
@@ -498,7 +510,7 @@ describe('png-text-tags', () => {
                 getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM'))
             ]);
 
-            const result = PngTextTags.read(dataView, chunks);
+            const result = readPngText(dataView, chunks);
 
             expect(readArgs).to.deep.equal([{data: 'Exif\0\0MM', offset: 6}]);
             expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
@@ -507,21 +519,50 @@ describe('png-text-tags', () => {
             expect(result.readTagsPromise).to.be.undefined;
         });
 
-        it('should pass the tag dictionaries to the Exif read of a tEXt Exif raw profile', () => {
-            let passedTagNames;
-            restoreTagReaders = swapProperties(Tags, {
-                read: (...args) => {
-                    passedTagNames = args[6];
-                    return {tags: {}};
-                }
-            });
+        it('should pass the decoded profile and the read options to the injected Exif reader', () => {
+            const readArgs = [];
+            const exif = (...args) => {
+                readArgs.push(args);
+                return {tags: {Model: {value: 'abc'}}};
+            };
             const {dataView, chunks} = buildTextChunks([
                 getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM'))
             ]);
+            const tagFilter = {shouldParseGroup: () => true, shouldParseTag: () => true};
+            const valueBudget = {remaining: 1000};
 
-            PngTextTags.read(dataView, chunks);
+            const result = PngTextTags.read(dataView, chunks, false, true, true, tagFilter, undefined, valueBudget, undefined, undefined, {exif});
 
-            expect(passedTagNames).to.equal(TagNames);
+            expect(readArgs).to.have.lengthOf(1);
+            const [exifDataView, ...otherArgs] = readArgs[0];
+            expect(getStringFromDataView(exifDataView, 0, exifDataView.byteLength)).to.equal('Exif\0\0MM');
+            expect(otherArgs).to.deep.equal([6, true, true, tagFilter, valueBudget]);
+            expect(otherArgs[3]).to.equal(tagFilter);
+            expect(otherArgs[4]).to.equal(valueBudget);
+            expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
+        });
+
+        it('should pass the decoded profile and the read options to the injected IPTC reader', () => {
+            const readArgs = [];
+            const iptc = (...args) => {
+                readArgs.push(args);
+                return {Headline: {value: 'abc'}};
+            };
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', '<IPTC data>'))
+            ]);
+            const tagFilter = {shouldParseGroup: () => true, shouldParseTag: () => true};
+            const valueBudget = {remaining: 1000};
+
+            const result = PngTextTags.read(dataView, chunks, false, true, false, tagFilter, undefined, valueBudget, undefined, undefined, {iptc});
+
+            expect(readArgs).to.have.lengthOf(1);
+            const [iptcDataView, ...otherArgs] = readArgs[0];
+            expect(getStringFromDataView(iptcDataView, 0, iptcDataView.byteLength)).to.equal('<IPTC data>');
+            expect(otherArgs).to.deep.equal([0, true, tagFilter, valueBudget]);
+            expect(otherArgs[2]).to.equal(tagFilter);
+            expect(otherArgs[3]).to.equal(valueBudget);
+            expect(result.embeddedIptcTags).to.deep.equal({Headline: {value: 'abc'}});
         });
 
         it('should not return the internal offset on MakerNote in a tEXt Exif raw profile', () => {
@@ -532,7 +573,7 @@ describe('png-text-tags', () => {
                 getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM'))
             ]);
 
-            const result = PngTextTags.read(dataView, chunks);
+            const result = readPngText(dataView, chunks);
 
             expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}, MakerNote: {value: [1, 2, 3]}});
         });
@@ -549,7 +590,7 @@ describe('png-text-tags', () => {
                 getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', '<IPTC data>'))
             ]);
 
-            const result = PngTextTags.read(dataView, chunks);
+            const result = readPngText(dataView, chunks);
 
             expect(readArgs).to.deep.equal([{data: '<IPTC data>', offset: 0}]);
             expect(result.embeddedIptcTags).to.deep.equal({Headline: {value: 'abc'}});
@@ -566,7 +607,7 @@ describe('png-text-tags', () => {
                 getUncompressedItxtChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM'))
             ]);
 
-            const result = PngTextTags.read(dataView, chunks, true);
+            const result = readPngText(dataView, chunks, true);
 
             expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
             expect(result.readTags).to.deep.equal({});
@@ -587,7 +628,7 @@ describe('png-text-tags', () => {
                 getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0MM'))
             ]);
 
-            const result = PngTextTags.read(dataView, chunks);
+            const result = readPngText(dataView, chunks);
 
             expect(result.embeddedExifTags).to.deep.equal({
                 Model: {value: 'second'},
@@ -610,7 +651,7 @@ describe('png-text-tags', () => {
                 getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', 'I'))
             ]);
 
-            const result = PngTextTags.read(dataView, chunks);
+            const result = readPngText(dataView, chunks);
 
             expect(result.embeddedIptcTags).to.deep.equal({
                 Headline: {value: 'second'},
@@ -628,7 +669,7 @@ describe('png-text-tags', () => {
                 getTextChunk('MyTag', 'My value.')
             ]);
 
-            const result = PngTextTags.read(dataView, chunks);
+            const result = readPngText(dataView, chunks);
 
             expect(result.embeddedExifTags).to.be.undefined;
             expect(result.embeddedIptcTags).to.be.undefined;
@@ -657,7 +698,7 @@ describe('png-text-tags', () => {
             const tagFilter = {shouldParseGroup: (group) => group === 'png'};
 
             try {
-                const result = PngTextTags.read(dataView, chunks, false, false, false, tagFilter);
+                const result = readPngText(dataView, chunks, false, false, false, tagFilter);
 
                 expect(readCalls).to.equal(0);
                 expect(result.embeddedExifTags).to.be.undefined;
@@ -678,7 +719,7 @@ describe('png-text-tags', () => {
             ]);
             const tagFilter = {shouldParseGroup: (group) => group !== 'png'};
 
-            const result = PngTextTags.read(dataView, chunks, false, false, false, tagFilter);
+            const result = readPngText(dataView, chunks, false, false, false, tagFilter);
 
             expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
             expect(result.readTags).to.deep.equal({});
@@ -698,7 +739,7 @@ describe('png-text-tags', () => {
             ]);
             const valueBudget = {remaining: 1000};
 
-            PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, valueBudget);
+            readPngText(dataView, chunks, false, false, false, undefined, undefined, valueBudget);
 
             expect(passedBudgets).to.have.lengthOf(2);
             expect(passedBudgets[0]).to.equal(valueBudget);
@@ -721,7 +762,7 @@ describe('png-text-tags', () => {
             ]);
             const valueBudget = {remaining: 1000, ifdEntriesRemaining: 1000, decompressedAllowanceRemaining: 1024 * 1024};
 
-            PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, valueBudget);
+            readPngText(dataView, chunks, false, false, false, undefined, undefined, valueBudget);
 
             expect(seenAtRead).to.deep.equal([{remaining: 1000, decompressedAllowanceRemaining: 1024 * 1024}]);
         });
@@ -743,7 +784,7 @@ describe('png-text-tags', () => {
             ]);
             const valueBudget = {iptcDatasetsRemaining: 7, decompressedIptcAllowanceRemaining: 8192};
 
-            PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, valueBudget);
+            readPngText(dataView, chunks, false, false, false, undefined, undefined, valueBudget);
 
             expect(seenAtRead).to.have.lengthOf(1);
             expect(seenAtRead[0].valueBudget).to.equal(valueBudget);
@@ -751,37 +792,49 @@ describe('png-text-tags', () => {
             expect(seenAtRead[0].decompressedIptcAllowanceRemaining).to.equal(8192);
         });
 
-        it('should drop tEXt Exif and IPTC raw profiles in a build without Exif and IPTC support', () => {
-            let readCalls = 0;
-            restoreTagReaders = swapProperties(Tags, {
-                read: () => {
-                    readCalls++;
-                    return {tags: {}};
-                }
-            });
-            const restoreIptcTags = swapProperties(IptcTags, {
-                read: () => {
-                    readCalls++;
-                    return {};
-                }
-            });
-            const restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_IPTC: false});
+        it('should drop tEXt Exif and IPTC raw profiles without raw-profile readers', () => {
             const {dataView, chunks} = buildTextChunks([
                 getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0')),
                 getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', 'I'))
             ]);
 
-            try {
-                const result = PngTextTags.read(dataView, chunks);
+            const result = PngTextTags.read(dataView, chunks);
 
-                expect(readCalls).to.equal(0);
-                expect(result.embeddedExifTags).to.be.undefined;
-                expect(result.embeddedIptcTags).to.be.undefined;
-                expect(result.readTags).to.deep.equal({});
-            } finally {
-                restoreConstants();
-                restoreIptcTags();
-            }
+            expect(result.embeddedExifTags).to.be.undefined;
+            expect(result.embeddedIptcTags).to.be.undefined;
+            expect(result.readTags).to.deep.equal({});
+        });
+
+        it('should drop each raw profile whose reader is missing and read the other', () => {
+            const {dataView, chunks} = buildTextChunks([
+                getTextChunk('Raw profile type exif', getRawProfileValue('exif', 'Exif\0\0')),
+                getTextChunk('Raw profile type iptc', getRawProfileValue('iptc', 'I'))
+            ]);
+            const exif = () => ({tags: {Model: {value: 'abc'}}});
+            const iptc = () => ({Headline: {value: 'abc'}});
+
+            const exifOnly = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, undefined, undefined, {exif});
+            const iptcOnly = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, undefined, undefined, {iptc});
+
+            expect(exifOnly.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
+            expect(exifOnly.embeddedIptcTags).to.be.undefined;
+            expect(iptcOnly.embeddedExifTags).to.be.undefined;
+            expect(iptcOnly.embeddedIptcTags).to.deep.equal({Headline: {value: 'abc'}});
+        });
+
+        it('should not decode a raw profile whose reader is missing', async () => {
+            const {dataView, chunks} = buildTextChunks([
+                getZtxtChunk('Raw profile type exif', toBytes(getRawProfileValue('exif', 'Exif\0\0' + '\0'.repeat(1000)))),
+                getZtxtChunk('Raw profile type iptc', toBytes(getRawProfileValue('iptc', '\0'.repeat(1000))))
+            ]);
+            const valueBudget = {remaining: 0, decompressedAllowanceRemaining: 1024 * 1024, decompressedIptcAllowanceRemaining: 1024 * 1024};
+            const decompressConfig = {deflate: (bytes) => bytes};
+
+            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, valueBudget).readTagsPromise;
+
+            expect(tags).to.deep.equal([{}, {}]);
+            expect(valueBudget.decompressedAllowanceRemaining).to.equal(1024 * 1024);
+            expect(valueBudget.decompressedIptcAllowanceRemaining).to.equal(1024 * 1024);
         });
 
         it('should merge the tags of 10000 tEXt Exif raw profiles well under a second', function () {
@@ -792,8 +845,8 @@ describe('png-text-tags', () => {
             const {dataView, chunks} = buildExifRawProfileChunks(NUMBER_OF_CHUNKS);
 
             const result = expectTimeRatioBelow(
-                () => PngTextTags.read(baseline.dataView, baseline.chunks, false, true),
-                () => PngTextTags.read(dataView, chunks, false, true),
+                () => readPngText(baseline.dataView, baseline.chunks, false, true),
+                () => readPngText(dataView, chunks, false, true),
                 24
             );
 
@@ -833,7 +886,7 @@ describe('png-text-tags', () => {
                 getTextChunk('Raw profile type exif', getRawProfileValueWithHex('exif', data, hex))
             ]);
 
-            PngTextTags.read(dataView, chunks);
+            readPngText(dataView, chunks);
 
             expect(views).to.have.lengthOf(1);
             expect(getStringFromDataView(views[0], 0, views[0].byteLength)).to.equal(data);
@@ -865,7 +918,7 @@ describe('png-text-tags', () => {
                 getTextChunk('MyTag', 'My value.')
             ]);
 
-            const result = PngTextTags.read(dataView, chunks);
+            const result = readPngText(dataView, chunks);
 
             expect(readCalls).to.equal(0);
             expect(result.embeddedExifTags).to.be.undefined;
@@ -917,7 +970,7 @@ describe('png-text-tags', () => {
                 getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA))
             ]);
 
-            const result = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, getThumbnail);
+            const result = readPngText(dataView, chunks, false, false, false, undefined, undefined, undefined, getThumbnail);
 
             expect(calls).to.have.lengthOf(1);
             expect(calls[0].dataView.byteOffset).to.equal(0);
@@ -936,7 +989,7 @@ describe('png-text-tags', () => {
                 getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA))
             ]);
 
-            const result = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, getThumbnail);
+            const result = readPngText(dataView, chunks, false, false, false, undefined, undefined, undefined, getThumbnail);
 
             expect(result.embeddedExifThumbnail).to.be.undefined;
             expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
@@ -948,7 +1001,7 @@ describe('png-text-tags', () => {
                 getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA))
             ]);
 
-            const result = PngTextTags.read(dataView, chunks);
+            const result = readPngText(dataView, chunks);
 
             expect(result.embeddedExifThumbnail).to.be.undefined;
             expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}});
@@ -964,7 +1017,7 @@ describe('png-text-tags', () => {
                 getTextChunk('Raw profile type exif', getRawProfileValue('exif', EXIF_DATA))
             ]);
 
-            const result = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, getThumbnail);
+            const result = readPngText(dataView, chunks, false, false, false, undefined, undefined, undefined, getThumbnail);
 
             expect(calls).to.have.lengthOf(2);
             expect(result.embeddedExifThumbnail).to.equal(firstWithImage);
@@ -980,7 +1033,7 @@ describe('png-text-tags', () => {
             ]);
             const decompressConfig = {deflate: (bytes) => bytes};
 
-            const tagList = await PngTextTags.read(
+            const tagList = await readPngText(
                 dataView, chunks, true, false, false, undefined, decompressConfig, undefined, getThumbnail
             ).readTagsPromise;
 
@@ -998,7 +1051,7 @@ describe('png-text-tags', () => {
             ]);
             const decompressConfig = {deflate: (bytes) => bytes};
 
-            const tagList = await PngTextTags.read(
+            const tagList = await readPngText(
                 dataView, chunks, true, false, false, undefined, decompressConfig, undefined, getThumbnail
             ).readTagsPromise;
 
@@ -1015,7 +1068,7 @@ describe('png-text-tags', () => {
             ]);
             const decompressConfig = {deflate: (bytes) => bytes};
 
-            const result = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig, undefined, getThumbnail);
+            const result = readPngText(dataView, chunks, true, false, false, undefined, decompressConfig, undefined, getThumbnail);
             const tagList = await result.readTagsPromise;
 
             expect(calls).to.have.lengthOf(1);
@@ -1031,7 +1084,7 @@ describe('png-text-tags', () => {
             ]);
             const tagFilter = {shouldParseGroup: (group) => group !== 'exif'};
 
-            const result = PngTextTags.read(dataView, chunks, false, false, false, tagFilter, undefined, undefined, getThumbnail);
+            const result = readPngText(dataView, chunks, false, false, false, tagFilter, undefined, undefined, getThumbnail);
 
             expect(readCount.calls).to.equal(0);
             expect(calls).to.have.lengthOf(0);
@@ -1082,7 +1135,7 @@ describe('png-text-tags', () => {
             const {dataView, chunks} = buildTextChunks(otherChunks.concat([getExifChunk()]));
             const decompressConfig = {deflate: (bytes) => bytes};
 
-            PngTextTags.read(dataView, chunks, async, false, false, undefined, decompressConfig, undefined, undefined, readCarriedGroups);
+            readPngText(dataView, chunks, async, false, false, undefined, decompressConfig, undefined, undefined, readCarriedGroups);
 
             return calls[0].source;
         }
@@ -1094,7 +1147,7 @@ describe('png-text-tags', () => {
             const valueBudget = {remaining: 1000};
             const {dataView, chunks} = buildTextChunks([getExifChunk()]);
 
-            const result = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, valueBudget, undefined, readCarriedGroups);
+            const result = readPngText(dataView, chunks, false, false, false, undefined, undefined, valueBudget, undefined, readCarriedGroups);
 
             expect(calls).to.have.lengthOf(1);
             expect(calls[0].dataView.byteLength).to.equal(EXIF_DATA.length);
@@ -1113,7 +1166,7 @@ describe('png-text-tags', () => {
             swapTagsReadWithMakerNote();
             const {dataView, chunks} = buildTextChunks([getExifChunk()]);
 
-            const result = PngTextTags.read(dataView, chunks);
+            const result = readPngText(dataView, chunks);
 
             expect(result.exifCarriedGroups).to.be.undefined;
             expect(result.embeddedExifTags).to.deep.equal({Model: {value: 'abc'}, MakerNote: {value: [1, 2]}});
@@ -1127,7 +1180,7 @@ describe('png-text-tags', () => {
                 const textChunks = position === 'before' ? [iptcChunk, getExifChunk()] : [getExifChunk(), iptcChunk];
                 const {dataView, chunks} = buildTextChunks(textChunks);
 
-                PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, undefined, readCarriedGroups);
+                readPngText(dataView, chunks, false, false, false, undefined, undefined, undefined, undefined, readCarriedGroups);
 
                 expect(calls[0].source).to.deep.equal({decompressed: false, hasIptcBlock: true});
             });
@@ -1184,7 +1237,7 @@ describe('png-text-tags', () => {
             ]);
             const {dataView, chunks} = buildTextChunks([getExifChunk(), getExifChunk()]);
 
-            const result = PngTextTags.read(dataView, chunks, false, false, false, undefined, undefined, undefined, undefined, readCarriedGroups);
+            const result = readPngText(dataView, chunks, false, false, false, undefined, undefined, undefined, undefined, readCarriedGroups);
 
             expect(calls).to.have.lengthOf(2);
             expect(result.exifCarriedGroups).to.deep.equal({
@@ -1205,7 +1258,7 @@ describe('png-text-tags', () => {
             ]);
             const decompressConfig = {deflate: (bytes) => bytes};
 
-            const result = PngTextTags.read(
+            const result = readPngText(
                 dataView, chunks, true, false, false, undefined, decompressConfig, undefined, undefined, readCarriedGroups
             );
             const tagList = await result.readTagsPromise;
@@ -1235,8 +1288,8 @@ describe('png-text-tags', () => {
 
             // The 7745 chunks past the cap are only header-parsed; decompressing all 8000 is about 31 times the baseline.
             const tags = await expectAsyncTimeRatioBelow(
-                () => PngTextTags.read(baseline.dataView, baseline.chunks, true).readTagsPromise,
-                () => PngTextTags.read(dataView, chunks, true).readTagsPromise,
+                () => readPngText(baseline.dataView, baseline.chunks, true).readTagsPromise,
+                () => readPngText(dataView, chunks, true).readTagsPromise,
                 8
             );
 
@@ -1264,7 +1317,7 @@ describe('png-text-tags', () => {
                 Array.from({length: 300}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)))
             );
 
-            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+            const tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
             expect(calls).to.equal(MAX_COMPRESSED_TEXT_CHUNKS);
             expect(tags).to.deep.equal(getExpectedTags(0, MAX_COMPRESSED_TEXT_CHUNKS));
@@ -1283,7 +1336,7 @@ describe('png-text-tags', () => {
                 ...Array.from({length: 100}, (_, index) => getCompressedItxtChunk('k' + (200 + index), toBytes('v' + (200 + index))))
             ]);
 
-            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+            const tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
             expect(calledValues).to.have.lengthOf(MAX_COMPRESSED_TEXT_CHUNKS);
             expect(calledValues).to.not.include('v255');
@@ -1308,7 +1361,7 @@ describe('png-text-tags', () => {
                 getUncompressedItxtChunk('LastItxt', 'last iTXt value')
             ]);
 
-            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+            const {readTags, readTagsPromise} = readPngText(dataView, chunks, true, false, false, undefined, decompressConfig);
             const tags = await readTagsPromise;
 
             expect(readTags).to.deep.equal({
@@ -1339,7 +1392,7 @@ describe('png-text-tags', () => {
                 Array.from({length: NUMBER_OF_CHUNKS}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)))
             );
 
-            const {readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+            const {readTagsPromise} = readPngText(dataView, chunks, true, false, false, undefined, decompressConfig);
             let resolved = false;
             readTagsPromise.then(() => {
                 resolved = true;
@@ -1376,7 +1429,7 @@ describe('png-text-tags', () => {
 
             const unknownCompressionValue = '<text using unknown compression>';
 
-            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+            const tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
             expect(tags).to.deep.equal([
                 {readTags: {k0: {value: 'v0', description: 'v0'}}},
@@ -1392,7 +1445,7 @@ describe('png-text-tags', () => {
             ]);
             const unknownCompressionValue = '<text using unknown compression>';
 
-            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+            const {readTags, readTagsPromise} = readPngText(dataView, chunks, true);
 
             expect(readTags).to.deep.equal({good: {value: 'fine', description: 'fine'}});
             expect(await readTagsPromise).to.deep.equal([
@@ -1407,7 +1460,7 @@ describe('png-text-tags', () => {
             ]);
             const unknownCompressionValue = '<text using unknown compression>';
 
-            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, true);
+            const {readTags, readTagsPromise} = readPngText(dataView, chunks, true);
 
             expect(readTags).to.deep.equal({good: {value: 'fine', description: 'fine'}});
             expect(await readTagsPromise).to.deep.equal([
@@ -1423,7 +1476,7 @@ describe('png-text-tags', () => {
             const unknownCompressionValue = '<text using unknown compression>';
             const placeholderTag = {value: unknownCompressionValue, description: unknownCompressionValue};
 
-            const tags = await PngTextTags.read(dataView, chunks, true).readTagsPromise;
+            const tags = await readPngText(dataView, chunks, true).readTagsPromise;
 
             expect(tags).to.deep.equal([
                 {readTags: {'Raw profile type exif': placeholderTag}},
@@ -1443,7 +1496,7 @@ describe('png-text-tags', () => {
                 Array.from({length: 3}, (_, index) => getZtxtChunk('k' + index, toBytes('v' + index)))
             );
 
-            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, false, false, false, undefined, decompressConfig);
+            const {readTags, readTagsPromise} = readPngText(dataView, chunks, false, false, false, undefined, decompressConfig);
 
             expect(calls).to.equal(0);
             expect(readTagsPromise).to.be.undefined;
@@ -1469,7 +1522,7 @@ describe('png-text-tags', () => {
                 );
                 const unknownCompressionValue = '<text using unknown compression>';
 
-                const {readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+                const {readTagsPromise} = readPngText(dataView, chunks, true, false, false, undefined, decompressConfig);
 
                 const tags = await readTagsPromise;
                 await flushPromises();
@@ -1502,7 +1555,7 @@ describe('png-text-tags', () => {
             const restoreWarn = swapProperties(console, {warn: () => undefined});
             let tags;
             try {
-                tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+                tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
             } finally {
                 restoreWarn();
             }
@@ -1540,7 +1593,7 @@ describe('png-text-tags', () => {
                 getZtxtChunk('good', toBytes('fine'))
             ]);
 
-            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+            const tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
             expect(tags).to.deep.equal([
                 {readTags: {k: {value: unknownCompressionValue, description: unknownCompressionValue}}},
@@ -1556,7 +1609,7 @@ describe('png-text-tags', () => {
                 {type: TYPE_ZTXT, bytes: toBytes('good\x00\x01fine')}
             ]);
 
-            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+            const tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
             expect(tags).to.deep.equal([
                 {readTags: {k: {value: unknownCompressionValue, description: unknownCompressionValue}}},
@@ -1571,7 +1624,7 @@ describe('png-text-tags', () => {
                 {type: TYPE_ITXT, bytes: concatBytes(toBytes('keyword\x00\x01\x01\x00\x00'), toBytes('fine'))}
             ]);
 
-            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+            const tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
             expect(tags).to.deep.equal([
                 {readTags: {keyword: {value: unknownCompressionValue, description: unknownCompressionValue}}}
@@ -1586,7 +1639,7 @@ describe('png-text-tags', () => {
                 getCompressedItxtChunk('good', toBytes('fine'))
             ]);
 
-            const tags = await PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+            const tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
 
             expect(tags).to.deep.equal([
                 {readTags: {k: {value: unknownCompressionValue, description: unknownCompressionValue}}},
@@ -1600,8 +1653,8 @@ describe('png-text-tags', () => {
             const isolatedChunks = buildTextChunks([truncatedItxtChunk]);
             const followedChunks = buildTextChunks([truncatedItxtChunk, getTextChunk('good', 'fine')]);
 
-            const isolated = PngTextTags.read(isolatedChunks.dataView, isolatedChunks.chunks, true, false);
-            const followed = PngTextTags.read(followedChunks.dataView, followedChunks.chunks, true, false);
+            const isolated = readPngText(isolatedChunks.dataView, isolatedChunks.chunks, true, false);
+            const followed = readPngText(followedChunks.dataView, followedChunks.chunks, true, false);
 
             expect(isolated.readTags.k).to.deep.equal({value: '', description: ''});
             expect(followed.readTags.k).to.deep.equal(isolated.readTags.k);
@@ -1626,7 +1679,7 @@ describe('png-text-tags', () => {
             });
 
             try {
-                const tags = await PngTextTags.read(dataView, chunks, true, false).readTagsPromise;
+                const tags = await readPngText(dataView, chunks, true, false).readTagsPromise;
 
                 expect(tags).to.deep.equal([
                     {readTags: {k: {value: unknownCompressionValue, description: unknownCompressionValue}}},
@@ -1660,7 +1713,7 @@ describe('png-text-tags', () => {
         it('should read a tEXt chunk with a 79-byte keyword', () => {
             const {dataView, chunks} = buildTextChunks([getTextChunk(KEYWORD_79, 'value')]);
 
-            const {readTags} = PngTextTags.read(dataView, chunks);
+            const {readTags} = readPngText(dataView, chunks);
 
             expect(readTags).to.deep.equal({[KEYWORD_79]: {value: 'value', description: 'value'}});
         });
@@ -1668,7 +1721,7 @@ describe('png-text-tags', () => {
         it('should read a tEXt chunk that ends after a 79-byte keyword with no terminator', () => {
             const {dataView, chunks} = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(KEYWORD_79)}]);
 
-            const {readTags} = PngTextTags.read(dataView, chunks);
+            const {readTags} = readPngText(dataView, chunks);
 
             expect(readTags).to.deep.equal({[KEYWORD_79]: {value: '', description: ''}});
         });
@@ -1679,7 +1732,7 @@ describe('png-text-tags', () => {
                 getTextChunk('good', 'fine')
             ]);
 
-            const {readTags} = PngTextTags.read(dataView, chunks);
+            const {readTags} = readPngText(dataView, chunks);
 
             expect(readTags).to.deep.equal({good: {value: 'fine', description: 'fine'}});
         });
@@ -1687,7 +1740,7 @@ describe('png-text-tags', () => {
         it('should skip a tEXt chunk whose keyword has no terminator', () => {
             const {dataView, chunks} = buildTextChunks([{type: TYPE_TEXT, bytes: ONE_MIB_OF_A}]);
 
-            const {readTags} = PngTextTags.read(dataView, chunks);
+            const {readTags} = readPngText(dataView, chunks);
 
             expect(readTags).to.deep.equal({});
         });
@@ -1696,7 +1749,7 @@ describe('png-text-tags', () => {
             const {decompressConfig, getCallCount} = getCountingDecompressConfig();
             const {dataView, chunks} = buildTextChunks([getZtxtChunk(KEYWORD_80, toBytes('compressed'))]);
 
-            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+            const {readTags, readTagsPromise} = readPngText(dataView, chunks, true, false, false, undefined, decompressConfig);
 
             expect(readTags).to.deep.equal({});
             expect(readTagsPromise).to.be.undefined;
@@ -1707,7 +1760,7 @@ describe('png-text-tags', () => {
             const {decompressConfig, getCallCount} = getCountingDecompressConfig();
             const {dataView, chunks} = buildTextChunks([getCompressedItxtChunk(KEYWORD_80, toBytes('compressed'))]);
 
-            const {readTags, readTagsPromise} = PngTextTags.read(dataView, chunks, true, false, false, undefined, decompressConfig);
+            const {readTags, readTagsPromise} = readPngText(dataView, chunks, true, false, false, undefined, decompressConfig);
 
             expect(readTags).to.deep.equal({});
             expect(readTagsPromise).to.be.undefined;
@@ -1717,7 +1770,7 @@ describe('png-text-tags', () => {
         it('should read an iTXt chunk with a 79-byte language tag', () => {
             const {dataView, chunks} = buildTextChunks([getItxtChunkWithLang('k', LANG_79, 'tk', 'value')]);
 
-            const {readTags} = PngTextTags.read(dataView, chunks);
+            const {readTags} = readPngText(dataView, chunks);
 
             expect(readTags).to.deep.equal({[`k (${LANG_79})`]: {value: 'value', description: 'value'}});
         });
@@ -1725,7 +1778,7 @@ describe('png-text-tags', () => {
         it('should skip an iTXt chunk with an 80-byte language tag', () => {
             const {dataView, chunks} = buildTextChunks([getItxtChunkWithLang('k', LANG_80, 'tk', 'value')]);
 
-            const {readTags} = PngTextTags.read(dataView, chunks);
+            const {readTags} = readPngText(dataView, chunks);
 
             expect(readTags).to.deep.equal({});
         });
@@ -1735,7 +1788,7 @@ describe('png-text-tags', () => {
                 {type: TYPE_ITXT, bytes: concatBytes(toBytes('k\x00\x00\x00'), ONE_MIB_OF_A)}
             ]);
 
-            const {readTags} = PngTextTags.read(dataView, chunks);
+            const {readTags} = readPngText(dataView, chunks);
 
             expect(readTags).to.deep.equal({});
         });
@@ -1743,7 +1796,7 @@ describe('png-text-tags', () => {
         it('should read an uncompressed iTXt chunk with a long translated keyword', () => {
             const {dataView, chunks} = buildTextChunks([getItxtChunkWithLang('k', 'en', 'T'.repeat(1000), 'value')]);
 
-            const {readTags} = PngTextTags.read(dataView, chunks);
+            const {readTags} = readPngText(dataView, chunks);
 
             expect(readTags).to.deep.equal({'k (en)': {value: 'value', description: 'value'}});
         });
@@ -1818,7 +1871,7 @@ describe('png-text-tags', () => {
             }
         });
         const {dataView, chunks} = buildTextChunks([getTextChunk('Raw profile type exif', rawProfileValue)]);
-        PngTextTags.read(dataView, chunks);
+        readPngText(dataView, chunks);
         return decoded;
     }
 
