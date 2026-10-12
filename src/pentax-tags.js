@@ -10,7 +10,7 @@
 import ByteOrder from './byte-order.js';
 import {objectAssign} from './utils.js';
 import {readIfd} from './tags-helpers.js';
-import {IFD_TYPE_PENTAX} from './tag-names.js';
+import TagNames, {IFD_TYPE_PENTAX} from './tag-names.js';
 
 const BYTE_ORDER_OFFSET = 8; // Pentax5: https://exiftool.org/makernote_types.html
 const PENTAX_IFD_OFFSET = BYTE_ORDER_OFFSET + 2; // https://exiftool.org/makernote_types.html
@@ -58,7 +58,8 @@ function read(
             computed,
             tagFilter,
             'makerNotes',
-            valueBudget
+            valueBudget,
+            TagNames
         );
 
         if (hasLevelInfoK3III(tags)) {

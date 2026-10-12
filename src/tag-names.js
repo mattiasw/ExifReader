@@ -11,17 +11,29 @@ import TagNamesInteroperabilityIfd from './tag-names-interoperability-ifd.js';
 import TagNamesMpfIfd from './tag-names-mpf-ifd.js';
 import TagNamesCanonIfd from './tag-names-canon-ifd.js';
 import TagNamesPentaxIfd from './tag-names-pentax-ifd.js';
+import {
+    IFD_TYPE_0TH,
+    IFD_TYPE_1ST,
+    IFD_TYPE_EXIF,
+    IFD_TYPE_GPS,
+    IFD_TYPE_INTEROPERABILITY,
+    IFD_TYPE_MPF,
+    IFD_TYPE_CANON,
+    IFD_TYPE_PENTAX
+} from './ifd-types.js';
 
 const tagNames0thExifIfds = Constants.USE_EXIF ? objectAssign({}, TagNames0thIfd, TagNamesExifIfd) : {};
 
-export const IFD_TYPE_0TH = '0th';
-export const IFD_TYPE_1ST = '1st';
-export const IFD_TYPE_EXIF = 'exif';
-export const IFD_TYPE_GPS = 'gps';
-export const IFD_TYPE_INTEROPERABILITY = 'interoperability';
-export const IFD_TYPE_MPF = 'mpf';
-export const IFD_TYPE_CANON = 'canon';
-export const IFD_TYPE_PENTAX = 'pentax';
+export {
+    IFD_TYPE_0TH,
+    IFD_TYPE_1ST,
+    IFD_TYPE_EXIF,
+    IFD_TYPE_GPS,
+    IFD_TYPE_INTEROPERABILITY,
+    IFD_TYPE_MPF,
+    IFD_TYPE_CANON,
+    IFD_TYPE_PENTAX
+};
 
 export default {
     [IFD_TYPE_0TH]: tagNames0thExifIfds,

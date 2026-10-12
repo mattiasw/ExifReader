@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Buffer` is a `Uint8Array` and still works. In 4.50.0 such objects worked
   only for TIFF and GIF files; every other format threw a `TypeError` from
   inside the parser.
+- The internal module `src/dataview.js`. Internal function signatures under
+  `src/` changed as well (`Tags.read` and `readIfd` take the tag dictionaries
+  as an argument); `src/exif-reader.js` is the only documented deep import.
 
 ### Fixed
 
