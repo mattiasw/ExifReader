@@ -19,6 +19,122 @@ describe('utils', () => {
         expect(Utils.getStringFromDataView(dataView, 2, 10)).to.equal('MyString');
     });
 
+    describe('getDataViewFromBytes', () => {
+        let restore;
+
+        afterEach(() => {
+            if (restore) {
+                restore();
+                restore = undefined;
+            }
+        });
+
+        it('should view an ArrayBuffer', () => {
+            const buffer = new Uint8Array([1, 2, 3]).buffer;
+            const dataView = Utils.getDataViewFromBytes(buffer);
+            expect(dataView).to.be.an.instanceof(DataView);
+            expect(dataView.buffer).to.equal(buffer);
+            expect(dataView.byteOffset).to.equal(0);
+            expect(dataView.byteLength).to.equal(3);
+        });
+
+        it('should view a SharedArrayBuffer', () => {
+            const buffer = new SharedArrayBuffer(4);
+            const dataView = Utils.getDataViewFromBytes(buffer);
+            expect(dataView.buffer).to.equal(buffer);
+            expect(dataView.byteLength).to.equal(4);
+        });
+
+        it('should view a Uint8Array without copying', () => {
+            const bytes = new Uint8Array([1, 2, 3]);
+            const dataView = Utils.getDataViewFromBytes(bytes);
+            expect(dataView).to.be.an.instanceof(DataView);
+            expect(dataView.buffer).to.equal(bytes.buffer);
+            expect(dataView.byteOffset).to.equal(0);
+            expect(dataView.byteLength).to.equal(3);
+        });
+
+        it('should keep the offset and length of a typed array window', () => {
+            const parent = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+            const dataView = Utils.getDataViewFromBytes(parent.subarray(2, 6));
+            expect(dataView.buffer).to.equal(parent.buffer);
+            expect(dataView.byteOffset).to.equal(2);
+            expect(dataView.byteLength).to.equal(4);
+            expect(dataView.getUint8(0)).to.equal(3);
+        });
+
+        it('should use the byte length of a typed array with wider elements', () => {
+            const parent = new ArrayBuffer(16);
+            const dataView = Utils.getDataViewFromBytes(new Uint16Array(parent, 4, 3));
+            expect(dataView.byteOffset).to.equal(4);
+            expect(dataView.byteLength).to.equal(6);
+        });
+
+        it('should keep the offset and length of a DataView window', () => {
+            const parent = new ArrayBuffer(16);
+            const dataView = Utils.getDataViewFromBytes(new DataView(parent, 3, 5));
+            expect(dataView.buffer).to.equal(parent);
+            expect(dataView.byteOffset).to.equal(3);
+            expect(dataView.byteLength).to.equal(5);
+        });
+
+        it('should view a Node Buffer window', () => {
+            const parent = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]).buffer;
+            const buffer = Buffer.from(parent, 3, 4);
+            const dataView = Utils.getDataViewFromBytes(buffer);
+            expect(dataView.buffer).to.equal(parent);
+            expect(dataView.byteOffset).to.equal(3);
+            expect(dataView.byteLength).to.equal(4);
+            expect(dataView.getUint8(0)).to.equal(4);
+        });
+
+        it('should not depend on ArrayBuffer.isView', () => {
+            const parent = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+            restore = swapProperties(ArrayBuffer, {isView: undefined});
+            const dataView = Utils.getDataViewFromBytes(parent.subarray(2, 6));
+            expect(dataView.byteOffset).to.equal(2);
+            expect(dataView.byteLength).to.equal(4);
+        });
+
+        it('should throw a TypeError naming the accepted types for unsupported data', () => {
+            const unsupported = [
+                {},
+                42,
+                null,
+                undefined,
+                {length: 4, readUInt8: () => 0},
+                {buffer: new ArrayBuffer(8), byteLength: 4},
+                {buffer: new ArrayBuffer(8), byteOffset: 0},
+                {byteOffset: 0, byteLength: 4},
+            ];
+            for (const data of unsupported) {
+                expect(() => Utils.getDataViewFromBytes(data)).to.throw(TypeError, /typed array such as a Uint8Array or Node Buffer, or a File\./);
+            }
+        });
+    });
+
+    describe('isArrayBufferViewLike', () => {
+        it('should accept typed arrays, DataViews and Node Buffers', () => {
+            expect(Utils.isArrayBufferViewLike(new Uint8Array(4))).to.be.true;
+            expect(Utils.isArrayBufferViewLike(new Float64Array(1))).to.be.true;
+            expect(Utils.isArrayBufferViewLike(new DataView(new ArrayBuffer(4)))).to.be.true;
+            expect(Utils.isArrayBufferViewLike(Buffer.alloc(4))).to.be.true;
+        });
+
+        it('should reject buffers, other objects and missing data', () => {
+            expect(Utils.isArrayBufferViewLike(new ArrayBuffer(4))).to.be.false;
+            expect(Utils.isArrayBufferViewLike({})).to.be.false;
+            expect(Utils.isArrayBufferViewLike(null)).to.be.false;
+            expect(Utils.isArrayBufferViewLike(undefined)).to.be.false;
+        });
+
+        it('should reject an object missing any one of buffer, byteOffset and byteLength', () => {
+            expect(Utils.isArrayBufferViewLike({buffer: new ArrayBuffer(8), byteLength: 4})).to.be.false;
+            expect(Utils.isArrayBufferViewLike({buffer: new ArrayBuffer(8), byteOffset: 0})).to.be.false;
+            expect(Utils.isArrayBufferViewLike({byteOffset: 0, byteLength: 4})).to.be.false;
+        });
+    });
+
     describe('getNullTerminatedStringFromDataView', () => {
         it('should stop at the NUL', () => {
             const dataView = getDataView('\x00\x00MyString\x00rest');

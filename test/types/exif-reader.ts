@@ -30,6 +30,12 @@ const syncTags0: Tags = load(new ArrayBuffer(0));
 const asyncTags0: Promise<Tags> = load(new ArrayBuffer(0), { async: true });
 // @ts-expect-error
 const syncTags1: Tags = load(new ArrayBuffer(0), { async: true });
+const syncTypedArrayTags: Tags = load(new Uint8Array(0));
+const asyncTypedArrayTags: Promise<Tags> = load(new Int16Array(0), { async: true });
+const expandedTypedArrayTags: ExpandedTags = load(new Uint8Array(0), { expanded: true });
+const syncDataViewTags: Tags = load(new DataView(new ArrayBuffer(0)));
+// @ts-expect-error
+load([1, 2, 3]);
 const syncTags2: Tags = loadView(new DataView(new ArrayBuffer(0)), { includeUnknown: true });
 const syncTags2Computed: Tags = loadView(new DataView(new ArrayBuffer(0)), {
     computed: true,

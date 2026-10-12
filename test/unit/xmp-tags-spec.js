@@ -9,7 +9,6 @@ import {DOMParser as XmldomDomParser, onErrorStopParsing} from '@xmldom/xmldom';
 import {DOMParser as LinkedomDomParser} from 'linkedom';
 import {getConsoleWarnSpy, getDataView, swapProperties, LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow} from './test-utils.js';
 import {createRequire} from 'node:module';
-import DataViewWrapper from '../../src/dataview.js';
 import DomParserModule from '../../src/dom-parser.js';
 import TextDecoderModule from '../../src/text-decoder.js';
 import XmpTags from '../../src/xmp-tags.js';
@@ -3109,12 +3108,16 @@ describe('xmp-tags', function () {
             expect(tags._raw).to.equal(xmlString);
         });
 
-        it('should read chunks at non-zero offsets through a DataViewWrapper around a Buffer', () => {
+        it('should read chunks at non-zero offsets in a DataView window into a larger buffer', () => {
             const domParser = new XmldomDomParser({onError: onErrorStopParsing});
             const standardXmp = getXmlString('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:Standard="1"/>');
             const extendedXmp = getXmlString('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:Extended="2"/>');
             const padding = '\x00\x00\x00\x00';
-            const dataView = new DataViewWrapper(Buffer.from(padding + standardXmp + extendedXmp, 'latin1'));
+            const outsidePadding = 'ZZZZZZZZ';
+            const content = padding + standardXmp + extendedXmp;
+            const bytes = Buffer.from(outsidePadding + content + outsidePadding, 'latin1');
+            const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length);
+            const dataView = new DataView(buffer, outsidePadding.length, content.length);
 
             const tags = XmpTags.read(
                 dataView,

@@ -64,7 +64,7 @@ function addMpfImages(dataView, dataOffset, tags, byteOrder) {
     // The bound is the view's own extent, not the buffer's, since the slice
     // starts at the view's byteOffset.
     const bufferLength = dataView.byteLength;
-    const byteOffset = dataView.byteOffset || 0;
+    const byteOffset = dataView.byteOffset;
     let remainingImageBytes = bufferLength * MAX_IMAGE_SIZE_PER_BUFFER_SIZE;
     const images = [];
     const imageCount = Math.min(Math.ceil(tags['MPEntry'].value.length / ENTRY_SIZE), MAX_IMAGES);

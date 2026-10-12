@@ -6,9 +6,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
-/* global Buffer */
 
-import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getByteString, getStringValueFromArray, assertPromiseSupport, setProperty} from './utils.js';
+import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getDataViewFromBytes, getByteString, getStringValueFromArray, assertPromiseSupport, setProperty} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import Constants from './constants.js';
@@ -75,20 +74,7 @@ export function load(data, options = {}) {
 }
 
 function loadFromData(data, options) {
-    if (isNodeBuffer(data)) {
-        // File data read in Node can share the underlying buffer with other
-        // data. Therefore it's safest to get a new one to avoid weird bugs.
-        data = (new Uint8Array(data)).buffer;
-    }
-    return loadView(getDataView(data), options);
-}
-
-function isNodeBuffer(data) {
-    try {
-        return Buffer.isBuffer(data);
-    } catch (error) {
-        return false;
-    }
+    return loadView(getDataViewFromBytes(data), options);
 }
 
 export function loadView(
@@ -836,8 +822,8 @@ function isWindowIntoLargerBuffer(dataView) {
 }
 
 // A DataView from another realm, an iframe for example, fails instanceof, so
-// match on the shape instead. A typed array has no getUint8 and the Node Buffer
-// wrapper has no byteOffset, so neither is treated as a window here.
+// match on the shape instead. A typed array has no getUint8, so it is not
+// treated as a window here.
 function isDataViewLike(dataView) {
     return !!dataView
         && (typeof dataView.getUint8 === 'function')
@@ -851,15 +837,7 @@ function getBrobDataView(dataView, brobChunk) {
     // The box length is untrusted, so bound the view by the bytes present. The
     // JXL header parser never reports a dataOffset past the end of the view.
     const length = Math.max(0, Math.min(brobChunk.length, dataView.byteLength - brobChunk.dataOffset));
-    if (isDataViewLike(dataView)) {
-        return new DataView(dataView.buffer, dataView.byteOffset + brobChunk.dataOffset, length);
-    }
-    // The Node Buffer wrapper has no ArrayBuffer to view, so copy the bytes out.
-    const bytes = new Uint8Array(length);
-    for (let i = 0; i < length; i++) {
-        bytes[i] = dataView.getUint8(brobChunk.dataOffset + i);
-    }
-    return new DataView(bytes.buffer);
+    return new DataView(dataView.buffer, dataView.byteOffset + brobChunk.dataOffset, length);
 }
 
 function exceedsBrobXmpSizeBound(byteLength, inputDataView) {

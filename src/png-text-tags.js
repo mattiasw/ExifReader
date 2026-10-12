@@ -170,7 +170,7 @@ function parseTextChunk(dataView, offset, length, type) {
     let valueChars;
     let parsingState = STATE_KEYWORD;
     let compressionMethod = COMPRESSION_METHOD_NONE;
-    const byteOffset = dataView.byteOffset || 0;
+    const byteOffset = dataView.byteOffset;
     const chunkEnd = Math.min(offset + length, dataView.byteLength);
 
     for (let i = 0; i < length && offset + i < dataView.byteLength; i++) {
@@ -183,9 +183,7 @@ function parseTextChunk(dataView, offset, length, type) {
             continue;
         } else if (parsingState === STATE_TEXT) {
             const slice = dataView.buffer.slice(byteOffset + offset + i, byteOffset + offset + length);
-            // On the Node Buffer wrapper, slice() returns a Buffer, which DataView
-            // rejects. Uint8Array copies a Buffer and leaves an ArrayBuffer as is.
-            valueChars = new DataView(new Uint8Array(slice).buffer);
+            valueChars = new DataView(slice);
             break;
         }
         const byte = dataView.getUint8(offset + i);

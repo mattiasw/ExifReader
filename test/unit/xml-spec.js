@@ -5,7 +5,6 @@
 import {expect} from 'chai';
 import {getDataView, swapProperties} from './test-utils.js';
 import Xml from '../../src/xml.js';
-import DataViewWrapper from '../../src/dataview.js';
 
 describe('xml', () => {
     let restoreFromCharCode;
@@ -134,20 +133,6 @@ describe('xml', () => {
         it('should mark truncated for an empty buffer', () => {
             const metadataBlocks = [];
             Xml.findOffsets(getDataView(''), metadataBlocks);
-            expect(metadataBlocks.truncated).to.equal(true);
-        });
-
-        it('should find the closing marker in a Node.js Buffer wrapper', () => {
-            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"></x:xmpmeta><?xpacket end="w"?>';
-            const metadataBlocks = [];
-            Xml.findOffsets(new DataViewWrapper(Buffer.from(xml)), metadataBlocks);
-            expect(metadataBlocks.truncated).to.equal(false);
-        });
-
-        it('should mark truncated for a cut-short Node.js Buffer wrapper without throwing', () => {
-            const xml = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/"><?xpacket end';
-            const metadataBlocks = [];
-            Xml.findOffsets(new DataViewWrapper(Buffer.from(xml)), metadataBlocks);
             expect(metadataBlocks.truncated).to.equal(true);
         });
     });

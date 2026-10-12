@@ -13,7 +13,6 @@ import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils
 import TagNames from '../../src/tag-names.js';
 import {readIfd, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, addDecompressedIptcAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING, takeEmbeddedExifThumbnail} from '../../src/tags-helpers.js';
 import ByteOrder from '../../src/byte-order.js';
-import DataViewWrapper from '../../src/dataview.js';
 
 describe('tags-helpers', () => {
     let restoreTagNames;
@@ -299,19 +298,6 @@ describe('tags-helpers', () => {
             + 'ABCDE\x00';
         const buffer = getDataView(junk + ifd + 'junk').buffer;
         const dataView = new DataView(buffer, junk.length, ifd.length);
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
-        expect(tags['MyAsciiTag'].value).to.deep.equal(['ABCDE']);
-    });
-
-    it('should read an ASCII value through the Node Buffer data view wrapper', () => {
-        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyAsciiTag'}});
-        const dataView = new DataViewWrapper(Buffer.from(
-            '\x00\x01'
-            + '\x47\x11\x00\x02\x00\x00\x00\x06\x00\x00\x00\x12'
-            + '\x00\x00\x00\x00'
-            + 'ABCDE\x00',
-            'latin1'
-        ));
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyAsciiTag'].value).to.deep.equal(['ABCDE']);
     });

@@ -11,6 +11,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {expect} from 'chai';
 import {
+    concatBuffers,
     fetchRange,
     loadFile,
     loadFileObject,
@@ -1140,6 +1141,27 @@ describe('file-loaders', () => {
             expect(readerCalls[0]).to.not.equal(file);
             expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from(BYTES.slice(4, 12)));
             expect(totalSize).to.equal(file.size);
+        });
+    });
+
+    describe('concatBuffers', () => {
+        let restore;
+
+        afterEach(() => {
+            if (restore) {
+                restore();
+                restore = undefined;
+            }
+        });
+
+        it('should take only the bytes of a DataView window without ArrayBuffer.isView', () => {
+            const parent = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+            const dataViewWindow = new DataView(parent.buffer, 2, 4);
+            restore = swapProperties(ArrayBuffer, {isView: undefined});
+
+            const result = concatBuffers(new Uint8Array([9]).buffer, dataViewWindow);
+
+            expect(Array.from(new Uint8Array(result))).to.deep.equal([9, 3, 4, 5, 6]);
         });
     });
 
