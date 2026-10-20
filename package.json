@@ -68,7 +68,7 @@
     "typescript": "^7.0.2",
     "webpack": "5.111.1",
     "webpack-cli": "^7.2.3",
-    "webpack-dev-server": "^5.2.6"
+    "webpack-dev-server": "^6.1.0"
   },
   "scripts": {
     "build": "node bin/build.js",
