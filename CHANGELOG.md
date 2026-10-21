@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.51.0] - 2026-10-21
+
 ### Added
 
 - `ExifReader.load` accepts any typed array, such as a `Uint8Array`, and a
@@ -48,8 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `ExifReader.load(file)` with a `File` in Node and Bun no longer rejects with
   `ReferenceError: FileReader is not defined`. A `File` is now read with
-  `Blob.prototype.arrayBuffer`, and `FileReader` is still used in browsers that
-  lack it. A `Blob` that is not a `File`, such as one from Node's
+  `Blob.prototype.arrayBuffer`, and browsers without that method still use
+  `FileReader`. A `Blob` that is not a `File`, such as one from Node's
   `fs.openAsBlob` or from `response.blob()`, is still rejected: wrap it as
   `new File([blob], 'name')`.
 - Custom builds that leave out `exif` or `thumbnail` no longer include the
@@ -2296,7 +2298,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.50.0...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.51.0...HEAD
+[4.51.0]: https://github.com/mattiasw/ExifReader/compare/v4.50.0...v4.51.0
 [4.50.0]: https://github.com/mattiasw/ExifReader/compare/v4.49.0...v4.50.0
 [4.49.0]: https://github.com/mattiasw/ExifReader/compare/v4.48.1...v4.49.0
 [4.48.1]: https://github.com/mattiasw/ExifReader/compare/v4.48.0...v4.48.1
