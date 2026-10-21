@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import ByteOrder from './byte-order.js';
-import Constants from './constants.js';
 import {TIFF_ID, TIFF_ID_OFFSET} from './tiff-constants.js';
 
 export default {
@@ -25,11 +24,8 @@ function hasTiffMarker(dataView) {
 function findTiffOffsets() {
     const TIFF_FILE_HEADER_OFFSET = 0;
 
-    if (Constants.USE_EXIF) {
-        return {
-            hasAppMarkers: true,
-            tiffHeaderOffset: TIFF_FILE_HEADER_OFFSET
-        };
-    }
-    return {};
+    return {
+        hasAppMarkers: true,
+        tiffHeaderOffset: TIFF_FILE_HEADER_OFFSET
+    };
 }

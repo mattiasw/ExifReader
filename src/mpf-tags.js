@@ -4,7 +4,8 @@
 
 import ByteOrder from './byte-order.js';
 import Types from './types.js';
-import {IFD_TYPE_MPF} from './tag-names.js';
+import TagNamesMpfIfd from './tag-names-mpf-ifd.js';
+import {IFD_TYPE_MPF} from './ifd-types.js';
 import {deferInit, getBase64Image} from './utils.js';
 import {readIfd, get0thIfdOffset} from './tags-helpers.js';
 
@@ -48,12 +49,20 @@ function read(
             computed,
             tagFilter,
             'mpf',
-            valueBudget
+            valueBudget,
+            getTagNames()
         );
         return addMpfImages(dataView, dataOffset, tags, byteOrder);
     } catch (error) {
         return {};
     }
+}
+
+// Assigned rather than a computed key, which Babel compiles to a helper call.
+function getTagNames() {
+    const tagNames = {};
+    tagNames[IFD_TYPE_MPF] = TagNamesMpfIfd;
+    return tagNames;
 }
 
 function addMpfImages(dataView, dataOffset, tags, byteOrder) {
@@ -64,7 +73,7 @@ function addMpfImages(dataView, dataOffset, tags, byteOrder) {
     // The bound is the view's own extent, not the buffer's, since the slice
     // starts at the view's byteOffset.
     const bufferLength = dataView.byteLength;
-    const byteOffset = dataView.byteOffset || 0;
+    const byteOffset = dataView.byteOffset;
     let remainingImageBytes = bufferLength * MAX_IMAGE_SIZE_PER_BUFFER_SIZE;
     const images = [];
     const imageCount = Math.min(Math.ceil(tags['MPEntry'].value.length / ENTRY_SIZE), MAX_IMAGES);

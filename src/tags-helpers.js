@@ -2,9 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import Constants from './constants.js';
 import Types from './types.js';
-import TagNames, {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './tag-names.js';
+import {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_PENTAX} from './ifd-types.js';
 import {IFD_ENTRY_LENGTH, TIFF_HEADER_LENGTH, TIFF_IFD_OFFSET_OFFSET} from './tiff-constants.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
 import {decodeUtf8ByteString, getByteString} from './utils.js';
@@ -86,7 +85,7 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
 
 /**
  * Reads the tags of an IFD, and for a 0th IFD also those of the thumbnail IFD
- * it points to.
+ * it points to when readThumbnailIfd is set.
  *
  * @param {{remaining: number, ifdEntriesRemaining: number, decompressedAllowanceRemaining: number}} [valueBudget] -
  * Caps the total size of the decoded tag values and the number of IFD entries
@@ -95,6 +94,13 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
  * out, later entries and IFDs are not read, so their tags are absent rather than
  * empty, and an IFD cut short does not follow its next-IFD offset. Nor does one
  * whose next-IFD offset points into the TIFF header.
+ * @param {Object} tagNames - Tag dictionaries keyed by IFD type, then by tag code,
+ * passed in so that a caller composing its own does not bundle every dictionary.
+ * Every IFD type read needs a dictionary, `{}` if empty; a missing one throws.
+ * @param {boolean} [readThumbnailIfd] - Whether a 0th IFD follows its next-IFD
+ * offset into the thumbnail IFD, whose entries are otherwise not charged to the
+ * value budget. Defaults to whether tagNames has an IFD_TYPE_1ST dictionary and
+ * tagFilter parses the thumbnail group.
  * @returns {Object} The read tags, keyed by tag name.
  */
 export function readIfd(
@@ -107,7 +113,9 @@ export function readIfd(
     computed = false,
     tagFilter = NOOP_TAG_FILTER,
     groupKey = 'exif',
-    valueBudget = getValueBudget(dataView)
+    valueBudget = getValueBudget(dataView),
+    tagNames,
+    readThumbnailIfd = tagNames[IFD_TYPE_1ST] !== undefined && tagFilter.shouldParseGroup('thumbnail')
 ) {
     const FIELD_COUNT_SIZE = Types.getTypeSize('SHORT');
     const FIELD_SIZE = IFD_ENTRY_LENGTH;
@@ -136,7 +144,8 @@ export function readIfd(
             includeUnknown,
             tagFilter,
             groupKey,
-            valueBudget
+            valueBudget,
+            tagNames
         );
         if (tag !== undefined) {
             tags[tag.name] = {
@@ -155,23 +164,22 @@ export function readIfd(
         offset += FIELD_SIZE;
     }
 
-    if (Constants.USE_THUMBNAIL && !ranOutOfIfdEntries && (offset + Types.getTypeSize('LONG') <= dataView.byteLength)) {
+    if (readThumbnailIfd && !ranOutOfIfdEntries && (offset + Types.getTypeSize('LONG') <= dataView.byteLength)) {
         const nextIfdOffset = Types.getLongAt(dataView, offset, byteOrder);
         if (nextIfdOffset >= TIFF_HEADER_LENGTH && ifdType === IFD_TYPE_0TH) {
-            if (tagFilter.shouldParseGroup('thumbnail')) {
-                tags['Thumbnail'] = readIfd(
-                    dataView,
-                    IFD_TYPE_1ST,
-                    offsetOrigin,
-                    offsetOrigin + nextIfdOffset,
-                    byteOrder,
-                    includeUnknown,
-                    computed,
-                    tagFilter,
-                    'thumbnail',
-                    valueBudget
-                );
-            }
+            tags['Thumbnail'] = readIfd(
+                dataView,
+                IFD_TYPE_1ST,
+                offsetOrigin,
+                offsetOrigin + nextIfdOffset,
+                byteOrder,
+                includeUnknown,
+                computed,
+                tagFilter,
+                'thumbnail',
+                valueBudget,
+                tagNames
+            );
         }
     }
 
@@ -293,7 +301,8 @@ function readTag(
     includeUnknown = false,
     tagFilter = NOOP_TAG_FILTER,
     groupKey = 'exif',
-    valueBudget
+    valueBudget,
+    tagNames
 ) {
     const TAG_CODE_IPTC_NAA = 0x83bb;
     const TAG_TYPE_OFFSET = Types.getTypeSize('SHORT');
@@ -307,11 +316,11 @@ function readTag(
     let tagValueOffset;
     let stringBudget;
 
-    if (Types.typeSizes[tagType] === undefined || (!includeUnknown && TagNames[ifdType][tagCode] === undefined)) {
+    if (Types.typeSizes[tagType] === undefined || (!includeUnknown && tagNames[ifdType][tagCode] === undefined)) {
         return undefined;
     }
 
-    const tagName = getTagName(ifdType, tagCode);
+    const tagName = getTagName(ifdType, tagCode, tagNames);
     if (!tagFilter.shouldParseTag(groupKey, tagName, tagCode)) {
         return undefined;
     }
@@ -338,10 +347,10 @@ function readTag(
 
     let tagDescription = tagValue;
 
-    if (TagNames[ifdType][tagCode] !== undefined) {
-        if ((TagNames[ifdType][tagCode]['name'] !== undefined) && (TagNames[ifdType][tagCode]['description'] !== undefined)) {
+    if (tagNames[ifdType][tagCode] !== undefined) {
+        if ((tagNames[ifdType][tagCode]['name'] !== undefined) && (tagNames[ifdType][tagCode]['description'] !== undefined)) {
             try {
-                tagDescription = TagNames[ifdType][tagCode]['description'](tagValue);
+                tagDescription = tagNames[ifdType][tagCode]['description'](tagValue);
             } catch (error) {
                 tagDescription = getDescriptionFromTagValue(tagValue);
             }
@@ -362,13 +371,13 @@ function readTag(
     };
 }
 
-function getTagName(ifdType, tagCode) {
-    if (TagNames[ifdType][tagCode] !== undefined) {
-        if (typeof TagNames[ifdType][tagCode] === 'string') {
-            return TagNames[ifdType][tagCode];
+function getTagName(ifdType, tagCode, tagNames) {
+    if (tagNames[ifdType][tagCode] !== undefined) {
+        if (typeof tagNames[ifdType][tagCode] === 'string') {
+            return tagNames[ifdType][tagCode];
         }
-        if (TagNames[ifdType][tagCode].name) {
-            return TagNames[ifdType][tagCode].name;
+        if (tagNames[ifdType][tagCode].name) {
+            return tagNames[ifdType][tagCode].name;
         }
     }
 

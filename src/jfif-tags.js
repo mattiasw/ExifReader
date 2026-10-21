@@ -153,7 +153,7 @@ function getThumbnail(dataView, jfifDataOffset, thumbnailLength, length) {
         return undefined;
     }
 
-    const byteOffset = dataView.byteOffset || 0;
+    const byteOffset = dataView.byteOffset;
     const value = dataView.buffer.slice(byteOffset + jfifDataOffset + OFFSET, byteOffset + jfifDataOffset + OFFSET + thumbnailLength);
     return {
         value,

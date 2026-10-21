@@ -11,7 +11,8 @@
 
 import {objectAssign} from './utils.js';
 import {readIfd} from './tags-helpers.js';
-import {IFD_TYPE_CANON} from './tag-names.js';
+import TagNamesCanonIfd from './tag-names-canon-ifd.js';
+import {IFD_TYPE_CANON} from './ifd-types.js';
 
 const SHOT_INFO_AUTO_ROTATE = 27; // First position is size.
 const CAMERA_SETTINGS_LENS_TYPE = 22; // First position is size.
@@ -42,7 +43,8 @@ function read(
         computed,
         tagFilter,
         'makerNotes',
-        valueBudget
+        valueBudget,
+        getTagNames()
     );
 
     if (tags['ShotInfo']) {
@@ -55,6 +57,13 @@ function read(
     }
 
     return tags;
+}
+
+// Assigned rather than a computed key, which Babel compiles to a helper call.
+function getTagNames() {
+    const tagNames = {};
+    tagNames[IFD_TYPE_CANON] = TagNamesCanonIfd;
+    return tagNames;
 }
 
 function parseShotInfo(shotInfoData) {

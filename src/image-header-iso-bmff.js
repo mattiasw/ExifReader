@@ -2,7 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import Constants from './constants.js';
 import {getNullTerminatedStringFromDataView, getStringFromDataView, pushMetadataBlock} from './utils.js';
 // import {get64BitValue} from './image-header-iso-bmff-utils.js';
 import {parseItemLocationBox} from './image-header-iso-bmff-iloc.js';
@@ -287,41 +286,31 @@ function findMetaBox(dataView) {
 }
 
 function findMetadataOffsets(dataView, metaBox, metadataBlocks) {
-    if (Constants.USE_EXIF || Constants.USE_XMP || Constants.USE_ICC) {
-        const offsets = {};
+    const offsets = {};
 
-        if (!metaBox) {
-            return {hasAppMarkers: false};
-        }
-
-        warnIfUnsupportedFieldSize(metaBox);
-
-        if (Constants.USE_EXIF) {
-            const exif = findExifOffset(dataView, metaBox, metadataBlocks);
-            if (exif !== undefined) {
-                offsets.tiffHeaderOffset = exif.tiffHeaderOffset;
-                if (exif.dataView !== undefined) {
-                    offsets.exifDataView = exif.dataView;
-                }
-            }
-        }
-        if (Constants.USE_XMP) {
-            const xmp = findXmpChunks(dataView, metaBox, metadataBlocks);
-            if (xmp !== undefined) {
-                offsets.xmpChunks = xmp.chunks;
-                if (xmp.dataView !== undefined) {
-                    offsets.xmpDataView = xmp.dataView;
-                }
-            }
-        }
-        if (Constants.USE_ICC) {
-            offsets.iccChunks = findIccChunks(metaBox, metadataBlocks);
-        }
-        offsets.hasAppMarkers = (offsets.tiffHeaderOffset !== undefined) || (offsets.xmpChunks !== undefined) || (offsets.iccChunks !== undefined);
-        return offsets;
+    if (!metaBox) {
+        return {hasAppMarkers: false};
     }
 
-    return {};
+    warnIfUnsupportedFieldSize(metaBox);
+
+    const exif = findExifOffset(dataView, metaBox, metadataBlocks);
+    if (exif !== undefined) {
+        offsets.tiffHeaderOffset = exif.tiffHeaderOffset;
+        if (exif.dataView !== undefined) {
+            offsets.exifDataView = exif.dataView;
+        }
+    }
+    const xmp = findXmpChunks(dataView, metaBox, metadataBlocks);
+    if (xmp !== undefined) {
+        offsets.xmpChunks = xmp.chunks;
+        if (xmp.dataView !== undefined) {
+            offsets.xmpDataView = xmp.dataView;
+        }
+    }
+    offsets.iccChunks = findIccChunks(metaBox, metadataBlocks);
+    offsets.hasAppMarkers = (offsets.tiffHeaderOffset !== undefined) || (offsets.xmpChunks !== undefined) || (offsets.iccChunks !== undefined);
+    return offsets;
 }
 
 function warnIfUnsupportedFieldSize(metaBox) {

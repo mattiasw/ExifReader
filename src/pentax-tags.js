@@ -10,7 +10,8 @@
 import ByteOrder from './byte-order.js';
 import {objectAssign} from './utils.js';
 import {readIfd} from './tags-helpers.js';
-import {IFD_TYPE_PENTAX} from './tag-names.js';
+import TagNamesPentaxIfd from './tag-names-pentax-ifd.js';
+import {IFD_TYPE_PENTAX} from './ifd-types.js';
 
 const BYTE_ORDER_OFFSET = 8; // Pentax5: https://exiftool.org/makernote_types.html
 const PENTAX_IFD_OFFSET = BYTE_ORDER_OFFSET + 2; // https://exiftool.org/makernote_types.html
@@ -58,7 +59,8 @@ function read(
             computed,
             tagFilter,
             'makerNotes',
-            valueBudget
+            valueBudget,
+            getTagNames()
         );
 
         if (hasLevelInfoK3III(tags)) {
@@ -77,6 +79,13 @@ function read(
     } catch (error) {
         return {};
     }
+}
+
+// Assigned rather than a computed key, which Babel compiles to a helper call.
+function getTagNames() {
+    const tagNames = {};
+    tagNames[IFD_TYPE_PENTAX] = TagNamesPentaxIfd;
+    return tagNames;
 }
 
 function hasLevelInfoK3III(tags) {

@@ -9,7 +9,7 @@ import {
     concatBuffers, isFilePathOrURL, isBrowserFileObject, isDataUri,
     HTTP_STATUS_OK, HTTP_STATUS_RANGE_NOT_SATISFIABLE,
 } from './file-loaders.js';
-import {objectAssign, dataUriToBuffer, assertPromiseSupport} from './utils.js';
+import {objectAssign, dataUriToBuffer, assertPromiseSupport, isArrayBufferViewLike} from './utils.js';
 
 const AUTO_INITIAL_LENGTH = 128 * 1024;
 const AUTO_MAX_ITERATIONS = 4;
@@ -286,7 +286,7 @@ function sliceInputBuffer(data, end) {
     if (typeof SharedArrayBuffer !== 'undefined' && data instanceof SharedArrayBuffer) {
         return data.slice(0, end);
     }
-    if (ArrayBuffer.isView(data)) {
+    if (isArrayBufferViewLike(data)) {
         const viewEnd = Math.max(0, Math.min(end, data.byteLength));
         return data.buffer.slice(data.byteOffset, data.byteOffset + viewEnd);
     }
