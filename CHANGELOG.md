@@ -34,17 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `iloc` construction method 2 for an Exif item in builds without `exif` and
   for an XMP item in builds without `xmp`, and the warning about several Exif
   segments in a JPEG in builds without `exif`.
-
-### Removed
-
 - Objects that only imitate a Node `Buffer`, with `readUInt8` and the other read
   methods but without being a typed array, are no longer accepted. A Node
   `Buffer` is a `Uint8Array` and still works. In 4.50.0 such objects worked
-  only for TIFF and GIF files; every other format threw a `TypeError` from
+  only for TIFF and GIF files, and every other format threw a `TypeError` from
   inside the parser.
-- The internal module `src/dataview.js`. Internal function signatures under
-  `src/` changed as well (`Tags.read` and `readIfd` take the tag dictionaries
-  as an argument); `src/exif-reader.js` is the only documented deep import.
+- Internal function signatures under `src/` changed (`Tags.read` and `readIfd`
+  take the tag dictionaries as an argument) and the internal module
+  `src/dataview.js` no longer exists. `src/exif-reader.js` is the only
+  documented deep import.
 
 ### Fixed
 
