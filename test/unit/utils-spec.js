@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import {inflateSync} from 'node:zlib';
 import {expect} from 'chai';
 import {getDataView, getConsoleWarnSpy, swapProperties} from './test-utils.js';
 import * as Utils from '../../src/utils.js';
@@ -1432,6 +1433,140 @@ describe('utils', () => {
                 }
 
                 expect(warnCount).to.equal(1);
+            });
+
+            it('should pass one byte more than the rest of the total to a custom function', async () => {
+                const options = [];
+                const config = Utils.withDecompressBudget({
+                    deflate: (data, dataOptions) => {
+                        options.push(dataOptions);
+                        return new Uint8Array(100);
+                    },
+                    maxDecompressedSize: 150
+                });
+                const buffer = new ArrayBuffer(1);
+
+                await decompressDeflate(buffer, config);
+                const error = await getRejection(decompressDeflate(buffer, config));
+
+                expect(error).to.match(/total size of 150 bytes/);
+                expect(options).to.deep.equal([{maxOutputLength: 151}, {maxOutputLength: 51}]);
+            });
+
+            it('should accept a block that fills the total exactly from a custom function that passes the limit on', async () => {
+                const config = Utils.withDecompressBudget({
+                    deflate: (data, {maxOutputLength}) => inflateSync(data, {maxOutputLength}),
+                    maxDecompressedSize: 1024
+                });
+                const compressed = await compressDeflate(new Uint8Array(1024));
+
+                const result = await decompressDeflate(compressed, config);
+
+                expect(result.byteLength).to.equal(1024);
+                expect(warnSpy.hasWarned).to.equal(false);
+            });
+
+            it('should cap the limit passed to a custom function at what zlib accepts on every runtime', async () => {
+                const options = [];
+                const config = Utils.withDecompressBudget({
+                    deflate: (data, dataOptions) => {
+                        options.push(dataOptions);
+                        return inflateSync(data, dataOptions);
+                    },
+                    maxDecompressedSize: Infinity
+                });
+                const compressed = await compressDeflate(new Uint8Array(16));
+
+                const result = await decompressDeflate(compressed, config);
+
+                expect(result.byteLength).to.equal(16);
+                expect(options).to.deep.equal([{maxOutputLength: (2 ** 30) - 1}]);
+            });
+
+            it('should use up the total when a custom function stops at the limit by throwing', async () => {
+                let calls = 0;
+                const config = Utils.withDecompressBudget({
+                    deflate: (data, {maxOutputLength}) => {
+                        calls++;
+                        return inflateSync(data, {maxOutputLength});
+                    },
+                    maxDecompressedSize: 1024
+                });
+                const compressed = await compressDeflate(new Uint8Array(4 * 1024));
+                const tiny = await compressDeflate(new Uint8Array(1));
+
+                const error = await getRejection(decompressDeflate(compressed, config));
+
+                expect(error).to.match(/total size of 1024 bytes/);
+                expect(warnSpy.hasWarned).to.equal(true);
+                expect(config.budget.remaining).to.be.below(0);
+
+                const laterError = await getRejection(decompressDeflate(tiny, config));
+
+                expect(laterError).to.match(/total size/);
+                expect(calls).to.equal(1);
+            });
+
+            it('should use up the total when a custom function rejects at the limit', async () => {
+                const config = Utils.withDecompressBudget({
+                    brotli: () => Promise.reject(Object.assign(new Error('Too large.'), {code: 'ERR_BUFFER_TOO_LARGE'})),
+                    maxDecompressedSize: 150
+                });
+
+                const error = await getRejection(Utils.decompress(
+                    new DataView(new ArrayBuffer(1)),
+                    Utils.COMPRESSION_METHOD_BROTLI,
+                    undefined,
+                    'dataview',
+                    config
+                ));
+
+                expect(error).to.match(/total size of 150 bytes/);
+                expect(config.budget.remaining).to.be.below(0);
+            });
+
+            it('should use up an unlimited total when a custom function stops at the limit by throwing', async () => {
+                let calls = 0;
+                const config = Utils.withDecompressBudget({
+                    deflate: () => {
+                        calls++;
+                        throw Object.assign(new RangeError('Too large.'), {code: 'ERR_BUFFER_TOO_LARGE'});
+                    },
+                    maxDecompressedSize: Infinity
+                });
+                const buffer = new ArrayBuffer(1);
+
+                await getRejection(decompressDeflate(buffer, config));
+                const laterError = await getRejection(decompressDeflate(buffer, config));
+
+                expect(laterError).to.match(/total size/);
+                expect(calls).to.equal(1);
+            });
+
+            it('should pass any other custom function error on without charging the total', async () => {
+                const dataError = Object.assign(new Error('Corrupt data.'), {code: 'Z_DATA_ERROR'});
+                let calls = 0;
+                const config = Utils.withDecompressBudget({
+                    deflate: () => {
+                        calls++;
+                        if (calls === 1) {
+                            throw dataError;
+                        }
+                        return new Uint8Array(100);
+                    },
+                    maxDecompressedSize: 150
+                });
+                const buffer = new ArrayBuffer(1);
+
+                const error = await getRejection(decompressDeflate(buffer, config));
+
+                expect(error).to.equal(dataError);
+                expect(warnSpy.hasWarned).to.equal(false);
+                expect(config.budget.remaining).to.equal(150);
+
+                const result = await decompressDeflate(buffer, config);
+
+                expect(result.byteLength).to.equal(100);
             });
 
             function decompressDeflate(buffer, config) {

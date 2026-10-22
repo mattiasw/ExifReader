@@ -500,6 +500,8 @@ export const COMPRESSION_METHOD_NONE = undefined;
 export const COMPRESSION_METHOD_DEFLATE = 0;
 export const COMPRESSION_METHOD_BROTLI = 'brotli';
 export const DEFAULT_MAX_DECOMPRESSED_SIZE = 128 * 1024 * 1024;
+// buffer.constants.MAX_LENGTH of 32-bit Node, the lowest maxOutputLength bound of any Node zlib.
+const MAX_CUSTOM_OUTPUT_LENGTH = (1024 * 1024 * 1024) - 1;
 
 /**
  * Returns a copy of the decompress config whose compressed blocks share one
@@ -529,8 +531,11 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
     if (decompressConfig && decompressType) {
         const customFn = decompressConfig[decompressType];
         if (typeof customFn === 'function') {
+            // Allow one byte more than is left: a function that cuts its output off at this limit
+            // then returns more than fits, and is rejected instead of being taken as complete.
+            const maxOutputLength = Math.min(budget.remaining + 1, MAX_CUSTOM_OUTPUT_LENGTH);
             // Called now, not deferred: the input can view the caller's buffer, which may be reused once load() returns.
-            return new Promise((resolve) => resolve(customFn(getUint8View(dataView)))).then((result) => {
+            return new Promise((resolve) => resolve(customFn(getUint8View(dataView), {maxOutputLength}))).then((result) => {
                 budget.remaining -= getResultByteLength(result);
                 if (budget.remaining < 0) {
                     return rejectExceedsMax(budget, maxDecompressedSize);
@@ -548,6 +553,13 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
                     return new DataView(result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength));
                 }
                 return new TextDecoder(encoding).decode(result);
+            }, (error) => {
+                // Node's zlib throws this when the output would pass maxOutputLength.
+                if (error && error.code === 'ERR_BUFFER_TOO_LARGE') {
+                    budget.remaining = -1;
+                    return rejectExceedsMax(budget, maxDecompressedSize);
+                }
+                throw error;
             });
         }
     }

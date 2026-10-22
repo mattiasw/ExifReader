@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- A custom `brotli` or `deflate` function without a limit of its own could be
+  made to decompress far beyond `maxDecompressedSize` by a small crafted PNG or
+  JPEG XL file, because ExifReader could only check the result afterwards. Such
+  a function now receives the most bytes it may produce as `{maxOutputLength}`
+  in a second argument and stops there when it passes it on, as Node's
+  `zlib.inflateSync` does.
+
 ## [4.51.0] - 2026-10-21
 
 ### Added
