@@ -17,6 +17,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Releases push main before the tag, so a tag whose commit is not on main is a mistake.
+      # show-ref --verify reads only the exact ref, so no tag named like it can stand in for main.
+      - name: Refuse a tag whose commit is not on main
+        run: |
+          if ! main=$(git show-ref --verify --hash refs/remotes/origin/main) ||
+             ! git merge-base --is-ancestor HEAD "$main"; then
+            echo "::error::$GITHUB_REF_NAME ($(git rev-parse HEAD)) is not on main"
+            exit 1
+          fi
 
       - uses: actions/setup-node@v6
         with:
