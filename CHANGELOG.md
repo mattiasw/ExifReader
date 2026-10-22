@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a function now receives the most bytes it may produce as `{maxOutputLength}`
   in a second argument and stops there when it passes it on, as Node's
   `zlib.inflateSync` does.
+- The README and the type definitions now say that tag filtering removes
+  parsed tags only, not the raw data they came from, such as `xmp._raw`. The
+  output itself has not changed.
 
 ## [4.51.0] - 2026-10-21
 
