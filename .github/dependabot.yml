@@ -16,3 +16,13 @@ updates:
       all-dependencies:
         patterns:
           - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+    groups:
+      all-actions:
+        patterns:
+          - "*"
