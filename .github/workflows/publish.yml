@@ -5,13 +5,15 @@ on:
     tags:
       - "v*"
 
+# Only the publish job gets the OIDC token; it installs nothing and runs no project code.
 permissions:
-  id-token: write
   contents: read
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v7
@@ -19,7 +21,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
 
       - run: npm ci
       - run: npm run lint
@@ -29,4 +30,48 @@ jobs:
       - run: npm run test:build
         env:
           CI: true
-      - run: npm publish
+      - run: npm pack --ignore-scripts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-tarball
+          path: exifreader-*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      # Outside the workspace, where npm would read an .npmrc from the artifact as project config.
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-tarball
+          path: ${{ runner.temp }}/package-tarball
+
+      # A publishConfig in the tarball would override npm's registry and proxy during the token exchange.
+      # Read with npm's own pacote call for a tarball, so the check sees the manifest npm publish acts on.
+      - name: Refuse a tarball that sets publishConfig
+        run: |
+          node -e '
+            const path = require("path");
+            if (process.argv.length !== 2) {
+              throw new Error("Expected exactly one tarball");
+            }
+            const pacote = require(path.join(path.dirname(process.execPath), "..", "lib", "node_modules", "npm", "node_modules", "pacote"));
+            pacote.manifest("file:" + process.argv[1], {fullMetadata: true, fullReadJson: true}).then((manifest) => {
+              if ("publishConfig" in manifest) {
+                throw new Error("The tarball sets publishConfig");
+              }
+            });
+          ' "$RUNNER_TEMP"/package-tarball/exifreader-*.tgz
+      - run: npm publish "$RUNNER_TEMP"/package-tarball/exifreader-*.tgz
