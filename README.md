@@ -600,11 +600,24 @@ functions take a `Uint8Array` of compressed data and should return a
 `Uint8Array` or `ArrayBuffer` with the decompressed data (or a `Promise` that
 resolves to one).
 
+Each function also receives a second argument, `{maxOutputLength}`: the most
+bytes it may produce for this block. That is one more than what is left of the
+`maxDecompressedSize` total for this `load()` call, so that a result cut off
+there still shows the block went over, and at most 1 GiB. The function has to
+stop there itself, since ExifReader can only check the result after the
+function returns.
+A function that stops by throwing an error whose `code` is
+`'ERR_BUFFER_TOO_LARGE'`, as Node's `zlib` does, counts as going over the total
+(see [Limiting decompressed metadata size](#limiting-decompressed-metadata-size));
+any other error skips only that block. Wrap a library function in an arrow
+function that passes on only what it understands instead of passing the library
+function itself, since its own second parameter may mean something else.
+
 ```javascript
 const tags = await ExifReader.load(file, {
     async: true,
     decompress: {
-        brotli: async (compressedData) => myBrotliDecompress(compressedData),
+        brotli: async (compressedData, {maxOutputLength}) => myBrotliDecompress(compressedData, maxOutputLength),
     }
 });
 ```
@@ -612,6 +625,20 @@ const tags = await ExifReader.load(file, {
 If a custom function is provided for a compression type, it takes priority over
 the built-in Compression Streams API. If not provided, the library falls back to
 the Compression Streams API when available.
+
+In Node, `zlib` takes the limit directly:
+
+```javascript
+import zlib from 'node:zlib';
+
+const tags = await ExifReader.load(file, {
+    async: true,
+    decompress: {
+        deflate: (data, {maxOutputLength}) => zlib.inflateSync(data, {maxOutputLength}),
+        brotli: (data, {maxOutputLength}) => zlib.brotliDecompressSync(data, {maxOutputLength}),
+    }
+});
+```
 
 A lightweight browser-compatible Brotli decompression library is
 [brotli-dec-wasm](https://www.npmjs.com/package/brotli-dec-wasm), though it is
@@ -630,6 +657,9 @@ const tags = await ExifReader.load(file, {
     }
 });
 ```
+
+As written, this example does not pass `maxOutputLength` on, so a crafted file
+can make it allocate beyond the limit before ExifReader sees the result.
 
 #### Limiting decompressed metadata size
 
@@ -653,10 +683,11 @@ If a compressed block would take the total beyond the limit, that block and
 every later compressed block are skipped, one warning is logged via
 `console.warn`, and the rest of the tags are returned as usual. Blocks that
 are decompressed at the same time, such as several PNG text chunks, can all be
-skipped when together they go beyond the limit. The limit applies to the
-built-in Compression Streams paths and to any result returned by a custom
-`brotli`/`deflate` function. With `length: 'auto'`, each read attempt parses
-the bytes fetched so far and has its own total.
+skipped when together they go beyond the limit. The built-in Compression
+Streams paths stop at the limit. A custom `brotli`/`deflate` function receives
+its limit as `maxOutputLength` and has to stop there itself, because
+ExifReader can only check its result after it returns. With `length: 'auto'`,
+each read attempt parses the bytes fetched so far and has its own total.
 
 With `async: true`, ExifReader decompresses at most the first 255 compressed
 PNG text chunks (zTXt and compressed iTXt) of a file and skips later ones.

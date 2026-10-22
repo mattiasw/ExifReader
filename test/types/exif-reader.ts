@@ -457,6 +457,17 @@ loadView(new DataView(new ArrayBuffer(0)), {
         brotli: async (data: Uint8Array) => new Uint8Array(data),
     }
 });
+load(new ArrayBuffer(0), {
+    async: true,
+    decompress: {
+        deflate: (data: Uint8Array, options: { maxOutputLength: number }) => data.slice(0, options.maxOutputLength),
+        brotli: async (data: Uint8Array, { maxOutputLength }: { maxOutputLength: number }) => new Uint8Array(Math.min(data.length, maxOutputLength)),
+    }
+});
+// @ts-expect-error
+load(new ArrayBuffer(0), { async: true, decompress: { deflate: (data: Uint8Array, options: { maxOutputLength: string }) => data } });
+// @ts-expect-error
+load(new ArrayBuffer(0), { async: true, decompress: { deflate: (data: Uint8Array, options: { maxOutputLength: number }, extra: number) => data } });
 // @ts-expect-error
 load(new ArrayBuffer(0), { decompress: { brotli: 42 } });
 // @ts-expect-error

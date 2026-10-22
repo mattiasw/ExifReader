@@ -412,7 +412,14 @@ export type IncludeTagsOptions = {
 
 export type ExcludeTagsOptions = IncludeTagsOptions;
 
-type DecompressFunction = (data: Uint8Array) => Promise<Uint8Array | ArrayBuffer> | Uint8Array | ArrayBuffer;
+type DecompressFunction = (data: Uint8Array, options: {
+    /**
+     * The most bytes the function may produce: one more than what is left of
+     * the `maxDecompressedSize` total of the current `load()` or `loadView()`
+     * call, at most 2^30 - 1.
+     */
+    maxOutputLength: number,
+}) => Promise<Uint8Array | ArrayBuffer> | Uint8Array | ArrayBuffer;
 
 type DecompressOptions = {
     brotli?: DecompressFunction,
