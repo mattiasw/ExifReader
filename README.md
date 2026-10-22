@@ -326,6 +326,12 @@ Note that XMP and ICC tags are parsed from full metadata blocks, so ExifReader
 cannot skip parsing individual XMP/ICC tags based on selectors. The returned
 output is still filtered.
 
+Filtering removes parsed tags only, not the raw data they were parsed from.
+Some tags hold such data, for example `xmp._raw` (with `expanded: true`), the
+Exif `ApplicationNotes` and `IPTC-NAA` tags, the MPF `Images`, PNG text tags
+and `Thumbnail`. When filtering for privacy, list the tags you want in
+`includeTags` (by name, not `true`) instead of excluding the ones you do not.
+
 #### Unknown tags
 
 Tags that are unknown, either because they have been excluded by making a custom

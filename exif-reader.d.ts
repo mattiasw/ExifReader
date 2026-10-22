@@ -237,6 +237,9 @@ export interface ExpandedTags {
          * The raw, unsanitized XMP packet as it appears in the image, decoded
          * as text. Treat it as untrusted: escape or sanitize it before
          * inserting it into a page as HTML to avoid cross-site scripting.
+         *
+         * Tag filtering does not remove the values of excluded XMP tags from
+         * `_raw`; exclude `_raw` too.
          */
         _raw: string
     } & XmpTags,
