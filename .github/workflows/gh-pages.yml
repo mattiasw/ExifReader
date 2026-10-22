@@ -4,9 +4,16 @@ on:
   push:
     branches: [main]
 
+# Read-only unless a job asks for more; only build-pages writes.
+permissions:
+  contents: read
+
 jobs:
   build-pages:
     runs-on: ubuntu-latest
+    # Pushes the built site to the gh-pages branch.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - name: Build
