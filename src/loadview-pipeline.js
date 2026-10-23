@@ -607,10 +607,6 @@ function createInPlaceMerge(deps) {
     }
 }
 
-export function isThenable(value) {
-    return !!value && typeof value.then === 'function';
-}
-
 function buildMetadataRange(metadataBlocks, metadataTruncated, dataView, parsedGroups) {
     const blocks = (metadataBlocks || []).slice();
     const finderTruncated = !!metadataTruncated;

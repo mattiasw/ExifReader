@@ -17,7 +17,7 @@ import Tags from '../../src/tags.js';
 import TagNames from '../../src/tag-names.js';
 import IptcTags from '../../src/iptc-tags.js';
 import {getStringFromDataView, withDecompressBudget} from '../../src/utils.js';
-import {crc32} from 'node:zlib';
+import {crc32, inflateSync} from 'node:zlib';
 
 // The raw-profile readers exif-reader.js injects in the full build, calling the
 // module objects at call time so that the tests can swap their read functions.
@@ -1568,6 +1568,37 @@ describe('png-text-tags', () => {
             expect(fullValues.length * VALUE_LENGTH).to.be.at.most(MAX_DECOMPRESSED_SIZE);
             expect(fullValues).to.not.be.empty;
             expect(skippedValues).to.not.be.empty;
+        });
+
+        it('should tell a later in-flight chunk what the earlier ones left of the shared limit', async () => {
+            const VALUE_LENGTH = 1000;
+            const MAX_DECOMPRESSED_SIZE = 1500;
+            const value = 'A'.repeat(VALUE_LENGTH);
+            const compressedValue = new Uint8Array((await compress(toBytes(value))).buffer);
+            const {dataView, chunks} = buildTextChunks(
+                Array.from({length: 8}, (_, index) => getZtxtChunk('k' + index, compressedValue))
+            );
+            const limits = [];
+            const decompressConfig = withDecompressBudget({
+                maxDecompressedSize: MAX_DECOMPRESSED_SIZE,
+                deflate: (data, {maxOutputLength}) => {
+                    limits.push(maxOutputLength);
+                    return inflateSync(data, {maxOutputLength});
+                }
+            });
+            const unknownCompressionValue = '<text using unknown compression>';
+
+            const restoreWarn = swapProperties(console, {warn: () => undefined});
+            let tags;
+            try {
+                tags = await readPngText(dataView, chunks, true, false, false, undefined, decompressConfig).readTagsPromise;
+            } finally {
+                restoreWarn();
+            }
+
+            const values = tags.map((tag, index) => tag.readTags['k' + index].value);
+            expect(limits).to.deep.equal([MAX_DECOMPRESSED_SIZE + 1, MAX_DECOMPRESSED_SIZE - VALUE_LENGTH + 1]);
+            expect(values).to.deep.equal([value].concat(Array(7).fill(unknownCompressionValue)));
         });
 
         function getExpectedTags(start, end) {

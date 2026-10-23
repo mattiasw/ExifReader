@@ -531,36 +531,10 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
     if (decompressConfig && decompressType) {
         const customFn = decompressConfig[decompressType];
         if (typeof customFn === 'function') {
-            // Allow one byte more than is left: a function that cuts its output off at this limit
-            // then returns more than fits, and is rejected instead of being taken as complete.
-            const maxOutputLength = Math.min(budget.remaining + 1, MAX_CUSTOM_OUTPUT_LENGTH);
-            // Called now, not deferred: the input can view the caller's buffer, which may be reused once load() returns.
-            return new Promise((resolve) => resolve(customFn(getUint8View(dataView), {maxOutputLength}))).then((result) => {
-                budget.remaining -= getResultByteLength(result);
-                if (budget.remaining < 0) {
-                    return rejectExceedsMax(budget, maxDecompressedSize);
-                }
-                if (returnType === 'dataview') {
-                    if (result instanceof ArrayBuffer) {
-                        return new DataView(result);
-                    }
-                    // A DataView or a pooled Buffer can be a window into a
-                    // larger buffer, and parsers slice dataView.buffer, so
-                    // copy a window out but keep a whole buffer as it is.
-                    if ((result.byteOffset === 0) && (result.byteLength === result.buffer.byteLength)) {
-                        return new DataView(result.buffer);
-                    }
-                    return new DataView(result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength));
-                }
-                return new TextDecoder(encoding).decode(result);
-            }, (error) => {
-                // Node's zlib throws this when the output would pass maxOutputLength.
-                if (error && error.code === 'ERR_BUFFER_TOO_LARGE') {
-                    budget.remaining = -1;
-                    return rejectExceedsMax(budget, maxDecompressedSize);
-                }
-                throw error;
-            });
+            // The executor runs now, so a synchronous result is charged before this returns and a throw becomes a rejection.
+            return new Promise((resolve) => resolve(
+                decompressWithCustomFunction(customFn, dataView, returnType, encoding, budget, maxDecompressedSize)
+            ));
         }
     }
 
@@ -621,6 +595,63 @@ function getDecompressBudget(decompressConfig, maxDecompressedSize) {
         return decompressConfig.budget;
     }
     return {remaining: maxDecompressedSize, warned: false};
+}
+
+function decompressWithCustomFunction(customFn, dataView, returnType, encoding, budget, maxDecompressedSize) {
+    // Allow one byte more than is left: a function that cuts its output off at this limit
+    // then returns more than fits, and is rejected instead of being taken as complete.
+    const maxOutputLength = Math.min(budget.remaining + 1, MAX_CUSTOM_OUTPUT_LENGTH);
+    let result;
+    try {
+        // Called now, not deferred: the input can view the caller's buffer, which may be reused once load() returns.
+        result = customFn(getUint8View(dataView), {maxOutputLength});
+    } catch (error) {
+        return rejectCustomFunctionError(error, budget, maxDecompressedSize);
+    }
+    if (isThenable(result)) {
+        return Promise.resolve(result).then(
+            (resolvedResult) => chargeCustomResult(resolvedResult, returnType, encoding, budget, maxDecompressedSize),
+            (error) => rejectCustomFunctionError(error, budget, maxDecompressedSize)
+        );
+    }
+    return chargeCustomResult(result, returnType, encoding, budget, maxDecompressedSize);
+}
+
+function rejectCustomFunctionError(error, budget, maxDecompressedSize) {
+    // Node's zlib throws this when the output would pass maxOutputLength.
+    if (error && error.code === 'ERR_BUFFER_TOO_LARGE') {
+        budget.remaining = -1;
+        return rejectExceedsMax(budget, maxDecompressedSize);
+    }
+    return Promise.reject(error);
+}
+
+export function isThenable(value) {
+    return !!value && typeof value.then === 'function';
+}
+
+function chargeCustomResult(result, returnType, encoding, budget, maxDecompressedSize) {
+    budget.remaining -= getResultByteLength(result);
+    if (budget.remaining < 0) {
+        return rejectExceedsMax(budget, maxDecompressedSize);
+    }
+    return convertCustomResult(result, returnType, encoding);
+}
+
+function convertCustomResult(result, returnType, encoding) {
+    if (returnType === 'dataview') {
+        if (result instanceof ArrayBuffer) {
+            return new DataView(result);
+        }
+        // A DataView or a pooled Buffer can be a window into a
+        // larger buffer, and parsers slice dataView.buffer, so
+        // copy a window out but keep a whole buffer as it is.
+        if ((result.byteOffset === 0) && (result.byteLength === result.buffer.byteLength)) {
+            return new DataView(result.buffer);
+        }
+        return new DataView(result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength));
+    }
+    return new TextDecoder(encoding).decode(result);
 }
 
 function getUint8View(dataView) {
