@@ -62,7 +62,7 @@ function runBuild(options) {
             env.NODE_PATH = env.NODE_PATH ? buildModules + path.delimiter + env.NODE_PATH : buildModules;
         }
 
-        execSync(`npx -p ${getPackage('webpack-cli')} -p ${getPackage('webpack')} webpack`, {stdio: 'inherit', env});
+        execSync(`npx --ignore-scripts -p ${getPackage('webpack-cli')} -p ${getPackage('webpack')} webpack`, {stdio: 'inherit', env});
         if (config) {
             writeMarker(distDir, config, require(path.join(EXIFREADER_ROOT_DIR, 'package.json')).version);
         }
@@ -97,7 +97,7 @@ function installCustomBuildDependencies(tmpDir) {
     // npm init only creates a package.json to anchor the install to tmpDir, so
     // silence its package.json dump (stderr is kept for real errors).
     execSync('npm init -y', {cwd: tmpDir, stdio: ['ignore', 'ignore', 'inherit']});
-    execSync(`npm install --production --loglevel=error --no-optional --no-package-lock --no-save ${packages.join(' ')}`, {cwd: tmpDir, stdio: 'inherit'});
+    execSync(`npm install --production --loglevel=error --no-optional --no-package-lock --no-save --ignore-scripts ${packages.join(' ')}`, {cwd: tmpDir, stdio: 'inherit'});
     console.log('Done.'); // eslint-disable-line no-console
 }
 
