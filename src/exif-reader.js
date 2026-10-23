@@ -7,7 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getDataViewFromBytes, getByteString, getStringValueFromArray, assertPromiseSupport, setProperty, MAX_METADATA_BLOCKS} from './utils.js';
+import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getDataViewFromBytes, getByteString, getStringValueFromArray, assertPromiseSupport, setProperty, isThenable, MAX_METADATA_BLOCKS} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import Constants from './constants.js';
@@ -41,7 +41,7 @@ import GifFileTags from './gif-file-tags.js';
 import Thumbnail from './thumbnail.js';
 import Composite from './composite.js';
 import {createTagFilter} from './tag-filter.js';
-import {buildTagsFromMergeSteps, isThenable, EXIF_CARRIED_GROUP_ORDER} from './loadview-pipeline.js';
+import {buildTagsFromMergeSteps, EXIF_CARRIED_GROUP_ORDER} from './loadview-pipeline.js';
 import exifErrors from './errors.js';
 
 // Brob XMP is bounded by the file size, as brob Exif is, plus room for one JPEG
