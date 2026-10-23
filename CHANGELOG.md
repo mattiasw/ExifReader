@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Custom builds now install their build toolchain with `--ignore-scripts`, so
+  the install scripts of the toolchain packages and their dependencies no
+  longer run during a custom build.
+
 ### Security
 
 - A custom `brotli` or `deflate` function without a limit of its own could be
