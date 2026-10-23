@@ -615,7 +615,7 @@ function returns.
 A function that stops by throwing an error whose `code` is
 `'ERR_BUFFER_TOO_LARGE'`, as Node's `zlib` does, counts as going over the total
 (see [Limiting decompressed metadata size](#limiting-decompressed-metadata-size));
-any other error skips only that block. Wrap a library function in an arrow
+any other error skips that block. Wrap a library function in an arrow
 function that passes on only what it understands instead of passing the library
 function itself, since its own second parameter may mean something else.
 
@@ -692,8 +692,10 @@ are decompressed at the same time, such as several PNG text chunks, can all be
 skipped when together they go beyond the limit. The built-in Compression
 Streams paths stop at the limit. A custom `brotli`/`deflate` function receives
 its limit as `maxOutputLength` and has to stop there itself, because
-ExifReader can only check its result after it returns. With `length: 'auto'`,
-each read attempt parses the bytes fetched so far and has its own total.
+ExifReader can only check its result after it returns. Every failure of a
+custom function after the first in one `load()` call counts against the total
+as the whole `maxOutputLength` it was given. With `length: 'auto'`, each read
+attempt parses the bytes fetched so far and has its own total.
 
 With `async: true`, ExifReader decompresses at most the first 255 compressed
 PNG text chunks (zTXt and compressed iTXt) of a file and skips later ones.

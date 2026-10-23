@@ -1313,7 +1313,7 @@ describe('utils', () => {
                 expect(result.brotli).to.equal(brotli);
                 expect(result.deflate).to.equal(deflate);
                 expect(result.maxDecompressedSize).to.equal(4711);
-                expect(result.budget.remaining).to.equal(4711);
+                expect(result.budget).to.deep.equal({remaining: 4711, warned: false, failed: false});
                 expect(Object.keys(config)).to.deep.equal(['brotli', 'deflate', 'maxDecompressedSize']);
             });
 
@@ -1543,7 +1543,7 @@ describe('utils', () => {
                 expect(calls).to.equal(1);
             });
 
-            it('should pass any other custom function error on without charging the total', async () => {
+            it('should pass the first other custom function error on without charging the total', async () => {
                 const dataError = Object.assign(new Error('Corrupt data.'), {code: 'Z_DATA_ERROR'});
                 let calls = 0;
                 const config = Utils.withDecompressBudget({
@@ -1567,6 +1567,94 @@ describe('utils', () => {
                 const result = await decompressDeflate(buffer, config);
 
                 expect(result.byteLength).to.equal(100);
+            });
+
+            it('should charge a second other custom function error the maxOutputLength it was given', async () => {
+                const dataError = Object.assign(new Error('Corrupt data.'), {code: 'Z_DATA_ERROR'});
+                const maxOutputLengths = [];
+                const config = Utils.withDecompressBudget({
+                    deflate: (data, {maxOutputLength}) => {
+                        maxOutputLengths.push(maxOutputLength);
+                        throw dataError;
+                    },
+                    maxDecompressedSize: 150
+                });
+                const buffer = new ArrayBuffer(1);
+
+                expect(await getRejection(decompressDeflate(buffer, config))).to.equal(dataError);
+                expect(await getRejection(decompressDeflate(buffer, config))).to.equal(dataError);
+
+                expect(maxOutputLengths).to.deep.equal([151, 151]);
+                expect(config.budget.remaining).to.equal(-1);
+                expect(warnSpy.hasWarned).to.equal(false);
+
+                const laterError = await getRejection(decompressDeflate(buffer, config));
+
+                expect(laterError).to.match(/total size of 150 bytes/);
+                expect(maxOutputLengths).to.have.lengthOf(2);
+                expect(warnSpy.callCount).to.equal(1);
+            });
+
+            it('should charge a late custom rejection the maxOutputLength its call was given, not what is left', async () => {
+                const dataError = Object.assign(new Error('Corrupt data.'), {code: 'Z_DATA_ERROR'});
+                const maxOutputLengths = [];
+                let rejectFirst;
+                const results = [
+                    () => new Promise((resolve, reject) => {
+                        rejectFirst = reject;
+                    }),
+                    () => new Uint8Array(100),
+                    () => {
+                        throw dataError;
+                    }
+                ];
+                const config = Utils.withDecompressBudget({
+                    deflate: (data, {maxOutputLength}) => {
+                        maxOutputLengths.push(maxOutputLength);
+                        return results[maxOutputLengths.length - 1]();
+                    },
+                    maxDecompressedSize: 150
+                });
+                const buffer = new ArrayBuffer(1);
+
+                const first = getRejection(decompressDeflate(buffer, config));
+                const second = decompressDeflate(buffer, config);
+                const third = getRejection(decompressDeflate(buffer, config));
+                expect(config.budget.remaining).to.equal(50);
+                rejectFirst(dataError);
+
+                expect(await first).to.equal(dataError);
+                expect((await second).byteLength).to.equal(100);
+                expect(await third).to.equal(dataError);
+                expect(maxOutputLengths).to.deep.equal([151, 151, 51]);
+                expect(config.budget.remaining).to.equal(50 - 151);
+            });
+
+            it('should bound the work of many blocks that each fail their checksum near twice the total', async () => {
+                const maxOutputLengths = [];
+                const config = Utils.withDecompressBudget({
+                    deflate: (data, {maxOutputLength}) => {
+                        maxOutputLengths.push(maxOutputLength);
+                        return inflateSync(data, {maxOutputLength});
+                    },
+                    maxDecompressedSize: 1024
+                });
+                const compressed = new Uint8Array(await compressDeflate(new Uint8Array(1024)));
+                compressed[compressed.length - 1] ^= 0xff;
+
+                const errors = [];
+                for (let i = 0; i < 20; i++) {
+                    errors.push(await getRejection(decompressDeflate(compressed.buffer, config)));
+                }
+
+                expect(maxOutputLengths).to.have.lengthOf(2);
+                expect(maxOutputLengths.reduce((sum, length) => sum + length, 0)).to.be.at.most((2 * 1024) + 2);
+                expect(errors[0].code).to.equal('Z_DATA_ERROR');
+                expect(errors[1].code).to.equal('Z_DATA_ERROR');
+                for (const error of errors.slice(2)) {
+                    expect(error).to.match(/total size of 1024 bytes/);
+                }
+                expect(warnSpy.callCount).to.equal(1);
             });
 
             it('should charge a synchronous custom result before a block started in the same tick is called', async () => {
@@ -1609,23 +1697,6 @@ describe('utils', () => {
                 expect(await firstError).to.match(/total size of 1024 bytes/);
                 expect(await secondError).to.match(/total size of 1024 bytes/);
                 expect(calls).to.equal(1);
-            });
-
-            it('should turn any other synchronous custom function error into a rejection without charging the total', async () => {
-                const dataError = Object.assign(new Error('Corrupt data.'), {code: 'Z_DATA_ERROR'});
-                const config = Utils.withDecompressBudget({
-                    deflate: () => {
-                        throw dataError;
-                    },
-                    maxDecompressedSize: 150
-                });
-                let promise;
-
-                expect(() => {
-                    promise = decompressDeflate(new ArrayBuffer(1), config);
-                }).to.not.throw();
-                expect(config.budget.remaining).to.equal(150);
-                expect(await getRejection(promise)).to.equal(dataError);
             });
 
             it('should turn a synchronous custom result that cannot be converted into a rejection', async () => {

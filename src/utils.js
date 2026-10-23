@@ -508,14 +508,14 @@ const MAX_CUSTOM_OUTPUT_LENGTH = (1024 * 1024 * 1024) - 1;
  * total budget of maxDecompressedSize bytes. The input is never mutated.
  *
  * @param {Object|undefined} decompressConfig - The caller's decompress option.
- * @returns {Object} {brotli, deflate, maxDecompressedSize, budget: {remaining, warned}}
+ * @returns {Object} {brotli, deflate, maxDecompressedSize, budget: {remaining, warned, failed}}
  */
 export function withDecompressBudget(decompressConfig) {
     return {
         brotli: decompressConfig ? decompressConfig.brotli : undefined,
         deflate: decompressConfig ? decompressConfig.deflate : undefined,
         maxDecompressedSize: decompressConfig ? decompressConfig.maxDecompressedSize : undefined,
-        budget: {remaining: getMaxDecompressedSize(decompressConfig), warned: false}
+        budget: {remaining: getMaxDecompressedSize(decompressConfig), warned: false, failed: false}
     };
 }
 
@@ -594,7 +594,7 @@ function getDecompressBudget(decompressConfig, maxDecompressedSize) {
     if (decompressConfig && decompressConfig.budget) {
         return decompressConfig.budget;
     }
-    return {remaining: maxDecompressedSize, warned: false};
+    return {remaining: maxDecompressedSize, warned: false, failed: false};
 }
 
 function decompressWithCustomFunction(customFn, dataView, returnType, encoding, budget, maxDecompressedSize) {
@@ -606,24 +606,34 @@ function decompressWithCustomFunction(customFn, dataView, returnType, encoding, 
         // Called now, not deferred: the input can view the caller's buffer, which may be reused once load() returns.
         result = customFn(getUint8View(dataView), {maxOutputLength});
     } catch (error) {
-        return rejectCustomFunctionError(error, budget, maxDecompressedSize);
+        return rejectCustomFunctionError(error, budget, maxDecompressedSize, maxOutputLength);
     }
     if (isThenable(result)) {
         return Promise.resolve(result).then(
             (resolvedResult) => chargeCustomResult(resolvedResult, returnType, encoding, budget, maxDecompressedSize),
-            (error) => rejectCustomFunctionError(error, budget, maxDecompressedSize)
+            (error) => rejectCustomFunctionError(error, budget, maxDecompressedSize, maxOutputLength)
         );
     }
     return chargeCustomResult(result, returnType, encoding, budget, maxDecompressedSize);
 }
 
-function rejectCustomFunctionError(error, budget, maxDecompressedSize) {
+function rejectCustomFunctionError(error, budget, maxDecompressedSize, maxOutputLength) {
     // Node's zlib throws this when the output would pass maxOutputLength.
     if (error && error.code === 'ERR_BUFFER_TOO_LARGE') {
         budget.remaining = -1;
         return rejectExceedsMax(budget, maxDecompressedSize);
     }
+    chargeFailedCall(budget, maxOutputLength);
     return Promise.reject(error);
+}
+
+function chargeFailedCall(budget, maxOutputLength) {
+    // One corrupt block in a legitimate file costs nothing; each later failure may have done maxOutputLength of work.
+    if (budget.failed) {
+        budget.remaining -= maxOutputLength;
+    } else {
+        budget.failed = true;
+    }
 }
 
 export function isThenable(value) {
