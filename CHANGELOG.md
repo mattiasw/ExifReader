@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.52.0] - 2026-10-23
+
 ### Changed
 
 - Custom builds now install their build toolchain with `--ignore-scripts`, so
@@ -17,14 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A custom `brotli` or `deflate` function without a limit of its own could be
   made to decompress far beyond `maxDecompressedSize` by a small crafted PNG or
-  JPEG XL file, because ExifReader could only check the result afterwards. Such
-  a function now receives the most bytes it may produce as `{maxOutputLength}`
-  in a second argument and stops there when it passes it on, as Node's
-  `zlib.inflateSync` does.
+  JPEG XL file, because ExifReader could only check the result afterwards.
+  Every custom `brotli` or `deflate` function now receives the most bytes it
+  may produce as `{maxOutputLength}` in a second argument. Passing it on to a
+  decompressor that takes the same option, such as Node's `zlib.inflateSync`,
+  makes decompression stop there.
 - Every failure of a custom `brotli` or `deflate` function after the first in
-  one `load()` call now counts against `maxDecompressedSize`, so a file of many
-  corrupt compressed blocks no longer makes it decompress up to the limit for
-  each block.
+  one `load()` or `loadView()` call now counts against `maxDecompressedSize`,
+  so a file of many corrupt compressed blocks no longer makes it decompress up
+  to the limit for each block.
 - A custom `brotli` or `deflate` function that returns a Promise is now called
   for the next compressed block only after its previous call has settled, so
   blocks started together can no longer each be told the whole remaining
@@ -2324,7 +2327,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.51.0...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.52.0...HEAD
+[4.52.0]: https://github.com/mattiasw/ExifReader/compare/v4.51.0...v4.52.0
 [4.51.0]: https://github.com/mattiasw/ExifReader/compare/v4.50.0...v4.51.0
 [4.50.0]: https://github.com/mattiasw/ExifReader/compare/v4.49.0...v4.50.0
 [4.49.0]: https://github.com/mattiasw/ExifReader/compare/v4.48.1...v4.49.0
