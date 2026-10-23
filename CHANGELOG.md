@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one `load()` call now counts against `maxDecompressedSize`, so a file of many
   corrupt compressed blocks no longer makes it decompress up to the limit for
   each block.
+- A custom `brotli` or `deflate` function that returns a Promise is now called
+  for the next compressed block only after its previous call has settled, so
+  blocks started together can no longer each be told the whole remaining
+  `maxDecompressedSize`.
 - The README and the type definitions now say that tag filtering removes
   parsed tags only, not the raw data they came from, such as `xmp._raw`. The
   output itself has not changed.

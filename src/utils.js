@@ -508,14 +508,14 @@ const MAX_CUSTOM_OUTPUT_LENGTH = (1024 * 1024 * 1024) - 1;
  * total budget of maxDecompressedSize bytes. The input is never mutated.
  *
  * @param {Object|undefined} decompressConfig - The caller's decompress option.
- * @returns {Object} {brotli, deflate, maxDecompressedSize, budget: {remaining, warned, failed}}
+ * @returns {Object} {brotli, deflate, maxDecompressedSize, budget: {remaining, warned, failed, pending}}
  */
 export function withDecompressBudget(decompressConfig) {
     return {
         brotli: decompressConfig ? decompressConfig.brotli : undefined,
         deflate: decompressConfig ? decompressConfig.deflate : undefined,
         maxDecompressedSize: decompressConfig ? decompressConfig.maxDecompressedSize : undefined,
-        budget: {remaining: getMaxDecompressedSize(decompressConfig), warned: false, failed: false}
+        budget: {remaining: getMaxDecompressedSize(decompressConfig), warned: false, failed: false, pending: undefined}
     };
 }
 
@@ -531,10 +531,7 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
     if (decompressConfig && decompressType) {
         const customFn = decompressConfig[decompressType];
         if (typeof customFn === 'function') {
-            // The executor runs now, so a synchronous result is charged before this returns and a throw becomes a rejection.
-            return new Promise((resolve) => resolve(
-                decompressWithCustomFunction(customFn, dataView, returnType, encoding, budget, maxDecompressedSize)
-            ));
+            return decompressWithCustomFunctionInTurn(customFn, dataView, returnType, encoding, budget, maxDecompressedSize);
         }
     }
 
@@ -594,7 +591,41 @@ function getDecompressBudget(decompressConfig, maxDecompressedSize) {
     if (decompressConfig && decompressConfig.budget) {
         return decompressConfig.budget;
     }
-    return {remaining: maxDecompressedSize, warned: false, failed: false};
+    return {remaining: maxDecompressedSize, warned: false, failed: false, pending: undefined};
+}
+
+function decompressWithCustomFunctionInTurn(customFn, dataView, returnType, encoding, budget, maxDecompressedSize) {
+    // The executor runs now, so a synchronous result is charged before this returns and a throw becomes a rejection.
+    return new Promise((resolve) => {
+        if (budget.pending) {
+            resolve(queueCustomFunctionCall(customFn, dataView, returnType, encoding, budget, maxDecompressedSize));
+        } else {
+            resolve(decompressWithCustomFunction(customFn, dataView, returnType, encoding, budget, maxDecompressedSize));
+        }
+    });
+}
+
+function queueCustomFunctionCall(customFn, dataView, returnType, encoding, budget, maxDecompressedSize) {
+    const previousCall = budget.pending;
+    // Copy now: the input can view the caller's buffer, which may be reused once load() returns.
+    const inputCopy = new DataView(dataView.buffer.slice(dataView.byteOffset, dataView.byteOffset + dataView.byteLength));
+    return holdTurn(budget, previousCall.then(() => {
+        if (budget.remaining < 0) {
+            return rejectExceedsMax(budget, maxDecompressedSize);
+        }
+        return decompressWithCustomFunction(customFn, inputCopy, returnType, encoding, budget, maxDecompressedSize);
+    }));
+}
+
+function holdTurn(budget, call) {
+    const settled = call.then(() => undefined, () => undefined);
+    budget.pending = settled;
+    settled.then(() => {
+        if (budget.pending === settled) {
+            budget.pending = undefined;
+        }
+    });
+    return call;
 }
 
 function decompressWithCustomFunction(customFn, dataView, returnType, encoding, budget, maxDecompressedSize) {
@@ -603,16 +634,18 @@ function decompressWithCustomFunction(customFn, dataView, returnType, encoding, 
     const maxOutputLength = Math.min(budget.remaining + 1, MAX_CUSTOM_OUTPUT_LENGTH);
     let result;
     try {
-        // Called now, not deferred: the input can view the caller's buffer, which may be reused once load() returns.
+        // Only a call made at once gets the caller's input uncopied: that buffer may be reused once load() returns.
         result = customFn(getUint8View(dataView), {maxOutputLength});
     } catch (error) {
         return rejectCustomFunctionError(error, budget, maxDecompressedSize, maxOutputLength);
     }
     if (isThenable(result)) {
-        return Promise.resolve(result).then(
+        const charged = Promise.resolve(result).then(
             (resolvedResult) => chargeCustomResult(resolvedResult, returnType, encoding, budget, maxDecompressedSize),
             (error) => rejectCustomFunctionError(error, budget, maxDecompressedSize, maxOutputLength)
         );
+        // A queued call already holds its turn.
+        return budget.pending ? charged : holdTurn(budget, charged);
     }
     return chargeCustomResult(result, returnType, encoding, budget, maxDecompressedSize);
 }
