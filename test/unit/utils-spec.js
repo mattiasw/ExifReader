@@ -1313,7 +1313,7 @@ describe('utils', () => {
                 expect(result.brotli).to.equal(brotli);
                 expect(result.deflate).to.equal(deflate);
                 expect(result.maxDecompressedSize).to.equal(4711);
-                expect(result.budget).to.deep.equal({remaining: 4711, warned: false, failed: false});
+                expect(result.budget).to.deep.equal({remaining: 4711, warned: false, failed: false, pending: undefined});
                 expect(Object.keys(config)).to.deep.equal(['brotli', 'deflate', 'maxDecompressedSize']);
             });
 
@@ -1595,7 +1595,7 @@ describe('utils', () => {
                 expect(warnSpy.callCount).to.equal(1);
             });
 
-            it('should charge a late custom rejection the maxOutputLength its call was given, not what is left', async () => {
+            it('should run calls queued behind a late custom rejection and charge each later failure its own maxOutputLength', async () => {
                 const dataError = Object.assign(new Error('Corrupt data.'), {code: 'Z_DATA_ERROR'});
                 const maxOutputLengths = [];
                 let rejectFirst;
@@ -1620,14 +1620,16 @@ describe('utils', () => {
                 const first = getRejection(decompressDeflate(buffer, config));
                 const second = decompressDeflate(buffer, config);
                 const third = getRejection(decompressDeflate(buffer, config));
-                expect(config.budget.remaining).to.equal(50);
+                expect(maxOutputLengths).to.deep.equal([151]);
+                expect(config.budget.remaining).to.equal(150);
                 rejectFirst(dataError);
 
                 expect(await first).to.equal(dataError);
                 expect((await second).byteLength).to.equal(100);
                 expect(await third).to.equal(dataError);
                 expect(maxOutputLengths).to.deep.equal([151, 151, 51]);
-                expect(config.budget.remaining).to.equal(50 - 151);
+                expect(config.budget.remaining).to.equal(150 - 100 - 51);
+                expect(warnSpy.hasWarned).to.equal(false);
             });
 
             it('should bound the work of many blocks that each fail their checksum near twice the total', async () => {
@@ -1718,24 +1720,185 @@ describe('utils', () => {
                 expect(await getRejection(promise)).to.be.an.instanceof(TypeError);
             });
 
-            it('should pass the whole rest of the total to each async custom call started in the same tick', async () => {
-                const options = [];
+            it('should call an async custom function for a block started in the same tick only after the previous call settles', async () => {
+                const {calls, deflate} = getManualCustomFunction();
+                const config = Utils.withDecompressBudget({deflate, maxDecompressedSize: 150});
+                const buffer = new ArrayBuffer(1);
+
+                const first = decompressDeflate(buffer, config);
+                const secondError = getRejection(decompressDeflate(buffer, config));
+                expect(calls).to.have.lengthOf(1);
+                expect(config.budget.remaining).to.equal(150);
+
+                calls[0].resolve(new Uint8Array(100));
+                expect((await first).byteLength).to.equal(100);
+                await new Promise(setImmediate);
+                expect(calls).to.have.lengthOf(2);
+                calls[1].resolve(new Uint8Array(100));
+
+                expect(await secondError).to.match(/total size of 150 bytes/);
+                expect(calls.map((call) => call.options)).to.deep.equal([{maxOutputLength: 151}, {maxOutputLength: 51}]);
+                expect(config.budget.remaining).to.equal(-50);
+            });
+
+            it('should not call an async custom function for a queued block when the total is used up at its turn', async () => {
+                let calls = 0;
                 const config = Utils.withDecompressBudget({
-                    deflate: (data, dataOptions) => {
-                        options.push(dataOptions);
-                        return Promise.resolve(new Uint8Array(100));
+                    deflate: () => {
+                        calls++;
+                        return Promise.resolve(new Uint8Array(151));
                     },
                     maxDecompressedSize: 150
                 });
                 const buffer = new ArrayBuffer(1);
 
-                const first = decompressDeflate(buffer, config);
+                const firstError = getRejection(decompressDeflate(buffer, config));
                 const secondError = getRejection(decompressDeflate(buffer, config));
-                expect(config.budget.remaining).to.equal(150);
 
-                expect(options).to.deep.equal([{maxOutputLength: 151}, {maxOutputLength: 151}]);
-                expect((await first).byteLength).to.equal(100);
+                expect(await firstError).to.match(/total size of 150 bytes/);
                 expect(await secondError).to.match(/total size of 150 bytes/);
+                expect(calls).to.equal(1);
+                expect(warnSpy.callCount).to.equal(1);
+            });
+
+            it('should pass a queued custom call a copy of its input as it was when the block was started', async () => {
+                const {calls, deflate} = getManualCustomFunction();
+                const config = Utils.withDecompressBudget({deflate, maxDecompressedSize: 150});
+                const source = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+
+                const first = decompressDeflate(new ArrayBuffer(1), config);
+                const second = Utils.decompress(
+                    new DataView(source.buffer, 2, 4),
+                    Utils.COMPRESSION_METHOD_DEFLATE,
+                    'latin1',
+                    'dataview',
+                    config
+                );
+                source.fill(0);
+                calls[0].resolve(new Uint8Array(0));
+                await first;
+                await new Promise(setImmediate);
+
+                expect(calls).to.have.lengthOf(2);
+                expect(Array.from(calls[1].data)).to.deep.equal([3, 4, 5, 6]);
+                expect(calls[1].data.buffer).to.not.equal(source.buffer);
+                calls[1].resolve(new Uint8Array(0));
+                expect((await second).byteLength).to.equal(0);
+            });
+
+            it('should give each queued async custom call what the earlier ones left and keep all results that fit', async () => {
+                const sizes = [40, 50, 60, 0];
+                const maxOutputLengths = [];
+                const config = Utils.withDecompressBudget({
+                    deflate: (data, {maxOutputLength}) => {
+                        const index = maxOutputLengths.length;
+                        maxOutputLengths.push(maxOutputLength);
+                        return Promise.resolve(new Uint8Array(sizes[index]).fill(index + 1));
+                    },
+                    maxDecompressedSize: 150
+                });
+                const buffer = new ArrayBuffer(1);
+
+                const results = await Promise.all(sizes.map(() => decompressDeflate(buffer, config)));
+
+                expect(results.map((result) => Array.from(new Uint8Array(result.buffer, result.byteOffset, result.byteLength))))
+                    .to.deep.equal(sizes.map((size, index) => new Array(size).fill(index + 1)));
+                expect(maxOutputLengths).to.deep.equal([151, 111, 61, 1]);
+                expect(config.budget.remaining).to.equal(0);
+                expect(warnSpy.hasWarned).to.equal(false);
+            });
+
+            it('should make a custom call that arrives while a queued call runs wait for every call queued before it', async () => {
+                const {calls, deflate} = getManualCustomFunction();
+                const config = Utils.withDecompressBudget({deflate, maxDecompressedSize: 1000});
+                const start = (marker) => decompressDeflate(new Uint8Array([marker]).buffer, config);
+                const getCalled = () => calls.map((call) => [call.data[0], call.options.maxOutputLength]);
+
+                const results = [start(1), start(2), start(3)];
+                calls[0].resolve(new Uint8Array(100));
+                await new Promise(setImmediate);
+                expect(getCalled()).to.deep.equal([[1, 1001], [2, 901]]);
+                results.push(start(4));
+
+                calls[1].resolve(new Uint8Array(100));
+                await new Promise(setImmediate);
+                expect(getCalled()).to.deep.equal([[1, 1001], [2, 901], [3, 801]]);
+
+                calls[2].resolve(new Uint8Array(100));
+                await new Promise(setImmediate);
+                expect(getCalled()).to.deep.equal([[1, 1001], [2, 901], [3, 801], [4, 701]]);
+
+                calls[3].resolve(new Uint8Array(100));
+                expect((await Promise.all(results)).map((result) => result.byteLength)).to.deep.equal([100, 100, 100, 100]);
+            });
+
+            it('should call a synchronous custom function at once again after an async call has settled', async () => {
+                let calls = 0;
+                const config = Utils.withDecompressBudget({
+                    deflate: () => {
+                        calls++;
+                        return calls === 1 ? Promise.resolve(new Uint8Array(10)) : new Uint8Array(20);
+                    },
+                    maxDecompressedSize: 150
+                });
+                const buffer = new ArrayBuffer(1);
+                await decompressDeflate(buffer, config);
+                await new Promise(setImmediate);
+
+                const second = decompressDeflate(buffer, config);
+
+                expect(calls).to.equal(2);
+                expect(config.budget.remaining).to.equal(150 - 10 - 20);
+                expect((await second).byteLength).to.equal(20);
+            });
+
+            it('should bound the work of async custom calls started in the same tick by the total', async () => {
+                const work = [];
+                const config = Utils.withDecompressBudget({
+                    deflate: async (data, options) => {
+                        try {
+                            const output = inflateSync(data, options);
+                            work.push(output.byteLength);
+                            return output;
+                        } catch (error) {
+                            work.push(options.maxOutputLength);
+                            throw error;
+                        }
+                    },
+                    maxDecompressedSize: 1024
+                });
+                const compressed = await compressDeflate(new Uint8Array(600));
+
+                const outcomes = await Promise.allSettled([1, 2, 3, 4, 5].map(() => decompressDeflate(compressed, config)));
+
+                expect(outcomes[0].value.byteLength).to.equal(600);
+                for (const outcome of outcomes.slice(1)) {
+                    expect(outcome.reason).to.match(/total size of 1024 bytes/);
+                }
+                expect(work).to.have.lengthOf(2);
+                expect(work.reduce((sum, bytes) => sum + bytes, 0)).to.be.at.most(1024 + work.length);
+            });
+
+            it('should reject a missing input without calling the custom function or letting a later call run early', async () => {
+                const {calls, deflate} = getManualCustomFunction();
+                const config = Utils.withDecompressBudget({deflate, maxDecompressedSize: 150});
+                const first = decompressDeflate(new ArrayBuffer(1), config);
+                let missing;
+
+                expect(() => {
+                    missing = Utils.decompress(undefined, Utils.COMPRESSION_METHOD_DEFLATE, 'latin1', 'dataview', config);
+                }).to.not.throw();
+                expect(await getRejection(missing)).to.be.an.instanceof(TypeError);
+                const later = decompressDeflate(new ArrayBuffer(1), config);
+                await new Promise(setImmediate);
+                expect(calls).to.have.lengthOf(1);
+
+                calls[0].resolve(new Uint8Array(10));
+                await first;
+                await new Promise(setImmediate);
+                expect(calls).to.have.lengthOf(2);
+                calls[1].resolve(new Uint8Array(10));
+                expect((await later).byteLength).to.equal(10);
             });
 
             it('should decompress with a custom function that takes only the data', async () => {
@@ -1774,6 +1937,14 @@ describe('utils', () => {
                     () => expect.fail('Decompression should have been rejected.'),
                     (error) => error
                 );
+            }
+
+            function getManualCustomFunction() {
+                const calls = [];
+                const deflate = (data, options) => new Promise((resolve, reject) => {
+                    calls.push({data, options, resolve, reject});
+                });
+                return {calls, deflate};
             }
         });
     });
