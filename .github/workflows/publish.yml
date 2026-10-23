@@ -54,6 +54,8 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
+    # npm's trusted publisher for exifreader names this environment, so a workflow version without it cannot publish.
+    environment: npm
     permissions:
       id-token: write
       contents: read
