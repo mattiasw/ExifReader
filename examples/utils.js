@@ -9,7 +9,7 @@
 
     window.exifReaderError = function (message) {
         var errorContainer = document.querySelector('.error');
-        errorContainer.innerHTML = message;
+        errorContainer.textContent = message;
         errorContainer.classList.remove('hidden');
     };
 
@@ -41,7 +41,8 @@
             description = getDescription(tags[name]);
             if (description !== undefined) {
                 row = document.createElement('tr');
-                row.innerHTML = '<td>' + name + '</td><td>' + description + '</td>';
+                row.appendChild(createCell(name));
+                row.appendChild(createCell(description));
                 tableBody.appendChild(row);
             }
         }
@@ -52,5 +53,11 @@
             return tag.map((item) => item.description).join(', ');
         }
         return tag.description;
+    }
+
+    function createCell(text) {
+        var cell = document.createElement('td');
+        cell.textContent = text;
+        return cell;
     }
 }(window));

@@ -187,6 +187,30 @@ const images = [
             'Modify Date': '1996-06-07 17:58:08',
             'FileType': 'PNG', // File
         }
+    },
+    {
+        url: 'data:image/jpeg;base64,/9j/4QA2RXhpZgAATU0AKgAAAAgAAQEOAAIAAAAUAAAAGgAAAAA8YiBpZD0icHJvYmUiPng8L2I+AP/Z',
+        hasThumbnail: false,
+        tags: {
+            'ImageDescription': '<b id="probe">x</b>',
+        },
+        absentSelector: '#probe'
+    },
+    {
+        url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAAHnRFWHQ8aSBpZD0icHJvYmUtbmFtZSI+azwvaT4AdmFsdWVTZlxFAAAAAElFTkSuQmCC',
+        hasThumbnail: false,
+        tags: {
+            '<i id="probe-name">k</i>': 'value', // PNG text keyword
+        },
+        absentSelector: '#probe-name'
+    },
+    {
+        url: `${Cypress.config('baseUrl')}/probe-error.jpg`,
+        fetchResponse: {status: 500, statusText: '<b id="probe">x</b>'},
+        hasThumbnail: false,
+        tags: {},
+        error: 'Error: Could not fetch file: 500 <b id="probe">x</b>',
+        absentSelector: '#probe'
     }
 ];
 
@@ -213,13 +237,21 @@ for (const moduleType of moduleTypes) {
         for (const image of images) {
             describe(image.name || image.url, function () {
                 beforeEach(function () {
+                    if (usesBrotliWasm(image)) {
+                        removeContentSecurityPolicy(`/${moduleType.path}/`);
+                    }
                     cy.visit(`/${moduleType.path}/`);
                     cy.get('html[data-initialized]');
                 });
 
                 it('loads the tags', function () {
-                    if (image.needsBrotli && (Cypress.isBrowser('chrome') || Cypress.isBrowser('electron'))) {
+                    if (usesBrotliWasm(image)) {
                         setupBrotliDecompress();
+                    }
+                    if (image.fetchResponse) {
+                        cy.window().then((win) => {
+                            cy.stub(win, 'fetch').resolves(new win.Response('', image.fetchResponse));
+                        });
                     }
                     if (image.url) {
                         cy.get('#url').invoke('val', image.url);
@@ -244,9 +276,53 @@ for (const moduleType of moduleTypes) {
                     if (image.error) {
                         cy.contains('.error', image.error);
                     }
+                    if (image.absentSelector) {
+                        cy.get(image.absentSelector).should('not.exist');
+                    }
                 });
             });
         }
+
+        // A describe block, so it runs after the image cases and also catches a policy-less page left in the cache.
+        describe('content security policy', function () {
+            it('blocks an inline event handler', function () {
+                cy.visit(`/${moduleType.path}/`);
+                cy.get('html[data-initialized]');
+                cy.document().then((doc) => {
+                    const violatedDirectives = [];
+                    doc.addEventListener('securitypolicyviolation', (event) => {
+                        violatedDirectives.push(event.effectiveDirective);
+                    });
+                    doc.body.insertAdjacentHTML('beforeend', '<img src="csp-probe.png" onerror="window.cspProbe = 1">');
+                    cy
+                        .wrap(violatedDirectives)
+                        .should((directives) => {
+                            expect(directives.some((directive) => directive.startsWith('script-src'))).to.equal(true);
+                        });
+                });
+                cy.window().then((win) => {
+                    expect(win.cspProbe).to.equal(undefined);
+                });
+            });
+        });
+    });
+}
+
+function usesBrotliWasm(image) {
+    return image.needsBrotli && (Cypress.isBrowser('chrome') || Cypress.isBrowser('electron'));
+}
+
+// The brotli-wasm setup injects an inline module script from jsdelivr, which the page's policy blocks.
+function removeContentSecurityPolicy(path) {
+    cy.intercept({method: 'GET', pathname: path}, (req) => {
+        delete req.headers['if-none-match'];
+        delete req.headers['if-modified-since'];
+        req.continue((res) => {
+            res.body = res.body.replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*>/, '');
+            res.headers['cache-control'] = 'no-store';
+            delete res.headers.etag;
+            delete res.headers['last-modified'];
+        });
     });
 }
 
