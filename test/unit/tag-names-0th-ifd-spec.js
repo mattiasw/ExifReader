@@ -5,7 +5,7 @@
 import {expect} from 'chai';
 import TagNames0thIfd from '../../src/tag-names-0th-ifd.js';
 import TagNamesCommon from '../../src/tag-names-common.js';
-import {LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow} from './test-utils.js';
+import {LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow, swapProperties} from './test-utils.js';
 
 describe('tag-names-0th-ifd', () => {
     it('should have tag ProcessingSoftware', () => {
@@ -460,6 +460,42 @@ describe('tag-names-0th-ifd', () => {
 
     it('should decode a faulty XP tag value to an empty string', () => {
         expect(TagNames0thIfd[0x9c9b].description('<faulty value>')).to.equal('');
+    });
+
+    it('should describe an ASCII-typed XP tag value as its strings', () => {
+        expect(TagNames0thIfd[0x9c9c].description(['Hello world'])).to.equal('Hello world');
+    });
+
+    it('should describe an ASCII-typed XP tag value with a hole at the start as its strings', () => {
+        const value = [];
+        value[1] = 'a';
+        value[3] = 'b';
+        expect(TagNames0thIfd[0x9c9c].description(value)).to.equal('a, b');
+    });
+
+    it('should describe a long sparse ASCII-typed XP tag value without decoding it as bytes', () => {
+        const value = new Array(1024 * 1024);
+        value[1] = 'a';
+        const restoreGlobals = swapProperties(globalThis, {TextDecoder: undefined});
+        let description;
+        try {
+            description = TagNames0thIfd[0x9c9c].description(value);
+        } finally {
+            restoreGlobals();
+        }
+        expect(description).to.equal('a');
+    });
+
+    it('should describe an ASCII-typed XP tag with a faulty offset as the faulty value', () => {
+        expect(TagNames0thIfd[0x9c9c].description(['<faulty value>'])).to.equal('<faulty value>');
+    });
+
+    it('should describe an ASCII-typed XP tag value of only holes as an empty string', () => {
+        expect(TagNames0thIfd[0x9c9c].description(new Array(3))).to.equal('');
+    });
+
+    it('should describe an XP tag value of rational pairs as an empty string', () => {
+        expect(TagNames0thIfd[0x9c9c].description([[1, 2], [3, 4], [5, 6]])).to.equal('');
     });
 
     it('should have tag GDALMetadata', () => {

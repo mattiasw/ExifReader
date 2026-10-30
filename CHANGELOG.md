@@ -30,9 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file can get past these limits. With `linkedom` 0.18.13 a crafted 1 MB
   packet blocked `load()` for about a minute. ExifReader's behaviour has not
   changed.
-- An ASCII-typed UserComment, GPSProcessingMethod or GPSAreaInformation tag is
-  now described as its text (its strings joined with `, `), and its description
-  no longer reads the whole value as character codes.
+- An ASCII-typed UserComment, GPSProcessingMethod, GPSAreaInformation,
+  XPTitle, XPComment, XPAuthor, XPKeywords or XPSubject tag is now described
+  as its text (its strings joined with `, `), and its description no longer
+  reads the whole value as character codes or copies it into a byte buffer.
 - When there is no `domParser` option and no global `DOMParser`, ExifReader
   now skips XMP with a warning if the `@xmldom/xmldom` it loads is older than
   0.9.12 or its version cannot be read. That copy can be the one at the top of

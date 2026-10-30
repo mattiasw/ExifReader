@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {getCharacterArray} from '../../src/utils.js';
-import {getStringValue, getEncodedString, getVersionString, getTableDescription} from '../../src/tag-names-utils.js';
+import {getStringValue, getEncodedString, getVersionString, isStringValue, getStringsText, getTableDescription} from '../../src/tag-names-utils.js';
 import {swapProperties} from './test-utils.js';
 
 describe('tag-names-utils', () => {
@@ -137,6 +137,49 @@ describe('tag-names-utils', () => {
         const {result, calls} = getResultCountingFromCharCode(getVersionString, getCharacterArray(text));
         expect(result).to.equal(text);
         expect(calls).to.be.at.most(10);
+    });
+
+    describe('isStringValue', () => {
+        it('should be true for a value of strings', () => {
+            expect(isStringValue(['a'])).to.equal(true);
+        });
+
+        it('should be true for a value of strings with a hole at the start', () => {
+            const value = [];
+            value[1] = 'x';
+            expect(isStringValue(value)).to.equal(true);
+        });
+
+        it('should be true for a value of rational pairs', () => {
+            expect(isStringValue([[1, 2], [3, 4]])).to.equal(true);
+        });
+
+        it('should be false for a value of character codes', () => {
+            expect(isStringValue([65, 66])).to.equal(false);
+        });
+
+        it('should be false for a value that is not an array', () => {
+            expect(isStringValue(65)).to.equal(false);
+            expect(isStringValue('<faulty value>')).to.equal(false);
+        });
+    });
+
+    describe('getStringsText', () => {
+        it('should join the strings with a comma', () => {
+            expect(getStringsText(['a', 'b'])).to.equal('a, b');
+        });
+
+        it('should skip holes, the one at the start included', () => {
+            const value = [];
+            value[1] = 'a';
+            value[3] = 'b';
+            expect(getStringsText(value)).to.equal('a, b');
+        });
+
+        it('should give an empty string for a value without strings', () => {
+            expect(getStringsText([])).to.equal('');
+            expect(getStringsText([[1, 2], [3, 4]])).to.equal('');
+        });
     });
 
     describe('getTableDescription', () => {
