@@ -28,8 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `linkedom` and other parsers read some markup differently from
   `@xmldom/xmldom` 0.9, well-formed markup included, so with them a crafted
   file can get past these limits. With `linkedom` 0.18.13 a crafted 1 MB
-  packet blocked `load()` for about a minute. ExifReader's behaviour has not
-  changed.
+  packet blocked `load()` for about a minute. The README no longer presents
+  `linkedom` as an equal choice to `@xmldom/xmldom` and says to use it only
+  for files you trust. ExifReader's behaviour has not changed.
 - An ASCII-typed UserComment, GPSProcessingMethod, GPSAreaInformation,
   XPTitle, XPComment, XPAuthor, XPKeywords or XPSubject tag is now described
   as its text (its strings joined with `, `), and its description no longer
