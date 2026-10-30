@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- The README now says that, for a parser you pass in `domParser` or set as
+  the global `DOMParser`, the limits on XMP element nesting (256 levels) and
+  markup nodes (250,000) hold only with `@xmldom/xmldom` 0.9.12 or later.
+  `linkedom` and other parsers read some markup differently from
+  `@xmldom/xmldom` 0.9, well-formed markup included, so with them a crafted
+  file can get past these limits. With `linkedom` 0.18.13 a crafted 1 MB
+  packet blocked `load()` for about a minute. ExifReader's behaviour has not
+  changed.
+
 ## [4.52.0] - 2026-10-23
 
 ### Changed

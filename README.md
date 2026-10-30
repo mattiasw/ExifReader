@@ -724,8 +724,10 @@ const tags = ExifReader.load(fileBuffer, {domParser: new DOMParser({onError: onE
 
 Use `xmldom` 0.9.12 or later. ExifReader limits how deeply XMP elements can
 nest and how many markup nodes a packet can have, and it checks those limits
-the way `xmldom` 0.9 reads the markup. With 0.8, a crafted file can get past
-them and make parsing slow.
+the way `xmldom` 0.9.12 reads the markup. Older versions of `xmldom`,
+`linkedom` and other parsers read some markup differently, well-formed markup
+included, so with them a crafted file can get past the limits and make parsing
+slow.
 
 The `onError` option is needed to avoid a [seemingly infinite loop for some
 XMLs](https://github.com/xmldom/xmldom/issues/501). Unfortunately `linkedom` has
