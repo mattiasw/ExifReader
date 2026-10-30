@@ -5,6 +5,7 @@
 const {expect} = require('chai');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const {rimrafSync} = require('rimraf');
 const {execSync, execFileSync, spawnSync} = require('child_process');
 const Exif = require('./exif');
@@ -26,7 +27,7 @@ const MARKER_FILE_NAME = '.exifreader-custom-build.json';
 
 describe('custom configuration image outputs', () => {
     const ORIGINAL_DIR = process.cwd();
-    const TEMP_PROJECT_DIR = path.join(__dirname, 'tmp');
+    let tempProjectDir;
     const PACKAGE = path.join(__dirname, `../../exifreader-${getVersion()}.tgz`);
 
     const filter = getFilter(process.argv);
@@ -82,7 +83,7 @@ describe('custom configuration image outputs', () => {
                     // below passes even when tree-shaking is broken and the
                     // bundle ships every module (regression in 4.41.1).
                     it('stays substantially smaller than the full bundle', () => {
-                        const customSize = fs.statSync(path.join(TEMP_PROJECT_DIR, 'node_modules', 'exifreader', 'dist', 'exif-reader.js')).size;
+                        const customSize = fs.statSync(path.join(tempProjectDir, 'node_modules', 'exifreader', 'dist', 'exif-reader.js')).size;
                         const fullSize = fs.statSync(path.join(__dirname, '..', '..', 'dist', 'exif-reader.js')).size;
                         expect(customSize).to.be.below(fullSize * configuration.maxDistRatio);
                     });
@@ -142,7 +143,7 @@ describe('custom configuration image outputs', () => {
                         setUp();
                         execFileSync('npm', ['install', '--ignore-scripts', '--loglevel=error', PACKAGE], {stdio: 'ignore'});
                         updatePackageJson(configuration.config);
-                        const binDir = path.join(TEMP_PROJECT_DIR, 'node_modules', '.bin');
+                        const binDir = path.join(tempProjectDir, 'node_modules', '.bin');
                         expect(fs.existsSync(path.join(binDir, 'exifreader')) || fs.existsSync(path.join(binDir, 'exifreader.cmd'))).to.equal(true);
                         checkBeforeBuild = runCli(['build', '--check']);
                         // The sibling link stands in for another project sharing the package manager's store copy.
@@ -150,7 +151,7 @@ describe('custom configuration image outputs', () => {
                             stockBytes[fileName] = fs.readFileSync(path.join(installedDistDir(), fileName));
                             fs.linkSync(path.join(installedDistDir(), fileName), siblingPath(fileName));
                         });
-                        execSync('node node_modules/exifreader/bin/cli.js build', {cwd: TEMP_PROJECT_DIR, stdio: 'ignore'});
+                        execSync('node node_modules/exifreader/bin/cli.js build', {cwd: tempProjectDir, stdio: 'ignore'});
                     });
 
                     after(() => {
@@ -171,7 +172,7 @@ describe('custom configuration image outputs', () => {
                     });
 
                     it('passes build --check with the same config from a --config file', () => {
-                        const configPath = path.join(TEMP_PROJECT_DIR, 'exifreader-config.json');
+                        const configPath = path.join(tempProjectDir, 'exifreader-config.json');
                         fs.writeFileSync(configPath, JSON.stringify(configuration.config));
                         expect(runCli(['build', '--check', '--config', configPath]).status).to.equal(0);
                     });
@@ -230,19 +231,22 @@ describe('custom configuration image outputs', () => {
     function setUp() {
         process.chdir(path.join(__dirname, '../..'));
         execSync('npm pack', {stdio: 'ignore'});
-        fs.mkdirSync(TEMP_PROJECT_DIR);
-        process.chdir(TEMP_PROJECT_DIR);
+        tempProjectDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'exifreader-custom-build-')));
+        process.chdir(tempProjectDir);
         execSync('npm init -y', {stdio: 'ignore'});
     }
 
     function cleanUp() {
         process.chdir(ORIGINAL_DIR);
         rimrafSync(PACKAGE, {disableGlob: true});
-        rimrafSync(TEMP_PROJECT_DIR, {disableGlob: true});
+        if (tempProjectDir) {
+            rimrafSync(tempProjectDir, {disableGlob: true});
+            tempProjectDir = undefined;
+        }
     }
 
     function installedDistDir() {
-        return path.join(TEMP_PROJECT_DIR, 'node_modules', 'exifreader', 'dist');
+        return path.join(tempProjectDir, 'node_modules', 'exifreader', 'dist');
     }
 
     function getModuleMap(config) {
@@ -257,19 +261,19 @@ describe('custom configuration image outputs', () => {
     }
 
     function siblingPath(fileName) {
-        return path.join(TEMP_PROJECT_DIR, `shared-${fileName}`);
+        return path.join(tempProjectDir, `shared-${fileName}`);
     }
 
     function runCli(args, env) {
         return spawnSync('node', [path.join('node_modules', 'exifreader', 'bin', 'cli.js'), ...args], {
-            cwd: TEMP_PROJECT_DIR,
+            cwd: tempProjectDir,
             encoding: 'utf8',
             env: env || process.env
         });
     }
 
     function updatePackageJson(config) {
-        const packageJsonPath = path.join(TEMP_PROJECT_DIR, 'package.json');
+        const packageJsonPath = path.join(tempProjectDir, 'package.json');
         const packageJson = require(packageJsonPath);
         packageJson.exifreader = config;
         fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson));
@@ -281,7 +285,7 @@ describe('custom configuration image outputs', () => {
         // created and now retrieved, i.e. first stringified and then parsed,
         // since some values can't be correctly represented in JSON format.
         const result = JSON.parse(JSON.stringify(
-            await Exif.parse(path.join(FIXTURES_PATH, 'images', imageName), path.join(TEMP_PROJECT_DIR, 'node_modules/exifreader'))
+            await Exif.parse(path.join(FIXTURES_PATH, 'images', imageName), path.join(tempProjectDir, 'node_modules/exifreader'))
         ));
 
         expect(result).to.deep.equal(storedResult);
