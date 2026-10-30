@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `metadataRange.buffer` from `ExifReader.load` with `length: 'auto'` is now
+  trimmed to the metadata for an ArrayBuffer or SharedArrayBuffer created in
+  another realm, such as an iframe, instead of holding the whole input.
+
 ### Security
 
 - The README now says that, for a parser you pass in `domParser` or set as
@@ -17,12 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file can get past these limits. With `linkedom` 0.18.13 a crafted 1 MB
   packet blocked `load()` for about a minute. ExifReader's behaviour has not
   changed.
-
-### Fixed
-
-- `metadataRange.buffer` from `ExifReader.load` with `length: 'auto'` is now
-  trimmed to the metadata for an ArrayBuffer or SharedArrayBuffer created in
-  another realm, such as an iframe, instead of holding the whole input.
+- An ASCII-typed UserComment, GPSProcessingMethod or GPSAreaInformation tag is
+  now described as its text (its strings joined with `, `), and its description
+  no longer reads the whole value as character codes.
 
 ## [4.52.0] - 2026-10-23
 

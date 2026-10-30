@@ -587,6 +587,32 @@ describe('tags-helpers', () => {
         expect(tags.UserComment.description).to.equal('<faulty value>');
     });
 
+    it('should describe an ASCII-typed encoded-string tag as its strings', () => {
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x92\x86\x00\x02' // UserComment, ASCII.
+            + '\x00\x00\x00\x13' // Number of tag items.
+            + '\x00\x00\x00\x12' // Offset to the value.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+            + 'a\x00b\x00c\x00d\x00e\x00f\x00g\x00h\x00XY\x00'
+        );
+        const tags = readIfd(dataView, 'exif', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags.UserComment.description).to.equal('a, b, c, d, e, f, g, h, XY');
+    });
+
+    it('should describe an ASCII-typed encoded-string tag with a faulty offset as the faulty value', () => {
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x92\x86\x00\x02' // UserComment, ASCII.
+            + '\x00\x00\x00\x10' // Number of tag items.
+            + '\x00\x00\x01\x00' // Offset past the end of the data.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+        );
+        const tags = readIfd(dataView, 'exif', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags.UserComment.value).to.deep.equal(['<faulty value>']);
+        expect(tags.UserComment.description).to.equal('<faulty value>');
+    });
+
     it('should describe a single-byte version tag as the byte value', () => {
         const dataView = getDataView(
             '\x00\x01' // Number of fields.

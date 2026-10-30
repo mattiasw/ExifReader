@@ -65,6 +65,42 @@ describe('tag-names-utils', () => {
         expect(getEncodedString(value)).to.equal('\u263a');
     });
 
+    it('should describe a value of strings as its strings joined', () => {
+        expect(getEncodedString(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'A'])).to.equal('a, b, c, d, e, f, g, h, A');
+    });
+
+    it('should describe a sparse value of strings without converting character codes', () => {
+        const value = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+        value[1024 * 1024] = 'A';
+        const {result, calls} = getResultCountingFromCharCode(getEncodedString, value);
+        expect(result).to.equal('a, b, c, d, e, f, g, h, A');
+        expect(calls).to.equal(0);
+    });
+
+    it('should describe a value of strings with a hole at the start as its strings', () => {
+        const value = [];
+        value[1] = 'x';
+        value[3] = 'y';
+        value.length = 8;
+        expect(getEncodedString(value)).to.equal('x, y');
+    });
+
+    it('should skip the holes between the strings of a value', () => {
+        const value = ['ASCII'];
+        value[3] = 'hello';
+        expect(getEncodedString(value)).to.equal('ASCII, hello');
+    });
+
+    it('should describe a value of rational pairs as undefined without converting character codes', () => {
+        const {result, calls} = getResultCountingFromCharCode(getEncodedString, new Array(9).fill([0, 1]));
+        expect(result).to.equal('Undefined');
+        expect(calls).to.equal(0);
+    });
+
+    it('should describe an empty value as undefined', () => {
+        expect(getEncodedString([])).to.equal('Undefined');
+    });
+
     it('should get version string from character values', () => {
         expect(getVersionString([0x30, 0x32, 0x32, 0x30])).to.equal('0220');
     });
@@ -82,6 +118,18 @@ describe('tag-names-utils', () => {
 
     it('should keep the strings of a NUL-separated version value apart', () => {
         expect(getVersionString(['02', '20'])).to.equal('02, 20');
+    });
+
+    it('should get version string from a sparse value of strings without converting character codes', () => {
+        const value = ['02'];
+        value[1024 * 1024] = '20';
+        const {result, calls} = getResultCountingFromCharCode(getVersionString, value);
+        expect(result).to.equal('02, 20');
+        expect(calls).to.equal(0);
+    });
+
+    it('should get an empty version string from a value of rational pairs', () => {
+        expect(getVersionString(new Array(4).fill([0, 1]))).to.equal('');
     });
 
     it('should convert a long version value in chunks', () => {
