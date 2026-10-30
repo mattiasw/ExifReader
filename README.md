@@ -709,10 +709,15 @@ parser needs to have a `parseFromString` method with the same API as the
 [`parseFromString` from the DOMParser Web
 API](https://developer.mozilla.org/en-US/docs/Web/API/DOMParser/parseFromString).
 
-Two libraries have been tested,
-[`xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) and
-[`linkedom`](https://www.npmjs.com/package/linkedom), but more might work if
-they follow the spec.
+Use [`xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) 0.9.12 or later.
+ExifReader limits how deeply XMP elements can nest and how many markup nodes a
+packet can have, and it checks those limits the way `xmldom` reads markup.
+
+[`linkedom`](https://www.npmjs.com/package/linkedom) also parses XMP correctly,
+but use it only for files you trust. ExifReader's limits do not hold with it: a
+crafted 1 MB file can block parsing for about a minute, and a larger one for
+longer. `linkedom` can also get stuck on some XML (see below). Other parsers
+may work if they follow the spec, with the same caveat.
 
 Here is an example using `xmldom`:
 
@@ -722,14 +727,19 @@ import {DOMParser, onErrorStopParsing} from '@xmldom/xmldom';
 const tags = ExifReader.load(fileBuffer, {domParser: new DOMParser({onError: onErrorStopParsing})});
 ```
 
-Use `xmldom` 0.9.12 or later. ExifReader limits how deeply XMP elements can
-nest and how many markup nodes a packet can have, and it checks those limits
-the way `xmldom` 0.9.12 reads the markup. Older versions of `xmldom`,
-`linkedom` and other parsers read some markup differently, well-formed markup
-included, so with them a crafted file can get past the limits and make parsing
-slow. ExifReader also skips an XMP packet that has a DOCTYPE or another markup
-declaration, since a parser such as a browser's native `DOMParser` can expand
-the entities declared in a DOCTYPE into markup the limits do not see.
+The `onError` option is needed to avoid a [seemingly infinite loop for some
+XMLs](https://github.com/xmldom/xmldom/issues/501). Unfortunately `linkedom` has
+the same problem but does not have this option and will therefore get stuck on
+these XMLs. If this happens to you, switch to `xmldom` and pass in the `onError`
+option. (NOTE: The native `DOMParser` that a web browser uses does not seem to
+have this issue.)
+
+Versions of `xmldom` older than 0.9.12 read some markup differently,
+well-formed markup included, so with them a crafted file can get past the
+limits and make parsing slow. ExifReader also skips an XMP packet that has a
+DOCTYPE or another markup declaration, since a parser such as a browser's
+native `DOMParser` can expand the entities declared in a DOCTYPE into markup
+the limits do not see.
 
 If you pass no `domParser` and there is no global `DOMParser`, ExifReader tries
 to load `@xmldom/xmldom` itself. It then skips XMP, with a warning, if the copy
@@ -739,13 +749,6 @@ example when ExifReader is installed without optional dependencies, or when an
 npm override, a Yarn resolution or a pnpm override pins `@xmldom/xmldom` below
 0.9.12. Install `@xmldom/xmldom` 0.9.12 or later, or pass a parser in the
 `domParser` option.
-
-The `onError` option is needed to avoid a [seemingly infinite loop for some
-XMLs](https://github.com/xmldom/xmldom/issues/501). Unfortunately `linkedom` has
-the same problem but does not have this option and will therefore get stuck on
-these XMLs. If this happens to you, switch to `xmldom` and pass in the `onError`
-option. (NOTE: The native `DOMParser` that a web browser uses does not seem to
-have this issue.)
 
 #### Using React Native
 
