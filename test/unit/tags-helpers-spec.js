@@ -600,6 +600,19 @@ describe('tags-helpers', () => {
         expect(tags.UserComment.description).to.equal('a, b, c, d, e, f, g, h, XY');
     });
 
+    it('should describe an ASCII-typed XP tag starting with a null character as its strings', () => {
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x9c\x9c\x00\x02' // XPComment, ASCII.
+            + '\x00\x00\x00\x06' // Number of tag items.
+            + '\x00\x00\x00\x12' // Offset to the value.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+            + '\x00a\x00\x00b\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags.XPComment.description).to.equal('a, b');
+    });
+
     it('should describe an ASCII-typed encoded-string tag with a faulty offset as the faulty value', () => {
         const dataView = getDataView(
             '\x00\x01' // Number of fields.

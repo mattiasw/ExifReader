@@ -4,7 +4,7 @@
 
 import TagNamesCommon from './tag-names-common.js';
 import {joinMapped} from './utils.js';
-import {getTableDescription} from './tag-names-utils.js';
+import {getTableDescription, isStringValue, getStringsText} from './tag-names-utils.js';
 
 export default {
     0x000b: 'ProcessingSoftware',
@@ -384,6 +384,10 @@ function decodeXPValue(value) {
     if (!Array.isArray(value)) {
         // A one-element value arrives as a bare number, which Uint8Array would take as a length.
         return '';
+    }
+    if (isStringValue(value)) {
+        // An ASCII-typed value holds strings, not UCS-2 bytes.
+        return getStringsText(value);
     }
     // The XP tags are encoded as UCS-2 which uses two bytes per character but
     // it's close to UTF-16 so we can use that to decode them.

@@ -8,7 +8,7 @@ export {getStringValue};
 
 export function getEncodedString(value) {
     if (isStringValue(value)) {
-        return value.filter(isString).join(', ') || 'Undefined';
+        return getStringsText(value) || 'Undefined';
     }
     if (value.length >= 8) {
         const encoding = getStringValue(value.slice(0, 8));
@@ -42,18 +42,33 @@ export function getEncodedString(value) {
 export function getVersionString(value) {
     if (Array.isArray(value)) {
         if (isStringValue(value)) {
-            return value.filter(isString).join(', ');
+            return getStringsText(value);
         }
         return getByteString(value);
     }
     return value;
 }
 
-// Character codes are numbers. An ASCII-typed value holds strings, with a hole
-// where an empty piece was, index 0 included; a rational value holds number
-// pairs. Neither has character codes to convert.
-function isStringValue(value) {
+/**
+ * Tells whether a value is an array without character codes. Character codes
+ * are numbers. An ASCII-typed value holds strings, with a hole where an empty
+ * piece was, index 0 included; a rational value holds number pairs. Neither
+ * has character codes to convert, and an empty array has none either.
+ * @param {*} value
+ * @returns {boolean} True for an array whose element 0 is not a number.
+ */
+export function isStringValue(value) {
     return Array.isArray(value) && typeof value[0] !== 'number';
+}
+
+/**
+ * Describes an ASCII-typed value as its strings.
+ * @param {Array} value
+ * @returns {string} The strings joined with ', ', holes and non-strings
+ *     skipped, or '' when there are none.
+ */
+export function getStringsText(value) {
+    return value.filter(isString).join(', ');
 }
 
 function isString(item) {
