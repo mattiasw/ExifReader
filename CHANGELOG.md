@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crafted 1 MB packet blocked `load()` for about 27 seconds. To keep parsing
   XMP, have `@xmldom/xmldom` 0.9.12 or later where Node resolves it, or pass a
   parser in the `domParser` option.
+- XMP packets with a DOCTYPE or another markup declaration are now left out
+  before parsing. A browser's native `DOMParser` expands the internal entities
+  declared in a DOCTYPE into elements, which got past the limits on XMP
+  element nesting (256 levels) and markup nodes (250,000).
 
 ## [4.52.0] - 2026-10-23
 

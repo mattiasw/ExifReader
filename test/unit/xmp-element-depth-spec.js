@@ -116,8 +116,7 @@ describe('xmp-element-depth', () => {
         for (const [name, endTag] of [
             ['a comment start', '</a\n<!-->'],
             ['a comment start after a carriage return', '</a\r<!-->'],
-            ['a processing instruction start', '</a\n<?>'],
-            ['a declaration with a quote', '</a\n<!x ">']
+            ['a processing instruction start', '</a\n<?>']
         ]) {
             it(`should end an end tag at its first > when ${name} follows its name`, () => {
                 const xmlString = '<a>' + endTag + getTower(BOUND + 1, '', '<a xmlns:b="u">');
@@ -143,7 +142,9 @@ describe('xmp-element-depth', () => {
                 expect(exceedsMarkupBounds(xmlString, 1)).to.be.true;
             });
         }
+    });
 
+    describe('markup declarations', () => {
         for (const [name, doctype] of [
             ['an external ID whose literal holds a comment start', '<!DOCTYPE r SYSTEM "a><!--">'],
             ['a public ID whose literals hold markup', '<!DOCTYPE r PUBLIC "<a>" \'a>"<b>\'>'],
@@ -157,10 +158,49 @@ describe('xmp-element-depth', () => {
             ],
             ['a lowercase doctype', '<!doctype r [<!ENTITY e "x><!--">]>']
         ]) {
-            it(`should skip a DOCTYPE with ${name} and still count the elements after it`, () => {
-                expect(exceedsMarkupBounds(`${doctype}<r></r><!-- -->`, 1)).to.be.false;
-                const xmlString = doctype + getTower(BOUND + 1, '', '<a xmlns:b="u">') + '<!-- -->';
-                expect(exceedsMarkupBounds(xmlString, BOUND)).to.be.true;
+            it(`should reject a DOCTYPE with ${name}`, () => {
+                expect(exceedsMarkupBounds(`${doctype}<r></r>`, Infinity, Infinity)).to.be.true;
+            });
+        }
+
+        for (const [name, xmlString] of [
+            ['a DOCTYPE whose internal entity expands into elements', '<!DOCTYPE r [<!ENTITY e "<a><a><a></a></a></a>">]><r>&e;&e;</r>'],
+            ['a DOCTYPE after the root', '<r></r><!DOCTYPE r>'],
+            ['a DOCTYPE inside the root', '<r><!DOCTYPE r></r>'],
+            ['an entity declaration without a DOCTYPE', '<r><!ENTITY e "x"></r>'],
+            ['an unterminated DOCTYPE with a double-quoted literal', '<!DOCTYPE r "<a><a>'],
+            ['an unterminated entity value', '<!DOCTYPE r [<!ENTITY e "<a><a>'],
+            ['an unterminated DOCTYPE with a single-quoted literal', '<!DOCTYPE r SYSTEM \'<a><a>'],
+            ['an unterminated DOCTYPE', '<!DOCTYPE r'],
+            ['an unterminated declaration inside the root', '<r><!x'],
+            ['a processing instruction holding a DOCTYPE', '<r><?p <!DOCTYPE r> ?></r>'],
+            ['a processing instruction holding a declaration before the root', '<?p <!x?><r/>']
+        ]) {
+            it(`should reject ${name}`, () => {
+                expect(exceedsMarkupBounds(xmlString, Infinity, Infinity)).to.be.true;
+            });
+        }
+
+        for (const [name, xmlString] of [
+            ['a comment', '<r><!-- <!DOCTYPE r> --></r>'],
+            ['a CDATA section', '<r><![CDATA[ <!DOCTYPE r> ]]></r>']
+        ]) {
+            it(`should not reject DOCTYPE text inside ${name}`, () => {
+                expect(exceedsMarkupBounds(xmlString, 1)).to.be.false;
+            });
+        }
+
+        // A parser that recovers from errors ends these processing instructions
+        // early and reads the DOCTYPE; the ?> the scan ends them at is in entity f.
+        for (const [name, prolog] of [
+            ['a processing instruction without a target', '<? '],
+            ['an XML declaration ended by >', '<?xml version="1.0" >'],
+            ['an XML declaration with a malformed attribute', '<?xml version="1.0" x>']
+        ]) {
+            it(`should reject a DOCTYPE after ${name}`, () => {
+                const xmlString = prolog + '<!DOCTYPE r [<!ENTITY e "<a><a></a></a>"><!ENTITY f "?>">]><r>&e;&e;</r>';
+                expect(exceedsMarkupBounds(xmlString, 256, 250000)).to.be.true;
+                expect(exceedsMarkupBounds(xmlString, Infinity, Infinity)).to.be.true;
             });
         }
     });
@@ -234,11 +274,6 @@ describe('xmp-element-depth', () => {
             '<r><!-- <a><a>',
             '<r><![CDATA[ <a><a>',
             '<r><? <a><a>',
-            '<!DOCTYPE r "<a><a>',
-            '<!DOCTYPE r [<!ENTITY e "<a><a>',
-            '<!DOCTYPE r SYSTEM \'<a><a>',
-            '<!DOCTYPE r',
-            '<r><!x',
             '<r a="',
             '<r a=\'x',
             '<r',
@@ -260,9 +295,7 @@ describe('xmp-element-depth', () => {
             ['namespace declarations', '<r xmlns="u"><a xmlns:b="v"/></r>', 4],
             ['comments', '<!-- c --><r><!-- <a> --></r>', 3],
             ['processing instructions', '<?xml version="1.0"?><r><?p <a> ?></r>', 3],
-            ['CDATA sections', '<r><![CDATA[<a>]]><![CDATA[x]]></r>', 3],
-            ['a DOCTYPE', '<!DOCTYPE r><r/>', 2],
-            ['the declarations in an internal subset', '<!DOCTYPE r [<!ENTITY e "x"><!ELEMENT r ANY>]><r/>', 4]
+            ['CDATA sections', '<r><![CDATA[<a>]]><![CDATA[x]]></r>', 3]
         ]) {
             it(`should count ${name}`, () => {
                 expectNodeCount(xmlString, nodeCount);
@@ -438,7 +471,8 @@ describe('xmp-element-depth', () => {
             ['many tags with an unclosed single quote', '<a b=\'x '],
             ['many end tags without >', '</a '],
             ['many < characters', '<'],
-            ['a DOCTYPE with many [', '<!DOCTYPE r ['],
+            ['many processing instructions', '<?p ?>'],
+            ['many processing instructions with text', '<?p ' + 'x'.repeat(50) + '?>'],
             ['many shallow towers', getTower(255)],
             ['many self-closing siblings', '<a b="1"/>']
         ]) {

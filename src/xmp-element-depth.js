@@ -10,16 +10,19 @@ const NAME_END_CHARACTERS = ' \t\r\n/><="\'';
 /**
  * Tells whether an XML string has elements nested deeper than a bound or more
  * markup nodes than a bound, in linear time. The nodes are elements, attributes
- * (namespace declarations included), comments, processing instructions, CDATA
- * sections and <! declarations together; text is not counted. Malformed markup
- * may be counted deeper and with more nodes than @xmldom/xmldom 0.9.12 builds,
- * never shallower or with fewer.
+ * (namespace declarations included), comments, processing instructions and
+ * CDATA sections together; text is not counted. Malformed markup may be counted
+ * deeper and with more nodes than @xmldom/xmldom 0.9.12 builds, never shallower
+ * or with fewer. A markup declaration such as a DOCTYPE also makes it true,
+ * unless it is in a comment, a CDATA section or an end tag, and so does one in a
+ * processing instruction: a parser may expand an entity declared there into
+ * markup the scan cannot count.
  *
  * @param {string} xmlString
  * @param {number} maxDepth The deepest allowed element, the root being 1.
  * @param {number} [maxNodes] The most markup nodes allowed.
- * @returns {boolean} True as soon as an element is nested deeper than maxDepth
- * or the markup nodes are more than maxNodes.
+ * @returns {boolean} True as soon as an element is nested deeper than maxDepth,
+ * the markup nodes are more than maxNodes, or a markup declaration is found.
  */
 export function exceedsMarkupBounds(xmlString, maxDepth, maxNodes = Infinity) {
     let depth = 0;
@@ -33,11 +36,15 @@ export function exceedsMarkupBounds(xmlString, maxDepth, maxNodes = Infinity) {
             nodeCount++;
             index = skipPast(xmlString, index + 9, ']]>');
         } else if (hasSubstringAt(xmlString, '<?', index)) {
+            const endIndex = skipPast(xmlString, index + 2, '?>');
+            // A parser that recovers from errors may end the instruction early.
+            if (xmlString.slice(index + 2, endIndex).indexOf('<!') !== -1) {
+                return true;
+            }
             nodeCount++;
-            index = skipPast(xmlString, index + 2, '?>');
+            index = endIndex;
         } else if (hasSubstringAt(xmlString, '<!', index)) {
-            nodeCount++;
-            index = skipDeclaration(xmlString, index + 2);
+            return true;
         } else if (hasSubstringAt(xmlString, '</', index)) {
             depth = Math.max(depth - 1, 0);
             // xmldom ends an end tag at its first >, whatever comes between.
@@ -60,23 +67,6 @@ export function exceedsMarkupBounds(xmlString, maxDepth, maxNodes = Infinity) {
         index = xmlString.indexOf('<', index);
     }
     return false;
-}
-
-// Stopping at [ lets the main loop read the declarations of a DOCTYPE internal
-// subset one by one.
-function skipDeclaration(xmlString, fromIndex) {
-    for (let index = fromIndex; index < xmlString.length; index++) {
-        const character = xmlString.charAt(index);
-        if (character === '"' || character === '\'') {
-            index = xmlString.indexOf(character, index + 1);
-            if (index === -1) {
-                return xmlString.length;
-            }
-        } else if (character === '>' || character === '[') {
-            return index + 1;
-        }
-    }
-    return xmlString.length;
 }
 
 // A start tag cannot hold a <, so every search in it stops at the next <, which

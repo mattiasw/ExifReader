@@ -3104,6 +3104,24 @@ describe('xmp-tags', function () {
         });
     });
 
+    describe('markup declarations before parsing', () => {
+        const packet = getXmlString('<rdf:Description xmlns:xmp="http://ns.example.com/xmp" xmp:A="1"/>');
+        const packetWithDoctype = '<!DOCTYPE r [<!ENTITY e "<a><a><a></a></a></a>">]>' + packet;
+
+        it('should not parse a packet with a DOCTYPE', () => {
+            const {tags, received} = readChunksWithStubParser([packetWithDoctype]);
+
+            expect(received).to.deep.equal([]);
+            expect(tags).to.deep.equal({});
+        });
+
+        it('should parse the same packet without the DOCTYPE', () => {
+            const {received} = readChunksWithStubParser([packet]);
+
+            expect(received).to.deep.equal([packet]);
+        });
+    });
+
     describe('bounded chunk allocation (GHSA-q53f-v5gx-7j78)', () => {
         it('does not allocate beyond the available data when a chunk declares a length larger than the buffer', () => {
             const xmlString = getXmlString('');
