@@ -926,8 +926,7 @@ function isParsedMetadataBlock(format, blockType) {
         case 'file':
             return format === 'png' ? Constants.USE_PNG_FILE : Constants.USE_FILE;
         case 'exif':
-            // The PNG finder never gated eXIf, so it is listed in every build.
-            return format === 'png' || Constants.USE_EXIF;
+            return Constants.USE_EXIF;
         case 'jfif':
             return Constants.USE_JFIF;
         case 'xmp':

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A custom build with `png` and without `exif` no longer lists a PNG's eXIf
+  chunk in `metadataRange`, a chunk such a build does not parse.
+  `metadataRange.end` can be smaller as a result, and `length: 'auto'` rejects
+  a PNG whose only listed chunk was that one.
+
 ### Fixed
 
 - `metadataRange.buffer` from `ExifReader.load` with `length: 'auto'` is now

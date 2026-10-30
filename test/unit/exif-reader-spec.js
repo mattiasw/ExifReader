@@ -2761,10 +2761,10 @@ describe('exif-reader', function () {
                     expect(getBlockTypes(await loadPng())).to.deep.equal(ALL_KINDS);
                 });
 
-                it('should keep the eXIf exif block without USE_EXIF', async () => {
+                it('should leave out exif without USE_EXIF', async () => {
                     swap(Constants, {USE_EXIF: false});
 
-                    expect(getBlockTypes(await loadPng())).to.deep.equal(ALL_KINDS);
+                    expect(getBlockTypes(await loadPng())).to.deep.equal(['file', 'xmp', 'png', 'png', 'icc']);
                 });
 
                 it('should let file follow USE_PNG_FILE', async () => {
