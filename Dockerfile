@@ -59,18 +59,12 @@ if [ -f /exifreader.tgz ]; then
 fi
 # Load custom config file if it exists.
 node custom-config.js
-# Rebuild if there was a custom config file.
+# Build if there was a custom config file.
 if [ -f /custom.json ]; then
-    if [ "$pkg_mgr" = "yarn" ]; then
-        yarn rebuild exifreader || (cat /tmp/*/build.log && false)
-    elif [ "$pkg_mgr" = "yarn1" ]; then
-        if [ -f /exifreader.tgz ]; then
-            # There doesn't seem to be any way to rebuild a locally built package with yarn 1.
-            yarn remove exifreader
-        fi
-        yarn add exifreader
+    if [ "$pkg_mgr" = "yarn" ] || [ "$pkg_mgr" = "yarn1" ]; then
+        yarn exifreader build
     else
-        npm rebuild exifreader
+        npx exifreader build
     fi
 fi
 # List size of custom-built bundle.
