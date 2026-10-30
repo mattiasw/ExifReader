@@ -33,6 +33,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An ASCII-typed UserComment, GPSProcessingMethod or GPSAreaInformation tag is
   now described as its text (its strings joined with `, `), and its description
   no longer reads the whole value as character codes.
+- When there is no `domParser` option and no global `DOMParser`, ExifReader
+  now skips XMP with a warning if the `@xmldom/xmldom` it loads is older than
+  0.9.12 or its version cannot be read. That copy can be the one at the top of
+  `node_modules` instead of ExifReader's own, when ExifReader is installed
+  without optional dependencies or when an npm override, a Yarn resolution or
+  a pnpm override pins `@xmldom/xmldom` below 0.9.12. ExifReader checks the
+  limits on XMP element nesting and markup nodes the way 0.9.12 reads markup,
+  so with an older copy a crafted file could make parsing slow: with 0.8.15 a
+  crafted 1 MB packet blocked `load()` for about 27 seconds. To keep parsing
+  XMP, have `@xmldom/xmldom` 0.9.12 or later where Node resolves it, or pass a
+  parser in the `domParser` option.
 
 ## [4.52.0] - 2026-10-23
 

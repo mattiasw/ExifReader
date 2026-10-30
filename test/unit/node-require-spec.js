@@ -8,6 +8,7 @@ import {swapProperties} from './test-utils.js';
 
 const SENTINEL = {sentinel: true};
 const XMLDOM = '@xmldom/xmldom';
+const XMLDOM_PACKAGE_JSON = '@xmldom/xmldom/package.json';
 
 describe('node-require', () => {
     let restores;
@@ -96,6 +97,17 @@ describe('node-require', () => {
 
             expect(NodeRequire.optionalPackage(XMLDOM)).to.equal(SENTINEL);
             expect(requested).to.deep.equal([XMLDOM]);
+        });
+
+        it('returns what __non_webpack_require__ gives for @xmldom/xmldom/package.json', () => {
+            const requested = [];
+            swapWebpackRequire((moduleName) => {
+                requested.push(moduleName);
+                return SENTINEL;
+            });
+
+            expect(NodeRequire.optionalPackage(XMLDOM_PACKAGE_JSON)).to.equal(SENTINEL);
+            expect(requested).to.deep.equal([XMLDOM_PACKAGE_JSON]);
         });
 
         it('returns undefined when __non_webpack_require__ is absent, whatever the main module can resolve', () => {

@@ -7,7 +7,7 @@ import {expect} from 'chai';
 const SURROUNDING_SIZE = 200;
 import {DOMParser as XmldomDomParser, onErrorStopParsing} from '@xmldom/xmldom';
 import {DOMParser as LinkedomDomParser} from 'linkedom';
-import {getConsoleWarnSpy, getDataView, swapProperties, LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow} from './test-utils.js';
+import {getDataView, swapProperties, LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow} from './test-utils.js';
 import {createRequire} from 'node:module';
 import DomParserModule from '../../src/dom-parser.js';
 import TextDecoderModule from '../../src/text-decoder.js';
@@ -59,31 +59,38 @@ describe('xmp-tags', function () {
     });
 
     describe('without a DOM parser', () => {
+        const WARNING = 'Warning: XMP tags are skipped because the @xmldom/xmldom that was found is version 0.8.15. ExifReader needs 0.9.12 or later, or a parser passed in the domParser option.';
         let restoreDomParser;
+        let restoreConsole;
+        let warnings;
 
         beforeEach(() => {
             restoreDomParser = swapProperties(DomParserModule, {
                 get() {
-                    return undefined;
+                    return {parser: undefined, warning: WARNING};
+                }
+            });
+            warnings = [];
+            restoreConsole = swapProperties(console, {
+                warn(message) {
+                    warnings.push(message);
                 }
             });
         });
 
         afterEach(() => {
+            restoreConsole();
             restoreDomParser();
         });
 
-        it('should give a warning if a DOM parser is not available', () => {
-            const warnSpy = getConsoleWarnSpy();
+        it('should print the warning the DOM parser module gives, once, if there is no parser', () => {
             const xmlString = getXmlString('');
             const dataView = getDataView(xmlString);
 
             const tags = XmpTags.read(dataView, [{dataOffset: 0, length: xmlString.length}]);
 
-            expect(warnSpy.hasWarned).to.be.true;
+            expect(warnings).to.deep.equal([WARNING]);
             expect(tags).to.deep.equal({});
-
-            warnSpy.reset();
         });
     });
 
