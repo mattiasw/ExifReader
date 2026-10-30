@@ -968,12 +968,17 @@ given, so pass them the same one as the build: a project that builds with
 configuration is found and `--check` exits with 0.
 
 **Deprecated: automatic rebuild on install.** Older versions rebuilt the library
-automatically through an npm `postinstall` script, so a plain install or `npm
-rebuild exifreader` (or `yarn rebuild exifreader` with yarn 2+, or `yarn add
-exifreader` with yarn 1) produced the custom bundle. This still works in v4 but
-is deprecated and will be removed in v5, because npm is phasing out automatic
-install scripts. Use `npx exifreader build` instead, which also avoids the yarn
-2+ `node_modules` and `nodeLinker` caveats.
+automatically through an npm `postinstall` script, so a plain install or
+`npm rebuild exifreader` (or `yarn add exifreader` with yarn 1) produced the
+custom bundle. This still works in v4 but is deprecated and will be removed in
+v5, because npm is phasing out automatic install scripts. Yarn 4.14 and later
+disable dependency build scripts by default (an install prints
+`YN0004 ... all build scripts have been disabled`), so there the install-time
+build only runs if you enable build scripts, with Yarn's `enableScripts` setting
+or the `built` flag in `dependenciesMeta`. Use `npx exifreader build` (or
+`yarn exifreader build` with Yarn) instead, which does not depend on build
+scripts. With Yarn 2+ it needs a `node_modules` install
+(`nodeLinker: node-modules` in `.yarnrc.yml`), not Plug'n'Play.
 
 If you are using `vite`, you will need to [clear the dependency cache](https://vitejs.dev/guide/dep-pre-bundling.html#file-system-cache)
 after a rebuild.
