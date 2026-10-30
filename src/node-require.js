@@ -49,7 +49,7 @@ function firstLoaded(name, loaders) {
 
 // Literal names make webpack emit require('fs') and so on, which bundlers and
 // file tracers follow. No typeof guard: webpack may not rewrite the identifier there.
-// A try in this function makes bundlers treat fs and @xmldom/xmldom as optional.
+// A try in this function makes bundlers treat fs, @xmldom/xmldom and its package.json as optional.
 function webpackRequire(name) {
     switch (name) {
         case 'fs':
@@ -67,6 +67,13 @@ function webpackRequire(name) {
             // eslint-disable-next-line no-useless-catch
             try {
                 return __non_webpack_require__('@xmldom/xmldom');
+            } catch (error) {
+                throw error;
+            }
+        case '@xmldom/xmldom/package.json':
+            // eslint-disable-next-line no-useless-catch
+            try {
+                return __non_webpack_require__('@xmldom/xmldom/package.json');
             } catch (error) {
                 throw error;
             }

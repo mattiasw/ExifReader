@@ -50,7 +50,7 @@ const LOAD_LEGS = [
     {script: 'consumer-load.cjs', loader: 'dist', domParser: false, expectsXmp: true},
     {script: 'consumer-load.mjs', loader: 'dist', domParser: false, expectsXmp: true}
 ];
-const DIST_NODE_MODULES = ['fs', 'http', 'https', '@xmldom/xmldom'];
+const DIST_NODE_MODULES = ['fs', 'http', 'https', '@xmldom/xmldom', '@xmldom/xmldom/package.json'];
 
 const OPTIONAL_PACKAGE = '@xmldom/xmldom';
 const BUNDLE_SPECIFIERS = ['exifreader', 'exifreader/dist/exif-reader.js'];

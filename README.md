@@ -729,6 +729,15 @@ the way `xmldom` 0.9.12 reads the markup. Older versions of `xmldom`,
 included, so with them a crafted file can get past the limits and make parsing
 slow.
 
+If you pass no `domParser` and there is no global `DOMParser`, ExifReader tries
+to load `@xmldom/xmldom` itself. It then skips XMP, with a warning, if the copy
+it finds is older than 0.9.12 or its version cannot be read. That copy can be
+the one at the top of your `node_modules` instead of ExifReader's own, for
+example when ExifReader is installed without optional dependencies, or when an
+npm override, a Yarn resolution or a pnpm override pins `@xmldom/xmldom` below
+0.9.12. Install `@xmldom/xmldom` 0.9.12 or later, or pass a parser in the
+`domParser` option.
+
 The `onError` option is needed to avoid a [seemingly infinite loop for some
 XMLs](https://github.com/xmldom/xmldom/issues/501). Unfortunately `linkedom` has
 the same problem but does not have this option and will therefore get stuck on

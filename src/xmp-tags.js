@@ -139,9 +139,9 @@ function readTags(tags, chunkDataView, domParser) {
 }
 
 function getDocument(chunkDataView, _domParser) {
-    const domParser = DOMParser.get(_domParser);
+    const {parser: domParser, warning} = DOMParser.get(_domParser);
     if (!domParser) {
-        console.warn('Warning: DOMParser is not available. It is needed to be able to parse XMP tags.'); // eslint-disable-line no-console
+        console.warn(warning); // eslint-disable-line no-console
         throw new Error();
     }
 
