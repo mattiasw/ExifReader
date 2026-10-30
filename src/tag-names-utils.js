@@ -7,6 +7,9 @@ import {getStringValueFromArray as getStringValue, getByteString} from './utils.
 export {getStringValue};
 
 export function getEncodedString(value) {
+    if (isStringValue(value)) {
+        return value.filter(isString).join(', ') || 'Undefined';
+    }
     if (value.length >= 8) {
         const encoding = getStringValue(value.slice(0, 8));
 
@@ -38,12 +41,19 @@ export function getEncodedString(value) {
  */
 export function getVersionString(value) {
     if (Array.isArray(value)) {
-        if (value.some(isString)) {
+        if (isStringValue(value)) {
             return value.filter(isString).join(', ');
         }
         return getByteString(value);
     }
     return value;
+}
+
+// Character codes are numbers. An ASCII-typed value holds strings, with a hole
+// where an empty piece was, index 0 included; a rational value holds number
+// pairs. Neither has character codes to convert.
+function isStringValue(value) {
+    return Array.isArray(value) && typeof value[0] !== 'number';
 }
 
 function isString(item) {
