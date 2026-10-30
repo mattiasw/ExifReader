@@ -727,7 +727,9 @@ nest and how many markup nodes a packet can have, and it checks those limits
 the way `xmldom` 0.9.12 reads the markup. Older versions of `xmldom`,
 `linkedom` and other parsers read some markup differently, well-formed markup
 included, so with them a crafted file can get past the limits and make parsing
-slow.
+slow. ExifReader also skips an XMP packet that has a DOCTYPE or another markup
+declaration, since a parser such as a browser's native `DOMParser` can expand
+the entities declared in a DOCTYPE into markup the limits do not see.
 
 If you pass no `domParser` and there is no global `DOMParser`, ExifReader tries
 to load `@xmldom/xmldom` itself. It then skips XMP, with a warning, if the copy

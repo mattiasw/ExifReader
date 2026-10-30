@@ -219,7 +219,7 @@ function trimAfterPacketTrailer(xmlSource) {
 
 function parseFromString(domParser, xmlString, isRetry = false) {
     if (exceedsMarkupBounds(xmlString, MAX_ELEMENT_DEPTH, MAX_MARKUP_NODES)) {
-        throw new ParseError(`XMP elements nested deeper than ${MAX_ELEMENT_DEPTH} levels or more than ${MAX_MARKUP_NODES} markup nodes.`);
+        throw new ParseError(`XMP has elements nested deeper than ${MAX_ELEMENT_DEPTH} levels, more than ${MAX_MARKUP_NODES} markup nodes, or a markup declaration.`);
     }
     try {
         const doc = domParser.parseFromString(xmlString, 'application/xml');
