@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A PNG's text chunks (tEXt, iTXt and zTXt) are read up to the first 4096;
+  the rest are left out of the tags but still covered by `metadataRange`.
+  Real files carry a few text chunks, a few dozen at most; the bound keeps
+  a crafted file with hundreds of thousands of them from exhausting memory.
+
 ## [4.53.0] - 2026-11-02
 
 ### Added

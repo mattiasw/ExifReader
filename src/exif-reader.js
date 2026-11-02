@@ -7,7 +7,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import {objectAssign, decompress, withDecompressBudget, COMPRESSION_METHOD_BROTLI, getDataView, getDataViewFromBytes, getByteString, getStringValueFromArray, assertPromiseSupport, setProperty, isThenable, MAX_METADATA_BLOCKS} from './utils.js';
+import {objectAssign, decompress, withDecompressBudget, getCompressionMethod, getDataView, getDataViewFromBytes, getByteString, getStringValueFromArray, assertPromiseSupport, setProperty, isThenable, MAX_METADATA_BLOCKS} from './utils.js';
 import {isFilePathOrURL, isBrowserFileObject, loadFile, loadFileObject} from './file-loaders.js';
 import {makeLoadAuto, validateAutoOptions} from './load-auto.js';
 import Constants from './constants.js';
@@ -15,6 +15,7 @@ import {getCalculatedGpsValue} from './tag-names-utils.js';
 import ByteOrder from './byte-order.js';
 import {getTiffHeaderOffset} from './image-header-iso-bmff.js';
 import ImageHeader from './image-header.js';
+import {TYPE_ZTXT} from './image-header-png.js';
 import Tags from './tags.js';
 import TagNames0thIfd from './tag-names-0th-ifd.js';
 import TagNamesExifIfd from './tag-names-exif-ifd.js';
@@ -112,56 +113,36 @@ export function loadView(
     let embeddedXmpStepForFlat = undefined;
     let decompressedApplicationNotesSize = 0;
 
-    const {
-        fileType,
-        fileDataOffset,
-        jfifDataOffset,
-        tiffHeaderOffset,
-        iptcDataOffset,
-        xmpChunks,
-        iccChunks,
-        mpfDataOffset,
-        pngHeaderOffset,
-        pngTextChunks,
-        pngChunkOffsets,
-        vp8xChunkOffset,
-        gifHeaderOffset,
-        brobExifChunk,
-        brobXmpChunk,
-        jxlCodestreamOffset,
-        imageDimensionsOffset,
-        pixelInformationOffset,
-        metadataBlocks,
-        metadataTruncated,
-        exifDataView,
-        xmpDataView
-    } = ImageHeader.parseAppMarkers(dataView, async, expanded && includeOffsets);
+    const {fileType, blocks: allBlocks, ranges, truncated} = ImageHeader.parseAppMarkers(dataView, expanded && includeOffsets);
+    const blocks = async ? allBlocks : allBlocks.filter((block) => !isHiddenInSyncMode(block));
 
-    const fileHasMetaData = hasPotentialMetaData({
-        fileType,
-        fileDataOffset,
-        jfifDataOffset,
-        tiffHeaderOffset,
-        iptcDataOffset,
-        xmpChunks,
-        iccChunks,
-        mpfDataOffset,
-        pngHeaderOffset,
-        pngTextChunks,
-        pngChunkOffsets,
-        vp8xChunkOffset,
-        gifHeaderOffset,
-        jxlCodestreamOffset,
-    });
+    const fileHasMetaData = hasPotentialMetaData({fileType, blocks});
+
+    const fileBlock = getBlock(blocks, 'file');
+    const jfifBlock = getBlock(blocks, 'jfif');
+    const exifBlock = getBlock(blocks, 'exif');
+    const iptcBlock = getBlock(blocks, 'iptc');
+    const xmpBlock = getBlock(blocks, 'xmp');
+    const iccBlock = getBlock(blocks, 'icc');
+    const mpfBlock = getBlock(blocks, 'mpf');
+    const pngFileBlock = getBlock(blocks, 'pngFile');
+    const pngTextBlocks = getPngTextChunkBlocks(blocks);
+    const pngChunkBlocks = getBlocks(blocks, 'pngChunk');
+    const riffBlock = getBlock(blocks, 'riff');
+    const gifBlock = getBlock(blocks, 'gif');
+    const jxlFileBlock = getBlock(blocks, 'jxlFile');
+    const isoBmffFileBlock = getBlock(blocks, 'isoBmffFile');
+    const tiffHeaderOffset = exifBlock !== undefined ? exifBlock.tiffHeaderOffset : undefined;
+    const exifDataView = exifBlock !== undefined ? exifBlock.dataView : undefined;
 
     if (
         Constants.USE_JPEG
         && Constants.USE_FILE
-        && fileDataOffset !== undefined
+        && fileBlock !== undefined
         && tagFilter.shouldParseGroup('file')
         && shouldReadFileTagsForFileTypeOnlyOptimization(includeTags)
     ) {
-        const readTags = FileTags.read(dataView, fileDataOffset);
+        const readTags = FileTags.read(dataView, fileBlock.dataOffset);
         const parsedFileTags = filterTagsForParse('file', readTags, tagFilter);
         parsedGroups.file = parsedFileTags;
 
@@ -177,10 +158,10 @@ export function loadView(
     if (
         Constants.USE_JPEG
         && Constants.USE_JFIF
-        && jfifDataOffset !== undefined
+        && jfifBlock !== undefined
         && tagFilter.shouldParseGroup('jfif')
     ) {
-        const readTags = JfifTags.read(dataView, jfifDataOffset);
+        const readTags = JfifTags.read(dataView, jfifBlock.dataOffset);
         const parsedJfifTags = filterTagsForParse('jfif', readTags, tagFilter);
         parsedGroups.jfif = parsedJfifTags;
 
@@ -220,7 +201,7 @@ export function loadView(
             tiffHeaderOffset,
             byteOrder,
             valueBudget,
-            {decompressed: false, hasIptcBlock: iptcDataOffset !== undefined}
+            {decompressed: false, hasIptcBlock: iptcBlock !== undefined}
         );
         for (let i = 0; i < EXIF_CARRIED_GROUP_ORDER.length; i++) {
             const groupKey = EXIF_CARRIED_GROUP_ORDER[i];
@@ -272,10 +253,10 @@ export function loadView(
     if (
         Constants.USE_JPEG
         && Constants.USE_IPTC
-        && iptcDataOffset !== undefined
+        && iptcBlock !== undefined
         && tagFilter.shouldParseGroup('iptc')
     ) {
-        const readTags = IptcTags.read(dataView, iptcDataOffset, includeUnknown, tagFilter, valueBudget);
+        const readTags = IptcTags.read(dataView, iptcBlock.dataOffset, includeUnknown, tagFilter, valueBudget);
         const parsedIptcTags = filterTagsForParse('iptc', readTags, tagFilter);
         parsedGroups.iptc = parsedIptcTags;
 
@@ -290,10 +271,10 @@ export function loadView(
 
     if (
         Constants.USE_XMP
-        && hasXmpData(xmpChunks)
+        && hasXmpData(xmpBlock)
         && tagFilter.shouldParseGroup('xmp')
     ) {
-        const readTags = XmpTags.read(xmpDataView || dataView, xmpChunks, domParser);
+        const readTags = XmpTags.read(xmpBlock.dataView || dataView, xmpBlock.chunks, domParser);
         const parsedXmpTags = filterTagsForParse('xmp', readTags, tagFilter);
         parsedGroups.xmp = parsedXmpTags;
 
@@ -310,14 +291,14 @@ export function loadView(
     if (
         Constants.USE_JXL
         && Constants.USE_EXIF
-        && brobExifChunk
-        && tiffHeaderOffset === undefined
+        && exifBlock !== undefined
+        && exifBlock.compression === 'brotli'
         && tagFilter.shouldParseGroup('exif')
         && async
     ) {
-        const compressedExifData = getBrobDataView(dataView, brobExifChunk);
+        const compressedExifData = getBrobDataView(dataView, exifBlock);
         deferredPromises.push(
-            decompress(compressedExifData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
+            decompress(compressedExifData, getCompressionMethod(exifBlock.compression), undefined, 'dataview', decompressConfig)
                 .then((decompressedDataView) => {
                     const brobTiffHeaderOffset = getTiffHeaderOffset(decompressedDataView, 0);
                     addDecompressedValueAllowance(valueBudget, decompressedDataView.byteLength);
@@ -358,14 +339,14 @@ export function loadView(
     if (
         Constants.USE_JXL
         && Constants.USE_XMP
-        && brobXmpChunk
-        && !hasXmpData(xmpChunks)
+        && xmpBlock !== undefined
+        && xmpBlock.compression === 'brotli'
         && tagFilter.shouldParseGroup('xmp')
         && async
     ) {
-        const compressedXmpData = getBrobDataView(dataView, brobXmpChunk);
+        const compressedXmpData = getBrobDataView(dataView, xmpBlock);
         deferredPromises.push(
-            decompress(compressedXmpData, COMPRESSION_METHOD_BROTLI, undefined, 'dataview', decompressConfig)
+            decompress(compressedXmpData, getCompressionMethod(xmpBlock.compression), undefined, 'dataview', decompressConfig)
                 .then((decompressedDataView) => {
                     if (exceedsBrobXmpSizeBound(decompressedDataView.byteLength, dataView)) {
                         deferredResults.brobXmp = {};
@@ -389,10 +370,10 @@ export function loadView(
 
     if (
         Constants.USE_ICC
-        && hasIccData(iccChunks)
+        && hasIccData(iccBlock)
         && tagFilter.shouldParseGroup('icc')
     ) {
-        const readTags = IccTags.read(dataView, iccChunks, async, decompressConfig);
+        const readTags = IccTags.read(dataView, iccBlock.chunks, async, decompressConfig);
         if (isThenable(readTags)) {
             if (!async) {
                 throw new Error('Promise is required when async mode is enabled.');
@@ -420,12 +401,12 @@ export function loadView(
 
     if (
         Constants.USE_MPF
-        && mpfDataOffset !== undefined
+        && mpfBlock !== undefined
         && tagFilter.shouldParseGroup('mpf')
     ) {
         const readMpfTags = MpfTags.read(
             dataView,
-            mpfDataOffset,
+            mpfBlock.dataOffset,
             includeUnknown,
             computed,
             tagFilter,
@@ -446,10 +427,10 @@ export function loadView(
     if (
         Constants.USE_PNG
         && Constants.USE_PNG_FILE
-        && pngHeaderOffset !== undefined
+        && pngFileBlock !== undefined
         && tagFilter.shouldParseGroup('png')
     ) {
-        const readTags = PngFileTags.read(dataView, pngHeaderOffset);
+        const readTags = PngFileTags.read(dataView, pngFileBlock.dataOffset);
         const parsedPngFileTags = filterTagsForParse('png', readTags, tagFilter);
         parsedGroups.pngFile = parsedPngFileTags;
 
@@ -463,7 +444,7 @@ export function loadView(
 
     if (
         Constants.USE_PNG
-        && hasPngTextData(pngTextChunks)
+        && hasPngTextData(pngTextBlocks)
         && (
             tagFilter.shouldParseGroup('png')
             || tagFilter.shouldParseGroup('exif')
@@ -472,7 +453,7 @@ export function loadView(
     ) {
         const {readTags, embeddedExifTags, embeddedIptcTags, embeddedExifThumbnail, exifCarriedGroups, readTagsPromise} = PngTextTags.read(
             dataView,
-            pngTextChunks,
+            pngTextBlocks,
             async,
             includeUnknown,
             computed,
@@ -510,10 +491,10 @@ export function loadView(
 
     if (
         Constants.USE_PNG
-        && pngChunkOffsets !== undefined
+        && pngChunkBlocks.length > 0
         && tagFilter.shouldParseGroup('png')
     ) {
-        const readTags = PngTags.read(dataView, pngChunkOffsets);
+        const readTags = PngTags.read(dataView, pngChunkBlocks.map((block) => block.dataOffset));
         const parsedPngChunkTags = filterTagsForParse('png', readTags, tagFilter);
         parsedGroups.pngChunk = parsedPngChunkTags;
 
@@ -527,10 +508,10 @@ export function loadView(
 
     if (
         Constants.USE_WEBP
-        && vp8xChunkOffset !== undefined
+        && riffBlock !== undefined
         && tagFilter.shouldParseGroup('riff')
     ) {
-        const readTags = Vp8xTags.read(dataView, vp8xChunkOffset);
+        const readTags = Vp8xTags.read(dataView, riffBlock.dataOffset);
         const parsedRiffTags = filterTagsForParse('riff', readTags, tagFilter);
         parsedGroups.riff = parsedRiffTags;
 
@@ -545,10 +526,10 @@ export function loadView(
 
     if (
         Constants.USE_GIF
-        && gifHeaderOffset !== undefined
+        && gifBlock !== undefined
         && tagFilter.shouldParseGroup('gif')
     ) {
-        const readTags = GifFileTags.read(dataView, gifHeaderOffset);
+        const readTags = GifFileTags.read(dataView, gifBlock.dataOffset);
         const parsedGifTags = filterTagsForParse('gif', readTags, tagFilter);
         parsedGroups.gif = parsedGifTags;
 
@@ -563,10 +544,10 @@ export function loadView(
 
     if (
         Constants.USE_JXL
-        && jxlCodestreamOffset !== undefined
+        && jxlFileBlock !== undefined
         && tagFilter.shouldParseGroup('file')
     ) {
-        const readTags = JxlFileTags.read(dataView, jxlCodestreamOffset);
+        const readTags = JxlFileTags.read(dataView, jxlFileBlock.codestreamOffset);
         const parsedJxlFileTags = filterTagsForParse('file', readTags, tagFilter);
         parsedGroups.file = parsedJxlFileTags;
 
@@ -581,10 +562,10 @@ export function loadView(
 
     if (
         (Constants.USE_HEIC || Constants.USE_AVIF)
-        && (imageDimensionsOffset !== undefined || pixelInformationOffset !== undefined)
+        && isoBmffFileBlock !== undefined
         && tagFilter.shouldParseGroup('file')
     ) {
-        const readTags = IsoBmffFileTags.read(dataView, imageDimensionsOffset, pixelInformationOffset);
+        const readTags = IsoBmffFileTags.read(dataView, isoBmffFileBlock.imageDimensionsOffset, isoBmffFileBlock.pixelInformationOffset);
         const parsedIsoBmffFileTags = filterTagsForParse('file', readTags, tagFilter);
         parsedGroups.file = parsedIsoBmffFileTags;
 
@@ -609,8 +590,8 @@ export function loadView(
     if (expanded && includeOffsets) {
         mergeSteps.push({
             type: 'metadataRange',
-            metadataBlocks: getParsedMetadataBlocks(metadataBlocks, fileType),
-            metadataTruncated: !!metadataTruncated,
+            metadataBlocks: getMetadataRangeBlocks(ranges, async),
+            metadataTruncated: !!truncated,
         });
     }
 
@@ -648,7 +629,7 @@ export function loadView(
                 tiffHeaderOffset,
                 exifDataView,
                 fileType,
-                pngTextChunks,
+                pngTextBlocks,
                 pngTextIsAsync,
                 thumbnailIfdTags,
                 deps: pipelineDependencies,
@@ -668,7 +649,7 @@ export function loadView(
         tiffHeaderOffset,
         exifDataView,
         fileType,
-        pngTextChunks,
+        pngTextBlocks,
         pngTextIsAsync,
         thumbnailIfdTags,
         deps: pipelineDependencies,
@@ -711,7 +692,7 @@ export function loadView(
                 Constants.USE_XMP
                 && parsedExifTags['ApplicationNotes']
                 && isNumberArray(parsedExifTags['ApplicationNotes'].value)
-                && !hasXmpData(xmpChunks)
+                && !hasXmpData(xmpBlock)
                 && tagFilter.shouldParseGroup('xmp')
                 && (!source.decompressed || takeDecompressedApplicationNotesAllowance(parsedExifTags['ApplicationNotes'].value.length))
             ) {
@@ -741,7 +722,7 @@ export function loadView(
             if (
                 Constants.USE_ICC
                 && parsedExifTags['ICC_Profile']
-                && !hasIccData(iccChunks)
+                && !hasIccData(iccBlock)
                 && tagFilter.shouldParseGroup('icc')
             ) {
                 const readIccTags = IccTags.read(
@@ -846,11 +827,11 @@ function isDataViewLike(dataView) {
         && (typeof dataView.buffer.slice === 'function');
 }
 
-function getBrobDataView(dataView, brobChunk) {
+function getBrobDataView(dataView, brobBlock) {
     // The box length is untrusted, so bound the view by the bytes present. The
     // JXL header parser never reports a dataOffset past the end of the view.
-    const length = Math.max(0, Math.min(brobChunk.length, dataView.byteLength - brobChunk.dataOffset));
-    return new DataView(dataView.buffer, dataView.byteOffset + brobChunk.dataOffset, length);
+    const length = Math.max(0, Math.min(brobBlock.length, dataView.byteLength - brobBlock.dataOffset));
+    return new DataView(dataView.buffer, dataView.byteOffset + brobBlock.dataOffset, length);
 }
 
 function exceedsBrobXmpSizeBound(byteLength, inputDataView) {
@@ -908,23 +889,45 @@ function shouldReadThumbnailIfd(tagFilter) {
     return Constants.USE_THUMBNAIL && tagFilter.shouldParseGroup('thumbnail');
 }
 
-// Finders report every kind they find; list only the kinds this build parses.
-function getParsedMetadataBlocks(metadataBlocks, fileType) {
-    if (!metadataBlocks) {
-        return metadataBlocks;
+// Finders report every kind they find; list only the kinds this build parses,
+// and in sync mode only the blocks it reads (isHiddenInSyncMode).
+function getMetadataRangeBlocks(ranges, async) {
+    const entries = ranges || [];
+    const isCapped = entries.length >= MAX_METADATA_BLOCKS;
+    const lastIndex = entries.length - 1;
+    const metadataBlocks = [];
+    for (let i = 0; i < entries.length; i++) {
+        const {block, start, end} = entries[i];
+        // At the cap the last entry was widened over every later block, so it
+        // stays whatever its own block is, hidden in sync mode or not parsed.
+        const isWidenedLast = isCapped && i === lastIndex;
+        if (isWidenedLast || ((async || !isHiddenInSyncMode(block)) && isParsedRangeType(block))) {
+            metadataBlocks.push({type: getRangeType(block), start, end});
+        }
     }
-    const format = fileType && fileType.value;
-    const isCapped = metadataBlocks.length >= MAX_METADATA_BLOCKS;
-    const lastIndex = metadataBlocks.length - 1;
-    return metadataBlocks.filter((block, index) => isParsedMetadataBlock(format, block.type)
-        // At the cap the last block was widened over every later block, so it stays.
-        || (isCapped && index === lastIndex));
+    return metadataBlocks;
 }
 
-function isParsedMetadataBlock(format, blockType) {
-    switch (blockType) {
+// The range types predate the block kinds and stay as they are.
+function getRangeType(block) {
+    if (isPngTextChunkBlock(block) || block.kind === 'pngChunk') {
+        return 'png';
+    }
+    if (block.kind === 'pngFile') {
+        return 'file';
+    }
+    return block.kind;
+}
+
+function isParsedRangeType(block) {
+    if (isPngTextChunkBlock(block)) {
+        return true;
+    }
+    switch (block.kind) {
         case 'file':
-            return format === 'png' ? Constants.USE_PNG_FILE : Constants.USE_FILE;
+            return Constants.USE_FILE;
+        case 'pngFile':
+            return Constants.USE_PNG_FILE;
         case 'exif':
             return Constants.USE_EXIF;
         case 'jfif':
@@ -1024,85 +1027,45 @@ function filterTags(groupKey, readTags, matchesTag) {
     }
 }
 
-function hasPotentialMetaData({
-    fileType,
-    fileDataOffset,
-    jfifDataOffset,
-    tiffHeaderOffset,
-    iptcDataOffset,
-    xmpChunks,
-    iccChunks,
-    mpfDataOffset,
-    pngHeaderOffset,
-    pngTextChunks,
-    pngChunkOffsets,
-    vp8xChunkOffset,
-    gifHeaderOffset,
-    jxlCodestreamOffset,
-    imageDimensionsOffset,
-    pixelInformationOffset,
-}) {
-    return !!fileType
-        || (
-            Constants.USE_JPEG
-            && Constants.USE_FILE
-            && fileDataOffset !== undefined
-        )
-        || (
-            Constants.USE_JPEG
-            && Constants.USE_JFIF
-            && jfifDataOffset !== undefined
-        )
-        || (
-            Constants.USE_EXIF
-            && tiffHeaderOffset !== undefined
-        )
-        || (
-            Constants.USE_JPEG
-            && Constants.USE_IPTC
-            && iptcDataOffset !== undefined
-        )
-        || (
-            Constants.USE_XMP
-            && hasXmpData(xmpChunks)
-        )
-        || (
-            Constants.USE_ICC
-            && hasIccData(iccChunks)
-        )
-        || (
-            Constants.USE_MPF
-            && mpfDataOffset !== undefined
-        )
-        || (
-            Constants.USE_PNG
-            && Constants.USE_PNG_FILE
-            && pngHeaderOffset !== undefined
-        )
-        || (
-            Constants.USE_PNG
-            && hasPngTextData(pngTextChunks)
-        )
-        || (
-            Constants.USE_PNG
-            && pngChunkOffsets !== undefined
-        )
-        || (
-            Constants.USE_WEBP
-            && vp8xChunkOffset !== undefined
-        )
-        || (
-            Constants.USE_GIF
-            && gifHeaderOffset !== undefined
-        )
-        || (
-            Constants.USE_JXL
-            && jxlCodestreamOffset !== undefined
-        )
-        || (
-            (Constants.USE_HEIC || Constants.USE_AVIF)
-            && (imageDimensionsOffset !== undefined || pixelInformationOffset !== undefined)
-        );
+function hasPotentialMetaData({fileType, blocks}) {
+    return !!fileType || blocks.some(isPotentialMetadataBlock);
+}
+
+// The same gates as the read branches above, keyed by block kind.
+function isPotentialMetadataBlock(block) {
+    if (isPngTextChunkBlock(block)) {
+        return Constants.USE_PNG;
+    }
+    switch (block.kind) {
+        case 'file':
+            return Constants.USE_JPEG && Constants.USE_FILE;
+        case 'jfif':
+            return Constants.USE_JPEG && Constants.USE_JFIF;
+        case 'exif':
+            return Constants.USE_EXIF && block.tiffHeaderOffset !== undefined;
+        case 'iptc':
+            return Constants.USE_JPEG && Constants.USE_IPTC;
+        case 'xmp':
+            return Constants.USE_XMP && hasXmpData(block);
+        case 'icc':
+            return Constants.USE_ICC && hasIccData(block);
+        case 'mpf':
+            return Constants.USE_MPF;
+        case 'pngFile':
+            return Constants.USE_PNG && Constants.USE_PNG_FILE;
+        case 'pngChunk':
+            return Constants.USE_PNG;
+        case 'riff':
+            return Constants.USE_WEBP;
+        case 'gif':
+            return Constants.USE_GIF;
+        case 'jxlFile':
+            return Constants.USE_JXL;
+        case 'isoBmffFile':
+            return Constants.USE_HEIC || Constants.USE_AVIF;
+        default:
+            return false;
+    }
 }
 
 function getGpsGroupFromExifTags(exifTags) {
@@ -1158,12 +1121,13 @@ function isNumberArray(value) {
     return Array.isArray(value) && typeof value[0] === 'number';
 }
 
-function hasXmpData(xmpChunks) {
-    return Array.isArray(xmpChunks) && xmpChunks.length > 0;
+// A brob block carries compressed XMP, not chunks.
+function hasXmpData(xmpBlock) {
+    return xmpBlock !== undefined && xmpBlock.compression === undefined && xmpBlock.chunks.length > 0;
 }
 
-function hasIccData(iccDataOffsets) {
-    return Array.isArray(iccDataOffsets) && iccDataOffsets.length > 0;
+function hasIccData(iccBlock) {
+    return iccBlock !== undefined && iccBlock.chunks.length > 0;
 }
 
 function hasCanonData(tags) {
@@ -1179,6 +1143,57 @@ function hasPentaxType1Data(tags) {
         && tags['MakerNote'].__offset;
 }
 
-function hasPngTextData(pngTextChunks) {
-    return Array.isArray(pngTextChunks) && pngTextChunks.length > 0;
+function hasPngTextData(pngTextBlocks) {
+    return Array.isArray(pngTextBlocks) && pngTextBlocks.length > 0;
+}
+
+/**
+ * The first block of a kind that is not a PNG text chunk, or undefined. After
+ * a finder's duplicate policy there is at most one such block per kind.
+ * @param {Array<Object>} blocks
+ * @param {string} kind
+ * @returns {Object|undefined}
+ */
+function getBlock(blocks, kind) {
+    for (let i = 0; i < blocks.length; i++) {
+        if (blocks[i].kind === kind && !isPngTextChunkBlock(blocks[i])) {
+            return blocks[i];
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Every block of a kind that is not a PNG text chunk, in file order.
+ * @param {Array<Object>} blocks
+ * @param {string} kind
+ * @returns {Array<Object>}
+ */
+function getBlocks(blocks, kind) {
+    return blocks.filter((block) => block.kind === kind && !isPngTextChunkBlock(block));
+}
+
+/**
+ * Every PNG text-chunk block (kind exif, iptc or pngText with `text`), in file order.
+ * @param {Array<Object>} blocks
+ * @returns {Array<Object>}
+ */
+function getPngTextChunkBlocks(blocks) {
+    return blocks.filter(isPngTextChunkBlock);
+}
+
+function isPngTextChunkBlock(block) {
+    return block.text !== undefined;
+}
+
+// Decision 2026-10-21: sync mode keeps leaving PNG compressed-text chunks
+// (TYPE_ZTXT, whatever their header says) and the iCCP chunk out of
+// metadataRange, the potential-metadata check and the readers, as the PNG
+// finder did while it took the async flag; the iCCP block is always
+// compressed. A compressed iTXt and a brob box stay listed, and unread, in
+// sync mode, as before. The USE_PNG gate keeps the PNG finder's constant out
+// of a build without PNG.
+function isHiddenInSyncMode(block) {
+    return (Constants.USE_PNG && isPngTextChunkBlock(block) && block.text.chunkType === TYPE_ZTXT)
+        || (block.kind === 'icc' && block.compression !== undefined);
 }

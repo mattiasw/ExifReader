@@ -11,7 +11,7 @@ import {
     expectTimeRatioBelow,
     expectAsyncTimeRatioBelow
 } from './test-utils.js';
-import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../src/image-header-png.js';
+import ImageHeaderPng, {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../src/image-header-png.js';
 import PngTextTags from '../../src/png-text-tags.js';
 import Tags from '../../src/tags.js';
 import TagNames from '../../src/tag-names.js';
@@ -26,6 +26,7 @@ const RAW_PROFILE_READERS = {
     iptc: (...args) => IptcTags.read(...args),
 };
 const READ_PARAMETER_COUNT = 10;
+const PNG_SIGNATURE = '\x89PNG\r\n\x1a\n';
 
 function readPngText(...args) {
     const paddedArgs = args.concat(new Array(READ_PARAMETER_COUNT - args.length).fill(undefined));
@@ -66,7 +67,7 @@ describe('png-text-tags', () => {
         const tagDatatEXt = 'MyTag0\x00My value.';
         const textChunks = buildTextChunks([{type: TYPE_TEXT, bytes: toBytes(tagDatatEXt)}]);
         const dataView = getPaddedDataView(textChunks.dataView, 4);
-        const chunks = [0];
+        const chunks = textChunks.chunks;
 
         const {readTags} = readPngText(dataView, chunks);
 
@@ -101,6 +102,14 @@ describe('png-text-tags', () => {
             value: 'abc',
             description: 'abc'
         });
+    });
+
+    it('should keep the Latin-1 bytes of a tEXt value as its description even when they would decode as UTF-8', () => {
+        const {dataView, chunks} = buildTextChunks([getTextChunk('k', 'h\xc3\xa9')]);
+
+        const {readTags} = readPngText(dataView, chunks);
+
+        expect(readTags.k).to.deep.equal({value: 'h\xc3\xa9', description: 'h\xc3\xa9'});
     });
 
     it('should read a tEXt tag with empty text when TextDecoder is missing', () => {
@@ -837,10 +846,10 @@ describe('png-text-tags', () => {
             expect(valueBudget.decompressedIptcAllowanceRemaining).to.equal(1024 * 1024);
         });
 
-        it('should merge the tags of 10000 tEXt Exif raw profiles well under a second', function () {
+        it('should merge the tags of 4096 tEXt Exif raw profiles, as many as the finder reports, well under a second', function () {
             this.timeout(LINEAR_TIME_TIMEOUT_MS);
             this.retries(2);
-            const NUMBER_OF_CHUNKS = 10000;
+            const NUMBER_OF_CHUNKS = 4096;
             const baseline = buildExifRawProfileChunks(NUMBER_OF_CHUNKS / 8);
             const {dataView, chunks} = buildExifRawProfileChunks(NUMBER_OF_CHUNKS);
 
@@ -1918,19 +1927,21 @@ describe('png-text-tags', () => {
         return new DataView(buffer, pad);
     }
 
-    // Each entry becomes a whole PNG chunk (length, type, data, CRC). Pass a larger
-    // declaredLength and withCrc: false to make a final chunk that is cut off.
+    // Each entry becomes a whole PNG chunk (length, type, data, CRC) after the PNG
+    // signature, and `chunks` holds the text-chunk blocks the real PNG finder
+    // reports for them. Pass a larger declaredLength and withCrc: false to make a
+    // final chunk that is cut off.
     function buildTextChunks(textChunks) {
-        const chunkBytes = textChunks.map(getPngChunkBytes);
+        const chunkBytes = [toBytes(PNG_SIGNATURE)].concat(textChunks.map(getPngChunkBytes));
         const bytes = new Uint8Array(chunkBytes.reduce((total, chunk) => total + chunk.length, 0));
-        const chunks = [];
         let offset = 0;
         for (const chunk of chunkBytes) {
             bytes.set(chunk, offset);
-            chunks.push(offset);
             offset += chunk.length;
         }
-        return {dataView: new DataView(bytes.buffer), chunks};
+        const dataView = new DataView(bytes.buffer);
+        const chunks = ImageHeaderPng.findPngOffsets(dataView).filter((block) => block.text !== undefined);
+        return {dataView, chunks};
     }
 
     function getPngChunkBytes({type, bytes, declaredLength = bytes.length, withCrc = true}) {

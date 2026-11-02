@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import vm from 'node:vm';
-import {deflateSync, crc32} from 'node:zlib';
+import {deflateSync} from 'node:zlib';
 import {expect} from 'chai';
 import {getCharacterArray, getBase64Image} from '../../src/utils.js';
 import * as ExifReader from '../../src/exif-reader.js';
@@ -105,7 +105,7 @@ describe('exif-reader', function () {
                     if (getAsciiPrefix(dataView, IMAGE.length) !== IMAGE) {
                         throw new Error('DataView error, does not match image.');
                     }
-                    return {fileDataOffset: OFFSET_TEST_VALUE};
+                    return {blocks: [{kind: 'file', dataOffset: OFFSET_TEST_VALUE}]};
                 }
             });
             swapTagsRead(FileTags, TAGS);
@@ -456,39 +456,135 @@ describe('exif-reader', function () {
     });
 
     it('should fail when there is no Exif data', () => {
-        swapImageHeader({
-            hasAppMarkers: false,
-            fileDataOffset: undefined,
-            jfifDataOffset: undefined,
-            tiffHeaderOffset: undefined,
-            iptcDataOffset: undefined,
-            xmpChunks: undefined,
-            iccChunks: undefined,
-            mpfDataOffset: undefined
-        });
+        swapImageHeader({});
         expect(() => ExifReader.loadView()).to.throw(exifErrors.MetadataMissingError);
     });
 
     it('should be able to find file data segment', () => {
         const myTags = {MyTag: 42};
-        swapForLoadView({fileDataOffset: OFFSET_TEST_VALUE}, FileTags, myTags);
+        swapForLoadView({blocks: [{kind: 'file', dataOffset: OFFSET_TEST_VALUE}]}, FileTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
+    describe('potential metadata in sync mode', () => {
+        // Decision 2026-10-21: the finder reports zTXt and iCCP chunks in every
+        // mode, but sync mode must keep treating a file with nothing else as empty.
+        const ZTXT_BLOCK = {kind: 'pngText', compression: 'deflate', text: {chunkType: 'zTXt', name: 'K', valueOffset: 20, valueLength: 2}};
+        const ICCP_BLOCK = {kind: 'icc', compression: 'deflate', chunks: [{offset: 20, length: 2, chunkNumber: 1, chunksTotal: 1, profileName: 'P', compressionMethod: 0}]};
+
+        beforeEach(() => {
+            swap(PngTextTags, {read: () => ({readTags: {}})});
+            swap(IccTags, {read: () => ({})});
+        });
+
+        it('should not count a zTXt text block or an iCCP block as potential metadata in sync mode', async () => {
+            for (const block of [ZTXT_BLOCK, ICCP_BLOCK]) {
+                swapImageHeader({blocks: [block]});
+
+                expect(() => ExifReader.loadView(getDataView('\x00'.repeat(32))), block.kind).to.throw(exifErrors.MetadataMissingError);
+                expect(await ExifReader.loadView(getDataView('\x00'.repeat(32)), {async: true}), block.kind).to.deep.equal({});
+            }
+        });
+
+        it('should count an uncompressed tEXt block as potential metadata in both modes', async () => {
+            swapImageHeader({blocks: [getTextBlock(20)]});
+
+            expect(ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.deep.equal({});
+            expect(await ExifReader.loadView(getDataView('\x00'.repeat(32)), {async: true})).to.deep.equal({});
+        });
+
+        it('should count a compressed iTXt block but not a brob block as potential metadata in sync mode', () => {
+            const compressedItxtBlock = {kind: 'pngText', compression: 'deflate', text: {chunkType: 'iTXt', name: 'K', valueOffset: 20, valueLength: 2}};
+            swapImageHeader({blocks: [compressedItxtBlock]});
+
+            expect(ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.deep.equal({});
+
+            swapImageHeader({blocks: [{kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10}]});
+
+            expect(() => ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.throw(exifErrors.MetadataMissingError);
+        });
+    });
+
+    it('should read at most 4096 PNG text chunks, the first ones, and still cover the rest in metadataRange', () => {
+        const textChunks = [];
+        for (let i = 0; i < 4097; i++) {
+            textChunks.push(getPngChunk('tEXt', `k${i}\x00v`));
+        }
+        const png = getPngWithChunks(...textChunks);
+
+        const tags = ExifReader.loadView(getDataView(png), {expanded: true, includeOffsets: true});
+
+        expect(Object.keys(tags.pngText)).to.have.lengthOf(4096);
+        expect(tags.pngText.k0.value).to.equal('v');
+        expect(tags.pngText.k4095.value).to.equal('v');
+        expect(tags.pngText).to.not.have.property('k4096');
+        expect(tags.metadataRange.end).to.equal(png.length - 12);
+    });
+
+    it('should keep the widened last entry of a capped metadataRange in sync mode when its own chunk is a zTXt', () => {
+        // IHDR takes the first of the 4096 entries, so the tEXt chunk widens the last zTXt entry.
+        const png = getPngWithChunks(getPngChunk('zTXt', 'k\x00\x00v').repeat(4095), getPngChunk('tEXt', 'last\x00v'));
+
+        const tags = ExifReader.loadView(getDataView(png), {expanded: true, includeOffsets: true});
+
+        expect(tags.pngText.last.value).to.equal('v');
+        expect(tags.metadataRange.blocks).to.have.lengthOf(2);
+        expect(tags.metadataRange.blocks[1].type).to.equal('png');
+        expect(tags.metadataRange.end).to.equal(png.length - 12);
+    });
+
+    it('should count the ISO-BMFF file block as potential metadata with HEIC or AVIF support, not without both', () => {
+        swapImageHeader({blocks: [{kind: 'isoBmffFile', imageDimensionsOffset: OFFSET_TEST_VALUE}]});
+        swapTagsRead(IsoBmffFileTags, {MyTag: 42});
+
+        expect(ExifReader.loadView()).to.deep.equal({MyTag: 42});
+
+        swap(Constants, {USE_HEIC: false});
+
+        expect(ExifReader.loadView()).to.deep.equal({MyTag: 42});
+
+        swap(Constants, {USE_HEIC: true, USE_AVIF: false});
+
+        expect(ExifReader.loadView()).to.deep.equal({MyTag: 42});
+
+        swap(Constants, {USE_HEIC: false});
+
+        expect(() => ExifReader.loadView()).to.throw(exifErrors.MetadataMissingError);
+    });
+
+    it('should not count a block of an unknown kind as potential metadata', () => {
+        swapImageHeader({blocks: [{kind: 'bogus', dataOffset: OFFSET_TEST_VALUE}]});
+
+        expect(() => ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.throw(exifErrors.MetadataMissingError);
+        expect(() => ExifReader.loadView(getDataView('\x00'.repeat(32)), {async: true})).to.throw(exifErrors.MetadataMissingError);
+    });
+
+    it('should neither read nor count an xmp or icc block without chunks', () => {
+        swap(XmpTags, {read: () => {
+            throw new Error('XmpTags.read was called.');
+        }});
+        swap(IccTags, {read: () => {
+            throw new Error('IccTags.read was called.');
+        }});
+        swapImageHeader({blocks: [{kind: 'xmp', chunks: []}, {kind: 'icc', chunks: []}]});
+
+        expect(() => ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.throw(exifErrors.MetadataMissingError);
     });
 
     it('should be able to find JFIF data segment', () => {
         const myTags = {MyTag: 42};
-        swapForLoadView({jfifDataOffset: OFFSET_TEST_VALUE}, JfifTags, myTags);
+        swapForLoadView({blocks: [{kind: 'jfif', dataOffset: OFFSET_TEST_VALUE}]}, JfifTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find Exif APP segment', () => {
         const myTags = {MyExifTag: 42};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should skip Exif but keep other data when Tags.read throws on a malformed TIFF header', () => {
-        swapImageHeader({fileType: {value: 'heic', description: 'HEIC'}, tiffHeaderOffset: OFFSET_TEST_VALUE});
+        swapImageHeader({fileType: {value: 'heic', description: 'HEIC'}, blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]});
         swap(Tags, {
             read() {
                 throw new Error('Illegal byte order value. Faulty image.');
@@ -507,7 +603,7 @@ describe('exif-reader', function () {
     it('should pass xmpDataView from BMFF multi-extent items to XmpTags.read instead of the source dataView', () => {
         const myTags = {MyXmpTag: 99};
         const SYNTHETIC = {synthetic: true};
-        swapImageHeader({xmpChunks: [{dataOffset: 0, length: 4}], xmpDataView: SYNTHETIC});
+        swapImageHeader({blocks: [{kind: 'xmp', chunks: [{dataOffset: 0, length: 4}], dataView: SYNTHETIC}]});
         let capturedDataView;
         swap(XmpTags, {
             read(dataView) {
@@ -526,7 +622,7 @@ describe('exif-reader', function () {
             MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
         };
         const SYNTHETIC = {synthetic: true};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE, dataView: SYNTHETIC}]}, Tags, myExifTags);
         let capturedDataView;
         swap(CanonTags, {
             read(dataView) {
@@ -544,7 +640,7 @@ describe('exif-reader', function () {
             MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE, value: getCharacterArray('PENTAX \x00\x00\x00')}
         };
         const SYNTHETIC = {synthetic: true};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE, dataView: SYNTHETIC}]}, Tags, myExifTags);
         let capturedDataView;
         swap(PentaxTags, {
             read(dataView) {
@@ -584,7 +680,7 @@ describe('exif-reader', function () {
     });
 
     it('should pass the decoded-value budget of the Exif read on to PngTextTags.read', () => {
-        const capturedBudgets = capturePngTextValueBudgets({tiffHeaderOffset: OFFSET_TEST_VALUE});
+        const capturedBudgets = capturePngTextValueBudgets([{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]);
 
         ExifReader.loadView(getDataView('\x00'.repeat(16)));
 
@@ -593,7 +689,7 @@ describe('exif-reader', function () {
     });
 
     it('should give PngTextTags.read a decoded-value budget sized from the file when there is no Exif', () => {
-        const capturedBudgets = capturePngTextValueBudgets({});
+        const capturedBudgets = capturePngTextValueBudgets([]);
 
         ExifReader.loadView(getDataView('\x00'.repeat(16)));
 
@@ -609,7 +705,7 @@ describe('exif-reader', function () {
 
     it('should pass the decoded-value budget of the Exif read on to the IPTC read of IPTC-NAA', () => {
         const capturedBudgets = {};
-        swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE});
+        swapImageHeader({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]});
         swap(Tags, {
             read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
                 capturedBudgets.exif = valueBudget;
@@ -631,7 +727,7 @@ describe('exif-reader', function () {
 
     it('should pass the decoded-value budget of the Exif read on to the IPTC read of the APP13 segment', () => {
         const capturedBudgets = {};
-        swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE, iptcDataOffset: OFFSET_TEST_VALUE});
+        swapImageHeader({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}, {kind: 'iptc', dataOffset: OFFSET_TEST_VALUE}]});
         swap(Tags, {
             read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
                 capturedBudgets.exif = valueBudget;
@@ -653,7 +749,7 @@ describe('exif-reader', function () {
 
     it('should give the IPTC read of the APP13 segment a budget sized from the file when there is no Exif', () => {
         let capturedBudget;
-        swapImageHeader({iptcDataOffset: OFFSET_TEST_VALUE});
+        swapImageHeader({blocks: [{kind: 'iptc', dataOffset: OFFSET_TEST_VALUE}]});
         swap(IptcTags, {
             read(...args) {
                 capturedBudget = args[4];
@@ -676,7 +772,7 @@ describe('exif-reader', function () {
         const SYNTHETIC = {synthetic: true};
         const myThumbnail = {type: 'image/jpeg'};
         const myTags = {MyExifTag: 43, Thumbnail: myThumbnail};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC}, Tags, myTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE, dataView: SYNTHETIC}]}, Tags, myTags);
         let capturedDataView;
         swap(Thumbnail, {
             get(dataView) {
@@ -692,7 +788,7 @@ describe('exif-reader', function () {
     it('should pass exifDataView from BMFF multi-extent items to Tags.read instead of the source dataView', () => {
         const myTags = {MyExifTag: 42};
         const SYNTHETIC = {synthetic: true};
-        swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE, exifDataView: SYNTHETIC});
+        swapImageHeader({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE, dataView: SYNTHETIC}]});
         let capturedDataView;
         swap(Tags, {
             read(dataView, offset) {
@@ -710,7 +806,7 @@ describe('exif-reader', function () {
 
     it('should pass on computed option to Exif tags parsing', function () {
         const myTags = {MyExifTag: 42};
-        swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE});
+        swapImageHeader({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]});
         swap(Tags, {
             read(dataView, offset, includeUnknown, computed) {
                 expect(offset).to.equal(OFFSET_TEST_VALUE);
@@ -728,7 +824,7 @@ describe('exif-reader', function () {
         const myExifTags = {'IPTC-NAA': {value: ['<IPTC block array>']}};
         const myIptcTags = {MyIptcTag: 42};
         const myTags = {...myExifTags, ...myIptcTags};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         swapTagsRead(IptcTags, myIptcTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
@@ -737,7 +833,7 @@ describe('exif-reader', function () {
         const myExifTags = {ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')}};
         const myXmpTags = {MyXmpTag: 45};
         const myTags = {...myExifTags, ...myXmpTags};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         swapXmpTagsRead(myXmpTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
@@ -763,19 +859,19 @@ describe('exif-reader', function () {
 
     it('should skip an inline XMP segment whose Exif value lies outside the file', () => {
         const myExifTags = {ApplicationNotes: {value: '<faulty value>'}};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         expect(ExifReader.loadView()).to.deep.equal(myExifTags);
     });
 
     it('should skip an inline XMP segment whose Exif value is not a byte array', () => {
         const myExifTags = {ApplicationNotes: {value: 42}};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         expect(ExifReader.loadView()).to.deep.equal(myExifTags);
     });
 
     it('should not convert an ApplicationNotes value of strings to XMP', () => {
         const myExifTags = {ApplicationNotes: {value: ['<x:xmpmeta></x:xmpmeta>']}};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         const readXmpStrings = swapXmpTagsReadRecording();
 
         expect(ExifReader.loadView()).to.deep.equal(myExifTags);
@@ -786,7 +882,7 @@ describe('exif-reader', function () {
     it('should not convert an ApplicationNotes value of strings and holes to XMP', () => {
         const value = [];
         value[100000] = 'a';
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, {ApplicationNotes: {value}});
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, {ApplicationNotes: {value}});
         const readXmpStrings = swapXmpTagsReadRecording();
 
         ExifReader.loadView();
@@ -795,7 +891,7 @@ describe('exif-reader', function () {
     });
 
     it('should not convert an ApplicationNotes value of rational pairs to XMP', () => {
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, {ApplicationNotes: {value: [[60, 1], [120, 1]]}});
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, {ApplicationNotes: {value: [[60, 1], [120, 1]]}});
         const readXmpStrings = swapXmpTagsReadRecording();
 
         ExifReader.loadView();
@@ -832,13 +928,13 @@ describe('exif-reader', function () {
         const myExifTags = {ICC_Profile: {value: [1, 2, 3]}};
         const myIccTags = {MyIccTag: 42};
         const myTags = {...myExifTags, ...myIccTags};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         swapIccTagsRead(myIccTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should return the groups the Exif carries in reading order ahead of Exif in expanded mode', () => {
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, {
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, {
             'IPTC-NAA': {value: [1]},
             ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')},
             ImageSourceData: {value: [1]},
@@ -860,7 +956,7 @@ describe('exif-reader', function () {
 
     for (const excludedGroupKey of ['iptc', 'xmp', 'photoshop', 'icc', 'makerNotes']) {
         it(`should not read the ${excludedGroupKey} group the Exif carries when the group is excluded`, () => {
-            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, {
+            swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, {
                 'IPTC-NAA': {value: [1]},
                 ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')},
                 ImageSourceData: {value: [1]},
@@ -893,7 +989,7 @@ describe('exif-reader', function () {
 
     it('should read ApplicationNotes XMP of an uncompressed Exif above the brob XMP size bound', () => {
         const inputLength = 10;
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, {
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, {
             ApplicationNotes: {value: new Array(4 * inputLength + 64 * 1024 + 1).fill(0x20)}
         });
         const readXmpStrings = swapXmpTagsReadRecording();
@@ -910,7 +1006,7 @@ describe('exif-reader', function () {
         };
         const myCanonTags = {AutoRotate: 42};
         const myTags = {...myExifTags, ...myCanonTags};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         swapMakerNoteTagsRead(myCanonTags, CanonTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
@@ -930,7 +1026,7 @@ describe('exif-reader', function () {
             LensModel: makerNotesLensModel,
             LensType: {value: 61182, description: '61182'}
         };
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         swapMakerNoteTagsRead(myCanonTags, CanonTags);
 
         const tags = ExifReader.loadView();
@@ -948,7 +1044,7 @@ describe('exif-reader', function () {
         };
         const myPentaxTags = {Artist: 'Arty'};
         const myTags = {...myExifTags, ...myPentaxTags};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         swapMakerNoteTagsRead(myPentaxTags, PentaxTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
@@ -960,7 +1056,7 @@ describe('exif-reader', function () {
                 value: '<faulty value>'
             }
         };
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         expect(ExifReader.loadView()).to.deep.equal(myExifTags);
     });
 
@@ -969,7 +1065,7 @@ describe('exif-reader', function () {
             ImageSourceData: {value: [1]},
             PhotoshopSettings: {value: '<faulty value>'}
         };
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
         swap(PhotoshopTags, {
             read() {
                 throw new Error('The Photoshop parser must not be handed a non-array value.');
@@ -980,14 +1076,14 @@ describe('exif-reader', function () {
 
     it('should be able to find IPTC APP segment', () => {
         const myTags = {MyIptcTag: 42};
-        swapForLoadView({iptcDataOffset: OFFSET_TEST_VALUE}, IptcTags, myTags);
+        swapForLoadView({blocks: [{kind: 'iptc', dataOffset: OFFSET_TEST_VALUE}]}, IptcTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find XMP APP segment', () => {
         const myTags = {MyXmpTag: 42};
 
-        swapImageHeader({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]});
+        swapImageHeader({blocks: [{kind: 'xmp', chunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}]});
         swapXmpTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
@@ -995,7 +1091,7 @@ describe('exif-reader', function () {
     it('should be able to find ICC APP segment', () => {
         const myTags = {MyIccTag: 42};
 
-        swapImageHeader({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]});
+        swapImageHeader({blocks: [{kind: 'icc', chunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}]});
         swapIccTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
@@ -1003,7 +1099,7 @@ describe('exif-reader', function () {
     it('should be able to find compressed ICC segment', async () => {
         const myTags = {MyIccTag: 42};
 
-        swapImageHeader({iccChunks: [OFFSET_TEST_VALUE_ICC2_3]});
+        swapImageHeader({blocks: [{kind: 'icc', chunks: [OFFSET_TEST_VALUE_ICC2_3]}]});
         swapIccTagsRead(myTags, true);
         expect(await ExifReader.loadView(undefined, {async: true})).to.deep.equal(myTags);
     });
@@ -1017,7 +1113,9 @@ describe('exif-reader', function () {
 
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: 10}
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+            ],
         });
         swapTagsRead(Tags, myTags);
 
@@ -1039,7 +1137,9 @@ describe('exif-reader', function () {
 
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: 10}
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+            ],
         });
         swapTagsRead(Tags, {MakerNote: {value: [1, 2, 3], __offset: 5}});
 
@@ -1060,7 +1160,9 @@ describe('exif-reader', function () {
         new DataView(decompressedBuffer).setUint32(0, OFFSET_TEST_VALUE - 4);
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: 10}
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+            ],
         });
         let capturedBudget;
         swap(Tags, {
@@ -1092,7 +1194,9 @@ describe('exif-reader', function () {
 
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobXmpChunk: {dataOffset: 0, length: 10}
+            blocks: [
+                {kind: 'xmp', compression: 'brotli', dataOffset: 0, length: 10},
+            ],
         });
         swap(XmpTags, {
             read(dataView, xmpData) {
@@ -1217,7 +1321,7 @@ describe('exif-reader', function () {
 
             await loadBrobExif({
                 exifTags: {ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')}},
-                appMarkers: {xmpChunks: [{dataOffset: 0, length: 4}]}
+                appMarkers: {blocks: [{kind: 'xmp', chunks: [{dataOffset: 0, length: 4}]}]}
             });
 
             expect(readXmpStrings.filter((xmpString) => typeof xmpString === 'string')).to.deep.equal([]);
@@ -1234,7 +1338,7 @@ describe('exif-reader', function () {
 
             await loadBrobExif({
                 exifTags: {ICC_Profile: {value: [1, 2, 3]}},
-                appMarkers: {iccChunks: [OFFSET_TEST_VALUE_ICC2_1]}
+                appMarkers: {blocks: [{kind: 'icc', chunks: [OFFSET_TEST_VALUE_ICC2_1]}]}
             });
 
             expect(iccReads).to.deep.equal([[OFFSET_TEST_VALUE_ICC2_1]]);
@@ -1381,7 +1485,9 @@ describe('exif-reader', function () {
                 const exifBlock = getByteStringFromNumber(0, 4) + getTiffWithThumbnail(thumbnail);
                 swapImageHeader({
                     fileType: {value: 'jxl', description: 'JPEG XL'},
-                    brobExifChunk: {dataOffset: 0, length: 10}
+                    blocks: [
+                        {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+                    ],
                 });
 
                 const tags = await ExifReader.loadView(new DataView(new ArrayBuffer(thumbnail.length)), {
@@ -1409,13 +1515,12 @@ describe('exif-reader', function () {
             return loadBrobExifRecording(args).then(({tags}) => tags);
         }
 
-        function loadBrobExifRecording({exifTags, options = {}, appMarkers = {}}) {
+        function loadBrobExifRecording({exifTags, options = {}, appMarkers = {blocks: []}}) {
             const decompressedBuffer = new ArrayBuffer(OFFSET_TEST_VALUE + 100);
             new DataView(decompressedBuffer).setUint32(0, OFFSET_TEST_VALUE - 4);
             swapImageHeader({
                 fileType: {value: 'jxl', description: 'JPEG XL'},
-                brobExifChunk: {dataOffset: 0, length: 10},
-                ...appMarkers
+                blocks: [{kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10}, ...appMarkers.blocks],
             });
             const tagsReadCalls = [];
             swap(Tags, {
@@ -1457,7 +1562,9 @@ describe('exif-reader', function () {
         async function loadBrobXmpDecompressingTo(inputLength, decompressedLength) {
             swapImageHeader({
                 fileType: {value: 'jxl', description: 'JPEG XL'},
-                brobXmpChunk: {dataOffset: 0, length: 10}
+                blocks: [
+                    {kind: 'xmp', compression: 'brotli', dataOffset: 0, length: 10},
+                ],
             });
             let readCount = 0;
             swap(XmpTags, {
@@ -1485,8 +1592,10 @@ describe('exif-reader', function () {
         beforeEach(() => {
             swapImageHeader({
                 fileType: {value: 'jxl', description: 'JPEG XL'},
-                brobExifChunk: {dataOffset: 0, length: 10},
-                brobXmpChunk: {dataOffset: 0, length: 10}
+                blocks: [
+                    {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+                    {kind: 'xmp', compression: 'brotli', dataOffset: 0, length: 10},
+                ],
             });
             swapTagsRead(Tags, {MyBrobExifTag: 42});
             swap(XmpTags, {
@@ -1554,7 +1663,9 @@ describe('exif-reader', function () {
     it('should skip brob data in sync mode', () => {
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: 10}
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+            ],
         });
 
         const result = ExifReader.loadView(new DataView(new ArrayBuffer(10)));
@@ -1566,7 +1677,9 @@ describe('exif-reader', function () {
     it('should handle brob decompression failure gracefully', async () => {
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: 10}
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+            ],
         });
 
         const result = await ExifReader.loadView(
@@ -1583,8 +1696,10 @@ describe('exif-reader', function () {
     it('should return a promise that resolves when a custom brob decompression function throws', async () => {
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: 10},
-            brobXmpChunk: {dataOffset: 0, length: 10}
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+                {kind: 'xmp', compression: 'brotli', dataOffset: 0, length: 10},
+            ],
         });
 
         let calls = 0;
@@ -1614,7 +1729,9 @@ describe('exif-reader', function () {
         let receivedLength;
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: 100}
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 100},
+            ],
         });
 
         const result = ExifReader.loadView(
@@ -1640,7 +1757,9 @@ describe('exif-reader', function () {
         let receivedLength;
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: -4}
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: -4},
+            ],
         });
 
         const result = ExifReader.loadView(
@@ -1666,7 +1785,9 @@ describe('exif-reader', function () {
         let receivedLength;
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobXmpChunk: {dataOffset: 0, length: 100}
+            blocks: [
+                {kind: 'xmp', compression: 'brotli', dataOffset: 0, length: 100},
+            ],
         });
 
         const result = ExifReader.loadView(
@@ -1767,7 +1888,9 @@ describe('exif-reader', function () {
 
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: 10}
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+            ],
         });
         swapTagsRead(Tags, myTags);
 
@@ -1790,7 +1913,9 @@ describe('exif-reader', function () {
 
         swapImageHeader({
             fileType: {value: 'jxl', description: 'JPEG XL'},
-            brobExifChunk: {dataOffset: 0, length: 10}
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+            ],
         });
         swapTagsRead(Tags, {MakerNote: {value: [1, 2, 3], __offset: 5}});
 
@@ -1810,8 +1935,10 @@ describe('exif-reader', function () {
         const plainTags = {PlainExifTag: 99};
 
         swapImageHeader({
-            tiffHeaderOffset: OFFSET_TEST_VALUE,
-            brobExifChunk: {dataOffset: 0, length: 10}
+            blocks: [
+                {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+            ],
         });
         swapTagsRead(Tags, plainTags);
 
@@ -1829,14 +1956,14 @@ describe('exif-reader', function () {
 
     it('should be able to find JXL file tags', () => {
         const myTags = {'Image Width': {value: 42, description: '42px'}};
-        swapImageHeader({jxlCodestreamOffset: OFFSET_TEST_VALUE});
+        swapImageHeader({blocks: [{kind: 'jxlFile', codestreamOffset: OFFSET_TEST_VALUE}]});
         swapTagsRead(JxlFileTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should put JXL file tags in file group when expanded', () => {
         const myTags = {'Image Width': {value: 42, description: '42px'}};
-        swapImageHeader({jxlCodestreamOffset: OFFSET_TEST_VALUE});
+        swapImageHeader({blocks: [{kind: 'jxlFile', codestreamOffset: OFFSET_TEST_VALUE}]});
         swapTagsRead(JxlFileTags, myTags);
         const result = ExifReader.loadView(undefined, {expanded: true});
         expect(result.file).to.deep.equal(myTags);
@@ -1850,7 +1977,7 @@ describe('exif-reader', function () {
         };
 
         beforeEach(() => {
-            swapImageHeader({fileType: FILE_TYPE, imageDimensionsOffset: OFFSET_TEST_VALUE});
+            swapImageHeader({fileType: FILE_TYPE, blocks: [{kind: 'isoBmffFile', imageDimensionsOffset: OFFSET_TEST_VALUE}]});
             swapTagsRead(IsoBmffFileTags, myTags);
         });
 
@@ -1924,7 +2051,7 @@ describe('exif-reader', function () {
             });
 
             it('should read them when only the pixel information offset is set', () => {
-                swapImageHeader({fileType: FILE_TYPE, pixelInformationOffset: OFFSET_TEST_VALUE});
+                swapImageHeader({fileType: FILE_TYPE, blocks: [{kind: 'isoBmffFile', pixelInformationOffset: OFFSET_TEST_VALUE}]});
                 const result = ExifReader.loadView(undefined, {expanded: true});
                 expect(readCalls.map((args) => args.slice(1))).to.deep.equal([[undefined, OFFSET_TEST_VALUE]]);
                 expect(result.file).to.deep.equal({...pixiTags, FileType: FILE_TYPE});
@@ -1933,15 +2060,16 @@ describe('exif-reader', function () {
             it('should pass both offsets on when both are set', () => {
                 swapImageHeader({
                     fileType: FILE_TYPE,
-                    imageDimensionsOffset: OFFSET_TEST_VALUE,
-                    pixelInformationOffset: SECOND_OFFSET_TEST_VALUE,
+                    blocks: [
+                        {kind: 'isoBmffFile', imageDimensionsOffset: OFFSET_TEST_VALUE, pixelInformationOffset: SECOND_OFFSET_TEST_VALUE},
+                    ],
                 });
                 ExifReader.loadView();
                 expect(readCalls.map((args) => args.slice(1))).to.deep.equal([[OFFSET_TEST_VALUE, SECOND_OFFSET_TEST_VALUE]]);
             });
 
             it('should not read them when a tag filter leaves out the file group', () => {
-                swapImageHeader({fileType: FILE_TYPE, pixelInformationOffset: OFFSET_TEST_VALUE});
+                swapImageHeader({fileType: FILE_TYPE, blocks: [{kind: 'isoBmffFile', pixelInformationOffset: OFFSET_TEST_VALUE}]});
                 ExifReader.loadView(undefined, {includeTags: {exif: true}});
                 expect(readCalls).to.have.lengthOf(0);
             });
@@ -1957,14 +2085,14 @@ describe('exif-reader', function () {
 
     it('should be able to find MPF APP segment', () => {
         const myTags = {MyMpfTag: 42};
-        swapImageHeader({mpfDataOffset: OFFSET_TEST_VALUE});
+        swapImageHeader({blocks: [{kind: 'mpf', dataOffset: OFFSET_TEST_VALUE}]});
         swapMpfTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find PNG file data segment', () => {
         const myTags = {MyTag: 42};
-        swapForLoadView({pngHeaderOffset: OFFSET_TEST_VALUE}, PngFileTags, myTags);
+        swapForLoadView({blocks: [{kind: 'pngFile', dataOffset: OFFSET_TEST_VALUE}]}, PngFileTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -1972,7 +2100,10 @@ describe('exif-reader', function () {
         const myTags = {MyTag: 42};
         const myAsyncTags = {MyAsyncTag: 42};
         swapImageHeader({
-            pngTextChunks: [OFFSET_TEST_VALUE, SECOND_OFFSET_TEST_VALUE]
+            blocks: [
+                getTextBlock(OFFSET_TEST_VALUE),
+                getTextBlock(SECOND_OFFSET_TEST_VALUE),
+            ],
         });
         swapPngTextTagsRead(myTags, myAsyncTags);
         expect(await ExifReader.loadView(undefined, {async: true})).to.deep.equal({...myTags, ...myAsyncTags});
@@ -1983,10 +2114,7 @@ describe('exif-reader', function () {
         const exifValue = `\nexif\n${String(exifData.length).padStart(8, ' ')}\n${Buffer.from(exifData, 'latin1').toString('hex')}`;
         const exifChunk = getZtxtChunkBytes('Raw profile type exif', exifValue);
         const keywordChunk = getZtxtChunkBytes('__exif', 'FROMFILE');
-        const dataView = new DataView(new Uint8Array(Buffer.concat([exifChunk, keywordChunk])).buffer);
-        swapImageHeader({
-            pngTextChunks: [0, exifChunk.length]
-        });
+        const dataView = getDataView(getPngWithChunks(exifChunk, keywordChunk));
         swap(Tags, {
             read() {
                 return {tags: {MyExifTag: {value: 42, description: '42'}}, byteOrder: ByteOrder.BIG_ENDIAN};
@@ -2001,35 +2129,27 @@ describe('exif-reader', function () {
 
         function getZtxtChunkBytes(keyword, value) {
             const COMPRESSION_METHOD_DEFLATE = '\0';
-            const typeAndData = Buffer.concat([
-                Buffer.from(`zTXt${keyword}\0${COMPRESSION_METHOD_DEFLATE}`, 'latin1'),
-                deflateSync(Buffer.from(value, 'latin1'))
-            ]);
-            const length = Buffer.alloc(4);
-            length.writeUInt32BE(typeAndData.length - 4);
-            const crc = Buffer.alloc(4);
-            crc.writeUInt32BE(crc32(typeAndData));
-            return Buffer.concat([length, typeAndData, crc]);
+            return getPngChunk('zTXt', `${keyword}\0${COMPRESSION_METHOD_DEFLATE}` + deflateSync(Buffer.from(value, 'latin1')).toString('latin1'));
         }
     });
 
     it('should be able to find PNG chunk data segment', () => {
         const myTags = {MyTag: 42};
-        swapImageHeader({pngChunkOffsets: [OFFSET_TEST_VALUE]});
+        swapImageHeader({blocks: [{kind: 'pngChunk', dataOffset: OFFSET_TEST_VALUE}]});
         swapPngTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find RIFF chunk data segment', () => {
         const myTags = {MyTag: 42};
-        swapImageHeader({vp8xChunkOffset: OFFSET_TEST_VALUE});
+        swapImageHeader({blocks: [{kind: 'riff', dataOffset: OFFSET_TEST_VALUE}]});
         swapVp8xTagsRead(myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
     it('should be able to find GIF file data segment', () => {
         const myTags = {MyTag: 42};
-        swapForLoadView({gifHeaderOffset: OFFSET_TEST_VALUE}, GifFileTags, myTags);
+        swapForLoadView({blocks: [{kind: 'gif', dataOffset: OFFSET_TEST_VALUE}]}, GifFileTags, myTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
@@ -2046,17 +2166,16 @@ describe('exif-reader', function () {
             Thumbnail: {type: 'image/jpeg'}
         };
         swapImageHeader({
-            fileDataOffset: OFFSET_TEST_VALUE,
-            jfifDataOffset: OFFSET_TEST_VALUE,
-            tiffHeaderOffset: OFFSET_TEST_VALUE,
-            iptcDataOffset: OFFSET_TEST_VALUE,
-            xmpChunks: [{
-                dataOffset: OFFSET_TEST_VALUE,
-                length: XMP_FIELD_LENGTH_TEST_VALUE
-            }],
-            iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2],
-            mpfDataOffset: OFFSET_TEST_VALUE,
-            vp8xChunkOffset: OFFSET_TEST_VALUE
+            blocks: [
+                {kind: 'file', dataOffset: OFFSET_TEST_VALUE},
+                {kind: 'jfif', dataOffset: OFFSET_TEST_VALUE},
+                {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
+                {kind: 'iptc', dataOffset: OFFSET_TEST_VALUE},
+                {kind: 'xmp', chunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]},
+                {kind: 'icc', chunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]},
+                {kind: 'mpf', dataOffset: OFFSET_TEST_VALUE},
+                {kind: 'riff', dataOffset: OFFSET_TEST_VALUE},
+            ],
         });
         swapTagsRead(FileTags, myTags.file);
         swapTagsRead(JfifTags, myTags.jfif);
@@ -2081,7 +2200,7 @@ describe('exif-reader', function () {
             xmp: {MyXmpTag: 43},
             icc: {MyIccTag: 44}
         };
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags.exif);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags.exif);
         swapTagsRead(IptcTags, myTags.iptc);
         swapXmpTagsRead(myTags.xmp);
         swapIccTagsRead(myTags.icc);
@@ -2091,7 +2210,7 @@ describe('exif-reader', function () {
     it('should retrieve a thumbnail', () => {
         const myThumbnail = {type: 'image/jpeg'};
         const myTags = {MyExifTag: 43, Thumbnail: myThumbnail};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
         swapThumbnail(myThumbnail);
 
         expect(ExifReader.loadView({})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
@@ -2100,7 +2219,7 @@ describe('exif-reader', function () {
     it('should retrieve a thumbnail when using expanded result', () => {
         const myThumbnail = {type: 'image/jpeg'};
         const myTags = {MyExifTag: 43, Thumbnail: myThumbnail};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
         swapThumbnail(myThumbnail);
 
         expect(ExifReader.loadView({}, {expanded: true})['Thumbnail']).to.deep.equal({image: '<image data>', ...myThumbnail});
@@ -2134,20 +2253,20 @@ describe('exif-reader', function () {
 
     it('should add file type', () => {
         const myTags = {MyTag: 42, FileType: 'will be overwritten'};
-        swapForLoadView({fileType: {value: 'heic', description: 'HEIC'}, tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+        swapForLoadView({fileType: {value: 'heic', description: 'HEIC'}, blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
         expect(ExifReader.loadView({})).to.deep.equal({...myTags, FileType: {value: 'heic', description: 'HEIC'}});
     });
 
     it('should add file type when using expanded result', () => {
         const myTags = {exif: {MyTag: 42}, file: {FileType: 'will be overwritten'}};
-        swapForLoadView({fileType: {value: 'webp', description: 'WebP'}, tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags.exif);
+        swapForLoadView({fileType: {value: 'webp', description: 'WebP'}, blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags.exif);
         expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({...myTags, file: {FileType: {value: 'webp', description: 'WebP'}}});
     });
 
     it('should calculate composite values', () => {
         const myTags = {MyExifTag: 42};
         const compositeTags = {MyCompositeTag: 4711};
-        swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
         swap(Composite, {
             get() {
                 return compositeTags;
@@ -2160,7 +2279,7 @@ describe('exif-reader', function () {
     describe('gps group', () => {
         it('should not create a "gps" group if there are no GPS values', () => {
             const myTags = {MyExifTag: 43};
-            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+            swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({exif: myTags});
         });
@@ -2170,7 +2289,7 @@ describe('exif-reader', function () {
                 GPSLatitudeRef: {value: ['N']},
                 GPSLatitude: {value: [[34, 1], [3, 1], [3780, 100]]},
             };
-            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+            swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Latitude: 34.0605});
         });
@@ -2180,7 +2299,7 @@ describe('exif-reader', function () {
                 GPSLatitudeRef: {value: ['S']},
                 GPSLatitude: {value: [[34, 1], [3, 1], [3780, 100]]},
             };
-            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+            swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Latitude: -34.0605});
         });
@@ -2190,7 +2309,7 @@ describe('exif-reader', function () {
                 GPSLatitudeRef: {value: ['se']},
                 GPSLatitude: {value: [31, 1]},
             };
-            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+            swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({});
         });
@@ -2200,7 +2319,7 @@ describe('exif-reader', function () {
                 GPSLongitudeRef: {value: ['E']},
                 GPSLongitude: {value: [[44, 1], [45, 1], [3240, 100]]},
             };
-            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+            swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Longitude: 44.759});
         });
@@ -2210,7 +2329,7 @@ describe('exif-reader', function () {
                 GPSLongitudeRef: {value: ['W']},
                 GPSLongitude: {value: [[44, 1], [45, 1], [3240, 100]]},
             };
-            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+            swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Longitude: -44.759});
         });
@@ -2220,7 +2339,7 @@ describe('exif-reader', function () {
                 GPSLongitudeRef: {value: ['se']},
                 GPSLongitude: {value: [31, 1]},
             };
-            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+            swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({});
         });
@@ -2230,7 +2349,7 @@ describe('exif-reader', function () {
                 GPSAltitudeRef: {value: 0},
                 GPSAltitude: {value: [46, 2]},
             };
-            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+            swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Altitude: 23});
         });
@@ -2240,7 +2359,7 @@ describe('exif-reader', function () {
                 GPSAltitudeRef: {value: 1},
                 GPSAltitude: {value: [46, 2]},
             };
-            swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myTags);
+            swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})['gps']).to.deep.equal({Altitude: -23});
         });
@@ -2275,35 +2394,37 @@ describe('exif-reader', function () {
 
         it('should handle when file tags have been excluded', () => {
             useFlags.USE_FILE = false;
-            swapForCustomBuild({fileDataOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'file', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when JFIF tags have been excluded', () => {
             useFlags.USE_JFIF = false;
-            swapForCustomBuild({jfifDataOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'jfif', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when PNG file tags have been excluded', () => {
             useFlags.USE_PNG_FILE = false;
-            swapForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'pngFile', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when JPEG files have been excluded', () => {
             useFlags.USE_JPEG = false;
             swapForCustomBuild({
-                fileDataOffset: OFFSET_TEST_VALUE,
-                jfifDataOffset: OFFSET_TEST_VALUE,
-                iptcDataOffset: OFFSET_TEST_VALUE
+                blocks: [
+                    {kind: 'file', dataOffset: OFFSET_TEST_VALUE},
+                    {kind: 'jfif', dataOffset: OFFSET_TEST_VALUE},
+                    {kind: 'iptc', dataOffset: OFFSET_TEST_VALUE},
+                ],
             }, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when Exif tags have been excluded', () => {
             useFlags.USE_EXIF = false;
-            swapForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
@@ -2318,7 +2439,7 @@ describe('exif-reader', function () {
             useFlags.USE_EXIF = false;
             const myTags = {MyXmpTag: 42};
             swap(Composite, {get: () => ({MyCompositeTag: 4711})});
-            swapForCustomBuild({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'xmp', chunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}]}, useFlags);
             swapXmpTagsRead(myTags);
             expect(ExifReader.loadView()).to.deep.equal({...myTags, MyCompositeTag: 4711});
         });
@@ -2328,44 +2449,44 @@ describe('exif-reader', function () {
             useFlags.USE_XMP = false;
             const myTags = {MyIccTag: 42};
             swap(Composite, {get: () => ({MyCompositeTag: 4711})});
-            swapForCustomBuild({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'icc', chunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}]}, useFlags);
             swapIccTagsRead(myTags);
             expect(ExifReader.loadView()).to.deep.equal(myTags);
         });
 
         it('should handle when IPTC tags have been excluded', () => {
             useFlags.USE_IPTC = false;
-            swapForCustomBuild({iptcDataOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'iptc', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when XMP tags have been excluded', () => {
             useFlags.USE_XMP = false;
-            swapForCustomBuild({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'xmp', chunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when ICC tags have been excluded', () => {
             useFlags.USE_ICC = false;
-            swapForCustomBuild({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'icc', chunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when MPF tags have been excluded', () => {
             useFlags.USE_MPF = false;
-            swapForCustomBuild({mpfDataOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'mpf', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when PNG files have been excluded', () => {
             useFlags.USE_PNG = false;
-            swapForCustomBuild({pngHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'pngFile', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
         it('should handle when GIF files have been excluded', () => {
             useFlags.USE_GIF = false;
-            swapForCustomBuild({gifHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'gif', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
             expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
         });
 
@@ -2379,13 +2500,12 @@ describe('exif-reader', function () {
                 Thumbnail: {type: 'image/jpeg'}
             };
             swapForCustomBuild({
-                tiffHeaderOffset: OFFSET_TEST_VALUE,
-                iptcDataOffset: OFFSET_TEST_VALUE,
-                xmpChunks: [{
-                    dataOffset: OFFSET_TEST_VALUE,
-                    length: XMP_FIELD_LENGTH_TEST_VALUE
-                }],
-                iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]
+                blocks: [
+                    {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
+                    {kind: 'iptc', dataOffset: OFFSET_TEST_VALUE},
+                    {kind: 'xmp', chunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]},
+                    {kind: 'icc', chunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]},
+                ],
             }, useFlags);
             swapTagsRead(Tags, {...myTags.exif, Thumbnail: myTags.Thumbnail});
             swapTagsRead(IptcTags, myTags.iptc);
@@ -2404,7 +2524,7 @@ describe('exif-reader', function () {
             useFlags.USE_JPEG = false;
             useFlags.USE_WEBP = false;
             const myTags = {MyIccTag: 42};
-            swapForCustomBuild({iccChunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'icc', chunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}]}, useFlags);
             swapIccTagsRead(myTags);
 
             expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({icc: myTags});
@@ -2417,7 +2537,7 @@ describe('exif-reader', function () {
                 exif: {MyExifTag: 43},
                 Thumbnail: {type: 'image/jpeg'}
             };
-            swapForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, useFlags);
             swapTagsRead(Tags, {...myTags.exif, Thumbnail: myTags.Thumbnail});
 
             expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({
@@ -2432,7 +2552,7 @@ describe('exif-reader', function () {
                 exif: {'IPTC-NAA': {value: ['<IPTC block array>']}},
                 iptc: {MyIptcTag: 42}
             };
-            swapForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, useFlags);
             swapTagsRead(Tags, myTags.exif);
             swapTagsRead(IptcTags, myTags.iptc);
 
@@ -2445,7 +2565,7 @@ describe('exif-reader', function () {
                 exif: {ApplicationNotes: {value: getCharacterArray('<x:xmpmeta></x:xmpmeta>')}},
                 xmp: {MyXmpTag: 45}
             };
-            swapForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, useFlags);
             swapTagsRead(Tags, myTags.exif);
             swapXmpTagsRead(myTags.xmp);
 
@@ -2458,7 +2578,7 @@ describe('exif-reader', function () {
                 exif: {ICC_Profile: {value: [1, 2, 3]}},
                 icc: {MyIccTag: 44}
             };
-            swapForCustomBuild({tiffHeaderOffset: OFFSET_TEST_VALUE}, useFlags);
+            swapForCustomBuild({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, useFlags);
             swapTagsRead(Tags, myTags.exif);
             swapIccTagsRead(myTags.icc);
 
@@ -2469,7 +2589,9 @@ describe('exif-reader', function () {
             useFlags.USE_THUMBNAIL = false;
             swap(Thumbnail, {get: () => true});
             swapForCustomBuild({
-                tiffHeaderOffset: OFFSET_TEST_VALUE,
+                blocks: [
+                    {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
+                ],
             }, useFlags);
             swapTagsRead(Tags, {Thumbnail: {type: 'image/jpeg'}});
             expect(ExifReader.loadView()['Thumbnail']).to.be.undefined;
@@ -2479,10 +2601,12 @@ describe('exif-reader', function () {
     describe('metadataRange (includeOffsets)', () => {
         it('should return metadataRange in expanded mode when includeOffsets is true', () => {
             swapImageHeader({
-                tiffHeaderOffset: OFFSET_TEST_VALUE,
-                metadataBlocks: [
-                    {type: 'exif', start: 2, end: 100},
-                    {type: 'xmp', start: 100, end: 200},
+                ranges: [
+                    {block: {kind: 'exif'}, start: 2, end: 100},
+                    {block: {kind: 'xmp'}, start: 100, end: 200},
+                ],
+                blocks: [
+                    {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
                 ],
             });
             swapTagsRead(Tags, {MyExifTag: 42});
@@ -2506,9 +2630,9 @@ describe('exif-reader', function () {
         it('should pass the includeOffsets flag to parseAppMarkers', () => {
             let receivedFlag;
             swap(ImageHeader, {
-                parseAppMarkers(_dataView, _async, includeMetadataBlocks) {
-                    receivedFlag = includeMetadataBlocks;
-                    return {tiffHeaderOffset: OFFSET_TEST_VALUE, metadataBlocks: []};
+                parseAppMarkers(_dataView, includeRanges) {
+                    receivedFlag = includeRanges;
+                    return {blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}], ranges: []};
                 }
             });
             swapTagsRead(Tags, {MyExifTag: 42});
@@ -2523,8 +2647,10 @@ describe('exif-reader', function () {
 
         it('should not return metadataRange in flat mode even when includeOffsets is true', () => {
             swapImageHeader({
-                tiffHeaderOffset: OFFSET_TEST_VALUE,
-                metadataBlocks: [{type: 'exif', start: 2, end: 100}],
+                ranges: [{block: {kind: 'exif'}, start: 2, end: 100}],
+                blocks: [
+                    {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
+                ],
             });
             swapTagsRead(Tags, {MyExifTag: 42});
 
@@ -2539,9 +2665,9 @@ describe('exif-reader', function () {
         it('should NOT ask parseAppMarkers to build blocks when expanded is omitted (no wasted work)', () => {
             let receivedFlag;
             swap(ImageHeader, {
-                parseAppMarkers(_dataView, _async, includeMetadataBlocks) {
-                    receivedFlag = includeMetadataBlocks;
-                    return {tiffHeaderOffset: OFFSET_TEST_VALUE};
+                parseAppMarkers(_dataView, includeRanges) {
+                    receivedFlag = includeRanges;
+                    return {blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]};
                 }
             });
             swapTagsRead(Tags, {MyExifTag: 42});
@@ -2556,8 +2682,10 @@ describe('exif-reader', function () {
 
         it('should not return metadataRange when includeOffsets is omitted', () => {
             swapImageHeader({
-                tiffHeaderOffset: OFFSET_TEST_VALUE,
-                metadataBlocks: [{type: 'exif', start: 2, end: 100}],
+                ranges: [{block: {kind: 'exif'}, start: 2, end: 100}],
+                blocks: [
+                    {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
+                ],
             });
             swapTagsRead(Tags, {MyExifTag: 42});
 
@@ -2571,8 +2699,10 @@ describe('exif-reader', function () {
 
         it('should mark complete:false when metadata extends past the buffer', () => {
             swapImageHeader({
-                tiffHeaderOffset: OFFSET_TEST_VALUE,
-                metadataBlocks: [{type: 'exif', start: 2, end: 5000}],
+                ranges: [{block: {kind: 'exif'}, start: 2, end: 5000}],
+                blocks: [
+                    {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
+                ],
             });
             swapTagsRead(Tags, {MyExifTag: 42});
 
@@ -2587,8 +2717,10 @@ describe('exif-reader', function () {
 
         it('should omit metadataRange when there are no blocks (e.g. plain TIFF)', () => {
             swapImageHeader({
-                tiffHeaderOffset: OFFSET_TEST_VALUE,
-                metadataBlocks: [],
+                ranges: [],
+                blocks: [
+                    {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
+                ],
             });
             swapTagsRead(Tags, {MyExifTag: 42});
 
@@ -2602,8 +2734,10 @@ describe('exif-reader', function () {
 
         it('should include MPF embedded images as mpfImage blocks', () => {
             swapImageHeader({
-                mpfDataOffset: OFFSET_TEST_VALUE,
-                metadataBlocks: [{type: 'mpf', start: 2, end: 100}],
+                ranges: [{block: {kind: 'mpf'}, start: 2, end: 100}],
+                blocks: [
+                    {kind: 'mpf', dataOffset: OFFSET_TEST_VALUE},
+                ],
             });
             swapMpfTagsRead({
                 NumberOfImages: {value: 3},
@@ -2631,11 +2765,13 @@ describe('exif-reader', function () {
 
         it('should emit no mpfImage blocks when MPF parsing is excluded', () => {
             swapImageHeader({
-                mpfDataOffset: OFFSET_TEST_VALUE,
-                tiffHeaderOffset: OFFSET_TEST_VALUE,
-                metadataBlocks: [
-                    {type: 'exif', start: 2, end: 100},
-                    {type: 'mpf', start: 100, end: 200},
+                ranges: [
+                    {block: {kind: 'exif'}, start: 2, end: 100},
+                    {block: {kind: 'mpf'}, start: 100, end: 200},
+                ],
+                blocks: [
+                    {kind: 'mpf', dataOffset: OFFSET_TEST_VALUE},
+                    {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
                 ],
             });
             // Tags.read is swapped to return tags only when the offset matches so the exif read succeeds.
@@ -2793,6 +2929,14 @@ describe('exif-reader', function () {
                     expect(getBlockTypes(tags)).to.deep.equal(['file', 'exif', 'png', 'png', 'icc']);
                     expect(tags.pngText).to.have.property('Comment');
                     expect(tags.pngText).to.not.have.property('XML:com.adobe.xmp');
+                });
+
+                it('should keep a raw profile text chunk listed as png without USE_EXIF', async () => {
+                    swap(Constants, {USE_EXIF: false});
+
+                    const tags = await loadPng(getInventoryPng(getTextChunk('Raw profile type exif', getExifRawProfile(getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]})))));
+
+                    expect(getBlockTypes(tags)).to.deep.equal(['file', 'png']);
                 });
 
                 it('should not make a pngText group from the XMP iTXt chunk alone without USE_XMP', async () => {
@@ -2980,8 +3124,10 @@ describe('exif-reader', function () {
 
         function swapForAutoTest({end} = {}) {
             swapImageHeader({
-                tiffHeaderOffset: OFFSET_TEST_VALUE,
-                metadataBlocks: end !== undefined ? [{type: 'exif', start: 2, end}] : [],
+                ranges: end !== undefined ? [{block: {kind: 'exif'}, start: 2, end}] : [],
+                blocks: [
+                    {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
+                ],
             });
             swapTagsRead(Tags, {MyExifTag: 42});
         }
@@ -3341,12 +3487,12 @@ describe('exif-reader', function () {
                     parseCalls++;
                     const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
                     if (len < 250000) {
-                        return {fileType: 'heic'};
+                        return {fileType: 'heic', blocks: []};
                     }
                     return {
                         fileType: 'heic',
-                        tiffHeaderOffset: OFFSET_TEST_VALUE,
-                        metadataBlocks: [{type: 'exif', start: 200000, end: 230000}],
+                        blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}],
+                        ranges: [{block: {kind: 'exif'}, start: 200000, end: 230000}],
                     };
                 });
                 swapTagsRead(Tags, {MyExifTag: 42});
@@ -3368,8 +3514,8 @@ describe('exif-reader', function () {
                 swapImageHeaderDynamic((dataView) => {
                     const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
                     return {
-                        tiffHeaderOffset: OFFSET_TEST_VALUE,
-                        metadataBlocks: [{type: 'exif', start: 2, end: len + 1000}],
+                        blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}],
+                        ranges: [{block: {kind: 'exif'}, start: 2, end: len + 1000}],
                     };
                 });
                 swapTagsRead(Tags, {MyExifTag: 42});
@@ -3393,8 +3539,8 @@ describe('exif-reader', function () {
                 swapImageHeaderDynamic((dataView) => {
                     const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
                     return {
-                        tiffHeaderOffset: OFFSET_TEST_VALUE,
-                        metadataBlocks: [{type: 'exif', start: 2, end: len + 1000}],
+                        blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}],
+                        ranges: [{block: {kind: 'exif'}, start: 2, end: len + 1000}],
                     };
                 });
                 swapTagsRead(Tags, {MyExifTag: 42});
@@ -3418,8 +3564,8 @@ describe('exif-reader', function () {
                 swapImageHeaderDynamic((dataView) => {
                     const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
                     return {
-                        tiffHeaderOffset: OFFSET_TEST_VALUE,
-                        metadataBlocks: [{type: 'exif', start: 2, end: len + 1000}],
+                        blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}],
+                        ranges: [{block: {kind: 'exif'}, start: 2, end: len + 1000}],
                     };
                 });
                 swapTagsRead(Tags, {MyExifTag: 42});
@@ -3932,7 +4078,7 @@ describe('exif-reader', function () {
             let parsedDataView;
             swapImageHeaderDynamic((view) => {
                 parsedDataView = view;
-                return {fileDataOffset: OFFSET_TEST_VALUE};
+                return {blocks: [{kind: 'file', dataOffset: OFFSET_TEST_VALUE}]};
             });
             swapTagsRead(FileTags, {MyTag: 42});
 
@@ -4600,7 +4746,7 @@ describe('exif-reader', function () {
         });
 
         it('should not return an XMP tag named Thumbnail as the thumbnail when there is no thumbnail IFD', () => {
-            swapImageHeader({xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]});
+            swapImageHeader({blocks: [{kind: 'xmp', chunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}]});
             swapXmpTagsRead({
                 Thumbnail: {value: 'fake-thumbnail', attributes: {}, description: 'fake-thumbnail'},
                 MyXmpTag: {value: 42}
@@ -4635,7 +4781,9 @@ describe('exif-reader', function () {
         it('should not return an XMP tag named FileType when only XMP tags are included', () => {
             swapImageHeader({
                 fileType: {value: 'jpeg', description: 'JPEG'},
-                xmpChunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]
+                blocks: [
+                    {kind: 'xmp', chunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]},
+                ],
             });
             swapXmpTagsRead({
                 FileType: {value: 'fake-filetype', attributes: {}, description: 'fake-filetype'},
@@ -4701,12 +4849,18 @@ function swapForLoadView(appMarkersValue, tagsModule, tagsValue) {
     swapTagsRead(tagsModule, tagsValue);
 }
 
+// A stub without `blocks` stands for a finder that found nothing.
 function swapImageHeader(appMarkersValue) {
     swap(ImageHeader, {
         parseAppMarkers() {
-            return appMarkersValue;
+            return {blocks: [], ...appMarkersValue};
         }
     });
+}
+
+// A PNG tEXt block as the finder reports it, for tests that fake the text reader.
+function getTextBlock(valueOffset) {
+    return {kind: 'pngText', text: {chunkType: 'tEXt', name: 'Comment', valueOffset, valueLength: 0}};
 }
 
 function swapImageHeaderDynamic(parseAppMarkersImpl) {
@@ -4743,7 +4897,7 @@ function swapMpfTagsRead(tagsValue) {
 
 function captureDecodedValueBudgets(exifTags) {
     const capturedBudgets = {};
-    swapImageHeader({tiffHeaderOffset: OFFSET_TEST_VALUE, mpfDataOffset: OFFSET_TEST_VALUE});
+    swapImageHeader({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}, {kind: 'mpf', dataOffset: OFFSET_TEST_VALUE}]});
     swap(Tags, {
         read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
             capturedBudgets.exif = valueBudget;
@@ -4771,9 +4925,9 @@ function captureDecodedValueBudgets(exifTags) {
     return capturedBudgets;
 }
 
-function capturePngTextValueBudgets(appMarkers) {
+function capturePngTextValueBudgets(blocks) {
     const capturedBudgets = {};
-    swapImageHeader({...appMarkers, pngTextChunks: [0]});
+    swapImageHeader({blocks: [...blocks, getTextBlock(0)]});
     swap(Tags, {
         read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
             capturedBudgets.exif = valueBudget;
@@ -4781,7 +4935,7 @@ function capturePngTextValueBudgets(appMarkers) {
         }
     });
     swap(PngTextTags, {
-        read(dataView, pngTextChunks, async, includeUnknown, computed, tagFilter, decompressConfig, valueBudget) {
+        read(dataView, pngTextBlocks, async, includeUnknown, computed, tagFilter, decompressConfig, valueBudget) {
             capturedBudgets.pngText = valueBudget;
             return {readTags: {}, readTagsPromise: undefined};
         }
@@ -4804,7 +4958,7 @@ function swapXmpTagsRead(tagsValue) {
 }
 
 function getXmpStringReadFromApplicationNotes(myExifTags) {
-    swapForLoadView({tiffHeaderOffset: OFFSET_TEST_VALUE}, Tags, myExifTags);
+    swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
     const readXmpStrings = swapXmpTagsReadRecording();
     ExifReader.loadView();
     return readXmpStrings[0];
@@ -4855,8 +5009,8 @@ function swapMakerNoteTagsRead(tagsValue, makerNoteModule) {
 
 function swapPngTextTagsRead(tagsValue, asyncTagsValue) {
     swap(PngTextTags, {
-        read(dataView, pngTextChunks, async) {
-            if (pngTextChunks.length === 2 && pngTextChunks[0] === OFFSET_TEST_VALUE && pngTextChunks[1] === SECOND_OFFSET_TEST_VALUE) {
+        read(dataView, pngTextBlocks, async) {
+            if (pngTextBlocks.length === 2 && pngTextBlocks[0].text.valueOffset === OFFSET_TEST_VALUE && pngTextBlocks[1].text.valueOffset === SECOND_OFFSET_TEST_VALUE) {
                 return {readTags: tagsValue, readTagsPromise: async ? Promise.resolve([{readTags: asyncTagsValue}]) : undefined};
             }
             return {};

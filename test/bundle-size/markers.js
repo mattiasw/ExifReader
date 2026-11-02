@@ -64,7 +64,7 @@ const MODULE_MARKERS = {
     'thumbnail.js': 'image/jpeg',
     'png-tags.js': 'Pixels Per Unit X',
     'image-header-png.js': 'zTXt',
-    'png-text-tags.js': 'STATE_KEYWORD',
+    'png-text-tags.js': '<text using unknown compression>',
     'image-header-heic.js': 'heix',
     'jxl-file-tags.js': 'Unexpected end of data',
     'vp8x-tags.js': 'Animation',

@@ -1082,13 +1082,13 @@ describe('image-header-iso-bmff', () => {
     });
 
     describe('findOffsets', () => {
-        it('should not find offsets if there is no meta box', () => {
+        it('should find no blocks if there is no meta box', () => {
             const dataView = getDataView('');
 
-            expect(findOffsets(dataView)).to.deep.equal({hasAppMarkers: false});
+            expect(findOffsets(dataView)).to.deep.equal([]);
         });
 
-        it('should report app markers for a meta box with only an Exif item', () => {
+        it('should report an exif block for a meta box with only an Exif item', () => {
             const EXIF_ITEM_ID = 2;
             const exifData = buildExifBlock('<Exif data>');
             const metaBox = getFullBox(
@@ -1101,24 +1101,22 @@ describe('image-header-iso-bmff', () => {
                 })
             );
 
-            const offsets = findOffsets(getDataView(metaBox.padEnd(200, '\x00') + exifData));
+            const blocks = findOffsets(getDataView(metaBox.padEnd(200, '\x00') + exifData));
 
-            expect(offsets.hasAppMarkers).to.be.true;
-            expect(offsets.tiffHeaderOffset).to.be.a('number');
-            expect(offsets.xmpChunks).to.be.undefined;
-            expect(offsets.iccChunks).to.be.undefined;
+            expect(blocks.map((block) => block.kind)).to.deep.equal(['exif']);
+            expect(blocks[0].tiffHeaderOffset).to.be.a('number');
         });
 
-        it('should report app markers for a meta box with only an ICC profile', () => {
+        it('should report an icc block for a meta box with only an ICC profile', () => {
             const dataView = getDataView(getFullBox('meta', 0, buildIprpColrBox('<ICC content>')));
 
-            const offsets = findOffsets(dataView);
+            const blocks = findOffsets(dataView);
 
-            expect(offsets.hasAppMarkers).to.be.true;
-            expect(offsets.iccChunks).to.have.lengthOf(1);
+            expect(blocks.map((block) => block.kind)).to.deep.equal(['icc']);
+            expect(blocks[0].chunks).to.have.lengthOf(1);
         });
 
-        it('should find offsets', () => {
+        it('should find the exif, xmp and icc blocks', () => {
             const EXIF_ITEM_ID = 2;
             const XMP_ITEM_ID = 3;
             const EXIF_PREFIX = 'Exif\x00\x00';
@@ -1152,31 +1150,22 @@ describe('image-header-iso-bmff', () => {
 
             const dataView = getDataView(boxes + exifDataPadding + exifData);
 
-            expect(findOffsets(dataView)).to.deep.equal({
-                hasAppMarkers: true,
-                tiffHeaderOffset: boxes.length + exifDataPadding.length + tiffHeaderOffsetBytes.length + EXIF_PREFIX.length,
-                xmpChunks: [{
-                    dataOffset: baseOffsetValue + XMP_EXTENT_OFFSET,
-                    length: 256
-                }],
-                iccChunks: [{
-                    offset: 116,
-                    length: 17,
-                    chunkNumber: 1,
-                    chunksTotal: 1
-                }]
-            });
+            expect(findOffsets(dataView)).to.deep.equal([
+                {kind: 'exif', tiffHeaderOffset: boxes.length + exifDataPadding.length + tiffHeaderOffsetBytes.length + EXIF_PREFIX.length},
+                {kind: 'xmp', chunks: [{dataOffset: baseOffsetValue + XMP_EXTENT_OFFSET, length: 256}]},
+                {kind: 'icc', chunks: [{offset: 116, length: 17, chunkNumber: 1, chunksTotal: 1}]},
+            ]);
         });
 
-        describe('metadataBlocks', () => {
-            it('should leave metadataBlocks empty when no meta box is found', () => {
+        describe('ranges', () => {
+            it('should leave the ranges empty when no meta box is found', () => {
                 const dataView = getDataView('');
-                const metadataBlocks = [];
-                findOffsets(dataView, metadataBlocks);
-                expect(metadataBlocks).to.deep.equal([]);
+                const ranges = [];
+                findOffsets(dataView, ranges);
+                expect(ranges).to.deep.equal([]);
             });
 
-            it('should emit exif, xmp and icc blocks from iloc extents', () => {
+            it('should list the exif, xmp and icc spans from iloc extents, linked to their blocks', () => {
                 const EXIF_ITEM_ID = 2;
                 const XMP_ITEM_ID = 3;
                 const exifDataPadding = '\x00'.repeat(9);
@@ -1203,16 +1192,19 @@ describe('image-header-iso-bmff', () => {
                 );
 
                 const dataView = getDataView(boxes + exifDataPadding + exifData);
-                const metadataBlocks = [];
-                findOffsets(dataView, metadataBlocks);
+                const ranges = [];
+                const blocks = findOffsets(dataView, ranges);
 
                 // Order matches the call order in findOffsets (exif, xmp, icc).
                 // The pipeline merge step sorts blocks by start before exposing them.
-                expect(metadataBlocks).to.deep.equal([
-                    {type: 'exif', start: baseOffsetValue + EXIF_EXTENT_OFFSET, end: baseOffsetValue + EXIF_EXTENT_OFFSET + 128},
-                    {type: 'xmp', start: baseOffsetValue + XMP_EXTENT_OFFSET, end: baseOffsetValue + XMP_EXTENT_OFFSET + 256},
-                    {type: 'icc', start: 116, end: 116 + 17},
+                expect(ranges).to.deep.equal([
+                    {block: blocks[0], start: baseOffsetValue + EXIF_EXTENT_OFFSET, end: baseOffsetValue + EXIF_EXTENT_OFFSET + 128},
+                    {block: blocks[1], start: baseOffsetValue + XMP_EXTENT_OFFSET, end: baseOffsetValue + XMP_EXTENT_OFFSET + 256},
+                    {block: blocks[2], start: 116, end: 116 + 17},
                 ]);
+                for (let i = 0; i < ranges.length; i++) {
+                    expect(ranges[i].block).to.equal(blocks[i]);
+                }
             });
 
             it('should report Exif, XMP and ICC even if they are excluded from custom build', () => {
@@ -1239,14 +1231,14 @@ describe('image-header-iso-bmff', () => {
                 const data = metaBox.padEnd(200, '\x00') + exifData.padEnd(100, '\x00') + xmpData;
                 const restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
                 try {
-                    const metadataBlocks = [];
-                    const offsets = findOffsets(getDataView(data), metadataBlocks);
+                    const ranges = [];
+                    const blocks = findOffsets(getDataView(data), ranges);
 
-                    expect(offsets.hasAppMarkers).to.be.true;
-                    expect(offsets.tiffHeaderOffset).to.be.a('number');
-                    expect(offsets.xmpChunks).to.deep.equal([{dataOffset: 300, length: xmpData.length}]);
-                    expect(offsets.iccChunks).to.have.lengthOf(1);
-                    expect(metadataBlocks.map((block) => block.type)).to.deep.equal(['exif', 'xmp', 'icc']);
+                    expect(blocks.map((block) => block.kind)).to.deep.equal(['exif', 'xmp', 'icc']);
+                    expect(blocks[0].tiffHeaderOffset).to.be.a('number');
+                    expect(blocks[1].chunks).to.deep.equal([{dataOffset: 300, length: xmpData.length}]);
+                    expect(blocks[2].chunks).to.have.lengthOf(1);
+                    expect(ranges.map((range) => range.block.kind)).to.deep.equal(['exif', 'xmp', 'icc']);
                 } finally {
                     restoreConstants();
                 }
@@ -1274,12 +1266,12 @@ describe('image-header-iso-bmff', () => {
                 const expectedTiffHeaderOffset = expectedExifBlockOffset + 4 + 'Exif\x00\x00'.length;
 
                 const dataView = getDataView(boxes);
-                const metadataBlocks = [];
-                const result = findOffsets(dataView, metadataBlocks);
+                const ranges = [];
+                const blocks = findOffsets(dataView, ranges);
 
-                expect(result.tiffHeaderOffset).to.equal(expectedTiffHeaderOffset);
-                expect(metadataBlocks).to.deep.equal([
-                    {type: 'exif', start: expectedExifBlockOffset, end: expectedExifBlockOffset + exifBlock.length},
+                expect(blocks).to.deep.equal([{kind: 'exif', tiffHeaderOffset: expectedTiffHeaderOffset}]);
+                expect(ranges).to.deep.equal([
+                    {block: blocks[0], start: expectedExifBlockOffset, end: expectedExifBlockOffset + exifBlock.length},
                 ]);
             });
 
@@ -1307,14 +1299,12 @@ describe('image-header-iso-bmff', () => {
                 const idatContentOffset = FULL_BOX_HEADER_SIZE + iinfBox.length + PLAIN_BOX_HEADER_SIZE;
 
                 const dataView = getDataView(boxes);
-                const metadataBlocks = [];
-                const result = findOffsets(dataView, metadataBlocks);
+                const ranges = [];
+                const blocks = findOffsets(dataView, ranges);
 
-                expect(result.xmpChunks).to.deep.equal([
-                    {dataOffset: idatContentOffset, length: xmpBytes.length},
-                ]);
-                expect(metadataBlocks).to.deep.equal([
-                    {type: 'xmp', start: idatContentOffset, end: idatContentOffset + xmpBytes.length},
+                expect(blocks).to.deep.equal([{kind: 'xmp', chunks: [{dataOffset: idatContentOffset, length: xmpBytes.length}]}]);
+                expect(ranges).to.deep.equal([
+                    {block: blocks[0], start: idatContentOffset, end: idatContentOffset + xmpBytes.length},
                 ]);
             });
 
@@ -1333,12 +1323,12 @@ describe('image-header-iso-bmff', () => {
                 const boxes = getFullBox('meta', 0, iinfBox + ilocBox);
 
                 const dataView = getDataView(boxes + '\x00'.repeat(64));
-                const metadataBlocks = [];
+                const ranges = [];
                 const warnSpy = getConsoleWarnSpy();
                 try {
-                    const result = findOffsets(dataView, metadataBlocks);
-                    expect(result.tiffHeaderOffset).to.be.undefined;
-                    expect(metadataBlocks).to.deep.equal([]);
+                    const blocks = findOffsets(dataView, ranges);
+                    expect(blocks).to.deep.equal([]);
+                    expect(ranges).to.deep.equal([]);
                     expect(warnSpy.hasWarned).to.be.true;
                 } finally {
                     warnSpy.reset();
@@ -1379,17 +1369,21 @@ describe('image-header-iso-bmff', () => {
                 const trailer = '\x00'.repeat(gap) + extentAData + '\x00'.repeat(gap) + extentBData;
 
                 const dataView = getDataView(boxes + trailer);
-                const metadataBlocks = [];
-                const result = findOffsets(dataView, metadataBlocks);
+                const ranges = [];
+                const blocks = findOffsets(dataView, ranges);
 
-                expect(result.exifDataView).to.not.be.undefined;
-                expect(result.exifDataView.byteLength).to.equal(exifBlock.length);
-                expect(result.tiffHeaderOffset).to.equal(4 + 'Exif\x00\x00'.length);
-                expect(readAll(result.exifDataView)).to.equal(exifBlock);
-                expect(metadataBlocks).to.deep.equal([
-                    {type: 'exif', start: extentAFileOffset, end: extentAFileOffset + extentAData.length},
-                    {type: 'exif', start: extentBFileOffset, end: extentBFileOffset + extentBData.length},
+                expect(blocks).to.have.lengthOf(1);
+                const [block] = blocks;
+                expect(block.kind).to.equal('exif');
+                expect(block.dataView).to.not.be.undefined;
+                expect(block.dataView.byteLength).to.equal(exifBlock.length);
+                expect(block.tiffHeaderOffset).to.equal(4 + 'Exif\x00\x00'.length);
+                expect(readAll(block.dataView)).to.equal(exifBlock);
+                expect(ranges).to.deep.equal([
+                    {block, start: extentAFileOffset, end: extentAFileOffset + extentAData.length},
+                    {block, start: extentBFileOffset, end: extentBFileOffset + extentBData.length},
                 ]);
+                expect(ranges[1].block).to.equal(block);
             });
 
             it('should expose a synthetic xmp dataView covering all extents for multi-extent items', () => {
@@ -1427,16 +1421,19 @@ describe('image-header-iso-bmff', () => {
                 const trailer = '\x00'.repeat(gap) + extentAData + '\x00'.repeat(gap) + extentBData;
 
                 const dataView = getDataView(boxes + trailer);
-                const metadataBlocks = [];
-                const result = findOffsets(dataView, metadataBlocks);
+                const ranges = [];
+                const blocks = findOffsets(dataView, ranges);
 
-                expect(result.xmpDataView).to.not.be.undefined;
-                expect(result.xmpDataView.byteLength).to.equal(xmpBytes.length);
-                expect(result.xmpChunks).to.deep.equal([{dataOffset: 0, length: xmpBytes.length}]);
-                expect(readAll(result.xmpDataView)).to.equal(xmpBytes);
-                expect(metadataBlocks).to.deep.equal([
-                    {type: 'xmp', start: extentAFileOffset, end: extentAFileOffset + extentAData.length},
-                    {type: 'xmp', start: extentBFileOffset, end: extentBFileOffset + extentBData.length},
+                expect(blocks).to.have.lengthOf(1);
+                const [block] = blocks;
+                expect(block.kind).to.equal('xmp');
+                expect(block.dataView).to.not.be.undefined;
+                expect(block.dataView.byteLength).to.equal(xmpBytes.length);
+                expect(block.chunks).to.deep.equal([{dataOffset: 0, length: xmpBytes.length}]);
+                expect(readAll(block.dataView)).to.equal(xmpBytes);
+                expect(ranges).to.deep.equal([
+                    {block, start: extentAFileOffset, end: extentAFileOffset + extentAData.length},
+                    {block, start: extentBFileOffset, end: extentBFileOffset + extentBData.length},
                 ]);
             });
 
@@ -1474,20 +1471,24 @@ describe('image-header-iso-bmff', () => {
                 const extentBFileOffset = idatContentOffset + extentBOffsetWithinIdat;
 
                 const dataView = getDataView(boxes);
-                const metadataBlocks = [];
-                const result = findOffsets(dataView, metadataBlocks);
+                const ranges = [];
+                const blocks = findOffsets(dataView, ranges);
 
-                expect(result.exifDataView).to.not.be.undefined;
-                expect(result.exifDataView.byteLength).to.equal(exifBlock.length);
-                expect(result.tiffHeaderOffset).to.equal(4 + 'Exif\x00\x00'.length);
-                expect(readAll(result.exifDataView)).to.equal(exifBlock);
-                expect(metadataBlocks).to.deep.equal([
-                    {type: 'exif', start: extentAFileOffset, end: extentAFileOffset + extentAData.length},
-                    {type: 'exif', start: extentBFileOffset, end: extentBFileOffset + extentBData.length},
+                expect(blocks).to.have.lengthOf(1);
+                const [block] = blocks;
+                expect(block.kind).to.equal('exif');
+                expect(block.dataView).to.not.be.undefined;
+                expect(block.dataView.byteLength).to.equal(exifBlock.length);
+                expect(block.tiffHeaderOffset).to.equal(4 + 'Exif\x00\x00'.length);
+                expect(readAll(block.dataView)).to.equal(exifBlock);
+                expect(ranges).to.deep.equal([
+                    {block, start: extentAFileOffset, end: extentAFileOffset + extentAData.length},
+                    {block, start: extentBFileOffset, end: extentBFileOffset + extentBData.length},
                 ]);
+                expect(ranges[1].block).to.equal(block);
             });
 
-            it('should emit blocks but skip parsing when a multi-extent item extends past EOF', () => {
+            it('should list the spans of a multi-extent item that extends past EOF but emit no block for it', () => {
                 const EXIF_ITEM_ID = 2;
                 const boxes = getFullBox(
                     'meta',
@@ -1509,15 +1510,15 @@ describe('image-header-iso-bmff', () => {
 
                 // dataView large enough for extent 1 but not extent 2.
                 const dataView = getDataView(boxes + '\x00'.repeat(2000));
-                const metadataBlocks = [];
-                const result = findOffsets(dataView, metadataBlocks);
+                const ranges = [];
+                const blocks = findOffsets(dataView, ranges);
 
-                expect(result.tiffHeaderOffset).to.be.undefined;
-                expect(result.exifDataView).to.be.undefined;
-                expect(metadataBlocks).to.deep.equal([
-                    {type: 'exif', start: 1100, end: 1150},
-                    {type: 'exif', start: 1000000, end: 1000080},
+                expect(blocks).to.deep.equal([]);
+                expect(ranges).to.deep.equal([
+                    {block: {kind: 'exif'}, start: 1100, end: 1150},
+                    {block: {kind: 'exif'}, start: 1000000, end: 1000080},
                 ]);
+                expect(ranges[1].block).to.equal(ranges[0].block);
             });
 
             it('should skip assembly when the combined extent length exceeds the buffer', () => {
@@ -1534,15 +1535,14 @@ describe('image-header-iso-bmff', () => {
                 );
 
                 const dataView = getDataView(boxes + '\x00'.repeat(2000));
-                let result;
+                let blocks;
                 expect(() => {
-                    result = findOffsets(dataView);
+                    blocks = findOffsets(dataView);
                 }).to.not.throw();
-                expect(result.exifDataView).to.be.undefined;
-                expect(result.tiffHeaderOffset).to.be.undefined;
+                expect(blocks).to.deep.equal([]);
             });
 
-            it('should emit one block per extent for multi-extent iloc items', () => {
+            it('should list one span per extent for multi-extent iloc items', () => {
                 const EXIF_ITEM_ID = 2;
                 const boxes = getFullBox(
                     'meta',
@@ -1562,12 +1562,12 @@ describe('image-header-iso-bmff', () => {
                 );
 
                 const dataView = getDataView(boxes + '\x00'.repeat(2000));
-                const metadataBlocks = [];
-                findOffsets(dataView, metadataBlocks);
+                const ranges = [];
+                const blocks = findOffsets(dataView, ranges);
 
-                expect(metadataBlocks).to.deep.equal([
-                    {type: 'exif', start: 1100, end: 1150},
-                    {type: 'exif', start: 1500, end: 1580},
+                expect(ranges).to.deep.equal([
+                    {block: blocks[0], start: 1100, end: 1150},
+                    {block: blocks[0], start: 1500, end: 1580},
                 ]);
             });
         });
@@ -1640,10 +1640,9 @@ describe('image-header-iso-bmff', () => {
                     ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
                 });
 
-                const offsets = findOffsets(getDataView(data));
+                const blocks = findOffsets(getDataView(data));
 
-                expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
-                expect(offsets.hasAppMarkers).to.be.false;
+                expect(blocks).to.deep.equal([{kind: 'isoBmffFile', imageDimensionsOffset: getDimensionsOffset(data, ispe)}]);
             });
 
             it('should pick the primary item\'s ispe over a tile\'s before it', () => {
@@ -1659,7 +1658,7 @@ describe('image-header-iso-bmff', () => {
                     ])],
                 });
 
-                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                expect(getFileBlock(data).imageDimensionsOffset)
                     .to.equal(getDimensionsOffset(data, primaryIspe));
             });
 
@@ -1672,7 +1671,7 @@ describe('image-header-iso-bmff', () => {
                     ipmas: [buildIpmaBox([{itemId: LARGE_ITEM_ID, associations: [1]}], {version: 1})],
                 });
 
-                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                expect(getFileBlock(data).imageDimensionsOffset)
                     .to.equal(getDimensionsOffset(data, ispe));
             });
 
@@ -1684,7 +1683,7 @@ describe('image-header-iso-bmff', () => {
                     ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [201]}], {flags: 1})],
                 });
 
-                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                expect(getFileBlock(data).imageDimensionsOffset)
                     .to.equal(getDimensionsOffset(data, ispe));
             });
 
@@ -1696,7 +1695,7 @@ describe('image-header-iso-bmff', () => {
                     ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [ESSENTIAL | 2]}])],
                 });
 
-                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                expect(getFileBlock(data).imageDimensionsOffset)
                     .to.equal(getDimensionsOffset(data, ispe));
             });
 
@@ -1709,7 +1708,7 @@ describe('image-header-iso-bmff', () => {
                     ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [ESSENTIAL | 201]}], {flags: 1})],
                 });
 
-                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                expect(getFileBlock(data).imageDimensionsOffset)
                     .to.equal(getDimensionsOffset(data, ispe));
             });
 
@@ -1721,7 +1720,7 @@ describe('image-header-iso-bmff', () => {
                     ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
                 });
 
-                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                expect(getFileBlock(data).imageDimensionsOffset)
                     .to.equal(getDimensionsOffset(data, ispe));
             });
 
@@ -1735,7 +1734,7 @@ describe('image-header-iso-bmff', () => {
                     ],
                 });
 
-                expect(findOffsets(getDataView(data)).imageDimensionsOffset)
+                expect(getFileBlock(data).imageDimensionsOffset)
                     .to.equal(getDimensionsOffset(data, ispe));
             });
 
@@ -1748,7 +1747,7 @@ describe('image-header-iso-bmff', () => {
                     ],
                 });
 
-                expect(findOffsets(getDataView(data))).to.not.have.property('imageDimensionsOffset');
+                expect(getFileBlock(data)).to.not.have.property('imageDimensionsOffset');
             });
 
             it('should find the ispe and no pixi when the primary item has only an ispe', () => {
@@ -1758,7 +1757,7 @@ describe('image-header-iso-bmff', () => {
                     ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}])],
                 });
 
-                const offsets = findOffsets(getDataView(data));
+                const offsets = getFileBlock(data);
 
                 expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
                 expect(offsets).to.not.have.property('pixelInformationOffset');
@@ -1771,10 +1770,7 @@ describe('image-header-iso-bmff', () => {
                     ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
                 });
 
-                const offsets = findOffsets(getDataView(data));
-
-                expect(offsets).to.not.have.property('imageDimensionsOffset');
-                expect(offsets).to.not.have.property('pixelInformationOffset');
+                expect(findOffsets(getDataView(data))).to.deep.equal([]);
             });
 
             describe('without a resolvable ispe', () => {
@@ -1782,7 +1778,7 @@ describe('image-header-iso-bmff', () => {
                 const primaryToIspe = buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}]);
 
                 function expectNoOffset(data) {
-                    expect(findOffsets(getDataView(data))).to.not.have.property('imageDimensionsOffset');
+                    expect(getFileBlock(data)).to.not.have.property('imageDimensionsOffset');
                 }
 
                 it('should return no offset without a pitm', () => {
@@ -1913,7 +1909,7 @@ describe('image-header-iso-bmff', () => {
                         ])],
                     });
 
-                    expect(findOffsets(getDataView(data)).pixelInformationOffset)
+                    expect(getFileBlock(data).pixelInformationOffset)
                         .to.equal(getChannelCountOffset(data, primaryPixi));
                 });
 
@@ -1927,7 +1923,7 @@ describe('image-header-iso-bmff', () => {
                         ])],
                     });
 
-                    const offsets = findOffsets(getDataView(data));
+                    const offsets = getFileBlock(data);
 
                     expect(offsets).to.not.have.property('pixelInformationOffset');
                     expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
@@ -1939,7 +1935,7 @@ describe('image-header-iso-bmff', () => {
                         ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}])],
                     });
 
-                    expect(findOffsets(getDataView(data))).to.not.have.property('pixelInformationOffset');
+                    expect(getFileBlock(data)).to.not.have.property('pixelInformationOffset');
                 });
 
                 it('should return no offset when the primary item\'s only pixi is too short', () => {
@@ -1950,7 +1946,7 @@ describe('image-header-iso-bmff', () => {
                         ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
                     });
 
-                    const offsets = findOffsets(getDataView(data));
+                    const offsets = getFileBlock(data);
 
                     expect(offsets).to.not.have.property('pixelInformationOffset');
                     expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
@@ -1964,7 +1960,7 @@ describe('image-header-iso-bmff', () => {
                         ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
                     });
 
-                    const offsets = findOffsets(getDataView(data));
+                    const offsets = getFileBlock(data);
 
                     expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
                     expect(offsets.pixelInformationOffset).to.equal(getChannelCountOffset(data, pixi));
@@ -1978,7 +1974,7 @@ describe('image-header-iso-bmff', () => {
                         ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
                     });
 
-                    const offsets = findOffsets(getDataView(data));
+                    const offsets = getFileBlock(data);
 
                     expect(offsets.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
                     expect(offsets.pixelInformationOffset).to.equal(getChannelCountOffset(data, pixi));
@@ -1992,12 +1988,11 @@ describe('image-header-iso-bmff', () => {
                         ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
                     });
 
-                    expect(findOffsets(getDataView(data))).to.deep.equal({
-                        hasAppMarkers: false,
-                        iccChunks: undefined,
+                    expect(findOffsets(getDataView(data))).to.deep.equal([{
+                        kind: 'isoBmffFile',
                         imageDimensionsOffset: getDimensionsOffset(data, ispe),
                         pixelInformationOffset: getChannelCountOffset(data, pixi),
-                    });
+                    }]);
                 });
 
                 it('should find the pixi without an ispe', () => {
@@ -2007,35 +2002,40 @@ describe('image-header-iso-bmff', () => {
                         ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
                     });
 
-                    const offsets = findOffsets(getDataView(data));
+                    const offsets = getFileBlock(data);
 
                     expect(offsets.pixelInformationOffset).to.equal(getChannelCountOffset(data, pixi));
                     expect(offsets).to.not.have.property('imageDimensionsOffset');
                 });
             });
         });
+
+        // The isoBmffFile block, or an empty object when the finder emits none.
+        function getFileBlock(data) {
+            return findOffsets(getDataView(data)).find((block) => block.kind === 'isoBmffFile') || {};
+        }
     });
 
     describe('malformed boxes', () => {
-        it('should return no app markers for an empty box after a HEIC ftyp box', () => {
+        it('should return no blocks for an empty box after a HEIC ftyp box', () => {
             const dataView = getDataView(getBox('ftyp', 'heic') + getBox('free', ''));
             let result;
             expect(() => {
                 result = findOffsets(dataView);
             }).to.not.throw();
-            expect(result).to.deep.equal({hasAppMarkers: false});
+            expect(result).to.deep.equal([]);
         });
 
-        it('should return no app markers for an unknown box after an AVIF ftyp box', () => {
+        it('should return no blocks for an unknown box after an AVIF ftyp box', () => {
             const dataView = getDataView(getBox('ftyp', 'avif') + getBox('abcd', ''));
             let result;
             expect(() => {
                 result = findOffsets(dataView);
             }).to.not.throw();
-            expect(result).to.deep.equal({hasAppMarkers: false});
+            expect(result).to.deep.equal([]);
         });
 
-        it('should return no app markers for a truncated extended-size box', () => {
+        it('should return no blocks for a truncated extended-size box', () => {
             // boxLength === 1 signals a 64-bit extended size that is absent here.
             const truncatedExtendedBox = getByteStringFromNumber(1, 4) + 'free';
             const dataView = getDataView(getBox('ftyp', 'heic') + truncatedExtendedBox);
@@ -2043,10 +2043,10 @@ describe('image-header-iso-bmff', () => {
             expect(() => {
                 result = findOffsets(dataView);
             }).to.not.throw();
-            expect(result).to.deep.equal({hasAppMarkers: false});
+            expect(result).to.deep.equal([]);
         });
 
-        it('should return no app markers when an iloc claims more items than the buffer holds', () => {
+        it('should return no blocks when an iloc claims more items than the buffer holds', () => {
             // iloc claims 50 items but supplies none, so parsing must stop cleanly.
             const sizesByte = getByteStringFromNumber(0x44, 1);
             const baseOffsetAndIndexByte = getByteStringFromNumber(0x40, 1);
@@ -2057,7 +2057,7 @@ describe('image-header-iso-bmff', () => {
             expect(() => {
                 result = findOffsets(dataView);
             }).to.not.throw();
-            expect(result.hasAppMarkers).to.be.false;
+            expect(result).to.deep.equal([]);
         });
 
         it('should still find the Exif offset when a later iloc item header is truncated', () => {
@@ -2087,7 +2087,7 @@ describe('image-header-iso-bmff', () => {
 
             const result = findOffsets(dataView);
 
-            expect(result.tiffHeaderOffset).to.equal(PLAIN_BOX_HEADER_SIZE + 4 + 'Exif\x00\x00'.length);
+            expect(result).to.deep.equal([{kind: 'exif', tiffHeaderOffset: PLAIN_BOX_HEADER_SIZE + 4 + 'Exif\x00\x00'.length}]);
         });
 
         describe('infe string bounds', () => {
@@ -2276,7 +2276,7 @@ describe('image-header-iso-bmff', () => {
 
                 const result = findOffsets(dataView);
 
-                expect(result.tiffHeaderOffset).to.equal(PLAIN_BOX_HEADER_SIZE + 4 + 'Exif\x00\x00'.length);
+                expect(result).to.deep.equal([{kind: 'exif', tiffHeaderOffset: PLAIN_BOX_HEADER_SIZE + 4 + 'Exif\x00\x00'.length}]);
             });
         });
 

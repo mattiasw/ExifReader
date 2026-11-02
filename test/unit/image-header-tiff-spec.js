@@ -28,21 +28,14 @@ describe('image-header-tiff', () => {
         expect(ImageHeaderTiff.isTiffFile(undefined)).to.be.false;
     });
 
-    it('should return tiffHeaderOffset 0 with hasAppMarkers true', () => {
-        const offsets = ImageHeaderTiff.findTiffOffsets();
-        expect(offsets).to.deep.equal({
-            hasAppMarkers: true,
-            tiffHeaderOffset: 0,
-        });
+    it('should return one exif block with the TIFF header at offset 0', () => {
+        expect(ImageHeaderTiff.findTiffOffsets()).to.deep.equal([{kind: 'exif', tiffHeaderOffset: 0}]);
     });
 
-    it('should return tiffHeaderOffset 0 even if Exif is excluded from custom build', () => {
+    it('should return the exif block even if Exif is excluded from custom build', () => {
         const restoreConstants = swapProperties(Constants, {USE_EXIF: false});
         try {
-            expect(ImageHeaderTiff.findTiffOffsets()).to.deep.equal({
-                hasAppMarkers: true,
-                tiffHeaderOffset: 0,
-            });
+            expect(ImageHeaderTiff.findTiffOffsets()).to.deep.equal([{kind: 'exif', tiffHeaderOffset: 0}]);
         } finally {
             restoreConstants();
         }

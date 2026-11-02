@@ -26,7 +26,7 @@ describe('promise safety', function () {
         fakeConstantsForIcc();
         fakeImageHeader({
             fileType: {value: 'jpeg', description: 'JPEG'},
-            iccChunks: [1],
+            blocks: [{kind: 'icc', chunks: [1]}],
         });
         fakeIccTagsRead({MyIccTag: {value: 42}});
 
@@ -83,24 +83,7 @@ function fakeConstantsForIcc() {
 function fakeImageHeader(overrides) {
     restoreFunctions.push(swapProperties(ImageHeader, {
         parseAppMarkers() {
-            return Object.assign(
-                {
-                    fileType: undefined,
-                    fileDataOffset: undefined,
-                    jfifDataOffset: undefined,
-                    tiffHeaderOffset: undefined,
-                    iptcDataOffset: undefined,
-                    xmpChunks: undefined,
-                    iccChunks: undefined,
-                    mpfDataOffset: undefined,
-                    pngHeaderOffset: undefined,
-                    pngTextChunks: undefined,
-                    pngChunkOffsets: undefined,
-                    vp8xChunkOffset: undefined,
-                    gifHeaderOffset: undefined,
-                },
-                overrides
-            );
+            return Object.assign({fileType: undefined, blocks: []}, overrides);
         },
     }));
 }

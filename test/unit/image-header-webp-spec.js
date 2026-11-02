@@ -25,104 +25,106 @@ describe('image-header-webp', () => {
         expect(ImageHeaderWebp.isWebpFile(getDataView('RIFFxxxxOTHER'))).to.be.false;
     });
 
-    it('should find Exif chunk', () => {
-        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView());
-
-        expect(offsets.hasAppMarkers).to.be.true;
-        expect(offsets.tiffHeaderOffset).to.equal(32);
+    it('should find the Exif chunk as an exif block', () => {
+        expect(getBlock(findBlocks(), 'exif')).to.deep.equal({kind: 'exif', tiffHeaderOffset: 32});
     });
 
     it('should find correct Exif chunk offset when the Exif identifier has wrongly been left in', () => {
-        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView({withExifIdentifier: true}));
-
-        expect(offsets.hasAppMarkers).to.be.true;
-        expect(offsets.tiffHeaderOffset).to.equal(38);
+        expect(getBlock(findBlocks({withExifIdentifier: true}), 'exif')).to.deep.equal({kind: 'exif', tiffHeaderOffset: 38});
     });
 
-    it('should find VP8X chunk', () => {
-        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView());
-
-        expect(offsets.hasAppMarkers).to.be.true;
-        expect(offsets.vp8xChunkOffset).to.equal(44);
+    it('should find the VP8X chunk as a riff block', () => {
+        expect(getBlock(findBlocks(), 'riff')).to.deep.equal({kind: 'riff', dataOffset: 44});
     });
 
-    it('should find XMP chunk', () => {
-        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView());
-
-        expect(offsets.hasAppMarkers).to.be.true;
-        expect(offsets.xmpChunks).to.deep.equal([{
-            dataOffset: 62,
-            length: 4
-        }]);
+    it('should find the XMP chunk as an xmp block', () => {
+        expect(getBlock(findBlocks(), 'xmp')).to.deep.equal({kind: 'xmp', chunks: [{dataOffset: 62, length: 4}]});
     });
 
-    it('should find ICC chunk', () => {
-        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView());
+    it('should find the ICCP chunk as an icc block', () => {
+        expect(getBlock(findBlocks(), 'icc')).to.deep.equal({
+            kind: 'icc',
+            chunks: [{offset: 74, length: 4, chunkNumber: 1, chunksTotal: 1}],
+        });
+    });
 
-        expect(offsets.hasAppMarkers).to.be.true;
-        expect(offsets.iccChunks).to.deep.equal([{
-            offset: 74,
-            length: 4,
-            chunkNumber: 1,
-            chunksTotal: 1
-        }]);
+    it('should report every block in chunk order', () => {
+        expect(findBlocks().map((block) => block.kind)).to.deep.equal(['exif', 'riff', 'xmp', 'icc']);
+    });
+
+    it('should keep the last chunk of each id, listing every chunk', () => {
+        const ranges = [];
+
+        const blocks = ImageHeaderWebp.findOffsets(getDataView(
+            'RIFF\x10\x00\x00\x00WEBP'
+            + 'EXIF\x04\x00\x00\x00abcd'
+            + 'XMP \x04\x00\x00\x00abcd'
+            + 'EXIF\x04\x00\x00\x00efgh'
+            + 'XMP \x06\x00\x00\x00abcdef'
+        ), ranges);
+
+        expect(blocks).to.deep.equal([
+            {kind: 'exif', tiffHeaderOffset: 44},
+            {kind: 'xmp', chunks: [{dataOffset: 56, length: 6}]},
+        ]);
+        expect(ranges.map((range) => range.block)).to.deep.equal([blocks[0], blocks[1], blocks[0], blocks[1]]);
+        expect(ranges[2].block).to.equal(blocks[0]);
     });
 
     it('should report every metadata kind whatever the custom-build flags say', () => {
         restoreConstants = swapProperties(Constants, {USE_EXIF: false, USE_XMP: false, USE_ICC: false});
-        const metadataBlocks = [];
+        const ranges = [];
 
-        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView(), metadataBlocks);
+        const blocks = findBlocks({}, ranges);
 
-        expect(offsets.tiffHeaderOffset).to.equal(32);
-        expect(offsets.xmpChunks).to.have.lengthOf(1);
-        expect(offsets.iccChunks).to.have.lengthOf(1);
-        expect(metadataBlocks.map((block) => block.type)).to.include.members(['exif', 'xmp', 'icc']);
+        expect(getBlock(blocks, 'exif').tiffHeaderOffset).to.equal(32);
+        expect(getBlock(blocks, 'xmp').chunks).to.have.lengthOf(1);
+        expect(getBlock(blocks, 'icc').chunks).to.have.lengthOf(1);
+        expect(ranges.map((range) => range.block.kind)).to.include.members(['exif', 'xmp', 'icc']);
     });
 
     it('should handle when a chunk has odd size and padded data at the end', () => {
         // WebP chunks can not have an odd number of bytes in the data and have to be padded.
-        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView({oddSizedChunk: true}));
-
-        expect(offsets.hasAppMarkers).to.be.true;
-        expect(offsets.xmpChunks).to.deep.equal([{
-            dataOffset: 76,
-            length: 4
-        }]);
+        expect(getBlock(findBlocks({oddSizedChunk: true}), 'xmp')).to.deep.equal({kind: 'xmp', chunks: [{dataOffset: 76, length: 4}]});
     });
 
     it('should not find nonexistent meta data', () => {
-        const offsets = ImageHeaderWebp.findOffsets(getWebpDataView({missingMetaData: true}));
-
-        expect(offsets.hasAppMarkers).to.be.false;
-        expect(offsets.tiffHeaderOffset).to.be.undefined;
-        expect(offsets.vp8xChunkOffset).to.be.undefined;
-        expect(offsets.xmpChunks).to.be.undefined;
+        expect(findBlocks({missingMetaData: true})).to.deep.equal([]);
     });
 
-    describe('metadataBlocks', () => {
+    describe('ranges', () => {
         it('should not push anything when no out-array is given', () => {
-            ImageHeaderWebp.findOffsets(getWebpDataView());
-            // no observable effect — sanity check: no error
+            expect(findBlocks()).to.not.have.property('truncated');
         });
 
-        it('should emit exif, riff, xmp and icc blocks for a full file', () => {
-            const metadataBlocks = [];
-            ImageHeaderWebp.findOffsets(getWebpDataView(), metadataBlocks);
-            expect(metadataBlocks).to.deep.equal([
-                {type: 'exif', start: 24, end: 36},
-                {type: 'riff', start: 36, end: 54},
-                {type: 'xmp', start: 54, end: 66},
-                {type: 'icc', start: 66, end: 78},
+        it('should list exif, riff, xmp and icc spans for a full file, linked to their blocks', () => {
+            const ranges = [];
+            const blocks = findBlocks({}, ranges);
+            expect(ranges).to.deep.equal([
+                {block: blocks[0], start: 24, end: 36},
+                {block: blocks[1], start: 36, end: 54},
+                {block: blocks[2], start: 54, end: 66},
+                {block: blocks[3], start: 66, end: 78},
             ]);
+            for (let i = 0; i < ranges.length; i++) {
+                expect(ranges[i].block).to.equal(blocks[i]);
+            }
         });
 
         it('should leave the array empty when there is no metadata', () => {
-            const metadataBlocks = [];
-            ImageHeaderWebp.findOffsets(getWebpDataView({missingMetaData: true}), metadataBlocks);
-            expect(metadataBlocks).to.deep.equal([]);
+            const ranges = [];
+            findBlocks({missingMetaData: true}, ranges);
+            expect(ranges).to.deep.equal([]);
         });
     });
+
+    function findBlocks(options, ranges) {
+        return ImageHeaderWebp.findOffsets(getWebpDataView(options), ranges);
+    }
+
+    function getBlock(blocks, kind) {
+        return blocks.find((block) => block.kind === kind);
+    }
 
     function getWebpDataView({missingMetaData, oddSizedChunk, withExifIdentifier} = {}) {
         return getDataView(

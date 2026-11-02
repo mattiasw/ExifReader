@@ -280,24 +280,37 @@ export function getCharacterArray(string) {
 export const MAX_METADATA_BLOCKS = 4096;
 
 /**
- * Records one metadata block. The list holds at most MAX_METADATA_BLOCKS
- * entries; past that, the last entry is widened to cover each further block
- * and keeps its own type. Does nothing without a list or a type.
- * @param {Array<{type: string, start: number, end: number}>|undefined} metadataBlocks
- * @param {string|undefined} type
+ * Appends a block to a finder's list and returns it, so that a finder can
+ * create a block the first time it meets its kind and update it after that.
+ * @param {Array<Object>} blocks
+ * @param {Object} block
+ * @returns {Object} The block.
+ */
+export function addBlock(blocks, block) {
+    blocks.push(block);
+    return block;
+}
+
+/**
+ * Records the span of one block for metadataRange. The list holds at most
+ * MAX_METADATA_BLOCKS entries; past that, the last entry is widened to cover
+ * each further span and keeps its own block. Does nothing without a list or
+ * a block.
+ * @param {Array<{block: Object, start: number, end: number}>|undefined} ranges
+ * @param {Object|undefined} block The block the span belongs to.
  * @param {number} start
  * @param {number} end Exclusive.
  */
-export function pushMetadataBlock(metadataBlocks, type, start, end) {
-    if (!metadataBlocks || !type) {
+export function pushRange(ranges, block, start, end) {
+    if (!ranges || !block) {
         return;
     }
-    if (metadataBlocks.length < MAX_METADATA_BLOCKS) {
-        metadataBlocks.push({type, start, end});
+    if (ranges.length < MAX_METADATA_BLOCKS) {
+        ranges.push({block, start, end});
     } else {
-        const lastBlock = metadataBlocks[metadataBlocks.length - 1];
-        lastBlock.start = Math.min(lastBlock.start, start);
-        lastBlock.end = Math.max(lastBlock.end, end);
+        const lastRange = ranges[ranges.length - 1];
+        lastRange.start = Math.min(lastRange.start, start);
+        lastRange.end = Math.max(lastRange.end, end);
     }
 }
 
@@ -517,6 +530,23 @@ export function withDecompressBudget(decompressConfig) {
         maxDecompressedSize: decompressConfig ? decompressConfig.maxDecompressedSize : undefined,
         budget: {remaining: getMaxDecompressedSize(decompressConfig), warned: false, failed: false, pending: undefined}
     };
+}
+
+/**
+ * Maps a block's `compression` to the method `decompress` takes. Anything but
+ * 'deflate' and 'brotli' is passed through unchanged, so `decompress` rejects
+ * it as an unknown method and never selects a custom function for it.
+ * @param {string} compression
+ * @returns {number|string}
+ */
+export function getCompressionMethod(compression) {
+    if (compression === 'deflate') {
+        return COMPRESSION_METHOD_DEFLATE;
+    }
+    if (compression === 'brotli') {
+        return COMPRESSION_METHOD_BROTLI;
+    }
+    return compression;
 }
 
 export function decompress(dataView, compressionMethod, encoding, returnType = 'string', decompressConfig) {

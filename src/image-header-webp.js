@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView, pushMetadataBlock} from './utils.js';
+import {getStringFromDataView, addBlock, pushRange} from './utils.js';
 
 export default {
     isWebpFile,
@@ -26,74 +26,68 @@ function isWebpFile(dataView) {
 }
 
 /**
- * Finds the offsets of metadata chunks in a WebP file.
+ * Finds the metadata blocks of a WebP file. The last chunk of each id wins.
  *
- * @param {DataView} dataView The data view to find offsets in.
- * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
- *     receives one block per recognized chunk (EXIF/XMP/ICCP/VP8X) with
- *     `start` and `end` covering the full RIFF chunk header and content.
- * @returns {Object} hasAppMarkers and the per-section offsets.
+ * @param {DataView} dataView The data view to find blocks in.
+ * @param {Array<Object>=} ranges Optional out-array. When provided, receives
+ *     one `{block, start, end}` span per recognized chunk (EXIF/XMP/ICCP/VP8X)
+ *     with `start` and `end` covering the full RIFF chunk header and content.
+ * @returns {Array<Object>} The blocks, in the order their first chunk was met.
  */
-function findOffsets(dataView, metadataBlocks) {
+function findOffsets(dataView, ranges) {
     const SUB_CHUNK_START_OFFSET = 12;
     const CHUNK_SIZE_OFFSET = 4;
     const EXIF_IDENTIFIER = 'Exif\x00\x00';
     const CHUNK_HEADER_SIZE = 8;
 
+    const blocks = [];
     let offset = SUB_CHUNK_START_OFFSET;
-    let hasAppMarkers = false;
-    let tiffHeaderOffset;
-    let xmpChunks;
-    let iccChunks;
-    let vp8xChunkOffset;
+    let exifBlock;
+    let xmpBlock;
+    let iccBlock;
+    let riffBlock;
 
     while (offset + CHUNK_HEADER_SIZE < dataView.byteLength) {
         const chunkId = getStringFromDataView(dataView, offset, 4);
         const chunkSize = dataView.getUint32(offset + CHUNK_SIZE_OFFSET, true);
-        let blockType;
+        let block;
 
         if (chunkId === 'EXIF') {
-            hasAppMarkers = true;
+            exifBlock = exifBlock || addBlock(blocks, {kind: 'exif'});
             if (getStringFromDataView(dataView, offset + CHUNK_HEADER_SIZE, EXIF_IDENTIFIER.length) === EXIF_IDENTIFIER) {
-                tiffHeaderOffset = offset + CHUNK_HEADER_SIZE + EXIF_IDENTIFIER.length;
+                exifBlock.tiffHeaderOffset = offset + CHUNK_HEADER_SIZE + EXIF_IDENTIFIER.length;
             } else {
-                tiffHeaderOffset = offset + CHUNK_HEADER_SIZE;
+                exifBlock.tiffHeaderOffset = offset + CHUNK_HEADER_SIZE;
             }
-            blockType = 'exif';
+            block = exifBlock;
         } else if (chunkId === 'XMP ') {
-            hasAppMarkers = true;
-            xmpChunks = [{
+            xmpBlock = xmpBlock || addBlock(blocks, {kind: 'xmp'});
+            xmpBlock.chunks = [{
                 dataOffset: offset + CHUNK_HEADER_SIZE,
                 length: chunkSize
             }];
-            blockType = 'xmp';
+            block = xmpBlock;
         } else if (chunkId === 'ICCP') {
-            hasAppMarkers = true;
-            iccChunks = [{
+            iccBlock = iccBlock || addBlock(blocks, {kind: 'icc'});
+            iccBlock.chunks = [{
                 offset: offset + CHUNK_HEADER_SIZE,
                 length: chunkSize,
                 chunkNumber: 1,
                 chunksTotal: 1
             }];
-            blockType = 'icc';
+            block = iccBlock;
         } else if (chunkId === 'VP8X') {
-            hasAppMarkers = true;
-            vp8xChunkOffset = offset + CHUNK_HEADER_SIZE;
-            blockType = 'riff';
+            riffBlock = riffBlock || addBlock(blocks, {kind: 'riff'});
+            riffBlock.dataOffset = offset + CHUNK_HEADER_SIZE;
+            block = riffBlock;
         }
 
         const chunkTotalSize = CHUNK_HEADER_SIZE + (chunkSize % 2 === 0 ? chunkSize : chunkSize + 1);
 
-        pushMetadataBlock(metadataBlocks, blockType, offset, offset + chunkTotalSize);
+        pushRange(ranges, block, offset, offset + chunkTotalSize);
 
         offset += chunkTotalSize;
     }
 
-    return {
-        hasAppMarkers,
-        tiffHeaderOffset,
-        xmpChunks,
-        iccChunks,
-        vp8xChunkOffset
-    };
+    return blocks;
 }

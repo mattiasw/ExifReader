@@ -12,7 +12,6 @@ import Jxl from './image-header-jxl.js';
 import Webp from './image-header-webp.js';
 import Gif from './image-header-gif.js';
 import Xml from './xml.js';
-import {objectAssign} from './utils.js';
 
 export default {
     parseAppMarkers
@@ -22,62 +21,63 @@ export default {
  * Detects the image format and delegates to the matching finder.
  *
  * @param {DataView} dataView The data view to inspect.
- * @param {boolean=} async Whether async parsing is enabled.
- * @param {boolean=} includeMetadataBlocks When true, the finder collects a
- *     block list describing where metadata sits in the file. The result
- *     gains `metadataBlocks` and `metadataTruncated` fields.
- * @returns {Object} Per-format offsets plus `fileType`.
+ * @param {boolean=} includeRanges When true, the finder also records where
+ *     each block's bytes sit in the file. The result then gains `ranges`, a
+ *     list of `{block, start, end}` in file order, and `truncated`, true when
+ *     the finder never reached the end of the file's metadata.
+ * @returns {{fileType: {value: string, description: string}, blocks: Array<Object>, ranges: (Array<Object>|undefined), truncated: (boolean|undefined)}}
+ *     The blocks the finder found, each `{kind, ...payload}`.
  * @throws {Error} When the data view is not a recognized image format.
  */
-function parseAppMarkers(dataView, async, includeMetadataBlocks) {
-    const metadataBlocks = includeMetadataBlocks ? [] : undefined;
+function parseAppMarkers(dataView, includeRanges) {
+    const ranges = includeRanges ? [] : undefined;
 
     if (Constants.USE_TIFF && Tiff.isTiffFile(dataView)) {
-        return finalize(Tiff.findTiffOffsets(), 'tiff', 'TIFF', metadataBlocks);
+        return finalize(Tiff.findTiffOffsets(), 'tiff', 'TIFF', ranges);
     }
 
     if (Constants.USE_JPEG && Jpeg.isJpegFile(dataView)) {
-        return finalize(Jpeg.findJpegOffsets(dataView, metadataBlocks), 'jpeg', 'JPEG', metadataBlocks);
+        return finalize(Jpeg.findJpegOffsets(dataView, ranges), 'jpeg', 'JPEG', ranges);
     }
 
     if (Constants.USE_PNG && Png.isPngFile(dataView)) {
-        return finalize(Png.findPngOffsets(dataView, async, metadataBlocks), 'png', 'PNG', metadataBlocks);
+        return finalize(Png.findPngOffsets(dataView, ranges), 'png', 'PNG', ranges);
     }
 
     if (Constants.USE_HEIC && Heic.isHeicFile(dataView)) {
-        return finalize(Heic.findHeicOffsets(dataView, metadataBlocks), 'heic', 'HEIC', metadataBlocks);
+        return finalize(Heic.findHeicOffsets(dataView, ranges), 'heic', 'HEIC', ranges);
     }
 
     if (Constants.USE_AVIF && Avif.isAvifFile(dataView)) {
-        return finalize(Avif.findAvifOffsets(dataView, metadataBlocks), 'avif', 'AVIF', metadataBlocks);
+        return finalize(Avif.findAvifOffsets(dataView, ranges), 'avif', 'AVIF', ranges);
     }
 
     if (Constants.USE_JXL && Jxl.isJxlFile(dataView)) {
-        return finalize(Jxl.findJxlOffsets(dataView, metadataBlocks), 'jxl', 'JPEG XL', metadataBlocks);
+        return finalize(Jxl.findJxlOffsets(dataView, ranges), 'jxl', 'JPEG XL', ranges);
     }
 
     if (Constants.USE_WEBP && Webp.isWebpFile(dataView)) {
-        return finalize(Webp.findOffsets(dataView, metadataBlocks), 'webp', 'WebP', metadataBlocks);
+        return finalize(Webp.findOffsets(dataView, ranges), 'webp', 'WebP', ranges);
     }
 
     if (Constants.USE_GIF && Gif.isGifFile(dataView)) {
-        return finalize(Gif.findOffsets(dataView, metadataBlocks), 'gif', 'GIF', metadataBlocks);
+        return finalize(Gif.findOffsets(dataView, ranges), 'gif', 'GIF', ranges);
     }
 
     if (Constants.USE_XMP && Xml.isXMLFile(dataView)) {
-        return finalize(Xml.findOffsets(dataView, metadataBlocks), 'xml', 'XML', metadataBlocks);
+        return finalize(Xml.findOffsets(dataView, ranges), 'xml', 'XML', ranges);
     }
 
     throw new Error('Invalid image format');
 }
 
-function finalize(offsets, fileType, fileTypeDescription, metadataBlocks) {
-    const result = objectAssign({}, offsets, {fileType: {value: fileType, description: fileTypeDescription}});
-    if (metadataBlocks !== undefined) {
-        result.metadataBlocks = metadataBlocks;
+function finalize(blocks, fileType, fileTypeDescription, ranges) {
+    const result = {fileType: {value: fileType, description: fileTypeDescription}, blocks};
+    if (ranges !== undefined) {
+        result.ranges = ranges;
         // Surface the finder's .truncated array convention as a sibling
         // field so consumers don't depend on properties on the array.
-        result.metadataTruncated = !!metadataBlocks.truncated;
+        result.truncated = !!ranges.truncated;
     }
     return result;
 }

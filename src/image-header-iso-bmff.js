@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getNullTerminatedStringFromDataView, getStringFromDataView, pushMetadataBlock} from './utils.js';
+import {getNullTerminatedStringFromDataView, getStringFromDataView, pushRange} from './utils.js';
 // import {get64BitValue} from './image-header-iso-bmff-utils.js';
 import {parseItemLocationBox} from './image-header-iso-bmff-iloc.js';
 import {hasBytes} from './image-header-iso-bmff-utils.js';
@@ -219,47 +219,42 @@ function hasEmptyHighBits(dataView, offset) {
 }
 
 /**
- * @typedef {Object} Offsets
- * @property {number} tiffHeaderOffset
- * @property {Array<Object>} xmpChunks
- * @property {Array<Object>} iccChunks
- * @property {boolean} hasAppMarkers
- * @property {DataView=} exifDataView Synthetic buffer when an Exif item
- *     spans multiple extents. tiffHeaderOffset then indexes into this view
- *     rather than the source dataView.
- * @property {DataView=} xmpDataView Synthetic buffer when an XMP item
- *     spans multiple extents. xmpChunks then references this view.
- * @property {number=} imageDimensionsOffset Offset of the primary item's
- *     dimensions, the width and height fields of its ispe property; absent
- *     when it cannot be resolved.
- * @property {number=} pixelInformationOffset Offset of the num_channels
- *     field of the primary item's pixi property; the per-channel bit depths
- *     follow it. Absent when it cannot be resolved.
- */
-
-/**
- * Finds the offsets of ISO-BMFF-structured data in the provided data view.
+ * Finds the metadata blocks of ISO-BMFF-structured data in the provided data view.
  *
- * @param {DataView} dataView The data view to find offsets in.
- * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
- *     receives one block per iloc extent (Exif/XMP) at the resolved file
- *     offset (cm 0 direct, cm 1 via the idat box) plus the ICC profile
- *     bytes. cm 2 (item_offset) items are skipped.
- * @returns {Offsets} The TIFF header offset, XMP chunks, ICC chunks,
- *     whether any of those were found, and the primary image's dimensions
- *     and pixel information offsets.
+ * The blocks, in this order when present: `exif` with `tiffHeaderOffset`
+ * (and `dataView`, a synthetic buffer the offset indexes into, when the Exif
+ * item spans several extents), `xmp` with `chunks` (and `dataView` likewise),
+ * `icc` with the first colr profile as its one chunk, and `isoBmffFile` with
+ * the primary item's `imageDimensionsOffset` (the width and height fields of
+ * its ispe property) and `pixelInformationOffset` (the num_channels field of
+ * its pixi property), each present only when it resolves.
+ *
+ * @param {DataView} dataView The data view to find blocks in.
+ * @param {Array<Object>=} ranges Optional out-array. When provided, receives
+ *     one `{block, start, end}` span per iloc extent (Exif/XMP) at the
+ *     resolved file offset (cm 0 direct, cm 1 via the idat box) plus the
+ *     ICC profile bytes, linked to the block of that item even when the
+ *     item's extents cannot be assembled and no block is returned for it.
+ *     cm 2 (item_offset) items are skipped.
+ * @returns {Array<Object>} The blocks.
  */
-export function findOffsets(dataView, metadataBlocks) {
+export function findOffsets(dataView, ranges) {
+    const blocks = [];
     const metaBox = findMetaBox(dataView);
-    const offsets = findMetadataOffsets(dataView, metaBox, metadataBlocks);
-    const {imageDimensionsOffset, pixelInformationOffset} = findPrimaryItemPropertyOffsets(dataView, metaBox);
-    if (imageDimensionsOffset !== undefined) {
-        offsets.imageDimensionsOffset = imageDimensionsOffset;
+    if (metaBox) {
+        warnIfUnsupportedFieldSize(metaBox);
+        pushDefinedBlock(blocks, findExifBlock(dataView, metaBox, ranges));
+        pushDefinedBlock(blocks, findXmpBlock(dataView, metaBox, ranges));
+        pushDefinedBlock(blocks, findIccBlock(metaBox, ranges));
     }
-    if (pixelInformationOffset !== undefined) {
-        offsets.pixelInformationOffset = pixelInformationOffset;
+    pushDefinedBlock(blocks, findPrimaryItemPropertyBlock(dataView, metaBox));
+    return blocks;
+}
+
+function pushDefinedBlock(blocks, block) {
+    if (block !== undefined) {
+        blocks.push(block);
     }
-    return offsets;
 }
 
 function findMetaBox(dataView) {
@@ -285,34 +280,6 @@ function findMetaBox(dataView) {
     return undefined;
 }
 
-function findMetadataOffsets(dataView, metaBox, metadataBlocks) {
-    const offsets = {};
-
-    if (!metaBox) {
-        return {hasAppMarkers: false};
-    }
-
-    warnIfUnsupportedFieldSize(metaBox);
-
-    const exif = findExifOffset(dataView, metaBox, metadataBlocks);
-    if (exif !== undefined) {
-        offsets.tiffHeaderOffset = exif.tiffHeaderOffset;
-        if (exif.dataView !== undefined) {
-            offsets.exifDataView = exif.dataView;
-        }
-    }
-    const xmp = findXmpChunks(dataView, metaBox, metadataBlocks);
-    if (xmp !== undefined) {
-        offsets.xmpChunks = xmp.chunks;
-        if (xmp.dataView !== undefined) {
-            offsets.xmpDataView = xmp.dataView;
-        }
-    }
-    offsets.iccChunks = findIccChunks(metaBox, metadataBlocks);
-    offsets.hasAppMarkers = (offsets.tiffHeaderOffset !== undefined) || (offsets.xmpChunks !== undefined) || (offsets.iccChunks !== undefined);
-    return offsets;
-}
-
 function warnIfUnsupportedFieldSize(metaBox) {
     const ilocBox = metaBox.subBoxes.find((box) => box.type === 'iloc');
     if (ilocBox && ilocBox.uses64BitFields) {
@@ -321,35 +288,37 @@ function warnIfUnsupportedFieldSize(metaBox) {
     }
 }
 
-function findExifOffset(dataView, metaBox, metadataBlocks) {
+function findExifBlock(dataView, metaBox, ranges) {
     try {
         const exifItemId = findIinfExifItemId(metaBox).itemId;
         const ilocItem = findIlocItem(metaBox, exifItemId);
         warnIfUnsupportedConstructionMethod(ilocItem);
         const idatContentOffset = findIdatContentOffset(metaBox);
-        pushIlocExtentBlocks(metadataBlocks, ilocItem, 'exif', idatContentOffset);
+        // The spans belong to the item whether or not it can be read.
+        const block = {kind: 'exif'};
+        pushIlocExtentRanges(ranges, ilocItem, block, idatContentOffset);
         if (ilocItem.extents.length > 1) {
             const assembled = assembleExtents(dataView, ilocItem, idatContentOffset);
             if (assembled === undefined) {
                 return undefined;
             }
-            return {
-                tiffHeaderOffset: getTiffHeaderOffset(assembled, 0),
-                dataView: assembled,
-            };
+            block.tiffHeaderOffset = getTiffHeaderOffset(assembled, 0);
+            block.dataView = assembled;
+            return block;
         }
         const exifOffset = resolveExtentToFileOffset(ilocItem, ilocItem.extents[0], idatContentOffset);
         if (exifOffset === undefined) {
             return undefined;
         }
-        return {tiffHeaderOffset: getTiffHeaderOffset(dataView, exifOffset)};
+        block.tiffHeaderOffset = getTiffHeaderOffset(dataView, exifOffset);
+        return block;
     } catch (error) {
         return undefined;
     }
 }
 
-function pushIlocExtentBlocks(metadataBlocks, ilocItem, blockType, idatContentOffset) {
-    if (!metadataBlocks) {
+function pushIlocExtentRanges(ranges, ilocItem, block, idatContentOffset) {
+    if (!ranges) {
         return;
     }
     for (let i = 0; i < ilocItem.extents.length; i++) {
@@ -358,7 +327,7 @@ function pushIlocExtentBlocks(metadataBlocks, ilocItem, blockType, idatContentOf
         if (start === undefined) {
             continue;
         }
-        pushMetadataBlock(metadataBlocks, blockType, start, start + extent.extentLength);
+        pushRange(ranges, block, start, start + extent.extentLength);
     }
 }
 
@@ -437,36 +406,30 @@ export function getTiffHeaderOffset(dataView, exifOffset) {
     return exifOffset + TIFF_HEADER_OFFSET_SIZE + dataView.getUint32(exifOffset);
 }
 
-function findXmpChunks(dataView, metaBox, metadataBlocks) {
+function findXmpBlock(dataView, metaBox, ranges) {
     try {
         const xmpItemId = findIinfXmpItemId(metaBox).itemId;
         const ilocItem = findIlocItem(metaBox, xmpItemId);
         warnIfUnsupportedConstructionMethod(ilocItem);
         const idatContentOffset = findIdatContentOffset(metaBox);
-        pushIlocExtentBlocks(metadataBlocks, ilocItem, 'xmp', idatContentOffset);
+        const block = {kind: 'xmp'};
+        pushIlocExtentRanges(ranges, ilocItem, block, idatContentOffset);
         if (ilocItem.extents.length > 1) {
             const assembled = assembleExtents(dataView, ilocItem, idatContentOffset);
             if (assembled === undefined) {
                 return undefined;
             }
-            return {
-                chunks: [{dataOffset: 0, length: assembled.byteLength}],
-                dataView: assembled,
-            };
+            block.chunks = [{dataOffset: 0, length: assembled.byteLength}];
+            block.dataView = assembled;
+            return block;
         }
         const ilocItemExtent = ilocItem.extents[0];
         const dataOffset = resolveExtentToFileOffset(ilocItem, ilocItemExtent, idatContentOffset);
         if (dataOffset === undefined) {
             return undefined;
         }
-        return {
-            chunks: [
-                {
-                    dataOffset,
-                    length: ilocItemExtent.extentLength,
-                }
-            ],
-        };
+        block.chunks = [{dataOffset, length: ilocItemExtent.extentLength}];
+        return block;
     } catch (error) {
         return undefined;
     }
@@ -477,7 +440,7 @@ function findIinfXmpItemId(metaBox) {
         .itemInfos.find((itemInfo) => itemInfo.itemType === ITEM_INFO_TYPE_MIME && itemInfo.contentType === 'application/rdf+xml');
 }
 
-function findIccChunks(metaBox, metadataBlocks) {
+function findIccBlock(metaBox, ranges) {
     // This finds the first ICC chunk, but there could be one for each image
     // that is embedded in the file. If it turns out we need to match the ICC
     // chunk to a specific image, we need to check the "ipma" in addition to the
@@ -488,8 +451,9 @@ function findIccChunks(metaBox, metadataBlocks) {
             .properties.find((box) => box.type === 'colr')
             .icc;
         if (icc) {
-            pushMetadataBlock(metadataBlocks, 'icc', icc.offset, icc.offset + icc.length);
-            return [icc];
+            const block = {kind: 'icc', chunks: [icc]};
+            pushRange(ranges, block, icc.offset, icc.offset + icc.length);
+            return block;
         }
     } catch (error) {
         // Let it pass through.
@@ -499,6 +463,21 @@ function findIccChunks(metaBox, metadataBlocks) {
 
 // Resolves meta > pitm (the primary item) through meta > iprp > ipma (its
 // property indexes) to the ispe and pixi among meta > iprp > ipco's children.
+function findPrimaryItemPropertyBlock(dataView, metaBox) {
+    const {imageDimensionsOffset, pixelInformationOffset} = findPrimaryItemPropertyOffsets(dataView, metaBox);
+    if (imageDimensionsOffset === undefined && pixelInformationOffset === undefined) {
+        return undefined;
+    }
+    const block = {kind: 'isoBmffFile'};
+    if (imageDimensionsOffset !== undefined) {
+        block.imageDimensionsOffset = imageDimensionsOffset;
+    }
+    if (pixelInformationOffset !== undefined) {
+        block.pixelInformationOffset = pixelInformationOffset;
+    }
+    return block;
+}
+
 function findPrimaryItemPropertyOffsets(dataView, metaBox) {
     // Every read below is bounded at parse time; the catch keeps a malformed
     // box from failing the whole file when that bounding is ever wrong.
