@@ -394,16 +394,155 @@ describe('tags-helpers', () => {
         expect(tags['MySrationalTag'].description).to.equal('-4.5');
     });
 
+    it('should read an in-slot UTF-8 tag the same as an ASCII tag with the same bytes', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyUtf8Tag', 0x4712: 'MyAsciiTag'}});
+        const dataView = getDataView(
+            '\x00\x02'
+            + '\x47\x11\x00\x81\x00\x00\x00\x03AB\x00\x00'
+            + '\x47\x12\x00\x02\x00\x00\x00\x03AB\x00\x00'
+            + '\x00\x00\x00\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyUtf8Tag'].value).to.deep.equal(['AB']);
+        expect(tags['MyUtf8Tag'].description).to.equal('AB');
+        expect(tags['MyUtf8Tag'].value).to.deep.equal(tags['MyAsciiTag'].value);
+    });
+
+    it('should decode an out-of-slot UTF-8 tag with non-ASCII characters', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyUtf8Tag'}});
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x81\x00\x00\x00\x07\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + 'h\xc3\xa5llo\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyUtf8Tag'].value).to.deep.equal(['h\u00e5llo']);
+    });
+
+    it('should read a multi-string UTF-8 tag the same as an ASCII tag and charge its extra strings', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyUtf8Tag', 0x4712: 'MyAsciiTag'}});
+        const stringBytes = 'ab\x00\x00cd\x00';
+        const dataView = getDataView(
+            '\x00\x02'
+            + '\x47\x11\x00\x81\x00\x00\x00\x07\x00\x00\x00\x1e'
+            + '\x47\x12\x00\x02\x00\x00\x00\x07\x00\x00\x00\x1e'
+            + '\x00\x00\x00\x00'
+            + stringBytes
+        );
+        const budget = {remaining: 100, ifdEntriesRemaining: 1000};
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+        expect(tags['MyUtf8Tag'].value).to.have.lengthOf(3);
+        expect(tags['MyUtf8Tag'].value[0]).to.equal('ab');
+        expect(tags['MyUtf8Tag'].value[2]).to.equal('cd');
+        expect(tags['MyUtf8Tag'].value).to.deep.equal(tags['MyAsciiTag'].value);
+        expect(budget.remaining).to.equal(100 - 2 * (stringBytes.length + BUDGET_BYTES_PER_EXTRA_ASCII_STRING));
+    });
+
+    it('should add a computed value for a UTF-8 tag when enabled', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyUtf8Tag'}});
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x81\x00\x00\x00\x04ABC\x00'
+            + '\x00\x00\x00\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, true);
+        expect(tags['MyUtf8Tag'].computed).to.equal('ABC');
+    });
+
+    it('should be able to read an SBYTE tag', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MySbyteTag'}});
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x06\x00\x00\x00\x02\xff\x80\x00\x00' + '\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MySbyteTag'].value).to.deep.equal([-1, -128]);
+        expect(tags['MySbyteTag'].description).to.equal('-1, -128');
+    });
+
+    it('should be able to read a big endian SSHORT tag', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MySshortTag'}});
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x08\x00\x00\x00\x01\xff\xfe\x00\x00' + '\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MySshortTag'].value).to.equal(-2);
+    });
+
+    it('should be able to read a little endian SSHORT tag', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MySshortTag'}});
+        const dataView = getDataView('\x01\x00' + '\x11\x47\x08\x00\x02\x00\x00\x00\xfe\xff\x00\x80' + '\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.LITTLE_ENDIAN);
+        expect(tags['MySshortTag'].value).to.deep.equal([-2, -32768]);
+    });
+
+    it('should be able to read a FLOAT tag', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyFloatTag'}});
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x0b\x00\x00\x00\x01\xbe\x80\x00\x00' + '\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyFloatTag'].value).to.equal(-0.25);
+        expect(tags['MyFloatTag'].description).to.equal(-0.25);
+    });
+
+    it('should be able to read a DOUBLE tag from its offset', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyDoubleTag'}});
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x0c\x00\x00\x00\x01\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + '\xbf\xd0\x00\x00\x00\x00\x00\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyDoubleTag'].value).to.equal(-0.25);
+    });
+
+    it('should be able to read a multi-element DOUBLE tag eight bytes per element', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyDoubleTag'}});
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x0c\x00\x00\x00\x02\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + '\x3f\xf8\x00\x00\x00\x00\x00\x00'
+            + '\xbf\xd0\x00\x00\x00\x00\x00\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyDoubleTag'].value).to.deep.equal([1.5, -0.25]);
+        expect(tags['MyDoubleTag'].description).to.equal('1.5, -0.25');
+    });
+
+    it('should charge a DOUBLE tag eight budget bytes per element', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyDoubleTag'}});
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x0c\x00\x00\x00\x02\x00\x00\x00\x12'
+            + '\x00\x00\x00\x00'
+            + '\x3f\xf8\x00\x00\x00\x00\x00\x00'
+            + '\xbf\xd0\x00\x00\x00\x00\x00\x00'
+        );
+        const budget = {remaining: 16, ifdEntriesRemaining: 1000};
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
+        expect(tags['MyDoubleTag'].value).to.deep.equal([1.5, -0.25]);
+        expect(budget.remaining).to.equal(0);
+    });
+
+    it('should give a DOUBLE tag whose value runs past the data a faulty value', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyDoubleTag'}});
+        const dataView = getDataView(
+            '\x00\x01'
+            + '\x47\x11\x00\x0c\x00\x00\x00\x01\x00\x00\x00\x13'
+            + '\x00\x00\x00\x00'
+            + '\xbf\xd0\x00\x00\x00\x00\x00\x00'
+        );
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyDoubleTag'].value).to.equal('<faulty value>');
+    });
+
     it('should be able to handle tag with faulty type', () => {
-        // Type 0x08 has no known size so the tag is dropped even when unknown tags are included.
-        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x08\x00\x00\x00\x01\x00\x00\x00\x00');
+        // Type 0x0e has no known size so the tag is dropped even when unknown tags are included.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x0e\x00\x00\x00\x01\x00\x00\x00\x00');
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, true);
         expect(tags).to.deep.equal({});
     });
 
     it('should be able to handle an IFD with a faulty type tag', () => {
-        // Field count + field.
-        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x08\x00\x00\x00\x00');
+        // Field count + field of the unknown type 0x0e.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x0e\x00\x00\x00\x01\x00\x00\x00\x00');
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyExifTag'}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyExifTag']).to.be.undefined;

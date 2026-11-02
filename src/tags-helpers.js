@@ -30,10 +30,10 @@ const MAX_DECOMPRESSED_VALUE_ALLOWANCE = 1024 * 1024;
 // visit at most about as many entries as the buffer holds.
 const MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY = 4;
 
-// Each string after the first of an out-of-slot ASCII value costs this much
-// budget. 4 MiB files whose tags use the budget up on short strings peaked at
-// up to 107 times their size in RSS without it, 88 with 1 and 76 with 2,
-// against 87 for BYTE values.
+// Each string after the first of an out-of-slot ASCII or UTF-8 value costs
+// this much budget. 4 MiB files whose tags use the budget up on short strings
+// peaked at up to 107 times their size in RSS without it, 88 with 1 and 76
+// with 2, against 87 for BYTE values.
 export const BUDGET_BYTES_PER_EXTRA_ASCII_STRING = 2;
 
 // A buffer gets one IPTC dataset unit per this many bytes, and a dataset draws
@@ -60,9 +60,13 @@ const getTagValueAt = {
     3: Types.getShortAt,
     4: Types.getLongAt,
     5: Types.getRationalAt,
+    6: Types.getSbyteAt,
     7: Types.getUndefinedAt,
+    8: Types.getSshortAt,
     9: Types.getSlongAt,
     10: Types.getSrationalAt,
+    11: Types.getFloatAt,
+    12: Types.getDoubleAt,
     13: Types.getIfdPointerAt
 };
 
@@ -341,7 +345,7 @@ function readTag(
         }
     }
 
-    if (tagType === Types.tagTypes['ASCII']) {
+    if (isStringType(tagType)) {
         tagValue = getAsciiTagValue(tagValue, stringBudget);
     }
 
@@ -395,7 +399,7 @@ function getTagValue(dataView, offset, type, count, byteOrder, forceByteType = f
         count = count * Types.typeSizes[type];
         type = Types.tagTypes['BYTE'];
     }
-    if (type === Types.tagTypes['ASCII']) {
+    if (isStringType(type)) {
         return getAsciiBytes(dataView, offset, count);
     }
     for (let valueIndex = 0; valueIndex < count; valueIndex++) {
@@ -434,6 +438,10 @@ function getBoundedTagCount(remainingBudget, tagType, tagCount) {
         return 0;
     }
     return boundedCount;
+}
+
+function isStringType(type) {
+    return type === Types.tagTypes['ASCII'] || type === Types.tagTypes['UTF8'];
 }
 
 function getAsciiTagValue(tagValue, stringBudget) {
@@ -494,7 +502,7 @@ function getDescriptionFromTagValue(tagValue) {
 }
 
 function getComputedTagValue(tagType, value) {
-    if (tagType === Types.tagTypes['ASCII']) {
+    if (isStringType(tagType)) {
         if (Array.isArray(value) && value.length === 1) {
             return value[0];
         }

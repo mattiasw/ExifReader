@@ -214,6 +214,25 @@ describe('tags', () => {
         expect(tags['MyExifTag']).to.be.undefined;
     });
 
+    it('should not follow a pointer whose value is not an integer', () => {
+        const dataView = getDataView(
+            // TIFF header + 0th IFD holding an Exif IFD pointer that is a FLOAT of 26.5.
+            '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x08'
+            + '\x00\x01' + '\x87\x69\x00\x0b\x00\x00\x00\x01\x41\xd4\x00\x00' + '\x00\x00\x00\x00'
+            // Exif IFD at offset 26, where the fraction would be cut off to.
+            + '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00'
+        );
+        restoreTagNames = swapProperties(TagNames, {
+            '0th': {0x8769: 'Exif IFD Pointer'},
+            'exif': {0x4711: 'MyExifTag'}
+        });
+
+        const {tags} = Tags.read(dataView, 0, false);
+
+        expect(tags['Exif IFD Pointer'].value).to.equal(26.5);
+        expect(tags['MyExifTag']).to.be.undefined;
+    });
+
     it('should not follow a pointer with count 0', () => {
         // The pointer decodes to [], so the IFD offset would become the string
         // '0': a field count at offset 0 and a tag at offsets '02', '022' and

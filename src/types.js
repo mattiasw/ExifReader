@@ -10,10 +10,15 @@ const typeSizes = {
     3: 2, // SHORT
     4: 4, // LONG
     5: 8, // RATIONAL
+    6: 1, // SBYTE
     7: 1, // UNDEFINED
+    8: 2, // SSHORT
     9: 4, // SLONG
     10: 8, // SRATIONAL
-    13: 4 // IFD
+    11: 4, // FLOAT
+    12: 8, // DOUBLE
+    13: 4, // IFD
+    129: 1 // UTF8
 };
 
 const tagTypes = {
@@ -22,10 +27,15 @@ const tagTypes = {
     'SHORT': 3,
     'LONG': 4,
     'RATIONAL': 5,
+    'SBYTE': 6,
     'UNDEFINED': 7,
+    'SSHORT': 8,
     'SLONG': 9,
     'SRATIONAL': 10,
-    'IFD': 13
+    'FLOAT': 11,
+    'DOUBLE': 12,
+    'IFD': 13,
+    'UTF8': 129
 };
 
 export default {
@@ -34,9 +44,13 @@ export default {
     getShortAt,
     getLongAt,
     getRationalAt,
+    getSbyteAt,
     getUndefinedAt,
+    getSshortAt,
     getSlongAt,
     getSrationalAt,
+    getFloatAt,
+    getDoubleAt,
     getIfdPointerAt,
     typeSizes,
     tagTypes,
@@ -63,8 +77,16 @@ function getRationalAt(dataView, offset, byteOrder) {
     return [getLongAt(dataView, offset, byteOrder), getLongAt(dataView, offset + 4, byteOrder)];
 }
 
+function getSbyteAt(dataView, offset) {
+    return dataView.getInt8(offset);
+}
+
 function getUndefinedAt(dataView, offset) {
     return getByteAt(dataView, offset);
+}
+
+function getSshortAt(dataView, offset, byteOrder) {
+    return dataView.getInt16(offset, byteOrder === ByteOrder.LITTLE_ENDIAN);
 }
 
 function getSlongAt(dataView, offset, byteOrder) {
@@ -73,6 +95,14 @@ function getSlongAt(dataView, offset, byteOrder) {
 
 function getSrationalAt(dataView, offset, byteOrder) {
     return [getSlongAt(dataView, offset, byteOrder), getSlongAt(dataView, offset + 4, byteOrder)];
+}
+
+function getFloatAt(dataView, offset, byteOrder) {
+    return dataView.getFloat32(offset, byteOrder === ByteOrder.LITTLE_ENDIAN);
+}
+
+function getDoubleAt(dataView, offset, byteOrder) {
+    return dataView.getFloat64(offset, byteOrder === ByteOrder.LITTLE_ENDIAN);
 }
 
 function getIfdPointerAt(dataView, offset, byteOrder) {
