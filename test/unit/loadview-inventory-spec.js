@@ -85,6 +85,8 @@ import {
     getJxlcBox,
     getPaddingBox,
     getWebp,
+    getWebpWithMetadata,
+    getIsoBmff,
     getGif,
 } from './loadview-inventory-images.js';
 
@@ -93,7 +95,7 @@ import {
 // Rule 2:  exif-reader.js, image-header-jxl.js, image-header-png.js, png-text-tags.js
 // Rule 3:  loadview-pipeline.js, exif-reader.js
 // Rule 4:  exif-reader.js, tags-helpers.js, png-text-tags.js
-// Rule 5:  loadview-pipeline.js, exif-reader.js (mergeSteps)
+// Rule 5:  loadview-pipeline.js, exif-reader.js (mergeBlocks)
 // Rule 6:  loadview-pipeline.js
 // Rule 7:  loadview-pipeline.js, tags-helpers.js, composite.js
 // Rule 8:  exif-reader.js, png-text-tags.js, image-header.js, icc-tags.js
@@ -115,6 +117,10 @@ const EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE = 64 * 1024;
 const PADDING_LENGTH = 40000;
 const PNG_FILE_TAG_NAMES = ['Image Width', 'Image Height', 'Bit Depth', 'Color Type', 'Compression', 'Filter', 'Interlace'];
 const PHYS_TAG_NAMES = ['Pixels Per Unit X', 'Pixels Per Unit Y', 'Pixel Units'];
+const ICC_HEADER_TAG_NAMES = [
+    'Preferred CMM type', 'Profile Version', 'Profile/Device class', 'Color Space', 'Connection Space', 'ICC Profile Date',
+    'ICC Signature', 'Primary Platform', 'Device Manufacturer', 'Device Model Number', 'Rendering Intent', 'Profile Creator',
+];
 const IPTC_UNKNOWN_DATASET = 0x02cb;
 // Position of the valueBudget argument in each reader's read signature.
 const BUDGET_ARGUMENT_INDEX = {Tags: 5, IptcTags: 4, MpfTags: 5, CanonTags: 7, PngTextTags: 7};
@@ -513,7 +519,7 @@ describe('loadView behaviour inventory', function () {
                 ]);
             });
 
-            it(`should read the carried groups in EXIF_CARRIED_GROUP_ORDER right after the main Exif block (async: ${async})`, async () => {
+            it(`should read the carried groups in CARRIED_GROUP_SLOTS order right after the main Exif block (async: ${async})`, async () => {
                 const log = [];
                 record(log, READERS);
 
@@ -810,6 +816,73 @@ describe('loadView behaviour inventory', function () {
                     expect(webp.riff.ImageWidth.value).to.equal(1);
                     expect(Object.keys(gif)).to.deep.equal(['gif', 'file']);
                     expect(gif.gif['GIF Version'].value).to.equal('89a');
+                });
+
+                it(`should order a TIFF with its carried groups before exif, and let the carried XMP win in flat output (async: ${async})`, async () => {
+                    const image = getTiff({ifd0: [
+                        ascii(TAG_MAKE, 'exif'),
+                        undefinedBytes(TAG_IPTC_NAA, getIptcDatasets([headline('carried')])),
+                        bytes(TAG_APPLICATION_NOTES, getXmpPacket({Make: 'xmp'})),
+                    ]});
+
+                    const expanded = await load(image, {expanded: true, async});
+                    const flat = await load(image, {async});
+
+                    expect(Object.keys(expanded)).to.deep.equal(['iptc', 'xmp', 'exif', 'file']);
+                    expect(Object.keys(flat)).to.deep.equal(['Headline', 'Make', 'ApplicationNotes', 'IPTC-NAA', 'about', 'FileType']);
+                    expect(flat.Make.value).to.equal('xmp');
+                    expect(expanded.exif.Make.value).to.deep.equal(['exif']);
+                });
+
+                for (const majorBrand of ['heic', 'avif']) {
+                    it(`should order a ${majorBrand.toUpperCase()} as exif, xmp, icc then file (async: ${async})`, async () => {
+                        const image = getIsoBmff({
+                            majorBrand,
+                            tiff: getTiffWithMake('exif'),
+                            xmpPacket: getXmpPacket({Make: 'xmp'}),
+                            iccProfile: getIccProfile('ICCP'),
+                        });
+
+                        const expanded = await load(image, {expanded: true, async});
+                        const flat = await load(image, {async});
+
+                        expect(Object.keys(expanded)).to.deep.equal(['exif', 'xmp', 'icc', 'file']);
+                        expect(Object.keys(flat)).to.deep.equal(['Make', 'about', ...ICC_HEADER_TAG_NAMES, 'Image Width', 'Image Height', 'FileType']);
+                        expect(flat.Make.value).to.equal('xmp');
+                        expect(flat.FileType.value).to.equal(majorBrand);
+                    });
+                }
+
+                it(`should order a WebP with EXIF, XMP and ICCP chunks as exif, xmp, icc, riff then file (async: ${async})`, async () => {
+                    const image = getWebpWithMetadata({
+                        tiff: getTiffWithMake('exif'),
+                        xmpPacket: getXmpPacket({Make: 'xmp'}),
+                        iccProfile: getIccProfile('ICCP'),
+                    });
+
+                    const expanded = await load(image, {expanded: true, async});
+                    const flat = await load(image, {async});
+
+                    expect(Object.keys(expanded)).to.deep.equal(['exif', 'xmp', 'icc', 'riff', 'file']);
+                    expect(Object.keys(flat)).to.deep.equal([
+                        'Make', 'about', ...ICC_HEADER_TAG_NAMES, 'Alpha', 'Animation', 'ImageWidth', 'ImageHeight', 'FileType',
+                    ]);
+                    expect(flat.Make.value).to.equal('xmp');
+                });
+
+                it(`should order an XML file as xmp then file, with the library FileType last in flat output (async: ${async})`, async () => {
+                    const image = '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>'
+                        + getXmpPacket({FileType: 'xmp', Make: 'xmp'})
+                        + '<?xpacket end="w"?>';
+
+                    const expanded = await load(image, {expanded: true, async});
+                    const flat = await load(image, {async});
+
+                    expect(Object.keys(expanded)).to.deep.equal(['xmp', 'file']);
+                    expect(expanded.xmp.FileType.value).to.equal('xmp');
+                    expect(expanded.file.FileType.value).to.equal('xml');
+                    expect(Object.keys(flat)).to.deep.equal(['about', 'Make', 'FileType']);
+                    expect(flat.FileType.value).to.equal('xml');
                 });
             }
         });

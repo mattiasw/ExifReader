@@ -42,7 +42,7 @@ import GifFileTags from './gif-file-tags.js';
 import Thumbnail from './thumbnail.js';
 import Composite from './composite.js';
 import {createTagFilter} from './tag-filter.js';
-import {buildTagsFromMergeSteps, EXIF_CARRIED_GROUP_ORDER} from './loadview-pipeline.js';
+import {buildTagsFromMergeBlocks, CARRIED_GROUP_SLOTS} from './loadview-pipeline.js';
 import exifErrors from './errors.js';
 
 // Brob XMP is bounded by the file size, as brob Exif is, plus room for one JPEG
@@ -104,13 +104,12 @@ export function loadView(
 
     const tagFilter = createTagFilter({includeTags, excludeTags});
     const parsedGroups = Object.create(null);
-    const mergeSteps = [];
+    const mergeBlocks = [];
     const deferredResults = Object.create(null);
     const deferredPromises = [];
     let pngTextIsAsync = false;
     let thumbnailIfdTags = undefined;
     let valueBudget = undefined;
-    let embeddedXmpStepForFlat = undefined;
     let decompressedApplicationNotesSize = 0;
 
     const {fileType, blocks: allBlocks, ranges, truncated} = ImageHeader.parseAppMarkers(dataView, expanded && includeOffsets);
@@ -147,11 +146,7 @@ export function loadView(
         parsedGroups.file = parsedFileTags;
 
         if (tagFilter.shouldReturnGroup('file')) {
-            mergeSteps.push({
-                type: 'mergeGroupAssign',
-                groupKey: 'file',
-                parsedTags: parsedFileTags,
-            });
+            mergeBlocks.push({slot: 'file', group: 'file', mode: 'assign', tags: parsedFileTags});
         }
     }
 
@@ -166,11 +161,7 @@ export function loadView(
         parsedGroups.jfif = parsedJfifTags;
 
         if (tagFilter.shouldReturnGroup('jfif')) {
-            mergeSteps.push({
-                type: 'mergeGroupAssign',
-                groupKey: 'jfif',
-                parsedTags: parsedJfifTags,
-            });
+            mergeBlocks.push({slot: 'jfif', group: 'jfif', mode: 'assign', tags: parsedJfifTags});
         }
     }
 
@@ -203,46 +194,20 @@ export function loadView(
             valueBudget,
             {decompressed: false, hasIptcBlock: iptcBlock !== undefined}
         );
-        for (let i = 0; i < EXIF_CARRIED_GROUP_ORDER.length; i++) {
-            const groupKey = EXIF_CARRIED_GROUP_ORDER[i];
+        const carriedGroupKeys = Object.keys(CARRIED_GROUP_SLOTS);
+        for (let i = 0; i < carriedGroupKeys.length; i++) {
+            const groupKey = carriedGroupKeys[i];
             if (carriedGroups[groupKey] === undefined) {
                 continue;
             }
             parsedGroups[groupKey] = carriedGroups[groupKey];
-            if (!tagFilter.shouldReturnGroup(groupKey)) {
-                continue;
-            }
-            if (groupKey === 'xmp') {
-                const step = {
-                    type: 'mergeXmpGroupAssign',
-                    parsedTags: carriedGroups.xmp,
-                };
-
-                if (expanded) {
-                    mergeSteps.push(step);
-                } else {
-                    embeddedXmpStepForFlat = step;
-                }
-            } else {
-                mergeSteps.push({
-                    type: 'mergeGroupAssign',
-                    groupKey,
-                    parsedTags: carriedGroups[groupKey],
-                });
+            if (tagFilter.shouldReturnGroup(groupKey)) {
+                mergeBlocks.push({slot: CARRIED_GROUP_SLOTS[groupKey], group: groupKey, mode: 'assign', tags: carriedGroups[groupKey]});
             }
         }
 
         if (tagFilter.shouldReturnGroup('exif')) {
-            mergeSteps.push({
-                type: 'mergeGroupAssign',
-                groupKey: 'exif',
-                parsedTags: parsedExifTags,
-            });
-        }
-
-        if (!expanded && embeddedXmpStepForFlat) {
-            mergeSteps.push(embeddedXmpStepForFlat);
-            embeddedXmpStepForFlat = undefined;
+            mergeBlocks.push({slot: 'exif', group: 'exif', mode: 'assign', tags: parsedExifTags});
         }
     }
 
@@ -261,11 +226,7 @@ export function loadView(
         parsedGroups.iptc = parsedIptcTags;
 
         if (tagFilter.shouldReturnGroup('iptc')) {
-            mergeSteps.push({
-                type: 'mergeGroupAssign',
-                groupKey: 'iptc',
-                parsedTags: parsedIptcTags,
-            });
+            mergeBlocks.push({slot: 'iptc', group: 'iptc', mode: 'assign', tags: parsedIptcTags});
         }
     }
 
@@ -279,10 +240,7 @@ export function loadView(
         parsedGroups.xmp = parsedXmpTags;
 
         if (tagFilter.shouldReturnGroup('xmp')) {
-            mergeSteps.push({
-                type: 'mergeXmpGroupAssign',
-                parsedTags: parsedXmpTags,
-            });
+            mergeBlocks.push({slot: 'xmp', group: 'xmp', mode: 'assign', tags: parsedXmpTags});
         }
     }
 
@@ -330,10 +288,7 @@ export function loadView(
                     deferredResults.brobExif = undefined;
                 })
         );
-        mergeSteps.push({
-            type: 'mergeBrobExifDeferred',
-            deferredKey: 'brobExif',
-        });
+        mergeBlocks.push({slot: 'brobExif', group: 'exif', mode: 'embeddedExif', deferredKey: 'brobExif'});
     }
 
     if (
@@ -362,10 +317,7 @@ export function loadView(
                     deferredResults.brobXmp = {};
                 })
         );
-        mergeSteps.push({
-            type: 'mergeBrobXmpDeferred',
-            deferredKey: 'brobXmp',
-        });
+        mergeBlocks.push({slot: 'brobXmp', group: 'xmp', mode: 'brobXmp', deferredKey: 'brobXmp'});
     }
 
     if (
@@ -382,19 +334,12 @@ export function loadView(
             deferredPromises.push(readTags.then((resolvedTags) => {
                 deferredResults.iccApp = resolvedTags;
             }));
-            mergeSteps.push({
-                type: 'mergeIccDeferred',
-                deferredKey: 'iccApp',
-            });
+            mergeBlocks.push({slot: 'icc', group: 'icc', mode: 'assign', deferredKey: 'iccApp'});
         } else {
             const parsedIccTags = filterTagsForParse('icc', readTags, tagFilter);
             parsedGroups.icc = parsedIccTags;
             if (tagFilter.shouldReturnGroup('icc')) {
-                mergeSteps.push({
-                    type: 'mergeGroupAssign',
-                    groupKey: 'icc',
-                    parsedTags: parsedIccTags,
-                });
+                mergeBlocks.push({slot: 'icc', group: 'icc', mode: 'assign', tags: parsedIccTags});
             }
         }
     }
@@ -416,11 +361,7 @@ export function loadView(
         parsedGroups.mpf = parsedMpfTags;
 
         if (tagFilter.shouldReturnGroup('mpf')) {
-            mergeSteps.push({
-                type: 'mergeGroupAssign',
-                groupKey: 'mpf',
-                parsedTags: parsedMpfTags,
-            });
+            mergeBlocks.push({slot: 'mpf', group: 'mpf', mode: 'assign', tags: parsedMpfTags});
         }
     }
 
@@ -435,10 +376,7 @@ export function loadView(
         parsedGroups.pngFile = parsedPngFileTags;
 
         if (tagFilter.shouldReturnGroup('png')) {
-            mergeSteps.push({
-                type: 'mergePngFile',
-                parsedTags: parsedPngFileTags,
-            });
+            mergeBlocks.push({slot: 'pngFile', group: 'png', mode: 'pngFile', tags: parsedPngFileTags});
         }
     }
 
@@ -469,23 +407,18 @@ export function loadView(
         );
         pngTextIsAsync = !!readTagsPromise;
 
-        mergeSteps.push({
-            type: 'processPngTextReadTags',
-            readTags,
-            embeddedExifTags,
-            embeddedIptcTags,
-            embeddedExifThumbnail,
-            exifCarriedGroups,
+        mergeBlocks.push({
+            slot: 'pngText',
+            group: 'png',
+            mode: 'pngText',
+            item: {readTags, embeddedExifTags, embeddedIptcTags, embeddedExifThumbnail, exifCarriedGroups},
         });
 
         if (readTagsPromise) {
             deferredPromises.push(readTagsPromise.then((tagList) => {
                 deferredResults.pngTextTagList = tagList;
             }));
-            mergeSteps.push({
-                type: 'processPngTextReadTagsDeferredList',
-                deferredKey: 'pngTextTagList',
-            });
+            mergeBlocks.push({slot: 'deferredPngText', group: 'png', mode: 'pngText', deferredKey: 'pngTextTagList'});
         }
     }
 
@@ -499,10 +432,7 @@ export function loadView(
         parsedGroups.pngChunk = parsedPngChunkTags;
 
         if (tagFilter.shouldReturnGroup('png')) {
-            mergeSteps.push({
-                type: 'mergePngChunk',
-                parsedTags: parsedPngChunkTags,
-            });
+            mergeBlocks.push({slot: 'pngChunk', group: 'png', mode: 'merge', tags: parsedPngChunkTags});
         }
     }
 
@@ -516,11 +446,7 @@ export function loadView(
         parsedGroups.riff = parsedRiffTags;
 
         if (tagFilter.shouldReturnGroup('riff')) {
-            mergeSteps.push({
-                type: 'mergeGroupMerge',
-                groupKey: 'riff',
-                parsedTags: parsedRiffTags,
-            });
+            mergeBlocks.push({slot: 'riff', group: 'riff', mode: 'merge', tags: parsedRiffTags});
         }
     }
 
@@ -534,11 +460,7 @@ export function loadView(
         parsedGroups.gif = parsedGifTags;
 
         if (tagFilter.shouldReturnGroup('gif')) {
-            mergeSteps.push({
-                type: 'mergeGroupMerge',
-                groupKey: 'gif',
-                parsedTags: parsedGifTags,
-            });
+            mergeBlocks.push({slot: 'gif', group: 'gif', mode: 'merge', tags: parsedGifTags});
         }
     }
 
@@ -552,11 +474,7 @@ export function loadView(
         parsedGroups.file = parsedJxlFileTags;
 
         if (tagFilter.shouldReturnGroup('file')) {
-            mergeSteps.push({
-                type: 'mergeGroupAssign',
-                groupKey: 'file',
-                parsedTags: parsedJxlFileTags,
-            });
+            mergeBlocks.push({slot: 'jxlFile', group: 'file', mode: 'assign', tags: parsedJxlFileTags});
         }
     }
 
@@ -570,26 +488,23 @@ export function loadView(
         parsedGroups.file = parsedIsoBmffFileTags;
 
         if (tagFilter.shouldReturnGroup('file')) {
-            mergeSteps.push({
-                type: 'mergeGroupAssign',
-                groupKey: 'file',
-                parsedTags: parsedIsoBmffFileTags,
-            });
+            mergeBlocks.push({slot: 'isoBmffFile', group: 'file', mode: 'assign', tags: parsedIsoBmffFileTags});
         }
     }
 
     if (Constants.USE_EXIF) {
-        mergeSteps.push({type: 'gps'});
+        mergeBlocks.push({slot: 'gps', mode: 'gps'});
     }
     if (Constants.USE_EXIF || Constants.USE_XMP) {
-        mergeSteps.push({type: 'composite'});
+        mergeBlocks.push({slot: 'composite', mode: 'composite'});
     }
-    mergeSteps.push({type: 'thumbnail'});
-    mergeSteps.push({type: 'fileType'});
+    mergeBlocks.push({slot: 'thumbnail', mode: 'thumbnail'});
+    mergeBlocks.push({slot: 'fileType', mode: 'fileType'});
 
     if (expanded && includeOffsets) {
-        mergeSteps.push({
-            type: 'metadataRange',
+        mergeBlocks.push({
+            slot: 'metadataRange',
+            mode: 'metadataRange',
             metadataBlocks: getMetadataRangeBlocks(ranges, async),
             metadataTruncated: !!truncated,
         });
@@ -619,8 +534,8 @@ export function loadView(
         assertPromiseSupport();
 
         return Promise.all(deferredPromises).then(() => {
-            const tags = buildTagsFromMergeSteps({
-                mergeSteps,
+            const tags = buildTagsFromMergeBlocks({
+                mergeBlocks,
                 deferredResults,
                 parsedGroups,
                 expanded,
@@ -639,8 +554,8 @@ export function loadView(
         });
     }
 
-    return buildTagsFromMergeSteps({
-        mergeSteps,
+    return buildTagsFromMergeBlocks({
+        mergeBlocks,
         deferredResults,
         parsedGroups,
         expanded,

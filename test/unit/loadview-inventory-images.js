@@ -418,3 +418,59 @@ export function getGif() {
 function getLittleEndian(number, numBytes) {
     return getByteStringFromNumber(number, numBytes).split('').reverse().join('');
 }
+
+// A WebP with a VP8X chunk, then EXIF, XMP and ICCP chunks.
+export function getWebpWithMetadata({tiff, xmpPacket, iccProfile}) {
+    const vp8x = '\x00' + '\x00\x00\x00' + getLittleEndian(0, 3) + getLittleEndian(0, 3);
+    const chunks = getWebpChunk('VP8X', vp8x)
+        + getWebpChunk('EXIF', tiff)
+        + getWebpChunk('XMP ', xmpPacket)
+        + getWebpChunk('ICCP', iccProfile);
+    return 'RIFF' + getLittleEndian(4 + chunks.length, 4) + 'WEBP' + chunks;
+}
+
+function getWebpChunk(id, data) {
+    return id + getLittleEndian(data.length, 4) + data + (data.length % 2 === 1 ? '\x00' : '');
+}
+
+// HEIC and AVIF: an ftyp box and a meta box whose pitm names the primary
+// item, whose iprp holds a colr ICC profile and an ispe (associated with the
+// primary item through ipma), and whose iloc points at an Exif item and an
+// XMP mime item stored after the meta box.
+export function getIsoBmff({majorBrand, tiff, xmpPacket, iccProfile}) {
+    const PRIMARY_ITEM_ID = 1;
+    const EXIF_ITEM_ID = 2;
+    const XMP_ITEM_ID = 3;
+    const ISPE_PROPERTY_INDEX = 2;
+    const exifItem = getByteStringFromNumber(6, 4) + 'Exif\x00\x00' + tiff;
+    const ftyp = getBox('ftyp', majorBrand + '\x00\x00\x00\x00' + 'mif1' + majorBrand);
+    const getMeta = (exifOffset, xmpOffset) => getIsoBmffFullBox('meta', 0,
+        getIsoBmffFullBox('pitm', 0, getByteStringFromNumber(PRIMARY_ITEM_ID, 2))
+        + getIsoBmffFullBox('iinf', 0, getByteStringFromNumber(2, 2)
+            + getIsoBmffFullBox('infe', 2, getByteStringFromNumber(EXIF_ITEM_ID, 2) + '\x00\x00' + 'Exif' + '\x00')
+            + getIsoBmffFullBox('infe', 2, getByteStringFromNumber(XMP_ITEM_ID, 2) + '\x00\x00' + 'mime' + '\x00' + 'application/rdf+xml\x00'))
+        + getBox('iprp',
+            getBox('ipco',
+                getBox('colr', 'prof' + iccProfile)
+                + getIsoBmffFullBox('ispe', 0, getByteStringFromNumber(1, 4) + getByteStringFromNumber(1, 4)))
+            + getIsoBmffFullBox('ipma', 0, getByteStringFromNumber(1, 4)
+                + getByteStringFromNumber(PRIMARY_ITEM_ID, 2) + '\x01' + getByteStringFromNumber(ISPE_PROPERTY_INDEX, 1)))
+        + getIsoBmffFullBox('iloc', 0, '\x44\x40' + getByteStringFromNumber(2, 2)
+            + getIlocItem(EXIF_ITEM_ID, exifOffset, exifItem.length)
+            + getIlocItem(XMP_ITEM_ID, xmpOffset, xmpPacket.length))
+    );
+    const exifOffset = ftyp.length + getMeta(0, 0).length;
+    return ftyp + getMeta(exifOffset, exifOffset + exifItem.length) + exifItem + xmpPacket;
+}
+
+function getIsoBmffFullBox(type, version, content) {
+    return getBox(type, String.fromCharCode(version) + '\x00\x00\x00' + content);
+}
+
+function getIlocItem(itemId, offset, length) {
+    const DATA_REFERENCE_INDEX = '\x00\x00';
+    const BASE_OFFSET = getByteStringFromNumber(0, 4);
+    const EXTENT_COUNT = getByteStringFromNumber(1, 2);
+    return getByteStringFromNumber(itemId, 2) + DATA_REFERENCE_INDEX + BASE_OFFSET + EXTENT_COUNT
+        + getByteStringFromNumber(offset, 4) + getByteStringFromNumber(length, 4);
+}
