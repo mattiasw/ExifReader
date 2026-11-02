@@ -139,9 +139,9 @@ function readTags(tags, chunkDataView, domParser) {
 }
 
 function getDocument(chunkDataView, _domParser) {
-    const domParser = DOMParser.get(_domParser);
+    const {parser: domParser, warning} = DOMParser.get(_domParser);
     if (!domParser) {
-        console.warn('Warning: DOMParser is not available. It is needed to be able to parse XMP tags.'); // eslint-disable-line no-console
+        console.warn(warning); // eslint-disable-line no-console
         throw new Error();
     }
 
@@ -219,7 +219,7 @@ function trimAfterPacketTrailer(xmlSource) {
 
 function parseFromString(domParser, xmlString, isRetry = false) {
     if (exceedsMarkupBounds(xmlString, MAX_ELEMENT_DEPTH, MAX_MARKUP_NODES)) {
-        throw new ParseError(`XMP elements nested deeper than ${MAX_ELEMENT_DEPTH} levels or more than ${MAX_MARKUP_NODES} markup nodes.`);
+        throw new ParseError(`XMP has elements nested deeper than ${MAX_ELEMENT_DEPTH} levels, more than ${MAX_MARKUP_NODES} markup nodes, or a markup declaration.`);
     }
     try {
         const doc = domParser.parseFromString(xmlString, 'application/xml');

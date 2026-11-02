@@ -290,7 +290,18 @@ function sliceInputBuffer(data, end) {
         const viewEnd = Math.max(0, Math.min(end, data.byteLength));
         return data.buffer.slice(data.byteOffset, data.byteOffset + viewEnd);
     }
+    if (isArrayBufferLike(data)) {
+        return data.slice(0, end);
+    }
     return data;
+}
+
+// Tells an ArrayBuffer or SharedArrayBuffer from another realm, where instanceof fails.
+function isArrayBufferLike(data) {
+    return !!data
+        && !data.buffer
+        && (typeof data.slice === 'function')
+        && (typeof data.byteLength === 'number');
 }
 
 function bufferByteLength(buffer) {
