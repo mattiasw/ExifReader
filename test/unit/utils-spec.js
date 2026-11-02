@@ -1949,88 +1949,108 @@ describe('utils', () => {
         });
     });
 
-    describe('pushMetadataBlock', () => {
-        it('should push a typed block when tracking is active', () => {
-            const metadataBlocks = [];
-            Utils.pushMetadataBlock(metadataBlocks, 'exif', 12, 34);
-            expect(metadataBlocks).to.deep.equal([{type: 'exif', start: 12, end: 34}]);
+    describe('getCompressionMethod', () => {
+        it('should map deflate to the deflate method', () => {
+            expect(Utils.getCompressionMethod('deflate')).to.equal(Utils.COMPRESSION_METHOD_DEFLATE);
         });
 
-        it('should do nothing when there is no block array', () => {
-            expect(() => Utils.pushMetadataBlock(undefined, 'exif', 12, 34)).to.not.throw();
+        it('should map brotli to the brotli method', () => {
+            expect(Utils.getCompressionMethod('brotli')).to.equal(Utils.COMPRESSION_METHOD_BROTLI);
         });
 
-        it('should not push a block without a type', () => {
-            const metadataBlocks = [];
-            Utils.pushMetadataBlock(metadataBlocks, undefined, 12, 34);
-            expect(metadataBlocks).to.deep.equal([]);
+        it('should pass an unknown compression through so that decompress rejects it', () => {
+            expect(Utils.getCompressionMethod('unknown')).to.equal('unknown');
+            return Utils.decompress(new DataView(new ArrayBuffer(1)), Utils.getCompressionMethod('unknown'), undefined, 'string', {deflate: () => {
+                throw new Error('must not be called');
+            }}).then(
+                () => expect.fail('should reject'),
+                (error) => expect(error).to.equal('Unknown compression method unknown.')
+            );
+        });
+    });
+
+    describe('pushRange', () => {
+        const EXIF_BLOCK = {kind: 'exif'};
+        const PNG_BLOCK = {kind: 'pngChunk'};
+
+        it('should push a span linked to its block when tracking is active', () => {
+            const ranges = [];
+            Utils.pushRange(ranges, EXIF_BLOCK, 12, 34);
+            expect(ranges).to.deep.equal([{block: EXIF_BLOCK, start: 12, end: 34}]);
+            expect(ranges[0].block).to.equal(EXIF_BLOCK);
         });
 
-        it('should cap the block list at 4096 entries', () => {
-            expect(Utils.MAX_METADATA_BLOCKS).to.equal(4096);
+        it('should do nothing when there is no range array', () => {
+            expect(() => Utils.pushRange(undefined, EXIF_BLOCK, 12, 34)).to.not.throw();
         });
 
-        it('should keep every block as given up to the cap', () => {
-            const metadataBlocks = getFullBlockList();
-            expect(metadataBlocks).to.deep.equal(getExpectedFullBlockList());
+        it('should not push a span without a block', () => {
+            const ranges = [];
+            Utils.pushRange(ranges, undefined, 12, 34);
+            expect(ranges).to.deep.equal([]);
         });
 
-        it('should widen the end of the last block instead of pushing past the cap', () => {
-            const metadataBlocks = getFullBlockList();
-            const {start, end} = getLastBlock(metadataBlocks);
-            Utils.pushMetadataBlock(metadataBlocks, 'png', end + 4, end + 16);
-            expect(metadataBlocks).to.have.lengthOf(Utils.MAX_METADATA_BLOCKS);
-            expect(getLastBlock(metadataBlocks)).to.deep.equal({type: 'png', start, end: end + 16});
+        it('should keep every span as given up to the cap', () => {
+            expect(getFullRangeList()).to.deep.equal(getExpectedFullRangeList());
         });
 
-        it('should widen the start of the last block for an out-of-order block past the cap', () => {
-            const metadataBlocks = getFullBlockList();
-            const {end} = getLastBlock(metadataBlocks);
-            Utils.pushMetadataBlock(metadataBlocks, 'png', 2, 6);
-            expect(metadataBlocks).to.have.lengthOf(Utils.MAX_METADATA_BLOCKS);
-            expect(getLastBlock(metadataBlocks)).to.deep.equal({type: 'png', start: 2, end});
+        it('should widen the end of the last span instead of pushing past the cap', () => {
+            const ranges = getFullRangeList();
+            const {start, end} = getLastRange(ranges);
+            Utils.pushRange(ranges, PNG_BLOCK, end + 4, end + 16);
+            expect(ranges).to.have.lengthOf(Utils.MAX_METADATA_BLOCKS);
+            expect(getLastRange(ranges)).to.deep.equal({block: PNG_BLOCK, start, end: end + 16});
         });
 
-        it('should not narrow the last block for a block inside it past the cap', () => {
-            const metadataBlocks = getFullBlockList();
-            const {start, end} = getLastBlock(metadataBlocks);
-            Utils.pushMetadataBlock(metadataBlocks, 'png', start + 1, end - 1);
-            expect(getLastBlock(metadataBlocks)).to.deep.equal({type: 'png', start, end});
+        it('should widen the start of the last span for an out-of-order span past the cap', () => {
+            const ranges = getFullRangeList();
+            const {end} = getLastRange(ranges);
+            Utils.pushRange(ranges, PNG_BLOCK, 2, 6);
+            expect(ranges).to.have.lengthOf(Utils.MAX_METADATA_BLOCKS);
+            expect(getLastRange(ranges)).to.deep.equal({block: PNG_BLOCK, start: 2, end});
         });
 
-        it('should keep the type of the last block when widening it with another type', () => {
-            const metadataBlocks = getFullBlockList();
-            const {start, end} = getLastBlock(metadataBlocks);
-            Utils.pushMetadataBlock(metadataBlocks, 'exif', end, end + 10);
-            expect(getLastBlock(metadataBlocks)).to.deep.equal({type: 'png', start, end: end + 10});
+        it('should not narrow the last span for a span inside it past the cap', () => {
+            const ranges = getFullRangeList();
+            const {start, end} = getLastRange(ranges);
+            Utils.pushRange(ranges, PNG_BLOCK, start + 1, end - 1);
+            expect(getLastRange(ranges)).to.deep.equal({block: PNG_BLOCK, start, end});
         });
 
-        it('should not widen the last block for a block without a type past the cap', () => {
-            const metadataBlocks = getFullBlockList();
-            const {start, end} = getLastBlock(metadataBlocks);
-            Utils.pushMetadataBlock(metadataBlocks, undefined, start - 1, end + 1);
-            expect(metadataBlocks).to.have.lengthOf(Utils.MAX_METADATA_BLOCKS);
-            expect(getLastBlock(metadataBlocks)).to.deep.equal({type: 'png', start, end});
+        it('should keep the block of the last span when widening it with another block', () => {
+            const ranges = getFullRangeList();
+            const {start, end} = getLastRange(ranges);
+            Utils.pushRange(ranges, EXIF_BLOCK, end, end + 10);
+            expect(getLastRange(ranges).block).to.equal(PNG_BLOCK);
+            expect(getLastRange(ranges)).to.deep.equal({block: PNG_BLOCK, start, end: end + 10});
         });
 
-        function getFullBlockList() {
-            const metadataBlocks = [];
+        it('should not widen the last span for a span without a block past the cap', () => {
+            const ranges = getFullRangeList();
+            const {start, end} = getLastRange(ranges);
+            Utils.pushRange(ranges, undefined, start - 1, end + 1);
+            expect(ranges).to.have.lengthOf(Utils.MAX_METADATA_BLOCKS);
+            expect(getLastRange(ranges)).to.deep.equal({block: PNG_BLOCK, start, end});
+        });
+
+        function getFullRangeList() {
+            const ranges = [];
             for (let i = 0; i < Utils.MAX_METADATA_BLOCKS; i++) {
-                Utils.pushMetadataBlock(metadataBlocks, 'png', 8 + i * 12, 20 + i * 12);
+                Utils.pushRange(ranges, PNG_BLOCK, 8 + i * 12, 20 + i * 12);
             }
-            return metadataBlocks;
+            return ranges;
         }
 
-        function getExpectedFullBlockList() {
+        function getExpectedFullRangeList() {
             const expected = [];
             for (let i = 0; i < 4096; i++) {
-                expected.push({type: 'png', start: 8 + i * 12, end: 20 + i * 12});
+                expected.push({block: PNG_BLOCK, start: 8 + i * 12, end: 20 + i * 12});
             }
             return expected;
         }
 
-        function getLastBlock(metadataBlocks) {
-            return metadataBlocks[metadataBlocks.length - 1];
+        function getLastRange(ranges) {
+            return ranges[ranges.length - 1];
         }
     });
 

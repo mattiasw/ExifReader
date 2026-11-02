@@ -865,7 +865,7 @@ describe('icc-tags', () => {
 
         it('should stay bounded for a WebP ICCP chunk that over-declares its size', () => {
             const dataView = getOverDeclaringWebpDataView();
-            const {iccChunks} = ImageHeaderWebp.findOffsets(dataView);
+            const {chunks: iccChunks} = ImageHeaderWebp.findOffsets(dataView).find((block) => block.kind === 'icc');
             expect(iccChunks[0].length).to.equal(OVER_DECLARED_LENGTH);
 
             const {requestedLengths, result} = readAndRecordAllocations(dataView, iccChunks);
@@ -876,7 +876,7 @@ describe('icc-tags', () => {
 
         it('should stay bounded for an ISO-BMFF colr box that over-declares its size', () => {
             const dataView = getOverDeclaringIsoBmffDataView();
-            const {iccChunks} = findIsoBmffOffsets(dataView);
+            const {chunks: iccChunks} = findIsoBmffOffsets(dataView).find((block) => block.kind === 'icc');
             expect(iccChunks[0].length).to.equal(OVER_DECLARED_LENGTH);
 
             const {requestedLengths, result} = readAndRecordAllocations(dataView, iccChunks);

@@ -4,7 +4,7 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringFromDataView, pushMetadataBlock} from './utils.js';
+import {getStringFromDataView, getStringValueFromArray, addBlock, pushRange, COMPRESSION_METHOD_NONE, MAX_METADATA_BLOCKS} from './utils.js';
 
 export default {
     isPngFile,
@@ -27,6 +27,33 @@ export const TYPE_EXIF = 'eXIf';
 export const TYPE_ICCP = 'iCCP';
 // PNG spec: an iCCP profile name is at most 79 bytes, like a text keyword.
 const MAX_ICC_PROFILE_NAME_LENGTH = 79;
+export const EXIF_PROFILE_NAME = 'raw profile type exif';
+export const IPTC_PROFILE_NAME = 'raw profile type iptc';
+const STATE_KEYWORD = 'STATE_KEYWORD';
+const STATE_COMPRESSION = 'STATE_COMPRESSION';
+const STATE_LANG = 'STATE_LANG';
+const STATE_TRANSLATED_KEYWORD = 'STATE_TRANSLATED_KEYWORD';
+const STATE_TEXT = 'STATE_TEXT';
+const COMPRESSION_SECTION_ITXT_EXTRA_BYTE = 1;
+const COMPRESSION_FLAG_COMPRESSED = 1;
+const COMPRESSION_METHOD_DEFLATE = 0;
+// PNG spec: a keyword is 1-79 bytes.
+const MAX_KEYWORD_LENGTH = 79;
+// Our own bound: BCP 47 sets no maximum, but real tags are far shorter.
+const MAX_LANGUAGE_TAG_LENGTH = 79;
+// Guards against memory exhaustion from a crafted file: every text chunk is its
+// own block, and a file of 8 MiB holds 600,000 empty ones. Real files have tens.
+const MAX_TEXT_CHUNK_BLOCKS = MAX_METADATA_BLOCKS;
+// A text chunk past the cap is listed against the shared block of its type and
+// never read, so that metadataRange still covers it.
+const DROPPED_TEXT_CHUNK_BLOCKS = {};
+DROPPED_TEXT_CHUNK_BLOCKS[TYPE_TEXT] = getDroppedTextChunkBlock(TYPE_TEXT);
+DROPPED_TEXT_CHUNK_BLOCKS[TYPE_ITXT] = getDroppedTextChunkBlock(TYPE_ITXT);
+DROPPED_TEXT_CHUNK_BLOCKS[TYPE_ZTXT] = getDroppedTextChunkBlock(TYPE_ZTXT);
+
+function getDroppedTextChunkBlock(chunkType) {
+    return {kind: 'pngText', text: {chunkType, name: undefined, valueOffset: undefined, valueLength: undefined}};
+}
 
 /**
  * Checks if the provided data view represents a PNG file.
@@ -39,86 +66,91 @@ function isPngFile(dataView) {
 }
 
 /**
- * Walks the PNG chunk list and reports the offsets ExifReader needs.
+ * Walks the PNG chunk list and reports the blocks ExifReader reads.
  *
- * @param {DataView} dataView The data view to find offsets in.
- * @param {boolean} async Whether async parsing is enabled (gates zTXt/iCCP).
- * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
- *     receives one block per recognized chunk and gets `truncated` set to
- *     true if the loop never saw an IEND chunk.
- * @returns {Object} Per-section offsets plus `hasAppMarkers`.
+ * Every tEXt, iTXt and zTXt chunk but the XMP iTXt is its own block, classified
+ * by keyword: `exif` for a raw Exif profile, `iptc` for a raw IPTC profile and
+ * `pngText` for anything else, with `compression` set for a compressed chunk.
+ * zTXt chunks are reported in every mode; the orchestrator decides whether a
+ * compressed block is read. Text chunks past the first MAX_TEXT_CHUNK_BLOCKS
+ * are only listed in `ranges`.
+ *
+ * @param {DataView} dataView The data view to find blocks in.
+ * @param {Array<Object>=} ranges Optional out-array. When provided, receives
+ *     one `{block, start, end}` span per recognized chunk and gets
+ *     `truncated` set to true if the loop never saw an IEND chunk.
+ * @returns {Array<Object>} The blocks, in chunk order.
  */
-function findPngOffsets(dataView, async, metadataBlocks) {
+function findPngOffsets(dataView, ranges) {
     const PNG_CRC_SIZE = 4;
     const TYPE_IEND = 'IEND';
+    const TYPE_IHDR = 'IHDR';
 
-    const offsets = {
-        hasAppMarkers: false
-    };
+    const blocks = [];
+    let fileBlock;
+    let xmpBlock;
+    let exifBlock;
+    let iccBlock;
+    let textChunkCount = 0;
 
     let offset = PNG_ID.length;
     let sawIEnd = false;
 
     while (offset + PNG_CHUNK_LENGTH_SIZE + PNG_CHUNK_TYPE_SIZE <= dataView.byteLength) {
-        let blockType;
+        let block;
         const chunkDataLength = dataView.getUint32(offset + PNG_CHUNK_LENGTH_OFFSET);
+        const chunkType = getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
 
-        // The IEND check is only needed for the truncation signal, so skip
-        // the per-chunk string read for default callers.
-        if (metadataBlocks
-            && getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === TYPE_IEND) {
+        if (chunkType === TYPE_IEND) {
             sawIEnd = true;
-        }
-        if (isPngImageHeaderChunk(dataView, offset)) {
-            offsets.hasAppMarkers = true;
-            offsets.pngHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
-            blockType = 'file';
-        } else if (isPngXmpChunk(dataView, offset)) {
+        } else if (chunkType === TYPE_IHDR) {
+            fileBlock = fileBlock || addBlock(blocks, {kind: 'pngFile'});
+            fileBlock.dataOffset = offset + PNG_CHUNK_DATA_OFFSET;
+            block = fileBlock;
+        } else if (isPngXmpChunk(dataView, chunkType, offset)) {
             const dataOffset = getPngXmpDataOffset(dataView, offset);
             if (dataOffset !== undefined) {
-                offsets.hasAppMarkers = true;
-                offsets.xmpChunks = [{
+                xmpBlock = xmpBlock || addBlock(blocks, {kind: 'xmp'});
+                xmpBlock.chunks = [{
                     dataOffset,
                     length: chunkDataLength - (dataOffset - (offset + PNG_CHUNK_DATA_OFFSET))
                 }];
-                blockType = 'xmp';
+                block = xmpBlock;
             }
-        } else if (isPngTextChunk(dataView, offset, async)) {
-            offsets.hasAppMarkers = true;
-            if (!offsets.pngTextChunks) {
-                offsets.pngTextChunks = [];
+        } else if (isPngTextChunk(chunkType)) {
+            if (textChunkCount < MAX_TEXT_CHUNK_BLOCKS) {
+                block = addBlock(blocks, getTextChunkBlock(dataView, offset + PNG_CHUNK_DATA_OFFSET, chunkDataLength, chunkType));
+            } else {
+                block = DROPPED_TEXT_CHUNK_BLOCKS[chunkType];
             }
-            offsets.pngTextChunks.push(offset + PNG_CHUNK_LENGTH_OFFSET);
-            blockType = 'png';
-        } else if (isPngExifChunk(dataView, offset)) {
-            offsets.hasAppMarkers = true;
-            offsets.tiffHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
-            blockType = 'exif';
-        } else if (async && isPngIccpChunk(dataView, offset)) {
+            textChunkCount++;
+        } else if (chunkType === TYPE_EXIF) {
+            exifBlock = exifBlock || addBlock(blocks, {kind: 'exif'});
+            exifBlock.tiffHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
+            block = exifBlock;
+        } else if (chunkType === TYPE_ICCP) {
             const iccHeaderOffset = offset + PNG_CHUNK_DATA_OFFSET;
             const iccHeader = parseIccHeader(dataView, iccHeaderOffset, chunkDataLength);
             if (iccHeader !== undefined) {
-                offsets.hasAppMarkers = true;
                 // PNG spec: a file has at most one iCCP chunk, so only the first valid one is kept.
-                if (!offsets.iccChunks) {
-                    offsets.iccChunks = [{
-                        offset: iccHeader.compressedProfileOffset,
-                        length: chunkDataLength - (iccHeader.compressedProfileOffset - iccHeaderOffset),
-                        chunkNumber: 1,
-                        chunksTotal: 1,
-                        profileName: iccHeader.profileName,
-                        compressionMethod: iccHeader.compressionMethod
-                    }];
+                if (!iccBlock) {
+                    iccBlock = addBlock(blocks, {
+                        kind: 'icc',
+                        compression: iccHeader.compressionMethod === COMPRESSION_METHOD_DEFLATE ? 'deflate' : 'unknown',
+                        chunks: [{
+                            offset: iccHeader.compressedProfileOffset,
+                            length: chunkDataLength - (iccHeader.compressedProfileOffset - iccHeaderOffset),
+                            chunkNumber: 1,
+                            chunksTotal: 1,
+                            profileName: iccHeader.profileName,
+                            compressionMethod: iccHeader.compressionMethod
+                        }]
+                    });
                 }
-                blockType = 'icc';
+                block = iccBlock;
             }
-        } else if (isPngChunk(dataView, offset)) {
-            offsets.hasAppMarkers = true;
-            if (!offsets.pngChunkOffsets) {
-                offsets.pngChunkOffsets = [];
-            }
-            offsets.pngChunkOffsets.push(offset + PNG_CHUNK_LENGTH_OFFSET);
-            blockType = 'png';
+        } else if (isPngChunk(chunkType)) {
+            block = addBlock(blocks, {kind: 'pngChunk', dataOffset: offset + PNG_CHUNK_LENGTH_OFFSET});
         }
 
         const chunkTotalSize = chunkDataLength
@@ -126,45 +158,136 @@ function findPngOffsets(dataView, async, metadataBlocks) {
             + PNG_CHUNK_TYPE_SIZE
             + PNG_CRC_SIZE;
 
-        pushMetadataBlock(metadataBlocks, blockType, offset, offset + chunkTotalSize);
+        pushRange(ranges, block, offset, offset + chunkTotalSize);
 
         offset += chunkTotalSize;
     }
 
-    if (metadataBlocks) {
-        metadataBlocks.truncated = !sawIEnd;
+    if (ranges) {
+        ranges.truncated = !sawIEnd;
     }
 
-    return offsets;
+    return blocks;
 }
 
-function isPngImageHeaderChunk(dataView, offset) {
-    const PNG_CHUNK_TYPE_IMAGE_HEADER = 'IHDR';
-    return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === PNG_CHUNK_TYPE_IMAGE_HEADER;
-}
-
-function isPngXmpChunk(dataView, offset) {
-    return (getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === TYPE_ITXT)
+function isPngXmpChunk(dataView, chunkType, offset) {
+    return (chunkType === TYPE_ITXT)
         && (getStringFromDataView(dataView, offset + PNG_CHUNK_DATA_OFFSET, PNG_XMP_PREFIX.length) === PNG_XMP_PREFIX);
 }
 
-function isPngTextChunk(dataView, offset, async) {
-    const chunkType = getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
-    return chunkType === TYPE_TEXT || chunkType === TYPE_ITXT || (chunkType === TYPE_ZTXT && async);
+function isPngTextChunk(chunkType) {
+    return chunkType === TYPE_TEXT || chunkType === TYPE_ITXT || chunkType === TYPE_ZTXT;
 }
 
-function isPngExifChunk(dataView, offset) {
-    return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === TYPE_EXIF;
-}
-
-function isPngIccpChunk(dataView, offset) {
-    return getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE) === TYPE_ICCP;
-}
-
-function isPngChunk(dataView, offset) {
+function isPngChunk(chunkType) {
     const SUPPORTED_PNG_CHUNK_TYPES = [TYPE_PHYS, TYPE_TIME];
-    const chunkType = getStringFromDataView(dataView, offset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
     return SUPPORTED_PNG_CHUNK_TYPES.includes(chunkType);
+}
+
+// The block carries where the text bytes are, not a copy of them: a block the
+// orchestrator hides or a group the filter leaves out is never read.
+function getTextChunkBlock(dataView, offset, length, chunkType) {
+    const textChunk = parseTextChunk(dataView, offset, length, chunkType);
+    if (textChunk === undefined) {
+        return getDroppedTextChunkBlock(chunkType);
+    }
+    const name = getName(chunkType, textChunk.langChars, textChunk.keywordChars);
+    const block = {kind: getTextChunkKind(name)};
+    if (textChunk.compressionMethod !== COMPRESSION_METHOD_NONE) {
+        block.compression = textChunk.compressionMethod === COMPRESSION_METHOD_DEFLATE ? 'deflate' : 'unknown';
+    }
+    block.text = {chunkType, name, valueOffset: textChunk.valueOffset, valueLength: textChunk.valueLength};
+    return block;
+}
+
+function parseTextChunk(dataView, offset, length, type) {
+    const keywordChars = [];
+    const langChars = [];
+    let valueOffset;
+    let valueLength;
+    let parsingState = STATE_KEYWORD;
+    let compressionMethod = COMPRESSION_METHOD_NONE;
+    const chunkEnd = Math.min(offset + length, dataView.byteLength);
+
+    for (let i = 0; i < length && offset + i < dataView.byteLength; i++) {
+        if (parsingState === STATE_COMPRESSION) {
+            compressionMethod = getTextChunkCompressionMethod({type, dataView, offset: offset + i, chunkEnd});
+            if (type === TYPE_ITXT) {
+                i += COMPRESSION_SECTION_ITXT_EXTRA_BYTE;
+            }
+            parsingState = moveToNextState(type, parsingState);
+            continue;
+        } else if (parsingState === STATE_TEXT) {
+            valueOffset = offset + i;
+            valueLength = length - i;
+            break;
+        }
+        const byte = dataView.getUint8(offset + i);
+        if (byte === 0) {
+            parsingState = moveToNextState(type, parsingState);
+        } else if (parsingState === STATE_KEYWORD) {
+            if (keywordChars.length >= MAX_KEYWORD_LENGTH) {
+                return undefined;
+            }
+            keywordChars.push(byte);
+        } else if (parsingState === STATE_LANG) {
+            if (langChars.length >= MAX_LANGUAGE_TAG_LENGTH) {
+                return undefined;
+            }
+            langChars.push(byte);
+        }
+    }
+
+    return {keywordChars, langChars, compressionMethod, valueOffset, valueLength};
+}
+
+function getTextChunkCompressionMethod({type, dataView, offset, chunkEnd}) {
+    if (type === TYPE_ITXT) {
+        if (offset + 1 < chunkEnd && dataView.getUint8(offset) === COMPRESSION_FLAG_COMPRESSED) {
+            return dataView.getUint8(offset + 1);
+        }
+    } else if (type === TYPE_ZTXT) {
+        return dataView.getUint8(offset);
+    }
+    return COMPRESSION_METHOD_NONE;
+}
+
+function moveToNextState(type, parsingState) {
+    if (parsingState === STATE_KEYWORD && [TYPE_ITXT, TYPE_ZTXT].includes(type)) {
+        return STATE_COMPRESSION;
+    }
+    if (parsingState === STATE_COMPRESSION) {
+        if (type === TYPE_ITXT) {
+            return STATE_LANG;
+        }
+        return STATE_TEXT;
+    }
+    if (parsingState === STATE_LANG) {
+        return STATE_TRANSLATED_KEYWORD;
+    }
+    return STATE_TEXT;
+}
+
+function getName(type, langChars, keywordChars) {
+    const name = getStringValueFromArray(keywordChars);
+    if (type === TYPE_TEXT || langChars.length === 0) {
+        return name;
+    }
+    const lang = getStringValueFromArray(langChars);
+    return `${name} (${lang})`;
+}
+
+// A raw profile is told by its keyword here; the reader checks the payload
+// and reads a block whose value is not a profile as plain text.
+function getTextChunkKind(name) {
+    const lowerCaseName = name.toLowerCase();
+    if (lowerCaseName === EXIF_PROFILE_NAME) {
+        return 'exif';
+    }
+    if (lowerCaseName === IPTC_PROFILE_NAME) {
+        return 'iptc';
+    }
+    return 'pngText';
 }
 
 function getPngXmpDataOffset(dataView, offset) {

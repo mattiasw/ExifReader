@@ -13,6 +13,7 @@ import Avif from '../../src/image-header-avif.js';
 import Jxl from '../../src/image-header-jxl.js';
 import Webp from '../../src/image-header-webp.js';
 import Gif from '../../src/image-header-gif.js';
+import Xml from '../../src/xml.js';
 import ImageHeader from '../../src/image-header.js';
 
 describe('image-header', () => {
@@ -40,17 +41,17 @@ describe('image-header', () => {
 
     describe('TIFF files', () => {
         const dataView = {};
-        const offsets = {tiffHeaderOffset: 0, hasAppMarkers: true};
+        const blocks = [{kind: 'exif', tiffHeaderOffset: 0}];
 
         beforeEach(() => {
             restores.push(swapProperties(Tiff, {
                 isTiffFile: (_dataView) => _dataView === dataView,
-                findTiffOffsets: () => offsets
+                findTiffOffsets: () => blocks
             }));
         });
 
         it('should handle TIFF files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'tiff', description: 'TIFF'}});
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({fileType: {value: 'tiff', description: 'TIFF'}, blocks});
         });
 
         it('should ignore file when it\'s not a TIFF image', () => {
@@ -66,25 +67,32 @@ describe('image-header', () => {
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
 
-        it('should omit metadataBlocks for TIFF files (no leading metadata container)', () => {
-            const result = ImageHeader.parseAppMarkers(dataView, false, true);
-            expect(result.metadataBlocks).to.deep.equal([]);
+        it('should give TIFF files no ranges (no leading metadata container)', () => {
+            const result = ImageHeader.parseAppMarkers(dataView, true);
+            expect(result.ranges).to.deep.equal([]);
+            expect(result.truncated).to.equal(false);
+        });
+
+        it('should not include ranges when they are not asked for', () => {
+            const result = ImageHeader.parseAppMarkers(dataView);
+            expect(result).to.not.have.property('ranges');
+            expect(result).to.not.have.property('truncated');
         });
     });
 
     describe('JPEG files', () => {
         const dataView = {};
-        const offsets = {hasAppMarkers: true};
+        const blocks = [{kind: 'exif', tiffHeaderOffset: 12}];
 
         beforeEach(() => {
             restores.push(swapProperties(Jpeg, {
                 isJpegFile: (_dataView) => _dataView === dataView,
-                findJpegOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+                findJpegOffsets: (_dataView) => _dataView === dataView ? blocks : undefined
             }));
         });
 
         it('should handle JPEG files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'jpeg', description: 'JPEG'}});
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({fileType: {value: 'jpeg', description: 'JPEG'}, blocks});
         });
 
         it('should ignore file when it\'s not a JPEG image', () => {
@@ -103,17 +111,38 @@ describe('image-header', () => {
 
     describe('PNG files', () => {
         const dataView = {};
-        const offsets = {hasAppMarkers: true};
+        const blocks = [{kind: 'pngFile', dataOffset: 16}];
+        let receivedRanges;
 
         beforeEach(() => {
+            receivedRanges = undefined;
             restores.push(swapProperties(Png, {
                 isPngFile: (_dataView) => _dataView === dataView,
-                findPngOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+                findPngOffsets: (_dataView, ranges) => {
+                    receivedRanges = ranges;
+                    if (ranges) {
+                        ranges.push({block: blocks[0], start: 8, end: 33});
+                        ranges.truncated = true;
+                    }
+                    return _dataView === dataView ? blocks : undefined;
+                }
             }));
         });
 
         it('should handle PNG files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'png', description: 'PNG'}});
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({fileType: {value: 'png', description: 'PNG'}, blocks});
+            expect(receivedRanges).to.equal(undefined);
+        });
+
+        it('should give the PNG finder the range list and surface its truncated flag', () => {
+            const result = ImageHeader.parseAppMarkers(dataView, true);
+            expect(result).to.deep.equal({
+                fileType: {value: 'png', description: 'PNG'},
+                blocks,
+                ranges: [{block: blocks[0], start: 8, end: 33}],
+                truncated: true,
+            });
+            expect(result.ranges).to.equal(receivedRanges);
         });
 
         it('should ignore file when it\'s not a PNG image', () => {
@@ -132,17 +161,17 @@ describe('image-header', () => {
 
     describe('HEIC files', () => {
         const dataView = {};
-        const offsets = {};
+        const blocks = [{kind: 'icc', chunks: []}];
 
         beforeEach(() => {
             restores.push(swapProperties(Heic, {
                 isHeicFile: (_dataView) => _dataView === dataView,
-                findHeicOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+                findHeicOffsets: (_dataView) => _dataView === dataView ? blocks : undefined
             }));
         });
 
         it('should handle HEIC files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'heic', description: 'HEIC'}});
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({fileType: {value: 'heic', description: 'HEIC'}, blocks});
         });
 
         it('should ignore file when it\'s not a HEIC image', () => {
@@ -161,17 +190,17 @@ describe('image-header', () => {
 
     describe('AVIF files', () => {
         const dataView = {};
-        const offsets = {};
+        const blocks = [{kind: 'icc', chunks: []}];
 
         beforeEach(() => {
             restores.push(swapProperties(Avif, {
                 isAvifFile: (_dataView) => _dataView === dataView,
-                findAvifOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+                findAvifOffsets: (_dataView) => _dataView === dataView ? blocks : undefined
             }));
         });
 
         it('should handle AVIF files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'avif', description: 'AVIF'}});
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({fileType: {value: 'avif', description: 'AVIF'}, blocks});
         });
 
         it('should ignore file when it\'s not a AVIF image', () => {
@@ -190,17 +219,17 @@ describe('image-header', () => {
 
     describe('JXL files', () => {
         const dataView = {};
-        const offsets = {};
+        const blocks = [{kind: 'jxlFile', codestreamOffset: 0}];
 
         beforeEach(() => {
             restores.push(swapProperties(Jxl, {
                 isJxlFile: (_dataView) => _dataView === dataView,
-                findJxlOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+                findJxlOffsets: (_dataView) => _dataView === dataView ? blocks : undefined
             }));
         });
 
         it('should handle JXL files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'jxl', description: 'JPEG XL'}});
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({fileType: {value: 'jxl', description: 'JPEG XL'}, blocks});
         });
 
         it('should ignore file when it\'s not a JXL image', () => {
@@ -219,17 +248,17 @@ describe('image-header', () => {
 
     describe('WebP files', () => {
         const dataView = {};
-        const offsets = {};
+        const blocks = [{kind: 'riff', dataOffset: 20}];
 
         beforeEach(() => {
             restores.push(swapProperties(Webp, {
                 isWebpFile: (_dataView) => _dataView === dataView,
-                findOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+                findOffsets: (_dataView) => _dataView === dataView ? blocks : undefined
             }));
         });
 
         it('should handle WebP files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'webp', description: 'WebP'}});
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({fileType: {value: 'webp', description: 'WebP'}, blocks});
         });
 
         it('should ignore file when it\'s not a WebP image', () => {
@@ -248,23 +277,23 @@ describe('image-header', () => {
 
     describe('GIF files', () => {
         const dataView = {};
-        const offsets = {};
+        const blocks = [{kind: 'gif', dataOffset: 0}];
 
         beforeEach(() => {
             restores.push(swapProperties(Gif, {
                 isGifFile: (_dataView) => _dataView === dataView,
-                findOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+                findOffsets: (_dataView) => _dataView === dataView ? blocks : undefined
             }));
         });
 
         it('should handle GIF files', () => {
-            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({...offsets, fileType: {value: 'gif', description: 'GIF'}});
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({fileType: {value: 'gif', description: 'GIF'}, blocks});
         });
 
         it('should ignore file when it\'s not a GIF image', () => {
             restores.push(swapProperties(Gif, {
                 isGifFile: () => false,
-                findOffsets: (_dataView) => _dataView === dataView ? offsets : undefined
+                findOffsets: (_dataView) => _dataView === dataView ? blocks : undefined
             }));
 
             expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
@@ -272,6 +301,35 @@ describe('image-header', () => {
 
         it('should handle when Gif files have been excluded in a custom build', () => {
             restores.push(swapProperties(Constants, {USE_GIF: false}));
+            expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
+        });
+    });
+
+    describe('XML files', () => {
+        const dataView = {};
+        const blocks = [{kind: 'xmp', chunks: [{dataOffset: 0, length: 15}]}];
+
+        beforeEach(() => {
+            restores.push(swapProperties(Xml, {
+                isXMLFile: (_dataView) => _dataView === dataView,
+                findOffsets: (_dataView) => _dataView === dataView ? blocks : undefined
+            }));
+        });
+
+        it('should handle XML files', () => {
+            expect(ImageHeader.parseAppMarkers(dataView)).to.deep.equal({fileType: {value: 'xml', description: 'XML'}, blocks});
+        });
+
+        it('should ignore file when it\'s not an XML file', () => {
+            restores.push(swapProperties(Xml, {
+                isXMLFile: () => false
+            }));
+
+            expect(() => ImageHeader.parseAppMarkers({})).to.throw(/Invalid image format/);
+        });
+
+        it('should handle when XMP has been excluded in a custom build', () => {
+            restores.push(swapProperties(Constants, {USE_XMP: false}));
             expect(() => ImageHeader.parseAppMarkers(dataView)).to.throw(/Invalid image format/);
         });
     });

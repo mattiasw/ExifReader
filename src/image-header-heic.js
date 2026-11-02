@@ -22,14 +22,13 @@ function isHeicFile(dataView) {
 }
 
 /**
- * Finds the offsets of a HEIC file in the provided data view.
+ * Finds the metadata blocks of a HEIC file in the provided data view.
  *
- * @param {DataView} dataView The data view to find offsets in.
- * @param {Array<Object>=} metadataBlocks Optional out-array. Forwarded to
- *     the shared ISO-BMFF findOffsets.
- * @returns {Object} TIFF header offset, XMP chunks, ICC chunks, and whether
- *     any were found.
+ * @param {DataView} dataView The data view to find blocks in.
+ * @param {Array<Object>=} ranges Optional out-array. Forwarded to the shared
+ *     ISO-BMFF findOffsets.
+ * @returns {Array<Object>} The blocks the shared ISO-BMFF findOffsets reports.
  */
-function findHeicOffsets(dataView, metadataBlocks) {
-    return findOffsets(dataView, metadataBlocks);
+function findHeicOffsets(dataView, ranges) {
+    return findOffsets(dataView, ranges);
 }

@@ -23,24 +23,22 @@ describe('image-header-gif', () => {
         expect(ImageHeaderGif.isGifFile(getDataView('RIFF'))).to.be.false;
     });
 
-    it('should find screen descriptor offset', () => {
-        expect(ImageHeaderGif.findOffsets('GIF87a<screen descriptor>')).to.deep.equal({
-            gifHeaderOffset: 0
-        });
+    it('should report the screen descriptor as a gif block at offset 0', () => {
+        expect(ImageHeaderGif.findOffsets('GIF87a<screen descriptor>')).to.deep.equal([{kind: 'gif', dataOffset: 0}]);
     });
 
-    describe('metadataBlocks', () => {
-        it('should not modify out-array argument when undefined', () => {
-            const offsets = ImageHeaderGif.findOffsets('GIF87a<screen descriptor>');
-            expect(offsets).to.deep.equal({gifHeaderOffset: 0});
+    describe('ranges', () => {
+        it('should not need the out-array', () => {
+            expect(ImageHeaderGif.findOffsets('GIF87a<screen descriptor>')).to.not.have.property('truncated');
         });
 
-        it('should emit a gif block covering the GIF header for the screen descriptor', () => {
-            const metadataBlocks = [];
-            ImageHeaderGif.findOffsets('GIF87a<screen descriptor>', metadataBlocks);
-            expect(metadataBlocks).to.deep.equal([
-                {type: 'gif', start: 0, end: 13},
+        it('should list a span covering the GIF header, linked to the gif block', () => {
+            const ranges = [];
+            const blocks = ImageHeaderGif.findOffsets('GIF87a<screen descriptor>', ranges);
+            expect(ranges).to.deep.equal([
+                {block: blocks[0], start: 0, end: 13},
             ]);
+            expect(ranges[0].block).to.equal(blocks[0]);
         });
     });
 });

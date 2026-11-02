@@ -31,7 +31,7 @@ describe('tag filtering options', function () {
     it('excludeTags.exif should exclude a tag by name', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
@@ -49,7 +49,7 @@ describe('tag filtering options', function () {
     it('excludeTags.exif should exclude a tag by id', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
@@ -67,7 +67,7 @@ describe('tag filtering options', function () {
     it('includeTags should override excludeTags for the same group (excludeAll)', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
@@ -88,7 +88,7 @@ describe('tag filtering options', function () {
     it('includeTags should override excludeTags for the same group (selectors)', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
@@ -109,7 +109,7 @@ describe('tag filtering options', function () {
     it('includeTags should be an include-pattern and exclude groups not mentioned', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
@@ -128,7 +128,7 @@ describe('tag filtering options', function () {
     it('includeTags should allow filtering output to empty without throwing', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             DateTimeOriginal: {id: 0x9003, value: '2020:01:01 00:00:00'},
@@ -146,7 +146,7 @@ describe('tag filtering options', function () {
     it('excludeTags: { png: true } should not block embedded exif tags', async function () {
         fakeImageHeader({
             fileType: 'png',
-            pngTextChunks: [1],
+            blocks: [getTextBlock()],
         });
         fakePngTextTagsReadAsync(
             {'Color Type': {value: 2, description: 'RGB'}},
@@ -167,7 +167,7 @@ describe('tag filtering options', function () {
     it('includeTags.thumbnail should not turn the thumbnail IFD of embedded png exif into a Thumbnail tag', async function () {
         fakeImageHeader({
             fileType: 'png',
-            pngTextChunks: [1],
+            blocks: [getTextBlock()],
         });
         fakePngTextTagsReadAsync({}, [{
             embeddedExifTags: {
@@ -191,7 +191,7 @@ describe('tag filtering options', function () {
     it('includeTags: { png: true } should not include embedded exif when exif is not included', async function () {
         fakeImageHeader({
             fileType: 'png',
-            pngTextChunks: [1],
+            blocks: [getTextBlock()],
         });
         fakePngTextTagsReadAsync(
             {'Color Type': {value: 2, description: 'RGB'}},
@@ -212,7 +212,7 @@ describe('tag filtering options', function () {
     it('includeTags.xmp should filter tags (xmpChunks path)', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            xmpChunks: [{dataOffset: 0, length: 1}],
+            blocks: [{kind: 'xmp', chunks: [{dataOffset: 0, length: 1}]}],
         });
         fakeXmpTagsRead({
             DateTimeOriginal: {value: '2020:01:01 00:00:00'},
@@ -235,7 +235,7 @@ describe('tag filtering options', function () {
     it('includeTags.xmp should filter tags (embedded ApplicationNotes path)', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             ApplicationNotes: {
@@ -268,7 +268,7 @@ describe('tag filtering options', function () {
         it(`${filterName} should keep an XMP tag named __proto__ as an own tag`, function () {
             fakeImageHeader({
                 fileType: 'jpeg',
-                xmpChunks: [{dataOffset: 0, length: 1}],
+                blocks: [{kind: 'xmp', chunks: [{dataOffset: 0, length: 1}]}],
             });
             fakeXmpTagsRead(getXmpTagsWithProtoTag());
 
@@ -284,7 +284,7 @@ describe('tag filtering options', function () {
         it(`${filterName} should keep an XMP tag named __proto__ as an own top-level tag when flat`, function () {
             fakeImageHeader({
                 fileType: 'jpeg',
-                xmpChunks: [{dataOffset: 0, length: 1}],
+                blocks: [{kind: 'xmp', chunks: [{dataOffset: 0, length: 1}]}],
             });
             fakeXmpTagsRead(getXmpTagsWithProtoTag());
 
@@ -328,7 +328,7 @@ describe('tag filtering options', function () {
     it('includeTags: { composite: true, file: [FileType] } should still parse file deps for composite', function () {
         fakeImageHeader({
             fileType: {value: 'jpeg', description: 'JPEG'},
-            fileDataOffset: 1,
+            blocks: [{kind: 'file', dataOffset: 1}],
         });
         fakeFileTagsRead({
             'Image Width': {value: 4000},
@@ -485,7 +485,7 @@ describe('tag filtering options', function () {
     it('includeTags.thumbnail should return the top-level Thumbnail', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             Thumbnail: {
@@ -517,7 +517,7 @@ describe('tag filtering options', function () {
     it('excludeTags.thumbnail: [Thumbnail] should remove top-level Thumbnail', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             Thumbnail: {
@@ -539,7 +539,7 @@ describe('tag filtering options', function () {
     it('includeTags.icc should filter embedded ICC tags', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             ICC_Profile: {id: 0x8773, value: [1, 2, 3]},
@@ -563,7 +563,7 @@ describe('tag filtering options', function () {
     it('includeTags.gps should filter computed gps group fields', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             GPSLatitude: {id: 0x0002, value: [[1, 1], [2, 1], [3, 1]]},
@@ -604,7 +604,7 @@ describe('tag filtering options', function () {
     it('includeTags.xmp: [] should skip XMP parsing', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            xmpChunks: [{dataOffset: 0, length: 1}],
+            blocks: [{kind: 'xmp', chunks: [{dataOffset: 0, length: 1}]}],
         });
         fakeXmpTagsReadToThrow();
 
@@ -621,7 +621,7 @@ describe('tag filtering options', function () {
     it('includeTags.xmp: [] should not trigger Exif parsing as a dependency', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsReadToThrow();
 
@@ -637,8 +637,7 @@ describe('tag filtering options', function () {
     it('includeTags.icc: [] should skip ICC parsing', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
-            iccChunks: [{dataOffset: 0, length: 1}],
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}, {kind: 'icc', chunks: [{dataOffset: 0, length: 1}]}],
         });
         fakeTagsReadToThrow();
         fakeIccTagsReadToThrow();
@@ -656,7 +655,7 @@ describe('tag filtering options', function () {
     it('includeTags.makerNotes should filter Canon maker-note tags', function () {
         fakeImageHeader({
             fileType: 'jpeg',
-            tiffHeaderOffset: 1,
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
         });
         fakeTagsRead({
             Make: {id: 0x010f, value: ['Canon']},
@@ -686,9 +685,14 @@ describe('tag filtering options', function () {
 function fakeImageHeader(appMarkersValue) {
     restoreFunctions.push(swapProperties(ImageHeader, {
         parseAppMarkers() {
-            return appMarkersValue;
+            return Object.assign({blocks: []}, appMarkersValue);
         },
     }));
+}
+
+// A PNG tEXt block as the finder reports it; the faked reader ignores the bytes.
+function getTextBlock() {
+    return {kind: 'pngText', text: {chunkType: 'tEXt', name: 'Comment', valueOffset: 1, valueLength: 0}};
 }
 
 function fakeTagsRead(tagsValue) {

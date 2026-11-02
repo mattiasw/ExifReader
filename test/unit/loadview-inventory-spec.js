@@ -66,6 +66,7 @@ import {
     getJfifSegment,
     getSof0Segment,
     getPng,
+    getPngChunk,
     getTextChunk,
     getZtxtChunk,
     getExifRawProfile,
@@ -1104,7 +1105,7 @@ describe('loadView behaviour inventory', function () {
 
             it(`should throw MetadataMissingError synchronously (async: ${async})`, () => {
                 // Unreachable from real bytes: every recognised format sets fileType, which hasPotentialMetaData accepts.
-                swap(ImageHeader, {parseAppMarkers: () => ({})});
+                swap(ImageHeader, {parseAppMarkers: () => ({blocks: []})});
 
                 expect(() => ExifReader.loadView(getDataView('\xff\xd8\xff\xd9'), {async})).to.throw(ExifReader.errors.MetadataMissingError);
             });
@@ -1279,6 +1280,39 @@ describe('loadView behaviour inventory', function () {
                 ];
                 const asyncBlocks = [syncBlocks[0], syncBlocks[1], {type: 'png', start: 48, end: 72}, syncBlocks[2]];
                 expect(tags.metadataRange).to.deep.equal({start: 8, end: 93, complete: true, blocks: async ? asyncBlocks : syncBlocks});
+            });
+
+            it(`should list the iCCP chunk in metadataRange in async mode only (async: ${async})`, async () => {
+                const iccpChunk = getIccpChunk('icc', 0, deflate(getIccProfile('ICCP')));
+                const image = getPng(getTextChunk('A', 'a'), iccpChunk, getPhysChunk());
+                const physStart = 48 + iccpChunk.length;
+
+                const tags = await load(image, {expanded: true, async, includeOffsets: true});
+
+                const syncBlocks = [
+                    {type: 'file', start: 8, end: 33},
+                    {type: 'png', start: 33, end: 48},
+                    {type: 'png', start: physStart, end: physStart + 21},
+                ];
+                const asyncBlocks = [syncBlocks[0], syncBlocks[1], {type: 'icc', start: 48, end: physStart}, syncBlocks[2]];
+                expect(tags.metadataRange).to.deep.equal({start: 8, end: physStart + 21, complete: true, blocks: async ? asyncBlocks : syncBlocks});
+            });
+
+            it(`should keep a compressed iTXt chunk listed in metadataRange in both modes (async: ${async})`, async () => {
+                const compressedItxtChunk = getPngChunk('iTXt', 'K\x00\x01\x00\x00\x00' + deflate('v'));
+                const image = getPng(getTextChunk('A', 'a'), compressedItxtChunk, getPhysChunk());
+                const physStart = 48 + compressedItxtChunk.length;
+
+                const tags = await load(image, {expanded: true, async, includeOffsets: true});
+
+                expect(tags.metadataRange.blocks).to.deep.equal([
+                    {type: 'file', start: 8, end: 33},
+                    {type: 'png', start: 33, end: 48},
+                    {type: 'png', start: 48, end: physStart},
+                    {type: 'png', start: physStart, end: physStart + 21},
+                ]);
+                expect(tags.png.A.value).to.equal('a');
+                expect(tags.png.K).to.deep.equal(async ? {value: 'v', description: 'v'} : undefined);
             });
 
             it(`should drop the XMP _raw in flat output for the segment and the carried XMP (async: ${async})`, async () => {

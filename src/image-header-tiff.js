@@ -21,11 +21,14 @@ function hasTiffMarker(dataView) {
     return dataView.getUint16(TIFF_ID_OFFSET, littleEndian) === TIFF_ID;
 }
 
+/**
+ * A TIFF file is its own Exif block: the TIFF header sits at offset 0. There
+ * is no container around it, so no range is recorded.
+ *
+ * @returns {Array<Object>} One exif block.
+ */
 function findTiffOffsets() {
     const TIFF_FILE_HEADER_OFFSET = 0;
 
-    return {
-        hasAppMarkers: true,
-        tiffHeaderOffset: TIFF_FILE_HEADER_OFFSET
-    };
+    return [{kind: 'exif', tiffHeaderOffset: TIFF_FILE_HEADER_OFFSET}];
 }

@@ -19,7 +19,7 @@ export function buildTagsFromMergeSteps({
     tiffHeaderOffset,
     exifDataView,
     fileType,
-    pngTextChunks,
+    pngTextBlocks,
     pngTextIsAsync,
     thumbnailIfdTags,
     deps,
@@ -59,7 +59,7 @@ export function buildTagsFromMergeSteps({
         Constants.USE_PNG
         && expanded
         && tagFilter.shouldReturnGroup('png')
-        && deps.hasPngTextData(pngTextChunks)
+        && deps.hasPngTextData(pngTextBlocks)
         && tags.png
         && !tags.pngText
     ) {

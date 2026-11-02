@@ -28,8 +28,8 @@ describe('image-header-avif', () => {
         for (const brand of majorBrands) {
             it(`should find header offset in HEIC file with major brand ${brand}`, () => {
                 const dataView = getDataView(getBox('ftyp', brand) + getMetaBoxWithIccProfile());
-                const appMarkerValues = ImageHeaderAvif.findAvifOffsets(dataView);
-                expect(appMarkerValues.hasAppMarkers).to.be.true;
+                const blocks = ImageHeaderAvif.findAvifOffsets(dataView);
+                expect(blocks.map((block) => block.kind)).to.deep.equal(['icc']);
             });
         }
     });
@@ -42,7 +42,7 @@ function getBox(type, content) {
 }
 
 // An ICC chunk (meta > iprp > ipco > colr) is the smallest metadata source
-// that makes the real findOffsets report hasAppMarkers.
+// that makes the real findOffsets report a block.
 function getMetaBoxWithIccProfile() {
     const COLOR_TYPE = 'prof';
     const ICC_CONTENT = '<ICC content>';

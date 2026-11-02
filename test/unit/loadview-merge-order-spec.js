@@ -32,18 +32,20 @@ describe('loadView merge order', function () {
         fakeConstantsForMergeOrderTests();
         fakeImageHeader({
             fileType: {value: 'jpeg', description: 'JPEG'},
-            fileDataOffset: 1,
-            jfifDataOffset: 1,
-            tiffHeaderOffset: 1,
-            iptcDataOffset: 1,
-            xmpChunks: [{dataOffset: 0, length: 1}],
-            iccChunks: [1, 2],
-            mpfDataOffset: 1,
-            pngHeaderOffset: 1,
-            pngTextChunks: [1],
-            pngChunkOffsets: [1],
-            vp8xChunkOffset: 1,
-            gifHeaderOffset: 1,
+            blocks: [
+                {kind: 'file', dataOffset: 1},
+                {kind: 'jfif', dataOffset: 1},
+                {kind: 'exif', tiffHeaderOffset: 1},
+                {kind: 'iptc', dataOffset: 1},
+                {kind: 'xmp', chunks: [{dataOffset: 0, length: 1}]},
+                {kind: 'icc', chunks: [1, 2]},
+                {kind: 'mpf', dataOffset: 1},
+                {kind: 'pngFile', dataOffset: 1},
+                getTextBlock(),
+                {kind: 'pngChunk', dataOffset: 1},
+                {kind: 'riff', dataOffset: 1},
+                {kind: 'gif', dataOffset: 1},
+            ],
         });
 
         fakeSimpleReader(FileTags, {
@@ -93,8 +95,7 @@ function loadAsyncWithDelays({iccDelayMs, pngTextDelayMs}) {
     fakeConstantsForMergeOrderTests();
     fakeImageHeader({
         fileType: {value: 'png', description: 'PNG'},
-        iccChunks: [1],
-        pngTextChunks: [1],
+        blocks: [{kind: 'icc', chunks: [1]}, getTextBlock()],
     });
 
     fakeIccTagsReadAsync({Collision: {value: 'icc'}}, iccDelayMs);
@@ -136,26 +137,14 @@ function fakeConstantsForMergeOrderTests() {
 function fakeImageHeader(overrides) {
     restoreFunctions.push(swapProperties(ImageHeader, {
         parseAppMarkers() {
-            return Object.assign(
-                {
-                    fileType: undefined,
-                    fileDataOffset: undefined,
-                    jfifDataOffset: undefined,
-                    tiffHeaderOffset: undefined,
-                    iptcDataOffset: undefined,
-                    xmpChunks: undefined,
-                    iccChunks: undefined,
-                    mpfDataOffset: undefined,
-                    pngHeaderOffset: undefined,
-                    pngTextChunks: undefined,
-                    pngChunkOffsets: undefined,
-                    vp8xChunkOffset: undefined,
-                    gifHeaderOffset: undefined,
-                },
-                overrides
-            );
+            return Object.assign({fileType: undefined, blocks: []}, overrides);
         },
     }));
+}
+
+// A PNG tEXt block as the finder reports it; the faked reader ignores the bytes.
+function getTextBlock() {
+    return {kind: 'pngText', text: {chunkType: 'tEXt', name: 'Comment', valueOffset: 1, valueLength: 0}};
 }
 
 function fakeSimpleReader(module, tagsValue) {
@@ -192,7 +181,7 @@ function fakePngTextTagsRead(tagsValue) {
 
 function fakePngTextTagsReadAsync(readTags, asyncTagList, delayMs) {
     restoreFunctions.push(swapProperties(PngTextTags, {
-        read(dataView, pngTextChunks, async) {
+        read(dataView, pngTextBlocks, async) {
             if (!async) {
                 return {readTags};
             }

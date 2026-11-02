@@ -4,9 +4,9 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringValueFromArray, getStringFromDataView, decompress, setProperty, getTagKey, objectAssign, COMPRESSION_METHOD_NONE, getHexDigitValue} from './utils.js';
+import {getStringFromDataView, decompress, getCompressionMethod, setProperty, getTagKey, objectAssign, COMPRESSION_METHOD_NONE, getHexDigitValue} from './utils.js';
 import TagDecoder from './tag-decoder.js';
-import {PNG_CHUNK_LENGTH_OFFSET, PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_DATA_OFFSET, PNG_CHUNK_TYPE_SIZE, TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
+import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT, EXIF_PROFILE_NAME, IPTC_PROFILE_NAME} from './image-header-png.js';
 import {NOOP_TAG_FILTER} from './tag-filter.js';
 import {addDecompressedValueAllowance, addDecompressedIptcAllowance, takeEmbeddedExifThumbnail} from './tags-helpers.js';
 
@@ -14,24 +14,15 @@ export default {
     read
 };
 
-const STATE_KEYWORD = 'STATE_KEYWORD';
-const STATE_COMPRESSION = 'STATE_COMPRESSION';
-const STATE_LANG = 'STATE_LANG';
-const STATE_TRANSLATED_KEYWORD = 'STATE_TRANSLATED_KEYWORD';
-const STATE_TEXT = 'STATE_TEXT';
-const COMPRESSION_SECTION_ITXT_EXTRA_BYTE = 1;
-const COMPRESSION_FLAG_COMPRESSED = 1;
 const EXIF_OFFSET = 6;
 const MAX_COMPRESSED_TEXT_CHUNKS = 255;
 const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;
-// PNG spec: a keyword is 1-79 bytes.
-const MAX_KEYWORD_LENGTH = 79;
-const IPTC_PROFILE_NAME = 'raw profile type iptc';
-// Our own bound: BCP 47 sets no maximum, but real tags are far shorter.
-const MAX_LANGUAGE_TAG_LENGTH = 79;
 
 /**
- * @param {number[]} pngTextChunks Chunk start offsets, where each chunk's length field is.
+ * @param {Array<Object>} textBlocks The PNG finder's text-chunk blocks, in chunk order:
+ *     `{kind, compression?, text: {chunkType, name, valueOffset, valueLength}}`.
+ *     A block whose `text.name` is undefined (a keyword or language tag over
+ *     79 bytes) is skipped.
  * @param {function(DataView, object, number): object} [getThumbnail] Called with a
  *     decoded Exif raw profile, its thumbnail IFD tags and the TIFF header offset;
  *     returns the thumbnail tags, with `image` set when the thumbnail was read.
@@ -60,7 +51,7 @@ const MAX_LANGUAGE_TAG_LENGTH = 79;
  */
 function read(
     dataView,
-    pngTextChunks,
+    textBlocks,
     async,
     includeUnknown,
     computed = false,
@@ -79,16 +70,13 @@ function read(
     const uncompressedRawProfiles = [];
     const compressedChunks = [];
 
-    for (let i = 0; i < pngTextChunks.length; i++) {
-        const chunkOffset = pngTextChunks[i];
-        const length = dataView.getUint32(chunkOffset + PNG_CHUNK_LENGTH_OFFSET);
-        const type = getStringFromDataView(dataView, chunkOffset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
-        const textChunk = parseTextChunk(dataView, chunkOffset + PNG_CHUNK_DATA_OFFSET, length, type);
-        if (!textChunk) {
+    for (let i = 0; i < textBlocks.length; i++) {
+        const block = textBlocks[i];
+        if (block.text.name === undefined) {
             continue;
         }
-        if (textChunk.compressionMethod === COMPRESSION_METHOD_NONE) {
-            const tag = getUncompressedTag(textChunk);
+        if (block.compression === undefined) {
+            const tag = getUncompressedTag(dataView, block.text);
             if (isRawProfileTag(tag)) {
                 uncompressedRawProfiles.push(tag);
             } else if (tag.name && tagFilter.shouldParseGroup('png')) {
@@ -98,7 +86,7 @@ function read(
                 });
             }
         } else if (async && compressedChunks.length < MAX_COMPRESSED_TEXT_CHUNKS) {
-            compressedChunks.push(textChunk);
+            compressedChunks.push(block);
         }
     }
 
@@ -133,7 +121,7 @@ function read(
     }
 
     const compressedThumbnailReader = embeddedExifThumbnail ? undefined : getThumbnail;
-    const decompressionTasks = compressedChunks.map((textChunk) => () => decompressTextChunk(textChunk, decompressConfig)
+    const decompressionTasks = compressedChunks.map((block) => () => decompressTextChunk(dataView, block, decompressConfig)
         .then((tag) => getTagsFromTextTag(
             tag,
             includeUnknown,
@@ -158,8 +146,8 @@ function read(
 }
 
 // A compressed profile counts before its value can be checked.
-function isCompressedIptcProfile({type, langChars, keywordChars}) {
-    return getName(type, langChars, keywordChars).toLowerCase() === IPTC_PROFILE_NAME;
+function isCompressedIptcProfile(block) {
+    return block.kind === 'iptc';
 }
 
 function mergeCarriedGroups(target, source) {
@@ -170,50 +158,19 @@ function mergeCarriedGroups(target, source) {
     return target;
 }
 
-function parseTextChunk(dataView, offset, length, type) {
-    const keywordChars = [];
-    const langChars = [];
-    let valueChars;
-    let parsingState = STATE_KEYWORD;
-    let compressionMethod = COMPRESSION_METHOD_NONE;
-    const byteOffset = dataView.byteOffset;
-    const chunkEnd = Math.min(offset + length, dataView.byteLength);
-
-    for (let i = 0; i < length && offset + i < dataView.byteLength; i++) {
-        if (parsingState === STATE_COMPRESSION) {
-            compressionMethod = getCompressionMethod({type, dataView, offset: offset + i, chunkEnd});
-            if (type === TYPE_ITXT) {
-                i += COMPRESSION_SECTION_ITXT_EXTRA_BYTE;
-            }
-            parsingState = moveToNextState(type, parsingState);
-            continue;
-        } else if (parsingState === STATE_TEXT) {
-            const slice = dataView.buffer.slice(byteOffset + offset + i, byteOffset + offset + length);
-            valueChars = new DataView(slice);
-            break;
-        }
-        const byte = dataView.getUint8(offset + i);
-        if (byte === 0) {
-            parsingState = moveToNextState(type, parsingState);
-        } else if (parsingState === STATE_KEYWORD) {
-            if (keywordChars.length >= MAX_KEYWORD_LENGTH) {
-                return undefined;
-            }
-            keywordChars.push(byte);
-        } else if (parsingState === STATE_LANG) {
-            if (langChars.length >= MAX_LANGUAGE_TAG_LENGTH) {
-                return undefined;
-            }
-            langChars.push(byte);
-        }
-    }
-
-    return {type, keywordChars, langChars, compressionMethod, valueChars};
+function getUncompressedTag(dataView, text) {
+    const decodedValueChars = decompress(getValueView(dataView, text), COMPRESSION_METHOD_NONE, getEncodingFromType(text.chunkType), 'string');
+    return constructTag(decodedValueChars, text.chunkType, text.name);
 }
 
-function getUncompressedTag({type, keywordChars, langChars, valueChars}) {
-    const decodedValueChars = decompress(valueChars, COMPRESSION_METHOD_NONE, getEncodingFromType(type), 'string');
-    return constructTag(decodedValueChars, type, langChars, keywordChars);
+// The same slice the parser made while it copied the value: the chunk's declared
+// end, clamped to the buffer by slice itself.
+function getValueView(dataView, {valueOffset, valueLength}) {
+    if (valueOffset === undefined) {
+        return undefined;
+    }
+    const byteOffset = dataView.byteOffset;
+    return new DataView(dataView.buffer.slice(byteOffset + valueOffset, byteOffset + valueOffset + valueLength));
 }
 
 function isRawProfileTag({name, value}) {
@@ -291,17 +248,18 @@ function getTagsFromTextTag({name, value, description}, includeUnknown, computed
     return {};
 }
 
-function decompressTextChunk({type, keywordChars, langChars, compressionMethod, valueChars}, decompressConfig) {
-    if (valueChars === undefined) {
-        return Promise.resolve(constructPlaceholderTag(type, langChars, keywordChars));
+function decompressTextChunk(dataView, {compression, text}, decompressConfig) {
+    const valueView = getValueView(dataView, text);
+    if (valueView === undefined) {
+        return Promise.resolve(constructPlaceholderTag(text));
     }
-    return decompress(valueChars, compressionMethod, getEncodingFromType(type), 'string', decompressConfig)
-        .then((decompressedValueChars) => constructTag(decompressedValueChars, type, langChars, keywordChars))
-        .catch(() => constructPlaceholderTag(type, langChars, keywordChars));
+    return decompress(valueView, getCompressionMethod(compression), getEncodingFromType(text.chunkType), 'string', decompressConfig)
+        .then((decompressedValueChars) => constructTag(decompressedValueChars, text.chunkType, text.name))
+        .catch(() => constructPlaceholderTag(text));
 }
 
-function constructPlaceholderTag(type, langChars, keywordChars) {
-    return constructTag('<text using unknown compression>', type, langChars, keywordChars);
+function constructPlaceholderTag({chunkType, name}) {
+    return constructTag('<text using unknown compression>', chunkType, name);
 }
 
 function runTasksInOrder(tasks, limit) {
@@ -328,33 +286,6 @@ function runTasksInOrder(tasks, limit) {
     }
 }
 
-function getCompressionMethod({type, dataView, offset, chunkEnd}) {
-    if (type === TYPE_ITXT) {
-        if (offset + 1 < chunkEnd && dataView.getUint8(offset) === COMPRESSION_FLAG_COMPRESSED) {
-            return dataView.getUint8(offset + 1);
-        }
-    } else if (type === TYPE_ZTXT) {
-        return dataView.getUint8(offset);
-    }
-    return COMPRESSION_METHOD_NONE;
-}
-
-function moveToNextState(type, parsingState) {
-    if (parsingState === STATE_KEYWORD && [TYPE_ITXT, TYPE_ZTXT].includes(type)) {
-        return STATE_COMPRESSION;
-    }
-    if (parsingState === STATE_COMPRESSION) {
-        if (type === TYPE_ITXT) {
-            return STATE_LANG;
-        }
-        return STATE_TEXT;
-    }
-    if (parsingState === STATE_LANG) {
-        return STATE_TRANSLATED_KEYWORD;
-    }
-    return STATE_TEXT;
-}
-
 function getEncodingFromType(type) {
     if (type === TYPE_TEXT || type === TYPE_ZTXT) {
         return 'latin1';
@@ -362,23 +293,14 @@ function getEncodingFromType(type) {
     return 'utf-8';
 }
 
-function constructTag(valueChars, type, langChars, keywordChars) {
+function constructTag(valueChars, chunkType, name) {
     const value = getValue(valueChars);
 
     return {
-        name: getName(type, langChars, keywordChars),
+        name,
         value,
-        description: type === TYPE_ITXT ? getDescription(valueChars) : value
+        description: chunkType === TYPE_ITXT ? getDescription(valueChars) : value
     };
-}
-
-function getName(type, langChars, keywordChars) {
-    const name = getStringValueFromArray(keywordChars);
-    if (type === TYPE_TEXT || langChars.length === 0) {
-        return name;
-    }
-    const lang = getStringValueFromArray(langChars);
-    return `${name} (${lang})`;
 }
 
 function getValue(valueChars) {
@@ -393,7 +315,7 @@ function getDescription(valueChars) {
 }
 
 function isExifGroupTag(name, value) {
-    return name.toLowerCase() === 'raw profile type exif' && value.substring(1, 5) === 'exif';
+    return name.toLowerCase() === EXIF_PROFILE_NAME && value.substring(1, 5) === 'exif';
 }
 
 function isIptcGroupTag(name, value) {
