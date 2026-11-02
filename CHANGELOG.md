@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `metadataRange.buffer` from `ExifReader.load` with `length: 'auto'` is now
   trimmed to the metadata for an ArrayBuffer or SharedArrayBuffer created in
   another realm, such as an iframe, instead of holding the whole input.
+- Tags stored with the Exif 3.0 UTF-8 field type, or with the TIFF SBYTE,
+  SSHORT, FLOAT or DOUBLE types, are now read instead of being left out.
 
 ### Security
 

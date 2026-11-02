@@ -54,9 +54,27 @@ describe('types', () => {
         expect(Types.getRationalAt(dataView, 0, byteOrder)).to.deep.equal([0x42434445, 0x46474849]);
     });
 
+    it('should be able to read an sbyte', () => {
+        const dataView = getDataView('\xff\x80');
+        expect(Types.getSbyteAt(dataView, 0)).to.equal(-1);
+        expect(Types.getSbyteAt(dataView, 1)).to.equal(-128);
+    });
+
     it('should be able to read an undefined', () => {
         const dataView = getDataView('\x42');
         expect(Types.getUndefinedAt(dataView, 0)).to.equal(0x42);
+    });
+
+    it('should be able to read a little endian sshort', () => {
+        const dataView = getDataView('\xfe\xff');
+        const byteOrder = ByteOrder.LITTLE_ENDIAN;
+        expect(Types.getSshortAt(dataView, 0, byteOrder)).to.equal(-2);
+    });
+
+    it('should be able to read a big endian sshort', () => {
+        const dataView = getDataView('\xff\xfe');
+        const byteOrder = ByteOrder.BIG_ENDIAN;
+        expect(Types.getSshortAt(dataView, 0, byteOrder)).to.equal(-2);
     });
 
     it('should be able to read a little endian slong', () => {
@@ -81,6 +99,34 @@ describe('types', () => {
         const dataView = getDataView('\xff\xff\xff\xbe\x46\x47\x48\x49');
         const byteOrder = ByteOrder.BIG_ENDIAN;
         expect(Types.getSrationalAt(dataView, 0, byteOrder)).to.deep.equal([-0x42, 0x46474849]);
+    });
+
+    it('should be able to read a little endian float', () => {
+        const dataView = getDataView('\x00\x00\xc0\x3f\x00\x00\x80\xbe');
+        const byteOrder = ByteOrder.LITTLE_ENDIAN;
+        expect(Types.getFloatAt(dataView, 0, byteOrder)).to.equal(1.5);
+        expect(Types.getFloatAt(dataView, 4, byteOrder)).to.equal(-0.25);
+    });
+
+    it('should be able to read a big endian float', () => {
+        const dataView = getDataView('\x3f\xc0\x00\x00\xbe\x80\x00\x00');
+        const byteOrder = ByteOrder.BIG_ENDIAN;
+        expect(Types.getFloatAt(dataView, 0, byteOrder)).to.equal(1.5);
+        expect(Types.getFloatAt(dataView, 4, byteOrder)).to.equal(-0.25);
+    });
+
+    it('should be able to read a little endian double', () => {
+        const dataView = getDataView('\x00\x00\x00\x00\x00\x00\xf8\x3f\x00\x00\x00\x00\x00\x00\xd0\xbf');
+        const byteOrder = ByteOrder.LITTLE_ENDIAN;
+        expect(Types.getDoubleAt(dataView, 0, byteOrder)).to.equal(1.5);
+        expect(Types.getDoubleAt(dataView, 8, byteOrder)).to.equal(-0.25);
+    });
+
+    it('should be able to read a big endian double', () => {
+        const dataView = getDataView('\x3f\xf8\x00\x00\x00\x00\x00\x00\xbf\xd0\x00\x00\x00\x00\x00\x00');
+        const byteOrder = ByteOrder.BIG_ENDIAN;
+        expect(Types.getDoubleAt(dataView, 0, byteOrder)).to.equal(1.5);
+        expect(Types.getDoubleAt(dataView, 8, byteOrder)).to.equal(-0.25);
     });
 
     it('should be able to read a little endian IFD pointer', () => {
@@ -109,5 +155,10 @@ describe('types', () => {
         expect(Types.getTypeSize('SLONG')).to.equal(4);
         expect(Types.getTypeSize('SRATIONAL')).to.equal(8);
         expect(Types.getTypeSize('IFD')).to.equal(4);
+        expect(Types.getTypeSize('SBYTE')).to.equal(1);
+        expect(Types.getTypeSize('SSHORT')).to.equal(2);
+        expect(Types.getTypeSize('FLOAT')).to.equal(4);
+        expect(Types.getTypeSize('DOUBLE')).to.equal(8);
+        expect(Types.getTypeSize('UTF8')).to.equal(1);
     });
 });
