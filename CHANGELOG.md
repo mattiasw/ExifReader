@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.53.0] - 2026-11-02
+
+### Added
+
+- Tags stored with the Exif 3.0 UTF-8 field type, or with the TIFF SBYTE,
+  SSHORT, FLOAT or DOUBLE types, are now read instead of being left out.
+
 ### Changed
 
 - A custom build with `png` and without `exif` no longer lists a PNG's eXIf
@@ -19,8 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `metadataRange.buffer` from `ExifReader.load` with `length: 'auto'` is now
   trimmed to the metadata for an ArrayBuffer or SharedArrayBuffer created in
   another realm, such as an iframe, instead of holding the whole input.
-- Tags stored with the Exif 3.0 UTF-8 field type, or with the TIFF SBYTE,
-  SSHORT, FLOAT or DOUBLE types, are now read instead of being left out.
+- The README now says that Yarn 4.14 and later disable dependency build
+  scripts by default, so with those versions the deprecated install-time
+  custom build runs only with build scripts enabled. It no longer claims that
+  `npx exifreader build` avoids the `node_modules` install that Yarn 2+ needs
+  (`nodeLinker: node-modules`, not Plug'n'Play).
 
 ### Security
 
@@ -32,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file can get past these limits. With `linkedom` 0.18.13 a crafted 1 MB
   packet blocked `load()` for about a minute. The README no longer presents
   `linkedom` as an equal choice to `@xmldom/xmldom` and says to use it only
-  for files you trust. ExifReader's behaviour has not changed.
+  for files you trust. ExifReader's behavior has not changed.
 - An ASCII-typed UserComment, GPSProcessingMethod, GPSAreaInformation,
   XPTitle, XPComment, XPAuthor, XPKeywords or XPSubject tag is now described
   as its text (its strings joined with `, `), and its description no longer
@@ -2373,7 +2383,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.52.0...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.53.0...HEAD
+[4.53.0]: https://github.com/mattiasw/ExifReader/compare/v4.52.0...v4.53.0
 [4.52.0]: https://github.com/mattiasw/ExifReader/compare/v4.51.0...v4.52.0
 [4.51.0]: https://github.com/mattiasw/ExifReader/compare/v4.50.0...v4.51.0
 [4.50.0]: https://github.com/mattiasw/ExifReader/compare/v4.49.0...v4.50.0
