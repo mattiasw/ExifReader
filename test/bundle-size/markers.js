@@ -206,6 +206,7 @@ const KNOWN_SURVIVORS = {};
 const NO_UNIQUE_LITERAL = 'no string literal unique to it in code';
 const FINDER_WITHOUT_LITERAL = 'a format finder with no literal of its own, so no probe shows the finder itself';
 const SHARED_BY_SEVERAL_MODULES = 'shared by several build modules, so its presence follows no single flag';
+const WRITER_MODULE = 'a writer module, never part of a reader bundle';
 
 // Source files that are neither a marker owner nor in ALWAYS_PRESENT_MODULES.
 const UNPROBEABLE_REASONS = {
@@ -232,7 +233,8 @@ const UNPROBEABLE_REASONS = {
     'byte-order.js': SHARED_BY_SEVERAL_MODULES,
     'tag-names-common.js': SHARED_BY_SEVERAL_MODULES,
     'types.js': SHARED_BY_SEVERAL_MODULES,
-    'exif-reader.js': 'the entry point; its unique literals are keys inside the icc and png gates, which those modules\' own probes cover'
+    'exif-reader.js': 'the entry point; its unique literals are keys inside the icc and png gates, which those modules\' own probes cover',
+    'exif-tag-table.js': WRITER_MODULE
 };
 
 const UNPROBEABLE_MODULES = Object.keys(UNPROBEABLE_REASONS);
@@ -265,7 +267,9 @@ function isoBmffIsIncluded(modules) {
 }
 
 function assertMarkersAreUnique() {
-    const contents = readSourceFiles(SRC_PATH);
+    // Markers probe reader bundles, which never hold a writer module, and the
+    // writer's tag table repeats the dictionaries' tag names.
+    const contents = withoutWriterModules(readSourceFiles(SRC_PATH));
     const code = stripComments(contents);
     const problems = [];
 
@@ -283,6 +287,16 @@ function assertMarkersAreUnique() {
     if (problems.length > 0) {
         throw new Error('Module markers are not unique to their module:\n  ' + problems.join('\n  '));
     }
+}
+
+function withoutWriterModules(contents) {
+    const readerContents = {};
+    for (const name of Object.keys(contents)) {
+        if (!name.startsWith('writer/')) {
+            readerContents[name] = contents[name];
+        }
+    }
+    return readerContents;
 }
 
 function readSourceFiles(directory, prefix = '') {
