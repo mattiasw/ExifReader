@@ -712,6 +712,9 @@ API](https://developer.mozilla.org/en-US/docs/Web/API/DOMParser/parseFromString)
 Use [`xmldom`](https://www.npmjs.com/package/@xmldom/xmldom) 0.9.12 or later.
 ExifReader limits how deeply XMP elements can nest and how many markup nodes a
 packet can have, and it checks those limits the way `xmldom` reads markup.
+Older versions of `xmldom` read some markup differently, well-formed markup
+included, so with them a crafted file can get past the limits and make parsing
+slow.
 
 [`linkedom`](https://www.npmjs.com/package/linkedom) also parses XMP correctly,
 but use it only for files you trust. ExifReader's limits do not hold with it: a
@@ -734,12 +737,9 @@ these XMLs. If this happens to you, switch to `xmldom` and pass in the `onError`
 option. (NOTE: The native `DOMParser` that a web browser uses does not seem to
 have this issue.)
 
-Versions of `xmldom` older than 0.9.12 read some markup differently,
-well-formed markup included, so with them a crafted file can get past the
-limits and make parsing slow. ExifReader also skips an XMP packet that has a
-DOCTYPE or another markup declaration, since a parser such as a browser's
-native `DOMParser` can expand the entities declared in a DOCTYPE into markup
-the limits do not see.
+ExifReader skips an XMP packet that has a DOCTYPE or another markup
+declaration, since a parser such as a browser's native `DOMParser` can expand
+the entities declared in a DOCTYPE into markup the limits do not see.
 
 If you pass no `domParser` and there is no global `DOMParser`, ExifReader tries
 to load `@xmldom/xmldom` itself. It then skips XMP, with a warning, if the copy

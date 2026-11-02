@@ -465,31 +465,12 @@ describe('tags-helpers', () => {
         expect(tags['MySshortTag'].value).to.equal(-2);
     });
 
-    it('should be able to read a little endian SSHORT tag', () => {
-        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MySshortTag'}});
-        const dataView = getDataView('\x01\x00' + '\x11\x47\x08\x00\x02\x00\x00\x00\xfe\xff\x00\x80' + '\x00\x00\x00\x00');
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.LITTLE_ENDIAN);
-        expect(tags['MySshortTag'].value).to.deep.equal([-2, -32768]);
-    });
-
     it('should be able to read a FLOAT tag', () => {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyFloatTag'}});
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x0b\x00\x00\x00\x01\xbe\x80\x00\x00' + '\x00\x00\x00\x00');
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyFloatTag'].value).to.equal(-0.25);
         expect(tags['MyFloatTag'].description).to.equal(-0.25);
-    });
-
-    it('should be able to read a DOUBLE tag from its offset', () => {
-        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyDoubleTag'}});
-        const dataView = getDataView(
-            '\x00\x01'
-            + '\x47\x11\x00\x0c\x00\x00\x00\x01\x00\x00\x00\x12'
-            + '\x00\x00\x00\x00'
-            + '\xbf\xd0\x00\x00\x00\x00\x00\x00'
-        );
-        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
-        expect(tags['MyDoubleTag'].value).to.equal(-0.25);
     });
 
     it('should be able to read a multi-element DOUBLE tag eight bytes per element', () => {

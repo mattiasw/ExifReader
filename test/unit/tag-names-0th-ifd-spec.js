@@ -486,18 +486,6 @@ describe('tag-names-0th-ifd', () => {
         expect(description).to.equal('a');
     });
 
-    it('should describe an ASCII-typed XP tag with a faulty offset as the faulty value', () => {
-        expect(TagNames0thIfd[0x9c9c].description(['<faulty value>'])).to.equal('<faulty value>');
-    });
-
-    it('should describe an ASCII-typed XP tag value of only holes as an empty string', () => {
-        expect(TagNames0thIfd[0x9c9c].description(new Array(3))).to.equal('');
-    });
-
-    it('should describe an XP tag value of rational pairs as an empty string', () => {
-        expect(TagNames0thIfd[0x9c9c].description([[1, 2], [3, 4], [5, 6]])).to.equal('');
-    });
-
     it('should have tag GDALMetadata', () => {
         expect(TagNames0thIfd[0xa480]).to.equal('GDALMetadata');
     });

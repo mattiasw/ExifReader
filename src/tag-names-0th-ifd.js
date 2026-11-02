@@ -4,7 +4,7 @@
 
 import TagNamesCommon from './tag-names-common.js';
 import {joinMapped} from './utils.js';
-import {getTableDescription, isStringValue, getStringsText} from './tag-names-utils.js';
+import {getTableDescription, isArrayWithoutCharacterCodes, getStringsText} from './tag-names-utils.js';
 
 export default {
     0x000b: 'ProcessingSoftware',
@@ -385,7 +385,7 @@ function decodeXPValue(value) {
         // A one-element value arrives as a bare number, which Uint8Array would take as a length.
         return '';
     }
-    if (isStringValue(value)) {
+    if (isArrayWithoutCharacterCodes(value)) {
         // An ASCII-typed value holds strings, not UCS-2 bytes.
         return getStringsText(value);
     }

@@ -57,19 +57,18 @@ function getXmldomVersionWarning(version) {
     if (!match) {
         return UNREADABLE_VERSION_WARNING;
     }
-    if (isOlderThanMinimum(match)) {
+    if (isOlderThanMinimum(match.slice(1, 4).map(Number), match[4] === '-')) {
         return `Warning: XMP tags are skipped because the @xmldom/xmldom that was found is version ${version}. ${XMLDOM_REMEDY}`;
     }
     return undefined;
 }
 
 // A prerelease of the minimum version (0.9.12-beta.1) comes before it.
-function isOlderThanMinimum(match) {
+function isOlderThanMinimum(parts, isPrerelease) {
     for (let i = 0; i < MIN_XMLDOM_VERSION.length; i++) {
-        const part = Number(match[i + 1]);
-        if (part !== MIN_XMLDOM_VERSION[i]) {
-            return part < MIN_XMLDOM_VERSION[i];
+        if (parts[i] !== MIN_XMLDOM_VERSION[i]) {
+            return parts[i] < MIN_XMLDOM_VERSION[i];
         }
     }
-    return match[4] === '-';
+    return isPrerelease;
 }

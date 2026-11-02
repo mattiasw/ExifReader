@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {getCharacterArray} from '../../src/utils.js';
-import {getStringValue, getEncodedString, getVersionString, isStringValue, getStringsText, getTableDescription} from '../../src/tag-names-utils.js';
+import {getStringValue, getEncodedString, getVersionString, isArrayWithoutCharacterCodes, getStringsText, getTableDescription} from '../../src/tag-names-utils.js';
 import {swapProperties} from './test-utils.js';
 
 describe('tag-names-utils', () => {
@@ -139,28 +139,28 @@ describe('tag-names-utils', () => {
         expect(calls).to.be.at.most(10);
     });
 
-    describe('isStringValue', () => {
+    describe('isArrayWithoutCharacterCodes', () => {
         it('should be true for a value of strings', () => {
-            expect(isStringValue(['a'])).to.equal(true);
+            expect(isArrayWithoutCharacterCodes(['a'])).to.equal(true);
         });
 
         it('should be true for a value of strings with a hole at the start', () => {
             const value = [];
             value[1] = 'x';
-            expect(isStringValue(value)).to.equal(true);
+            expect(isArrayWithoutCharacterCodes(value)).to.equal(true);
         });
 
         it('should be true for a value of rational pairs', () => {
-            expect(isStringValue([[1, 2], [3, 4]])).to.equal(true);
+            expect(isArrayWithoutCharacterCodes([[1, 2], [3, 4]])).to.equal(true);
         });
 
         it('should be false for a value of character codes', () => {
-            expect(isStringValue([65, 66])).to.equal(false);
+            expect(isArrayWithoutCharacterCodes([65, 66])).to.equal(false);
         });
 
         it('should be false for a value that is not an array', () => {
-            expect(isStringValue(65)).to.equal(false);
-            expect(isStringValue('<faulty value>')).to.equal(false);
+            expect(isArrayWithoutCharacterCodes(65)).to.equal(false);
+            expect(isArrayWithoutCharacterCodes('<faulty value>')).to.equal(false);
         });
     });
 
