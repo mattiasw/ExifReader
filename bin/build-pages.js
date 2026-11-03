@@ -14,29 +14,24 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const GH_PAGES_TEMP_DIR = path.join(ROOT, 'gh-pages');
 
-createTempDirectory();
-buildSite();
-
-function createTempDirectory() {
-    try {
-        fs.mkdirSync(GH_PAGES_TEMP_DIR);
-    } catch (error) {
-        if (error.code !== 'EEXIST') {
-            console.error(error); // eslint-disable-line no-console
-            process.exit(1);
-        }
-    }
+if (require.main === module) {
+    buildSite(ROOT, GH_PAGES_TEMP_DIR);
 }
 
-function buildSite() {
-    const directories = ['amd', 'esm', 'global', 'nodejs', 'src'];
-    let files = collectFiles(path.join(ROOT, 'examples'), '', ['html', 'css', 'js']);
-    files = collectFiles(ROOT, 'src', ['js'], files);
-    files[path.join(ROOT, 'dist/exif-reader.js')] = 'exif-reader.js';
-    files[path.join(ROOT, 'dist/exif-reader.js.map')] = 'exif-reader.js.map';
+/**
+ * Collects the example pages, the whole source tree and the bundle, and copies
+ * them into the output directory, creating every directory on the way.
+ *
+ * @param {string} root The repository root.
+ * @param {string} outputDirectory Where the site is assembled.
+ */
+function buildSite(root, outputDirectory) {
+    let files = collectFiles(path.join(root, 'examples'), '', ['html', 'css', 'js']);
+    files = collectFiles(root, 'src', ['js'], files);
+    files[path.join(root, 'dist/exif-reader.js')] = 'exif-reader.js';
+    files[path.join(root, 'dist/exif-reader.js.map')] = 'exif-reader.js.map';
 
-    createDirectories(directories);
-    copyFiles(files);
+    copyFiles(files, outputDirectory);
 }
 
 function collectFiles(rootDirectory, subDirectory, extensions, files = {}) {
@@ -55,21 +50,12 @@ function hasFileExtension(filename, extensions) {
     return extensions.some((extension) => filename.endsWith(extension));
 }
 
-function createDirectories(directories) {
-    directories.forEach((directory) => {
-        try {
-            fs.mkdirSync(path.join(GH_PAGES_TEMP_DIR, directory));
-        } catch (error) {
-            if (error.code !== 'EEXIST') {
-                console.error(error); // eslint-disable-line no-console
-                process.exit(1);
-            }
-        }
-    });
-}
-
-function copyFiles(files) {
+function copyFiles(files, outputDirectory) {
     for (const from in files) {
-        fs.copyFileSync(from, path.join(GH_PAGES_TEMP_DIR, files[from]));
+        const to = path.join(outputDirectory, files[from]);
+        fs.mkdirSync(path.dirname(to), {recursive: true});
+        fs.copyFileSync(from, to);
     }
 }
+
+module.exports = {buildSite};
