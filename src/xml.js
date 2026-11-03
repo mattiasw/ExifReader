@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView, pushMetadataBlock} from './utils.js';
+import {getStringFromDataView, pushRange} from './utils.js';
 
 export default {
     isXMLFile,
@@ -30,24 +30,21 @@ function isXMLFile(dataView) {
 }
 
 /**
- * Finds the XMP chunk offset for a standalone XMP file.
+ * Reports a standalone XMP file as one xmp block covering the whole buffer.
  *
- * @param {DataView} dataView The data view to find offsets in.
- * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
- *     receives one `xmp` block covering the whole buffer and gets a
+ * @param {DataView} dataView The data view to find blocks in.
+ * @param {Array<Object>=} ranges Optional out-array. When provided, receives
+ *     one span covering the whole buffer, linked to the xmp block, and gets a
  *     `truncated` property set to true if no XMP closing marker is found.
- * @returns {{xmpChunks: Array<{dataOffset: number, length: number}>}}
+ * @returns {Array<Object>} One xmp block with one chunk.
  */
-function findOffsets(dataView, metadataBlocks) {
-    const xmpChunks = [];
-    xmpChunks.push({dataOffset: XML_MARKER_OFFSET, length: dataView.byteLength});
-    pushMetadataBlock(metadataBlocks, 'xmp', 0, dataView.byteLength);
-    if (metadataBlocks) {
-        metadataBlocks.truncated = !hasXmpClosingMarker(dataView);
+function findOffsets(dataView, ranges) {
+    const block = {kind: 'xmp', chunks: [{dataOffset: XML_MARKER_OFFSET, length: dataView.byteLength}]};
+    pushRange(ranges, block, 0, dataView.byteLength);
+    if (ranges) {
+        ranges.truncated = !hasXmpClosingMarker(dataView);
     }
-    return {
-        xmpChunks,
-    };
+    return [block];
 }
 
 function hasXmpClosingMarker(dataView) {

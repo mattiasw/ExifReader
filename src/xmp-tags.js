@@ -4,7 +4,6 @@
 
 import {decodeUtf8ByteString, getByteString, getTagKey, objectAssign, setProperty, tryDecodeUtf8ByteString} from './utils.js';
 import XmpTagNames from './xmp-tag-names.js';
-import DOMParser from './dom-parser.js';
 import TextDecoder from './text-decoder.js';
 import {isMissingNamespaceError, addMissingNamespaces} from './xmp-namespaces.js';
 import {exceedsMarkupBounds} from './xmp-element-depth.js';
@@ -48,20 +47,20 @@ class ParseError extends Error {
     }
 }
 
-function read(dataView, chunks, domParser) {
+function read(dataView, chunks, domParser, getDomParser) {
     const tags = {};
 
     if (typeof dataView === 'string') {
-        readTags(tags, dataView, domParser);
+        readTags(tags, dataView, domParser, getDomParser);
         return tags;
     }
 
     const [standardXmp, extendedXmp] = extractCompleteChunks(dataView, chunks);
 
-    const hasStandardTags = readTags(tags, standardXmp, domParser);
+    const hasStandardTags = readTags(tags, standardXmp, domParser, getDomParser);
 
     if (extendedXmp) {
-        const hasExtendedTags = readTags(tags, extendedXmp, domParser);
+        const hasExtendedTags = readTags(tags, extendedXmp, domParser, getDomParser);
 
         if (!hasStandardTags && !hasExtendedTags) {
             // Some writers are not spec-compliant in that they split an XMP
@@ -69,7 +68,7 @@ function read(dataView, chunks, domParser) {
             // XMP block. If we failed parsing both of the XMPs in the regular
             // way, we try to combine them to see if that works better.
             delete tags._raw;
-            readTags(tags, combineChunks(dataView, chunks), domParser);
+            readTags(tags, combineChunks(dataView, chunks), domParser, getDomParser);
         }
     }
 
@@ -118,9 +117,9 @@ function getBoundedChunkBytes(dataView, chunk) {
     return new Uint8Array(dataView.buffer, byteOffset + start, end - start);
 }
 
-function readTags(tags, chunkDataView, domParser) {
+function readTags(tags, chunkDataView, domParser, getDomParser) {
     try {
-        const {doc, raw, decodeValue} = getDocument(chunkDataView, domParser);
+        const {doc, raw, decodeValue} = getDocument(chunkDataView, domParser, getDomParser);
         tags._raw = (tags._raw || '') + raw;
         const rdf = getRDF(doc);
 
@@ -138,8 +137,8 @@ function readTags(tags, chunkDataView, domParser) {
     }
 }
 
-function getDocument(chunkDataView, _domParser) {
-    const {parser: domParser, warning} = DOMParser.get(_domParser);
+function getDocument(chunkDataView, _domParser, getDomParser) {
+    const {parser: domParser, warning} = getDomParser(_domParser);
     if (!domParser) {
         console.warn(warning); // eslint-disable-line no-console
         throw new Error();

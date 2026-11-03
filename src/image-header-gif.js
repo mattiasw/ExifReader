@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getStringFromDataView, pushMetadataBlock} from './utils.js';
+import {getStringFromDataView, pushRange} from './utils.js';
 
 export default {
     isGifFile,
@@ -26,16 +26,15 @@ function isGifFile(dataView) {
 }
 
 /**
- * Finds the GIF logical screen descriptor offset.
+ * Reports the GIF header, whose logical screen descriptor sits at offset 0.
  *
  * @param {DataView} _dataView The data view (unused).
- * @param {Array<Object>=} metadataBlocks Optional out-array. When provided,
- *     receives one `gif` block covering the GIF header bytes.
- * @returns {{gifHeaderOffset: number}}
+ * @param {Array<Object>=} ranges Optional out-array. When provided, receives
+ *     one span covering the GIF header bytes, linked to the gif block.
+ * @returns {Array<Object>} One gif block.
  */
-function findOffsets(_dataView, metadataBlocks) {
-    pushMetadataBlock(metadataBlocks, 'gif', 0, GIF_HEADER_SIZE);
-    return {
-        gifHeaderOffset: 0
-    };
+function findOffsets(_dataView, ranges) {
+    const block = {kind: 'gif', dataOffset: 0};
+    pushRange(ranges, block, 0, GIF_HEADER_SIZE);
+    return [block];
 }

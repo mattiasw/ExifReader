@@ -4,355 +4,125 @@
 
 // Specification: http://www.libpng.org/pub/png/spec/1.2/
 
-import {getStringValueFromArray, getStringFromDataView, decompress, setProperty, getTagKey, objectAssign, COMPRESSION_METHOD_NONE, getHexDigitValue} from './utils.js';
+import {getStringFromDataView, decompress, getCompressionMethod, setProperty, getTagKey, COMPRESSION_METHOD_NONE, getHexDigitValue} from './utils.js';
 import TagDecoder from './tag-decoder.js';
-import {PNG_CHUNK_LENGTH_OFFSET, PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_DATA_OFFSET, PNG_CHUNK_TYPE_SIZE, TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from './image-header-png.js';
-import {NOOP_TAG_FILTER} from './tag-filter.js';
-import {addDecompressedValueAllowance, addDecompressedIptcAllowance, takeEmbeddedExifThumbnail} from './tags-helpers.js';
+import {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT, EXIF_PROFILE_NAME, IPTC_PROFILE_NAME} from './image-header-png.js';
+import {filterTagsForParse} from './tag-filter.js';
 
 export default {
     read
 };
 
-const STATE_KEYWORD = 'STATE_KEYWORD';
-const STATE_COMPRESSION = 'STATE_COMPRESSION';
-const STATE_LANG = 'STATE_LANG';
-const STATE_TRANSLATED_KEYWORD = 'STATE_TRANSLATED_KEYWORD';
-const STATE_TEXT = 'STATE_TEXT';
-const COMPRESSION_SECTION_ITXT_EXTRA_BYTE = 1;
-const COMPRESSION_FLAG_COMPRESSED = 1;
 const EXIF_OFFSET = 6;
 const MAX_COMPRESSED_TEXT_CHUNKS = 255;
-const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;
-// PNG spec: a keyword is 1-79 bytes.
-const MAX_KEYWORD_LENGTH = 79;
-const IPTC_PROFILE_NAME = 'raw profile type iptc';
-// Our own bound: BCP 47 sets no maximum, but real tags are far shorter.
-const MAX_LANGUAGE_TAG_LENGTH = 79;
 
 /**
- * @param {number[]} pngTextChunks Chunk start offsets, where each chunk's length field is.
- * @param {function(DataView, object, number): object} [getThumbnail] Called with a
- *     decoded Exif raw profile, its thumbnail IFD tags and the TIFF header offset;
- *     returns the thumbnail tags, with `image` set when the thumbnail was read.
- *     No thumbnail is returned when it is not passed.
- * @param {function(DataView, object, number, number, object, {decompressed: boolean, hasIptcBlock: boolean}): object} [readCarriedGroups]
- *     Called with a decoded Exif raw profile, the Exif tags read from it, the TIFF
- *     header offset, the byte order, the value budget and where the profile came
- *     from: `decompressed` when the chunk was compressed, `hasIptcBlock` when the
- *     file has a `Raw profile type iptc` chunk. Returns the parsed groups the Exif
- *     carries, keyed by group name. No groups are read when it is not passed.
- * @param {{exif?: function(DataView, number, boolean, boolean, object, object): {tags: object, byteOrder: number}, iptc?: function(DataView, number, boolean, object, object): object}} [rawProfileReaders]
- *     Read the decoded `Raw profile type exif` and `Raw profile type iptc`
- *     profiles: `exif(dataView, tiffHeaderOffset, includeUnknown, computed,
- *     tagFilter, valueBudget)` as Tags.read and `iptc(dataView, offset,
- *     includeUnknown, tagFilter, valueBudget)` as IptcTags.read. A profile
- *     whose reader is missing is neither decoded nor read.
- * @returns {{readTags: object, embeddedExifTags: object|undefined, embeddedIptcTags: object|undefined, embeddedExifThumbnail: object|undefined, exifCarriedGroups: object|undefined, readTagsPromise: Promise<object[]>|undefined}}
- *     `readTags`, the two embedded groups, `exifCarriedGroups` and
- *     `embeddedExifThumbnail` come from uncompressed chunks and are ready at
- *     once; the embedded groups and `exifCarriedGroups` are undefined when no
- *     uncompressed raw profile was parsed, and `embeddedExifThumbnail` is the
- *     first thumbnail with an image. `readTagsPromise` resolves to one result per
- *     compressed chunk, in chunk order, each with its own `exifCarriedGroups`, and
- *     its own `embeddedExifThumbnail` when it has one and no uncompressed chunk
- *     had one, and is undefined when none is read.
+ * Reads one PNG text-chunk block: `{kind, compression?, text: {chunkType, name,
+ * valueOffset, valueLength}}`. A block whose `text.name` is undefined (a
+ * keyword or language tag over 79 bytes) is skipped, and so is a compressed
+ * chunk past the first MAX_COMPRESSED_TEXT_CHUNKS of a load.
+ *
+ * @param {object} block The finder's block.
+ * @param {object} context The load context: `dataView`, `tagFilter` and the
+ *     pooled `decompress`.
+ * @returns {{tags: object, blocks?: Array<object>}|Promise<{tags: object, blocks?: Array<object>}>|undefined}
+ *     The text tag, parse-filtered, or for a raw profile no tags and an emitted
+ *     exif or iptc block whose `getDataView()` decodes the profile on demand
+ *     (and throws on a bad one). A compressed chunk gives a promise; a
+ *     decompression failure gives a placeholder text tag.
  */
-function read(
-    dataView,
-    pngTextChunks,
-    async,
-    includeUnknown,
-    computed = false,
-    tagFilter = NOOP_TAG_FILTER,
-    decompressConfig,
-    valueBudget,
-    getThumbnail,
-    readCarriedGroups,
-    rawProfileReaders = {}
-) {
-    const tags = {};
-    let embeddedExifTags;
-    let embeddedIptcTags;
-    let embeddedExifThumbnail;
-    let exifCarriedGroups;
-    const uncompressedRawProfiles = [];
-    const compressedChunks = [];
+function read(block, context) {
+    if (block.text.name === undefined) {
+        return undefined;
+    }
+    if (block.compression === undefined) {
+        return classify(getUncompressedTag(context.dataView, block.text), context, false);
+    }
+    if (context.compressedPngTextChunks >= MAX_COMPRESSED_TEXT_CHUNKS) {
+        return undefined;
+    }
+    context.compressedPngTextChunks++;
+    return decompressTextChunk(context, block).then((tag) => classify(tag, context, true));
+}
 
-    for (let i = 0; i < pngTextChunks.length; i++) {
-        const chunkOffset = pngTextChunks[i];
-        const length = dataView.getUint32(chunkOffset + PNG_CHUNK_LENGTH_OFFSET);
-        const type = getStringFromDataView(dataView, chunkOffset + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
-        const textChunk = parseTextChunk(dataView, chunkOffset + PNG_CHUNK_DATA_OFFSET, length, type);
-        if (!textChunk) {
+// The payload check keeps a chunk whose keyword says profile but whose payload
+// does not as a plain text tag.
+function classify({name, value, description}, context, decompressed) {
+    if (isExifGroupTag(name, value)) {
+        return {tags: {}, blocks: [{kind: 'exif', tiffHeaderOffset: EXIF_OFFSET, origin: 'rawProfile', decompressed, getDataView: () => decodeRawData(value)}]};
+    }
+    if (isIptcGroupTag(name, value)) {
+        return {tags: {}, blocks: [{kind: 'iptc', dataOffset: 0, origin: 'rawProfile', decompressed, getDataView: () => decodeRawData(value)}]};
+    }
+    if (name && context.tagFilter.shouldParseGroup('png')) {
+        const tags = {};
+        setProperty(tags, getTagKey(name), {value, description});
+        return {tags: filterTagsForParse('png', tags, context.tagFilter)};
+    }
+    return undefined;
+}
+
+/**
+ * Whether the finder blocks hold a `Raw profile type iptc` text chunk that
+ * `read` will read: by payload for an uncompressed chunk, by keyword alone for
+ * a compressed one among the first MAX_COMPRESSED_TEXT_CHUNKS named compressed
+ * chunks, the ones `read` decompresses.
+ *
+ * @param {Array<object>} finderBlocks In dispatch order.
+ * @param {DataView} dataView The file.
+ * @returns {boolean}
+ */
+export function hasRawIptcProfile(finderBlocks, dataView) {
+    let compressedChunks = 0;
+    for (let i = 0; i < finderBlocks.length; i++) {
+        const block = finderBlocks[i];
+        if (block.text === undefined || block.text.name === undefined) {
             continue;
         }
-        if (textChunk.compressionMethod === COMPRESSION_METHOD_NONE) {
-            const tag = getUncompressedTag(textChunk);
-            if (isRawProfileTag(tag)) {
-                uncompressedRawProfiles.push(tag);
-            } else if (tag.name && tagFilter.shouldParseGroup('png')) {
-                setProperty(tags, getTagKey(tag.name), {
-                    value: tag.value,
-                    description: tag.description
-                });
+        if (block.compression !== undefined) {
+            compressedChunks++;
+            if (block.kind === 'iptc' && compressedChunks <= MAX_COMPRESSED_TEXT_CHUNKS) {
+                return true;
             }
-        } else if (async && compressedChunks.length < MAX_COMPRESSED_TEXT_CHUNKS) {
-            compressedChunks.push(textChunk);
+        } else if (block.kind === 'iptc' && isUncompressedIptcProfile(block, dataView)) {
+            return true;
         }
     }
+    return false;
+}
 
-    const hasIptcProfile = uncompressedRawProfiles.some((tag) => isIptcGroupTag(tag.name, tag.value))
-        || compressedChunks.some(isCompressedIptcProfile);
+function isUncompressedIptcProfile(block, dataView) {
+    const tag = getUncompressedTag(dataView, block.text);
+    return isIptcGroupTag(tag.name, tag.value);
+}
 
-    for (let i = 0; i < uncompressedRawProfiles.length; i++) {
-        const rawProfileTags = getTagsFromTextTag(
-            uncompressedRawProfiles[i],
-            includeUnknown,
-            computed,
-            tagFilter,
-            valueBudget,
-            embeddedExifThumbnail ? undefined : getThumbnail,
-            readCarriedGroups,
-            false,
-            hasIptcProfile,
-            rawProfileReaders
-        );
-        if (rawProfileTags.embeddedExifTags) {
-            embeddedExifTags = objectAssign(embeddedExifTags || {}, rawProfileTags.embeddedExifTags);
-        }
-        if (rawProfileTags.exifCarriedGroups) {
-            exifCarriedGroups = mergeCarriedGroups(exifCarriedGroups || {}, rawProfileTags.exifCarriedGroups);
-        }
-        if (rawProfileTags.embeddedExifThumbnail) {
-            embeddedExifThumbnail = rawProfileTags.embeddedExifThumbnail;
-        }
-        if (rawProfileTags.embeddedIptcTags) {
-            embeddedIptcTags = objectAssign(embeddedIptcTags || {}, rawProfileTags.embeddedIptcTags);
-        }
+function getUncompressedTag(dataView, text) {
+    const decodedValueChars = decompress(getValueView(dataView, text), COMPRESSION_METHOD_NONE, getEncodingFromType(text.chunkType), 'string');
+    return constructTag(decodedValueChars, text.chunkType, text.name);
+}
+
+// The same slice the parser made while it copied the value: the chunk's declared
+// end, clamped to the buffer by slice itself.
+function getValueView(dataView, {valueOffset, valueLength}) {
+    if (valueOffset === undefined) {
+        return undefined;
     }
-
-    const compressedThumbnailReader = embeddedExifThumbnail ? undefined : getThumbnail;
-    const decompressionTasks = compressedChunks.map((textChunk) => () => decompressTextChunk(textChunk, decompressConfig)
-        .then((tag) => getTagsFromTextTag(
-            tag,
-            includeUnknown,
-            computed,
-            tagFilter,
-            valueBudget,
-            compressedThumbnailReader,
-            readCarriedGroups,
-            true,
-            hasIptcProfile,
-            rawProfileReaders
-        )));
-
-    return {
-        readTags: tags,
-        embeddedExifTags,
-        embeddedIptcTags,
-        embeddedExifThumbnail,
-        exifCarriedGroups,
-        readTagsPromise: decompressionTasks.length > 0 ? runTasksInOrder(decompressionTasks, MAX_DECOMPRESSIONS_IN_FLIGHT) : undefined
-    };
-}
-
-// A compressed profile counts before its value can be checked.
-function isCompressedIptcProfile({type, langChars, keywordChars}) {
-    return getName(type, langChars, keywordChars).toLowerCase() === IPTC_PROFILE_NAME;
-}
-
-function mergeCarriedGroups(target, source) {
-    const groupKeys = Object.keys(source);
-    for (let i = 0; i < groupKeys.length; i++) {
-        target[groupKeys[i]] = objectAssign(target[groupKeys[i]] || {}, source[groupKeys[i]]);
-    }
-    return target;
-}
-
-function parseTextChunk(dataView, offset, length, type) {
-    const keywordChars = [];
-    const langChars = [];
-    let valueChars;
-    let parsingState = STATE_KEYWORD;
-    let compressionMethod = COMPRESSION_METHOD_NONE;
     const byteOffset = dataView.byteOffset;
-    const chunkEnd = Math.min(offset + length, dataView.byteLength);
-
-    for (let i = 0; i < length && offset + i < dataView.byteLength; i++) {
-        if (parsingState === STATE_COMPRESSION) {
-            compressionMethod = getCompressionMethod({type, dataView, offset: offset + i, chunkEnd});
-            if (type === TYPE_ITXT) {
-                i += COMPRESSION_SECTION_ITXT_EXTRA_BYTE;
-            }
-            parsingState = moveToNextState(type, parsingState);
-            continue;
-        } else if (parsingState === STATE_TEXT) {
-            const slice = dataView.buffer.slice(byteOffset + offset + i, byteOffset + offset + length);
-            valueChars = new DataView(slice);
-            break;
-        }
-        const byte = dataView.getUint8(offset + i);
-        if (byte === 0) {
-            parsingState = moveToNextState(type, parsingState);
-        } else if (parsingState === STATE_KEYWORD) {
-            if (keywordChars.length >= MAX_KEYWORD_LENGTH) {
-                return undefined;
-            }
-            keywordChars.push(byte);
-        } else if (parsingState === STATE_LANG) {
-            if (langChars.length >= MAX_LANGUAGE_TAG_LENGTH) {
-                return undefined;
-            }
-            langChars.push(byte);
-        }
-    }
-
-    return {type, keywordChars, langChars, compressionMethod, valueChars};
+    return new DataView(dataView.buffer.slice(byteOffset + valueOffset, byteOffset + valueOffset + valueLength));
 }
 
-function getUncompressedTag({type, keywordChars, langChars, valueChars}) {
-    const decodedValueChars = decompress(valueChars, COMPRESSION_METHOD_NONE, getEncodingFromType(type), 'string');
-    return constructTag(decodedValueChars, type, langChars, keywordChars);
+function decompressTextChunk(context, {compression, text}) {
+    const valueView = getValueView(context.dataView, text);
+    if (valueView === undefined) {
+        return Promise.resolve(constructPlaceholderTag(text));
+    }
+    return context.decompress(valueView, getCompressionMethod(compression), getEncodingFromType(text.chunkType), 'string')
+        .then((decompressedValueChars) => constructTag(decompressedValueChars, text.chunkType, text.name))
+        .catch(() => constructPlaceholderTag(text));
 }
 
-function isRawProfileTag({name, value}) {
-    return isExifGroupTag(name, value) || isIptcGroupTag(name, value);
-}
-
-function getTagsFromTextTag({name, value, description}, includeUnknown, computed, tagFilter, valueBudget, getThumbnail, readCarriedGroups, isDecompressed, hasIptcProfile, rawProfileReaders) {
-    try {
-        if (isExifGroupTag(name, value)) {
-            if (!rawProfileReaders.exif || !tagFilter.shouldParseGroup('exif')) {
-                return {};
-            }
-            const exifDataView = decodeRawData(value);
-            if (isDecompressed) {
-                addDecompressedValueAllowance(valueBudget, exifDataView.byteLength);
-            }
-            const {tags: embeddedExifTags, byteOrder} = rawProfileReaders.exif(
-                exifDataView,
-                EXIF_OFFSET,
-                includeUnknown,
-                computed,
-                tagFilter,
-                valueBudget
-            );
-            const result = {embeddedExifTags};
-            if (readCarriedGroups) {
-                result.exifCarriedGroups = readCarriedGroups(
-                    exifDataView,
-                    embeddedExifTags,
-                    EXIF_OFFSET,
-                    byteOrder,
-                    valueBudget,
-                    {decompressed: isDecompressed, hasIptcBlock: hasIptcProfile}
-                );
-            }
-            if (embeddedExifTags['MakerNote']) {
-                delete embeddedExifTags['MakerNote'].__offset;
-            }
-            const thumbnail = takeEmbeddedExifThumbnail(embeddedExifTags, exifDataView, EXIF_OFFSET, getThumbnail);
-            if (thumbnail) {
-                result.embeddedExifThumbnail = thumbnail;
-            }
-            return result;
-        } else if (isIptcGroupTag(name, value)) {
-            if (!rawProfileReaders.iptc || !tagFilter.shouldParseGroup('iptc')) {
-                return {};
-            }
-            const iptcDataView = decodeRawData(value);
-            if (isDecompressed) {
-                addDecompressedIptcAllowance(valueBudget, iptcDataView.byteLength);
-            }
-            return {
-                embeddedIptcTags: rawProfileReaders.iptc(
-                    iptcDataView,
-                    0,
-                    includeUnknown,
-                    tagFilter,
-                    valueBudget
-                )
-            };
-        } else if (name) {
-            if (!tagFilter.shouldParseGroup('png')) {
-                return {};
-            }
-            const readTags = {};
-            setProperty(readTags, getTagKey(name), {
-                value,
-                description
-            });
-            return {readTags};
-        }
-    } catch (error) {
-        // Ignore the broken tag.
-    }
-    return {};
-}
-
-function decompressTextChunk({type, keywordChars, langChars, compressionMethod, valueChars}, decompressConfig) {
-    if (valueChars === undefined) {
-        return Promise.resolve(constructPlaceholderTag(type, langChars, keywordChars));
-    }
-    return decompress(valueChars, compressionMethod, getEncodingFromType(type), 'string', decompressConfig)
-        .then((decompressedValueChars) => constructTag(decompressedValueChars, type, langChars, keywordChars))
-        .catch(() => constructPlaceholderTag(type, langChars, keywordChars));
-}
-
-function constructPlaceholderTag(type, langChars, keywordChars) {
-    return constructTag('<text using unknown compression>', type, langChars, keywordChars);
-}
-
-function runTasksInOrder(tasks, limit) {
-    const results = [];
-    const workers = [];
-    let nextIndex = 0;
-
-    for (let i = 0; i < Math.min(limit, tasks.length); i++) {
-        workers.push(runNext());
-    }
-    return Promise.all(workers).then(() => results);
-
-    function runNext() {
-        if (nextIndex >= tasks.length) {
-            return Promise.resolve();
-        }
-        const index = nextIndex++;
-        // The wrapper turns a synchronous throw from a task into a rejection
-        // that Promise.all observes, instead of an exception out of read().
-        return new Promise((resolve) => resolve(tasks[index]())).then((result) => {
-            results[index] = result;
-            return runNext();
-        });
-    }
-}
-
-function getCompressionMethod({type, dataView, offset, chunkEnd}) {
-    if (type === TYPE_ITXT) {
-        if (offset + 1 < chunkEnd && dataView.getUint8(offset) === COMPRESSION_FLAG_COMPRESSED) {
-            return dataView.getUint8(offset + 1);
-        }
-    } else if (type === TYPE_ZTXT) {
-        return dataView.getUint8(offset);
-    }
-    return COMPRESSION_METHOD_NONE;
-}
-
-function moveToNextState(type, parsingState) {
-    if (parsingState === STATE_KEYWORD && [TYPE_ITXT, TYPE_ZTXT].includes(type)) {
-        return STATE_COMPRESSION;
-    }
-    if (parsingState === STATE_COMPRESSION) {
-        if (type === TYPE_ITXT) {
-            return STATE_LANG;
-        }
-        return STATE_TEXT;
-    }
-    if (parsingState === STATE_LANG) {
-        return STATE_TRANSLATED_KEYWORD;
-    }
-    return STATE_TEXT;
+function constructPlaceholderTag({chunkType, name}) {
+    return constructTag('<text using unknown compression>', chunkType, name);
 }
 
 function getEncodingFromType(type) {
@@ -362,23 +132,14 @@ function getEncodingFromType(type) {
     return 'utf-8';
 }
 
-function constructTag(valueChars, type, langChars, keywordChars) {
+function constructTag(valueChars, chunkType, name) {
     const value = getValue(valueChars);
 
     return {
-        name: getName(type, langChars, keywordChars),
+        name,
         value,
-        description: type === TYPE_ITXT ? getDescription(valueChars) : value
+        description: chunkType === TYPE_ITXT ? getDescription(valueChars) : value
     };
-}
-
-function getName(type, langChars, keywordChars) {
-    const name = getStringValueFromArray(keywordChars);
-    if (type === TYPE_TEXT || langChars.length === 0) {
-        return name;
-    }
-    const lang = getStringValueFromArray(langChars);
-    return `${name} (${lang})`;
 }
 
 function getValue(valueChars) {
@@ -393,7 +154,7 @@ function getDescription(valueChars) {
 }
 
 function isExifGroupTag(name, value) {
-    return name.toLowerCase() === 'raw profile type exif' && value.substring(1, 5) === 'exif';
+    return name.toLowerCase() === EXIF_PROFILE_NAME && value.substring(1, 5) === 'exif';
 }
 
 function isIptcGroupTag(name, value) {

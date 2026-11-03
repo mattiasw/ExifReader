@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import {setProperty} from './utils.js';
 import {
     FILTER_GROUPS,
     ID_CAPABLE_GROUPS,
@@ -407,5 +408,56 @@ function buildLowercasedNameMap(names) {
 function addRequiredTags(requiredTags, tags) {
     for (let i = 0; i < tags.length; i++) {
         requiredTags[tags[i]] = true;
+    }
+}
+
+export function filterTagsForParse(groupKey, readTags, tagFilter) {
+    if (!tagFilter.isActive) {
+        return readTags;
+    }
+
+    return filterTags(groupKey, readTags, tagFilter.shouldParseTag);
+}
+
+export function filterTagsForReturn(groupKey, readTags, tagFilter) {
+    if (!tagFilter.isActive) {
+        return readTags;
+    }
+
+    return filterTags(groupKey, readTags, tagFilter.shouldReturnTag);
+}
+
+export function filterTags(groupKey, readTags, matchesTag) {
+    if (!readTags) {
+        return readTags;
+    }
+
+    const filteredTags = {};
+
+    for (const tagName in readTags) {
+        const tagValue = readTags[tagName];
+        const tagId = getTagId(tagValue);
+
+        if (matchesTag(groupKey, tagName, tagId)) {
+            setProperty(filteredTags, tagName, tagValue);
+        }
+    }
+
+    return filteredTags;
+
+    function getTagId(tagValue) {
+        if (!tagValue) {
+            return undefined;
+        }
+
+        if (Array.isArray(tagValue)) {
+            if (tagValue.length === 0) {
+                return undefined;
+            }
+
+            return tagValue[0].id;
+        }
+
+        return tagValue.id;
     }
 }

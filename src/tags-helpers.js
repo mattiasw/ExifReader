@@ -105,6 +105,8 @@ export function get0thIfdOffset(dataView, tiffHeaderOffset, byteOrder) {
  * offset into the thumbnail IFD, whose entries are otherwise not charged to the
  * value budget. Defaults to whether tagNames has an IFD_TYPE_1ST dictionary and
  * tagFilter parses the thumbnail group.
+ * @param {Object} [valueOffsets] - Given, receives the offset of the MakerNote
+ * value as `MakerNote`, relative to the offset origin.
  * @returns {Object} The read tags, keyed by tag name.
  */
 export function readIfd(
@@ -119,7 +121,8 @@ export function readIfd(
     groupKey = 'exif',
     valueBudget = getValueBudget(dataView),
     tagNames,
-    readThumbnailIfd = tagNames[IFD_TYPE_1ST] !== undefined && tagFilter.shouldParseGroup('thumbnail')
+    readThumbnailIfd = tagNames[IFD_TYPE_1ST] !== undefined && tagFilter.shouldParseGroup('thumbnail'),
+    valueOffsets = undefined
 ) {
     const FIELD_COUNT_SIZE = Types.getTypeSize('SHORT');
     const FIELD_SIZE = IFD_ENTRY_LENGTH;
@@ -160,8 +163,11 @@ export function readIfd(
             if (computed) {
                 tags[tag.name].computed = getComputedTagValue(tag.tagType, tag.value);
             }
-            if (tag.name === 'MakerNote' || (ifdType === IFD_TYPE_PENTAX && tag.name === 'LevelInfo')) {
+            if (ifdType === IFD_TYPE_PENTAX && tag.name === 'LevelInfo') {
                 tags[tag.name].__offset = tag.__offset;
+            }
+            if (valueOffsets !== undefined && tag.name === 'MakerNote') {
+                valueOffsets.MakerNote = tag.__offset;
             }
         }
 
@@ -549,24 +555,4 @@ function getComputedRationalValue(rational) {
     }
 
     return numerator / denominator;
-}
-
-/**
- * Removes the thumbnail IFD from the tags of an embedded Exif block and reads
- * its image with `readThumbnail`, when given.
- *
- * @returns {object|undefined} The thumbnail tags when an image was read.
- */
-export function takeEmbeddedExifThumbnail(readTags, dataView, tiffHeaderOffset, readThumbnail) {
-    const thumbnailIfdTags = readTags.Thumbnail;
-    if (!thumbnailIfdTags) {
-        return undefined;
-    }
-    delete readTags.Thumbnail;
-
-    if (!readThumbnail) {
-        return undefined;
-    }
-    const thumbnail = readThumbnail(dataView, thumbnailIfdTags, tiffHeaderOffset);
-    return thumbnail.image ? thumbnail : undefined;
 }
