@@ -5,7 +5,8 @@
 import {expect} from 'chai';
 import {getDataView, getByteStringFromNumber} from './test-utils.js';
 import MpfTags from '../../src/mpf-tags.js';
-import {getStringValueFromArray, getBase64Image} from '../../src/utils.js';
+import {getStringValueFromArray} from '../../src/utils.js';
+import {getBase64Image} from '../../src/base64-image.js';
 
 const MP_ENTRY_VALUE_OFFSET = 26;
 const MAX_IMAGES = 256;
@@ -76,7 +77,7 @@ describe('mpf-tags', () => {
             + image2 // Image #2 (#1 is the original file, starting at offset 0)
         );
 
-        const tags = MpfTags.read(dataView, PREFIX_PADDING_SIZE);
+        const tags = MpfTags.read(dataView, PREFIX_PADDING_SIZE, false, false, undefined, undefined, getBase64Image);
 
         expect(tags['NumberOfImages'].description).to.equal(2);
         expect(tags['Images'].length).to.equal(2);
@@ -247,7 +248,7 @@ describe('mpf-tags', () => {
         const dataView = buildMpfDataView(entries, trailing);
         expect(dataView.buffer.byteLength).to.equal(totalLength);
 
-        const tags = MpfTags.read(dataView, 0);
+        const tags = MpfTags.read(dataView, 0, false, false, undefined, undefined, getBase64Image);
 
         expect(tags['Images'][0].image).to.deep.equal(dataView.buffer.slice(0, region0));
         expect(tags['Images'][1].image).to.deep.equal(dataView.buffer.slice(prefixLength + region0, prefixLength + region0 + region1));
@@ -260,11 +261,20 @@ describe('mpf-tags', () => {
     it('should give an empty image for a negative image size instead of a from-the-end slice', () => {
         const dataView = buildMpfDataView([{size: -1, offset: 0}], getStringValueFromArray(Array(100).fill(0x41)));
 
-        const tags = MpfTags.read(dataView, 0);
+        const tags = MpfTags.read(dataView, 0, false, false, undefined, undefined, getBase64Image);
 
         expect(tags['Images'][0].ImageSize.value).to.equal(-1);
         expect(tags['Images'][0].image.byteLength).to.equal(0);
         expect(tags['Images'][0].base64).to.equal('');
+    });
+
+    it('should define no base64 property without a base64 helper', () => {
+        const dataView = buildMpfDataView([{size: 4, offset: 0}], getStringValueFromArray(Array(100).fill(0x41)));
+
+        const tags = MpfTags.read(dataView, 0);
+
+        expect(tags['Images'][0].image.byteLength).to.equal(4);
+        expect(Object.keys(tags['Images'][0])).to.not.include('base64');
     });
 
     it('should clamp a negative image offset to the start of the buffer instead of a from-the-end slice', () => {

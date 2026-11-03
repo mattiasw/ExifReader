@@ -31,6 +31,7 @@ const MODULE_MARKERS = {
     'image-header.js': 'Invalid image format',
     'load-auto.js': 'length: "auto" is not supported for this file type ',
     'loadview-pipeline.js': 'mpfImage',
+    'engine.js': 'The group emission graph has a cycle through ',
     'tag-filter-config.js': 'relatedimage',
     // Quoted, since the data URI regex in file-loaders.js also holds the bare text.
     'utils.js': '\';base64\'',
@@ -77,6 +78,7 @@ const MODULE_MARKERS = {
 // The parsing core, whose markers have to be in every build. An absence here
 // also means the probe read an empty or wrong file.
 const ALWAYS_PRESENT_MODULES = [
+    'engine.js',
     'errors.js',
     'file-loaders.js',
     'image-header.js',
@@ -210,6 +212,7 @@ const WRITER_MODULE = 'a writer module, never part of a reader bundle';
 
 // Source files that are neither a marker owner nor in ALWAYS_PRESENT_MODULES.
 const UNPROBEABLE_REASONS = {
+    'base64-image.js': NO_UNIQUE_LITERAL,
     'composite.js': NO_UNIQUE_LITERAL,
     'constants.js': NO_UNIQUE_LITERAL,
     'dom-parser.js': NO_UNIQUE_LITERAL,

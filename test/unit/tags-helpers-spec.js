@@ -11,14 +11,14 @@
 import {expect} from 'chai';
 import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import TagNames from '../../src/tag-names.js';
-import {readIfd as readIfdWithTagNames, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, addDecompressedIptcAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING, takeEmbeddedExifThumbnail} from '../../src/tags-helpers.js';
+import {readIfd as readIfdWithTagNames, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, addDecompressedIptcAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING} from '../../src/tags-helpers.js';
 import ByteOrder from '../../src/byte-order.js';
 import {createTagFilter} from '../../src/tag-filter.js';
 
 // readIfd takes the tag dictionaries after the value budget. The tests below
 // call it positionally with the arguments they care about, so this forwards
 // the real TagNames and lets every omitted argument fall back to its default.
-function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown, computed, tagFilter, groupKey, valueBudget) {
+function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnknown, computed, tagFilter, groupKey, valueBudget, valueOffsets = undefined) {
     return readIfdWithTagNames(
         dataView,
         ifdType,
@@ -30,7 +30,9 @@ function readIfd(dataView, ifdType, offsetOrigin, offset, byteOrder, includeUnkn
         tagFilter,
         groupKey,
         valueBudget,
-        TagNames
+        TagNames,
+        undefined,
+        valueOffsets
     );
 }
 
@@ -163,16 +165,26 @@ describe('tags-helpers', () => {
         // Field count + field + offset to next IFD.
         const dataView = getDataView('\x00\x01' + '\x92\x7c\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
         restoreTagNames = swapProperties(TagNames, {'0th': {0x927c: 'MakerNote'}});
+        const valueOffsets = {};
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, undefined, undefined, undefined, undefined, undefined, valueOffsets);
+        expect(valueOffsets.MakerNote).to.equal(0xa);
+        expect(tags['MakerNote']).to.not.have.property('__offset');
+    });
+
+    it('should not record the MakerNote offset without a value offsets object', () => {
+        const dataView = getDataView('\x00\x01' + '\x92\x7c\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x927c: 'MakerNote'}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
-        expect(tags['MakerNote'].__offset).to.equal(0xa);
+        expect(tags['MakerNote']).to.deep.equal({id: 0x927c, value: 0x42, description: 0x42});
     });
 
     it('should pass on an in-slot MakerNote offset relative to the offset origin', () => {
         // Origin padding + field count + field + offset to next IFD.
         const dataView = getDataView('\x00\x00\x00\x00' + '\x00\x01' + '\x92\x7c\x00\x07\x00\x00\x00\x02\x42\x43\x00\x00' + '\x00\x00\x00\x00');
         restoreTagNames = swapProperties(TagNames, {'0th': {0x927c: 'MakerNote'}});
-        const tags = readIfd(dataView, '0th', 4, 4, ByteOrder.BIG_ENDIAN);
-        expect(tags['MakerNote'].__offset).to.equal(0xa);
+        const valueOffsets = {};
+        const tags = readIfd(dataView, '0th', 4, 4, ByteOrder.BIG_ENDIAN, undefined, undefined, undefined, undefined, undefined, valueOffsets);
+        expect(valueOffsets.MakerNote).to.equal(0xa);
         expect(tags['MakerNote'].value).to.deep.equal([0x42, 0x43]);
     });
 
@@ -180,8 +192,9 @@ describe('tags-helpers', () => {
         // Origin padding + field count + field + offset to next IFD + value.
         const dataView = getDataView('\x00\x00\x00\x00' + '\x00\x01' + '\x92\x7c\x00\x07\x00\x00\x00\x06\x00\x00\x00\x12' + '\x00\x00\x00\x00' + 'ABCDEF');
         restoreTagNames = swapProperties(TagNames, {'0th': {0x927c: 'MakerNote'}});
-        const tags = readIfd(dataView, '0th', 4, 4, ByteOrder.BIG_ENDIAN);
-        expect(tags['MakerNote'].__offset).to.equal(0x12);
+        const valueOffsets = {};
+        const tags = readIfd(dataView, '0th', 4, 4, ByteOrder.BIG_ENDIAN, undefined, undefined, undefined, undefined, undefined, valueOffsets);
+        expect(valueOffsets.MakerNote).to.equal(0x12);
         expect(tags['MakerNote'].value).to.deep.equal([65, 66, 67, 68, 69, 70]);
     });
 
@@ -556,14 +569,15 @@ describe('tags-helpers', () => {
             + '\x00\x00\x00\x00' // Offset to next IFD.
             + '\x41\x42\x43\x44\x45\x00' // Value.
         );
-        expect(readIfd(dataView, '0th', 4, 6, ByteOrder.BIG_ENDIAN)).to.deep.equal({
+        const valueOffsets = {};
+        expect(readIfd(dataView, '0th', 4, 6, ByteOrder.BIG_ENDIAN, undefined, undefined, undefined, undefined, undefined, valueOffsets)).to.deep.equal({
             MakerNote: {
                 id: 0x927c,
                 value: ['ABCDE'],
-                description: 'ABCDE',
-                __offset: 0x14
+                description: 'ABCDE'
             }
         });
+        expect(valueOffsets.MakerNote).to.equal(0x14);
     });
 
     it('should be able to handle tag with faulty offset (too large)', () => {
@@ -1450,55 +1464,6 @@ describe('tags-helpers', () => {
             const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget);
             expect(tags['MyAsciiTag'].value).to.deep.equal(['a', 'b']);
             expect(budget.remaining).to.equal(0);
-        });
-    });
-
-    describe('embedded Exif thumbnail', () => {
-        const THUMBNAIL_IFD_TAGS = {JPEGInterchangeFormat: {value: 10}};
-
-        it('should leave tags without a thumbnail IFD alone and not call the reader', () => {
-            const readTags = {Model: {value: 'm'}};
-            const calls = [];
-
-            const thumbnail = takeEmbeddedExifThumbnail(readTags, 'dataView', 8, (...args) => calls.push(args));
-
-            expect(thumbnail).to.equal(undefined);
-            expect(readTags).to.deep.equal({Model: {value: 'm'}});
-            expect(calls).to.deep.equal([]);
-        });
-
-        it('should remove the thumbnail IFD when there is no reader', () => {
-            const readTags = {Model: {value: 'm'}, Thumbnail: THUMBNAIL_IFD_TAGS};
-
-            const thumbnail = takeEmbeddedExifThumbnail(readTags, 'dataView', 8, undefined);
-
-            expect(thumbnail).to.equal(undefined);
-            expect(readTags).to.deep.equal({Model: {value: 'm'}});
-        });
-
-        it('should return nothing when the reader finds no image', () => {
-            const readTags = {Thumbnail: THUMBNAIL_IFD_TAGS};
-
-            const thumbnail = takeEmbeddedExifThumbnail(readTags, 'dataView', 8, () => ({...THUMBNAIL_IFD_TAGS}));
-
-            expect(thumbnail).to.equal(undefined);
-            expect(readTags).to.deep.equal({});
-        });
-
-        it('should hand the reader the view, the IFD tags and the offset and return its thumbnail', () => {
-            const readTags = {Thumbnail: THUMBNAIL_IFD_TAGS};
-            const dataView = getDataView('\x00');
-            const calls = [];
-            const result = {...THUMBNAIL_IFD_TAGS, image: '<image>'};
-
-            const thumbnail = takeEmbeddedExifThumbnail(readTags, dataView, 8, (...args) => {
-                calls.push(args);
-                return result;
-            });
-
-            expect(thumbnail).to.equal(result);
-            expect(calls).to.deep.equal([[dataView, THUMBNAIL_IFD_TAGS, 8]]);
-            expect(readTags).to.deep.equal({});
         });
     });
 });

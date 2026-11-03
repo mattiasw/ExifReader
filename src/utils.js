@@ -383,28 +383,6 @@ export function deferInit(object, key, initializer) {
     });
 }
 
-export function getBase64Image(image) {
-    if (typeof image === 'string' && typeof btoa !== 'undefined') {
-        // Only tests pass a string. btoa reads it as Latin-1, Buffer.from would use UTF-8.
-        return btoa(image);
-    }
-    if (hasBufferFrom()) {
-        return Buffer.from(image).toString('base64'); // eslint-disable-line no-undef
-    }
-    if (typeof btoa !== 'undefined') {
-        return btoa(getByteString(new Uint8Array(image)));
-    }
-    if (typeof Buffer === 'undefined') {
-        return undefined;
-    }
-    return (new Buffer(image)).toString('base64'); // eslint-disable-line no-undef
-}
-
-function hasBufferFrom() {
-    // Buffer polyfills before buffer@4.6.0 inherit Uint8Array.from, which returns an empty array for an ArrayBuffer.
-    return typeof Buffer !== 'undefined' && typeof Buffer.from !== 'undefined' && Buffer.from !== Uint8Array.from; // eslint-disable-line no-undef
-}
-
 export function dataUriToBuffer(dataUri) {
     const commaIndex = dataUri.indexOf(',');
     const header = dataUri.substring(0, commaIndex);

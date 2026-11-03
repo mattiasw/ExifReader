@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the rest are left out of the tags but still covered by `metadataRange`.
   Real files carry a few text chunks, a few dozen at most; the bound keeps
   a crafted file with hundreds of thousands of them from exhausting memory.
+- A metadata part whose reader throws is now left out on its own, whichever
+  part it is. Before, a throwing reader made `load` throw, and for an Exif
+  block embedded in a PNG raw profile or a JPEG XL brob box it dropped every
+  group that block carried.
 
 ## [4.53.0] - 2026-11-02
 

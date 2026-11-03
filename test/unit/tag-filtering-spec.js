@@ -150,7 +150,7 @@ describe('tag filtering options', function () {
         });
         fakePngTextTagsReadAsync(
             {'Color Type': {value: 2, description: 'RGB'}},
-            [{embeddedExifTags: {UserComment: {id: 0x9286, value: 'Hello'}}}]
+            {UserComment: {id: 0x9286, value: 'Hello'}}
         );
 
         const tags = await ExifReader.loadView({}, {
@@ -169,12 +169,10 @@ describe('tag filtering options', function () {
             fileType: 'png',
             blocks: [getTextBlock()],
         });
-        fakePngTextTagsReadAsync({}, [{
-            embeddedExifTags: {
-                UserComment: {id: 0x9286, value: 'Hello'},
-                Thumbnail: {JPEGInterchangeFormat: {id: 0x0201, value: 272}},
-            },
-        }]);
+        fakePngTextTagsReadAsync({}, {
+            UserComment: {id: 0x9286, value: 'Hello'},
+            Thumbnail: {JPEGInterchangeFormat: {id: 0x0201, value: 272}},
+        });
 
         const tags = await ExifReader.loadView({}, {
             async: true,
@@ -195,7 +193,7 @@ describe('tag filtering options', function () {
         });
         fakePngTextTagsReadAsync(
             {'Color Type': {value: 2, description: 'RGB'}},
-            [{embeddedExifTags: {UserComment: {id: 0x9286, value: 'Hello'}}}]
+            {UserComment: {id: 0x9286, value: 'Hello'}}
         );
 
         const tags = await ExifReader.loadView({}, {
@@ -324,6 +322,34 @@ describe('tag filtering options', function () {
 
         expect(tags.FileType).to.equal('jpeg');
     });
+
+    for (const [description, includeTags, expectedCalls] of [
+        ['only FileType', {file: ['FileType']}, 0],
+        ['FileType and another file tag', {file: ['FileType', 'Image Width']}, 1],
+        ['FileType with composite tags', {composite: ['FieldOfView'], file: ['FileType']}, 1],
+        ['FileType with the whole composite group', {composite: true, file: ['FileType']}, 1],
+        ['FileType with an empty composite list', {composite: [], file: ['FileType']}, 0],
+        ['the whole file group', {file: true}, 1],
+    ]) {
+        it(`should read the file segment ${expectedCalls === 1 ? 'once' : 'not at all'} for includeTags with ${description}`, function () {
+            fakeImageHeader({
+                fileType: {value: 'jpeg', description: 'JPEG'},
+                blocks: [{kind: 'file', dataOffset: 1}],
+            });
+            let fileReadCalls = 0;
+            restoreFunctions.push(swapProperties(FileTags, {
+                read() {
+                    fileReadCalls++;
+                    return {'Image Width': {value: 4000}};
+                },
+            }));
+
+            const tags = ExifReader.loadView({}, {includeTags});
+
+            expect(fileReadCalls).to.equal(expectedCalls);
+            expect(tags.FileType).to.deep.equal({value: 'jpeg', description: 'JPEG'});
+        });
+    }
 
     it('includeTags: { composite: true, file: [FileType] } should still parse file deps for composite', function () {
         fakeImageHeader({
@@ -659,8 +685,8 @@ describe('tag filtering options', function () {
         });
         fakeTagsRead({
             Make: {id: 0x010f, value: ['Canon']},
-            MakerNote: {id: 0x927c, value: [1, 2, 3], __offset: 42},
-        });
+            MakerNote: {id: 0x927c, value: [1, 2, 3]},
+        }, 42);
         fakeCanonTagsRead({
             LensType: {id: 0x0001, value: 61182, description: '61182'},
             LensModel: {
@@ -695,10 +721,10 @@ function getTextBlock() {
     return {kind: 'pngText', text: {chunkType: 'tEXt', name: 'Comment', valueOffset: 1, valueLength: 0}};
 }
 
-function fakeTagsRead(tagsValue) {
+function fakeTagsRead(tagsValue, makerNoteOffset = undefined) {
     restoreFunctions.push(swapProperties(Tags, {
         read() {
-            return {tags: tagsValue, byteOrder: ByteOrder.BIG_ENDIAN};
+            return {tags: tagsValue, byteOrder: ByteOrder.BIG_ENDIAN, makerNoteOffset};
         },
     }));
 }
@@ -711,10 +737,16 @@ function fakeTagsReadToThrow() {
     }));
 }
 
-function fakePngTextTagsReadAsync(readTags, asyncEntries) {
+// The text block gives its tags through a promise, as a compressed chunk does,
+// and emits a raw-profile Exif block whose Tags.read is faked with embeddedExifTags.
+function fakePngTextTagsReadAsync(readTags, embeddedExifTags) {
+    fakeTagsRead(embeddedExifTags);
     restoreFunctions.push(swapProperties(PngTextTags, {
         read() {
-            return {readTags, readTagsPromise: Promise.resolve(asyncEntries)};
+            return Promise.resolve({
+                tags: readTags,
+                blocks: [{kind: 'exif', tiffHeaderOffset: 0, origin: 'rawProfile', dataView: new DataView(new ArrayBuffer(0))}],
+            });
         },
     }));
 }

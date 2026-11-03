@@ -122,6 +122,38 @@ describe('tags', () => {
         expect(tags['MyExifTag'].description).to.equal(0x42);
     });
 
+    it('should report the MakerNote offset relative to the TIFF header', () => {
+        const dataView = getDataView(
+            // TIFF header + 0th IFD holding an Exif IFD pointer to offset 26.
+            '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x08'
+            + '\x00\x01' + '\x87\x69\x00\x04\x00\x00\x00\x01\x00\x00\x00\x1a' + '\x00\x00\x00\x00'
+            // Exif IFD: field count + a MakerNote in its slot + offset to next IFD.
+            + '\x00\x01' + '\x92\x7c\x00\x07\x00\x00\x00\x02\x42\x43\x00\x00' + '\x00\x00\x00\x00'
+        );
+        restoreTagNames = swapProperties(TagNames, {
+            '0th': {0x8769: 'Exif IFD Pointer'},
+            'exif': {0x927c: 'MakerNote'}
+        });
+
+        const {tags, makerNoteOffset} = Tags.read(dataView, 0, false);
+
+        expect(makerNoteOffset).to.equal(26 + 2 + 8);
+        expect(tags['MakerNote'].value).to.deep.equal([0x42, 0x43]);
+        expect(tags['MakerNote']).to.not.have.property('__offset');
+    });
+
+    it('should report no MakerNote offset without a MakerNote', () => {
+        const dataView = getDataView(
+            '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x08'
+            + '\x00\x01' + '\x47\x11\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00'
+        );
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyTag'}});
+
+        const {makerNoteOffset} = Tags.read(dataView, 0, false);
+
+        expect(makerNoteOffset).to.be.undefined;
+    });
+
     it('should be able to read GPS IFD through the 0th IFD pointer', () => {
         const dataView = getDataView(
             '\x4d\x4d\x00\x2a' + '\x00\x00\x00\x08'

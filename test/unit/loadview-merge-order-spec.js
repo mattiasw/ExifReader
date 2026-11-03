@@ -95,13 +95,13 @@ function loadAsyncWithDelays({iccDelayMs, pngTextDelayMs}) {
     fakeConstantsForMergeOrderTests();
     fakeImageHeader({
         fileType: {value: 'png', description: 'PNG'},
-        blocks: [{kind: 'icc', chunks: [1]}, getTextBlock()],
+        blocks: [{kind: 'icc', chunks: [1]}, getTextBlock(), getCompressedTextBlock()],
     });
 
     fakeIccTagsReadAsync({Collision: {value: 'icc'}}, iccDelayMs);
     fakePngTextTagsReadAsync(
         {Collision: {value: 'pngTextSync'}},
-        [{readTags: {Collision: {value: 'pngTextAsync'}}}],
+        {Collision: {value: 'pngTextAsync'}},
         pngTextDelayMs
     );
 
@@ -147,6 +147,10 @@ function getTextBlock() {
     return {kind: 'pngText', text: {chunkType: 'tEXt', name: 'Comment', valueOffset: 1, valueLength: 0}};
 }
 
+function getCompressedTextBlock() {
+    return {kind: 'pngText', compression: 'deflate', text: {chunkType: 'zTXt', name: 'Comment', valueOffset: 1, valueLength: 0}};
+}
+
 function fakeSimpleReader(module, tagsValue) {
     restoreFunctions.push(swapProperties(module, {
         read() {
@@ -174,22 +178,20 @@ function fakeIccTagsReadAsync(tagsValue, delayMs) {
 function fakePngTextTagsRead(tagsValue) {
     restoreFunctions.push(swapProperties(PngTextTags, {
         read() {
-            return {readTags: tagsValue};
+            return {tags: tagsValue};
         },
     }));
 }
 
-function fakePngTextTagsReadAsync(readTags, asyncTagList, delayMs) {
+// An uncompressed block gives its tags at once, a compressed one after a delay.
+function fakePngTextTagsReadAsync(readTags, asyncTags, delayMs) {
     restoreFunctions.push(swapProperties(PngTextTags, {
-        read(dataView, pngTextBlocks, async) {
-            if (!async) {
-                return {readTags};
+        read(block) {
+            if (block.compression === undefined) {
+                return {tags: readTags};
             }
 
-            return {
-                readTags,
-                readTagsPromise: createDelayedPromise(asyncTagList, delayMs),
-            };
+            return createDelayedPromise({tags: asyncTags}, delayMs);
         },
     }));
 }

@@ -6,7 +6,6 @@ import {expect} from 'chai';
 import {DOMParser as XmldomDomParser, onErrorStopParsing} from '@xmldom/xmldom';
 import * as ExifReader from '../../src/exif-reader.js';
 import {objectAssign} from '../../src/utils.js';
-import ImageHeader from '../../src/image-header.js';
 import Tags from '../../src/tags.js';
 import IptcTags from '../../src/iptc-tags.js';
 import XmpTags from '../../src/xmp-tags.js';
@@ -17,10 +16,9 @@ import JfifTags from '../../src/jfif-tags.js';
 import PhotoshopTags from '../../src/photoshop-tags.js';
 import CanonTags from '../../src/canon-tags.js';
 import PngFileTags from '../../src/png-file-tags.js';
-import PngTextTags from '../../src/png-text-tags.js';
 import PngTags from '../../src/png-tags.js';
 import Thumbnail from '../../src/thumbnail.js';
-import {getDataView, getByteStringFromNumber, swapProperties, getConsoleWarnSpy} from './test-utils.js';
+import {getDataView, getByteStringFromNumber, swapProperties, getConsoleWarnSpy, LINEAR_TIME_TIMEOUT_MS, expectAsyncTimeRatioBelow} from './test-utils.js';
 import {
     TAG_MAKE,
     TAG_MODEL,
@@ -92,16 +90,16 @@ import {
 
 // Where each rule lives in src/.
 // Rule 1:  image-header-jpeg.js (getExifMarkerScore), image-header-png.js, image-header-jxl.js, png-text-tags.js
-// Rule 2:  exif-reader.js, image-header-jxl.js, image-header-png.js, png-text-tags.js
+// Rule 2:  engine.js (rank, suppression), exif-reader.js (the rules), image-header-jxl.js, image-header-png.js, png-text-tags.js
 // Rule 3:  loadview-pipeline.js, exif-reader.js
-// Rule 4:  exif-reader.js, tags-helpers.js, png-text-tags.js
+// Rule 4:  engine.js (dispatch order, context), exif-reader.js (the adapters), tags-helpers.js, png-text-tags.js
 // Rule 5:  loadview-pipeline.js, exif-reader.js (mergeBlocks)
 // Rule 6:  loadview-pipeline.js
-// Rule 7:  loadview-pipeline.js, tags-helpers.js, composite.js
-// Rule 8:  exif-reader.js, png-text-tags.js, image-header.js, icc-tags.js
+// Rule 7:  loadview-pipeline.js, exif-reader.js (the thumbnail group), composite.js
+// Rule 8:  engine.js (a throwing group drops its block alone), png-text-tags.js, image-header.js, icc-tags.js
 // Rule 9:  tag-filter.js, tag-filter-config.js
-// Rule 10: png-text-tags.js, exif-reader.js
-// Rule 11: image-header-png.js, exif-reader.js, loadview-pipeline.js
+// Rule 10: engine.js (depth), png-text-tags.js, exif-reader.js
+// Rule 11: image-header-png.js, engine.js (the sync drop), exif-reader.js, loadview-pipeline.js
 // Rule 12: png-text-tags.js
 
 const domParser = new XmldomDomParser({onError: onErrorStopParsing});
@@ -123,7 +121,7 @@ const ICC_HEADER_TAG_NAMES = [
 ];
 const IPTC_UNKNOWN_DATASET = 0x02cb;
 // Position of the valueBudget argument in each reader's read signature.
-const BUDGET_ARGUMENT_INDEX = {Tags: 5, IptcTags: 4, MpfTags: 5, CanonTags: 7, PngTextTags: 7};
+const BUDGET_ARGUMENT_INDEX = {Tags: 5, IptcTags: 4, MpfTags: 5, CanonTags: 7};
 
 const restoreFunctions = [];
 
@@ -371,6 +369,59 @@ describe('loadView behaviour inventory', function () {
                 }
             });
 
+            it(`should not let a tEXt Raw profile type iptc chunk without an iptc payload suppress the IPTC-NAA of a raw profile Exif chunk (async: ${async})`, async () => {
+                const tiff = getTiff({ifd0: [undefinedBytes(TAG_IPTC_NAA, getIptcDatasets([headline('carried')]))]});
+                const image = getPng(getExifRawProfileChunk(tiff), getTextChunk('Raw profile type iptc', getExifRawProfile(tiff)));
+
+                const tags = await load(image, {expanded: true, async});
+
+                expect(tags.iptc.Headline.description).to.equal('carried');
+                expect(tags.png['Raw profile type iptc'].value).to.equal(getExifRawProfile(tiff));
+            });
+
+            it(`should scan the text chunks for a raw IPTC profile once per load, however many raw profile Exif chunks carry IPTC-NAA (async: ${async})`, async function () {
+                // Each carried IPTC-NAA asks whether a raw IPTC chunk is present, which decodes
+                // the iptc-keyword chunks: done per block, a file of thousands of both is quadratic.
+                this.timeout(LINEAR_TIME_TIMEOUT_MS);
+                this.retries(2);
+                const MANY_CHUNKS = 1600;
+                const tiff = getTiff({ifd0: [undefinedBytes(TAG_IPTC_NAA, getIptcDatasets([headline('carried')]))]});
+                const getImage = (count) => getDataView(getPng(
+                    ...new Array(count).fill(getExifRawProfileChunk(tiff)),
+                    ...new Array(count).fill(getTextChunk('Raw profile type iptc', 'x'.repeat(400)))
+                ));
+                const baseline = getImage(MANY_CHUNKS / 8);
+                const image = getImage(MANY_CHUNKS);
+                const loadView = (view) => Promise.resolve(ExifReader.loadView(view, {expanded: true, async}));
+
+                const tags = await expectAsyncTimeRatioBelow(
+                    () => loadView(baseline),
+                    () => loadView(image),
+                    24
+                );
+
+                expect(tags.iptc.Headline.description).to.equal('carried');
+                expect(Object.keys(tags.png)).to.have.lengthOf(8);
+            });
+        }
+
+        it('should not let a compressed Raw profile type iptc chunk past the 255 compressed chunk cap, which is never read, suppress the IPTC-NAA of a raw profile Exif chunk', async () => {
+            const tiff = getTiff({ifd0: [undefinedBytes(TAG_IPTC_NAA, getIptcDatasets([headline('carried'), objectName('carried only')]))]});
+            const iptcChunk = getCompressedIptcRawProfileChunk(getNaaBlock([headline('chunk')]));
+            const padding = new Array(255).fill(getZtxtChunk('k', 'v'));
+            const pastCap = getPng(...padding, iptcChunk, getExifRawProfileChunk(tiff));
+            const withinCap = getPng(...padding.slice(1), iptcChunk, getExifRawProfileChunk(tiff));
+
+            const pastCapTags = await load(pastCap, {expanded: true, async: true});
+            const withinCapTags = await load(withinCap, {expanded: true, async: true});
+
+            expect(pastCapTags.iptc.Headline.description).to.equal('carried');
+            expect(pastCapTags.iptc['Object Name'].description).to.equal('carried only');
+            expect(withinCapTags.iptc.Headline.description).to.equal('chunk');
+            expect(withinCapTags.iptc['Object Name']).to.be.undefined;
+        });
+
+        for (const async of MODES) {
             it(`should parse both groups carried by a PNG eXIf chunk in sync mode, and in async let iCCP suppress the carried ICC and a zTXt IPTC merge over the carried IPTC (async: ${async})`, async () => {
                 // A PNG never sets iptcDataOffset, so the carried IPTC-NAA is parsed even next to a zTXt raw IPTC chunk.
                 const tiff = getTiff({ifd0: [
@@ -413,6 +464,15 @@ describe('loadView behaviour inventory', function () {
             expect(flat.Keep.value).to.equal('carried');
             expect(flat.Only.value).to.equal('brob');
             expect(flat._raw).to.be.undefined;
+        });
+
+        it('should give no exif key for a brob Exif whose TIFF has no tags, but still its thumbnail', async () => {
+            const withoutTags = await load(getJxl(getBrobExifBox(getTiff({ifd0: []}))), {expanded: true, async: true});
+            const withThumbnail = await load(getJxl(getBrobExifBox(getTiffWithThumbnail('brob'))), {expanded: true, async: true});
+
+            expect(Object.keys(withoutTags)).to.deep.equal(['file']);
+            expect(Object.keys(withThumbnail)).to.deep.equal(['exif', 'Thumbnail', 'file']);
+            expect(getThumbnailBytes(withThumbnail)).to.equal('\xff\xd8brob\xff\xd9');
         });
 
         it('should keep the carried xmp group when the brob XMP is empty', async () => {
@@ -474,7 +534,6 @@ describe('loadView behaviour inventory', function () {
             ['CanonTags', CanonTags],
             ['MpfTags', MpfTags],
             ['PngFileTags', PngFileTags],
-            ['PngTextTags', PngTextTags],
             ['PngTags', PngTags],
         ];
 
@@ -519,7 +578,7 @@ describe('loadView behaviour inventory', function () {
                 ]);
             });
 
-            it(`should read the carried groups in CARRIED_GROUP_SLOTS order right after the main Exif block (async: ${async})`, async () => {
+            it(`should read the carried groups in emission order right after the main Exif block (async: ${async})`, async () => {
                 const log = [];
                 record(log, READERS);
 
@@ -542,7 +601,7 @@ describe('loadView behaviour inventory', function () {
 
                 await load(image, {expanded: true, async});
 
-                const expectedOrder = ['Tags', 'IptcTags', 'PngFileTags', 'PngTextTags', 'Tags', 'PngTags'];
+                const expectedOrder = ['Tags', 'IptcTags', 'PngFileTags', 'Tags', 'PngTags'];
                 expect(log.map((entry) => entry.name)).to.deep.equal(async ? [...expectedOrder, 'Tags'] : expectedOrder);
             });
         }
@@ -558,11 +617,9 @@ describe('loadView behaviour inventory', function () {
             await load(image, {expanded: true, async: true});
 
             const budgets = getRecordedBudgets(log);
-            expect(budgets.map((budget) => budget.name)).to.deep.equal(['PngTextTags', 'Tags']);
-            expect(budgets[1].object).to.equal(budgets[0].object);
-            expect(budgets[0].pristine).to.deep.equal(getPristineBudget(image.length));
+            expect(budgets.map((budget) => budget.name)).to.deep.equal(['Tags']);
             const allowance = 4 * (DECOMPRESSED_TIFF_LENGTH + 'Exif\x00\x00'.length);
-            expect(budgets[1].pristine).to.deep.equal(objectAssign(getPristineBudget(image.length), {
+            expect(budgets[0].pristine).to.deep.equal(objectAssign(getPristineBudget(image.length), {
                 remaining: 4 * image.length + allowance,
                 decompressedAllowanceRemaining: MAX_DECOMPRESSED_VALUE_ALLOWANCE - allowance,
             }));
@@ -576,8 +633,20 @@ describe('loadView behaviour inventory', function () {
             await load(image, {expanded: true, async: true});
 
             const budgets = getRecordedBudgets(log);
-            expect(budgets.map((budget) => budget.name)).to.deep.equal(['PngTextTags', 'Tags']);
-            expect(budgets[1].pristine).to.deep.equal(getPristineBudget(image.length));
+            expect(budgets.map((budget) => budget.name)).to.deep.equal(['Tags']);
+            expect(budgets[0].pristine).to.deep.equal(getPristineBudget(image.length));
+        });
+
+        it('should add no IPTC allowance for an uncompressed raw IPTC profile', async () => {
+            const image = getPng(getIptcRawProfileChunk(getNaaBlock([headline('x'.repeat(200))])));
+            const log = [];
+            record(log, READERS);
+
+            await load(image, {expanded: true, async: true});
+
+            const budgets = getRecordedBudgets(log);
+            expect(budgets.map((budget) => budget.name)).to.deep.equal(['IptcTags']);
+            expect(budgets[0].pristine).to.deep.equal(getPristineBudget(image.length));
         });
 
         it('should add one IPTC dataset unit per 5 decompressed bytes of a compressed raw IPTC profile', async () => {
@@ -589,9 +658,9 @@ describe('loadView behaviour inventory', function () {
             await load(image, {expanded: true, async: true});
 
             const budgets = getRecordedBudgets(log);
-            expect(budgets.map((budget) => budget.name)).to.deep.equal(['PngTextTags', 'IptcTags']);
+            expect(budgets.map((budget) => budget.name)).to.deep.equal(['IptcTags']);
             const allowance = Math.floor(naaBlock.length / 5);
-            expect(budgets[1].pristine).to.deep.equal(objectAssign(getPristineBudget(image.length), {
+            expect(budgets[0].pristine).to.deep.equal(objectAssign(getPristineBudget(image.length), {
                 iptcDatasetsRemaining: 1024 + Math.floor(image.length / 48) + allowance,
                 decompressedIptcAllowanceRemaining: MAX_DECOMPRESSED_IPTC_ALLOWANCE - allowance,
             }));
@@ -642,6 +711,24 @@ describe('loadView behaviour inventory', function () {
             expect(oneLargeTags.xmp.A.value).to.equal('v');
             expect(bothSmallTags.xmp.A.value).to.equal('v');
             expect(bothSmallTags.xmp.B.value).to.equal('v');
+        });
+
+        it('should copy no further embedded thumbnail once an uncompressed raw profile gave one, but every compressed one within the bound', async () => {
+            const log = [];
+            record(log, [['Thumbnail', Thumbnail, 'get']]);
+
+            const uncompressed = await load(getPng(getExifRawProfileChunk(getTiffWithThumbnail('A')), getExifRawProfileChunk(getTiffWithThumbnail('B'))), {expanded: true, async: true});
+            const uncompressedCalls = log.length;
+            const mixed = await load(getPng(getExifRawProfileChunk(getTiffWithThumbnail('A')), getCompressedExifRawProfileChunk(getTiffWithThumbnail('B'))), {expanded: true, async: true});
+            const mixedCalls = log.length - uncompressedCalls;
+            const compressed = await load(getPng(getCompressedExifRawProfileChunk(getTiffWithThumbnail('A')), getCompressedExifRawProfileChunk(getTiffWithThumbnail('B'))), {expanded: true, async: true});
+
+            expect(uncompressedCalls).to.equal(1);
+            expect(getThumbnailBytes(uncompressed)).to.equal('\xff\xd8A\xff\xd9');
+            expect(mixedCalls).to.equal(1);
+            expect(getThumbnailBytes(mixed)).to.equal('\xff\xd8A\xff\xd9');
+            expect(log.length - uncompressedCalls - mixedCalls).to.equal(2);
+            expect(getThumbnailBytes(compressed)).to.equal('\xff\xd8A\xff\xd9');
         });
 
         it('should copy only one of two embedded thumbnails that together exceed 2 times the file size plus 64 KiB', async () => {
@@ -1150,37 +1237,53 @@ describe('loadView behaviour inventory', function () {
             bytes(TAG_APPLICATION_NOTES, getXmpPacket({Title: 'x'})),
             undefinedBytes(TAG_ICC_PROFILE, getIccProfile('CARR')),
         ]});
+        const tiffWithCanonMakerNote = getTiff({
+            ifd0: [ascii(TAG_MAKE, 'Canon'), undefinedBytes(TAG_IPTC_NAA, getIptcDatasets([headline('h')]))],
+            exifIfd: [canonMakerNote([ascii(TAG_CANON_LENS_MODEL, 'canon')])],
+        });
 
         for (const async of MODES) {
-            it(`should throw synchronously when a carried reader of the main Exif block throws (async: ${async})`, () => {
+            it(`should drop only the carried IPTC of the main Exif block when its reader throws, keeping exif, xmp and icc (async: ${async})`, async () => {
                 swap(IptcTags, {read: () => {
                     throw new Error('IPTC read failed.');
                 }});
-                const dataView = getDataView(getJpeg(getExifSegment(tiffWithCarriedGroups)));
 
-                expect(() => ExifReader.loadView(dataView, {async, domParser})).to.throw('IPTC read failed.');
+                const tags = await load(getJpeg(getExifSegment(tiffWithCarriedGroups)), {expanded: true, async});
+
+                expect(Object.keys(tags)).to.deep.equal(['xmp', 'icc', 'exif', 'file']);
+                expect(tags.exif.Make.value).to.deep.equal(['raw']);
+                expect(tags.xmp.Title.value).to.equal('x');
+                expect(tags.icc['Device Manufacturer'].value).to.equal('CARR');
             });
 
-            it(`should drop every carried group of a PNG raw profile when one of its readers throws (async: ${async})`, async () => {
+            it(`should drop only the icc group of a PNG raw profile when its reader throws, keeping exif, iptc and xmp (async: ${async})`, async () => {
                 swap(IccTags, {read: () => {
                     throw new Error('ICC read failed.');
                 }});
 
                 const tags = await load(getPng(getExifRawProfileChunk(tiffWithCarriedGroups)), {expanded: true, async});
 
-                expect(Object.keys(tags)).to.deep.equal(['png', 'pngFile', 'exif', 'file', 'pngText']);
-                expect(tags.exif.Make.value).to.deep.equal(['raw']);
+                expectOnlyIccDropped(tags, ['png', 'pngFile', 'iptc', 'xmp', 'exif', 'file', 'pngText']);
+            });
+
+            it(`should drop only the maker notes of the main Exif block when their reader throws (async: ${async})`, async () => {
+                swapCanonTagsReadToThrow();
+
+                const tags = await load(getJpeg(getExifSegment(tiffWithCanonMakerNote)), {expanded: true, async});
+
+                expectOnlyMakerNotesDropped(tags, ['iptc', 'exif', 'file']);
+            });
+
+            it(`should drop only the maker notes of a PNG raw profile when their reader throws (async: ${async})`, async () => {
+                swapCanonTagsReadToThrow();
+
+                const tags = await load(getPng(getExifRawProfileChunk(tiffWithCanonMakerNote)), {expanded: true, async});
+
+                expectOnlyMakerNotesDropped(tags, ['png', 'pngFile', 'iptc', 'exif', 'file', 'pngText']);
             });
 
             it(`should throw Invalid image format synchronously (async: ${async})`, () => {
                 expect(() => ExifReader.loadView(getDataView('not an image'), {async})).to.throw('Invalid image format');
-            });
-
-            it(`should throw MetadataMissingError synchronously (async: ${async})`, () => {
-                // Unreachable from real bytes: every recognised format sets fileType, which hasPotentialMetaData accepts.
-                swap(ImageHeader, {parseAppMarkers: () => ({blocks: []})});
-
-                expect(() => ExifReader.loadView(getDataView('\xff\xd8\xff\xd9'), {async})).to.throw(ExifReader.errors.MetadataMissingError);
             });
 
             it(`should give an empty icc group for an unsupported iCCP compression method in async mode only (async: ${async})`, async () => {
@@ -1194,27 +1297,61 @@ describe('loadView behaviour inventory', function () {
             });
         }
 
-        it('should drop every carried group of a compressed PNG raw profile when one of its readers throws', async () => {
+        it('should drop only the icc group of a compressed PNG raw profile when its reader throws, keeping exif, iptc and xmp', async () => {
             swap(IccTags, {read: () => {
                 throw new Error('ICC read failed.');
             }});
 
             const tags = await load(getPng(getCompressedExifRawProfileChunk(tiffWithCarriedGroups)), {expanded: true, async: true});
 
-            expect(Object.keys(tags)).to.deep.equal(['png', 'pngFile', 'exif', 'file', 'pngText']);
-            expect(tags.exif.Make.value).to.deep.equal(['raw']);
+            expectOnlyIccDropped(tags, ['png', 'pngFile', 'iptc', 'xmp', 'exif', 'file', 'pngText']);
         });
 
-        it('should drop every carried group of a brob Exif when one of its readers throws', async () => {
+        it('should drop only the icc group of a brob Exif when its reader throws, keeping exif, iptc and xmp', async () => {
             swap(IccTags, {read: () => {
                 throw new Error('ICC read failed.');
             }});
 
             const tags = await load(getJxl(getBrobExifBox(tiffWithCarriedGroups)), {expanded: true, async: true});
 
-            expect(Object.keys(tags)).to.deep.equal(['exif', 'file']);
-            expect(tags.exif.Make.value).to.deep.equal(['raw']);
+            expectOnlyIccDropped(tags, ['iptc', 'xmp', 'exif', 'file']);
         });
+
+        it('should drop only the maker notes of a compressed PNG raw profile when their reader throws', async () => {
+            swapCanonTagsReadToThrow();
+
+            const tags = await load(getPng(getCompressedExifRawProfileChunk(tiffWithCanonMakerNote)), {expanded: true, async: true});
+
+            expectOnlyMakerNotesDropped(tags, ['png', 'pngFile', 'iptc', 'exif', 'file', 'pngText']);
+        });
+
+        it('should drop only the maker notes of a brob Exif when their reader throws', async () => {
+            swapCanonTagsReadToThrow();
+
+            const tags = await load(getJxl(getBrobExifBox(tiffWithCanonMakerNote)), {expanded: true, async: true});
+
+            expectOnlyMakerNotesDropped(tags, ['iptc', 'exif', 'file']);
+        });
+
+        function swapCanonTagsReadToThrow() {
+            swap(CanonTags, {read: () => {
+                throw new Error('Canon read failed.');
+            }});
+        }
+
+        function expectOnlyIccDropped(tags, keys) {
+            expect(Object.keys(tags)).to.deep.equal(keys);
+            expect(tags.exif.Make.value).to.deep.equal(['raw']);
+            expect(tags.iptc.Headline.description).to.equal('h');
+            expect(tags.xmp.Title.value).to.equal('x');
+        }
+
+        function expectOnlyMakerNotesDropped(tags, keys) {
+            expect(Object.keys(tags)).to.deep.equal(keys);
+            expect(tags.exif.Make.value).to.deep.equal(['Canon']);
+            expect(tags.exif.MakerNote).to.not.be.undefined;
+            expect(tags.iptc.Headline.description).to.equal('h');
+        }
     });
 
     describe('Rule 9: filter interaction', () => {
