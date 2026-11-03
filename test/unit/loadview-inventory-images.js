@@ -38,6 +38,7 @@ export const TAG_GPS_LATITUDE_REF = 0x0001;
 export const TAG_GPS_LATITUDE = 0x0002;
 export const TAG_MPF_NUMBER_OF_IMAGES = 0xb001;
 export const TAG_CANON_LENS_MODEL = 0x0095;
+const TAG_INTEROPERABILITY_IFD_POINTER = 0xa005;
 
 // IFD entry helpers. Each returns {tag, type, count, data} where data is the
 // encoded value as a byte string.
@@ -93,28 +94,36 @@ export function canonMakerNote(entries) {
 }
 
 /**
- * A big-endian TIFF block: header, IFD0 at 8, then the Exif IFD, the GPS IFD
- * and IFD1, each table followed by its own out-of-slot values, then the
- * thumbnail image. Pointer entries and the IFD1 link are added here.
+ * A big-endian TIFF block: header, IFD0 at 8, then the Exif IFD, the
+ * Interoperability IFD, the GPS IFD and IFD1, each table followed by its own
+ * out-of-slot values, then the thumbnail image. Pointer entries and the IFD1
+ * link are added here; an Interoperability IFD brings an Exif IFD.
  *
- * @param {{ifd0?: object[], exifIfd?: object[], gpsIfd?: object[], ifd1?: object[], thumbnail?: {image: string, declaredLength?: number, offset?: number}, byteOrderMarker?: string}} parts
+ * @param {{ifd0?: object[], exifIfd?: object[], gpsIfd?: object[], interopIfd?: object[], ifd1?: object[], thumbnail?: {image: string, declaredLength?: number, offset?: number}, byteOrderMarker?: string}} parts
  * @returns {string}
  */
-export function getTiff({ifd0 = [], exifIfd, gpsIfd, ifd1, thumbnail, byteOrderMarker = 'MM'} = {}) {
+export function getTiff({ifd0 = [], exifIfd, gpsIfd, interopIfd, ifd1, thumbnail, byteOrderMarker = 'MM'} = {}) {
     const ifd0Entries = ifd0.slice();
+    const exifIfdEntries = exifIfd || interopIfd ? (exifIfd || []).slice() : undefined;
     let nextOffset = TIFF_HEADER_LENGTH + getIfdBlockLength(ifd0Entries)
-        + (exifIfd ? IFD_ENTRY_LENGTH : 0)
+        + (exifIfdEntries ? IFD_ENTRY_LENGTH : 0)
         + (gpsIfd ? IFD_ENTRY_LENGTH : 0);
     let exifIfdOffset;
     let gpsIfdOffset;
+    let interopIfdOffset;
     let ifd1Offset = 0;
     let thumbnailOffset;
     let ifd1Entries;
 
-    if (exifIfd) {
+    if (exifIfdEntries) {
         exifIfdOffset = nextOffset;
-        nextOffset += getIfdBlockLength(exifIfd);
+        nextOffset += getIfdBlockLength(exifIfdEntries) + (interopIfd ? IFD_ENTRY_LENGTH : 0);
         ifd0Entries.push(long(TAG_EXIF_IFD_POINTER, exifIfdOffset));
+    }
+    if (interopIfd) {
+        interopIfdOffset = nextOffset;
+        nextOffset += getIfdBlockLength(interopIfd);
+        exifIfdEntries.push(long(TAG_INTEROPERABILITY_IFD_POINTER, interopIfdOffset));
     }
     if (gpsIfd) {
         gpsIfdOffset = nextOffset;
@@ -137,8 +146,11 @@ export function getTiff({ifd0 = [], exifIfd, gpsIfd, ifd1, thumbnail, byteOrderM
 
     let tiff = byteOrderMarker + '\x00\x2a' + getByteStringFromNumber(TIFF_HEADER_LENGTH, 4)
         + getIfdBlock(ifd0Entries, TIFF_HEADER_LENGTH, ifd1Offset);
-    if (exifIfd) {
-        tiff += getIfdBlock(exifIfd, exifIfdOffset);
+    if (exifIfdEntries) {
+        tiff += getIfdBlock(exifIfdEntries, exifIfdOffset);
+    }
+    if (interopIfd) {
+        tiff += getIfdBlock(interopIfd, interopIfdOffset);
     }
     if (gpsIfd) {
         tiff += getIfdBlock(gpsIfd, gpsIfdOffset);

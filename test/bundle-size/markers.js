@@ -250,7 +250,8 @@ const UNPROBEABLE_REASONS = {
     'exif-reader.js': 'the entry point, in every build; the format and group modules it gates are probed through the modules they import',
     'exif-tag-table.js': WRITER_MODULE,
     // Under src/composable/. Its xml.js, thumbnail.js and composite.js share a
-    // basename with a module above, which accounts for them.
+    // basename with a module above, which accounts for them, as exif.js,
+    // iptc.js and mpf.js below account for the generated tags/ modules.
     'avif.js': COMPOSABLE_TABLE_MODULE,
     'brand.js': 'imported by every format and group module, so in every build, and it holds no string literal',
     'canon.js': COMPOSABLE_TABLE_MODULE,
@@ -274,6 +275,7 @@ const UNPROBEABLE_REASONS = {
     'photoshop.js': COMPOSABLE_TABLE_MODULE,
     'png.js': COMPOSABLE_TABLE_MODULE,
     'read-view.js': `the load pipeline, in every build since the entry point's loadView delegates to it, and ${NO_UNIQUE_LITERAL}`,
+    'tag-binding-name.js': NO_UNIQUE_LITERAL,
     'tiff.js': COMPOSABLE_TABLE_MODULE,
     'webp.js': COMPOSABLE_TABLE_MODULE,
     'xmp.js': COMPOSABLE_TABLE_MODULE
@@ -309,9 +311,9 @@ function isoBmffIsIncluded(modules) {
 }
 
 function assertMarkersAreUnique() {
-    // Markers probe reader bundles, which never hold a writer module, and the
-    // writer's tag table repeats the dictionaries' tag names.
-    const contents = withoutWriterModules(readSourceFiles(SRC_PATH));
+    // Markers probe default-entry bundles, which never hold a writer module or
+    // a generated per-tag module, and both repeat the dictionaries' tag names.
+    const contents = withoutUnbundledModules(readSourceFiles(SRC_PATH));
     const code = stripComments(contents);
     const problems = [];
 
@@ -331,10 +333,10 @@ function assertMarkersAreUnique() {
     }
 }
 
-function withoutWriterModules(contents) {
+function withoutUnbundledModules(contents) {
     const readerContents = {};
     for (const name of Object.keys(contents)) {
-        if (!name.startsWith('writer/')) {
+        if (!name.startsWith('writer/') && !name.startsWith('composable/tags/')) {
             readerContents[name] = contents[name];
         }
     }
