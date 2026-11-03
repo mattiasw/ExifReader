@@ -15,13 +15,12 @@ const EXIF_FILENAME = path.join('/x', 'src', 'tag-names-0th-ifd.js');
 const IPTC_FILENAME = path.join('/x', 'src', 'iptc-tag-names.js');
 
 describe('TagFilterPlugin', () => {
-    it('keeps the value descriptions of an included tag in the real source', () => {
+    it('keeps the description of an included tag in the real source', () => {
         const code = fs.readFileSync(EXIF_0TH_FILENAME, 'utf8');
 
         const output = transform(code, EXIF_0TH_FILENAME, {exif: ['FillOrder']});
 
-        expect(output).to.contain('\'Normal\'');
-        expect(output).to.contain('\'Reversed\'');
+        expect(output).to.match(/description: getFillOrderDescription\b/);
         expect(output).to.not.contain('\'ProcessingSoftware\'');
     });
 

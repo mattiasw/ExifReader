@@ -130,6 +130,6 @@ After updating, read through the whole `Unreleased` section again. Each change t
 ## Adding Tags
 
 1. Add hex-keyed entry in the appropriate `src/tag-names-*-ifd.js`
-2. Add description function if needed (see `src/tag-names-common.js` for helpers)
+2. Add description function if needed, as a named export of the dictionary's sibling `*-descriptions.js` module, or of `src/tag-names-common.js` when dictionaries share it. An inline arrow in a dictionary fails `test/unit/tag-dictionary-shape-spec.js`
 3. Add unit test in corresponding `test/unit/tag-names-*-spec.js`
 4. Update `exif-reader.d.ts` and `test/types/exif-reader.ts` if the tag is user-facing

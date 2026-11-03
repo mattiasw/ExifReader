@@ -39,14 +39,19 @@ const MODULE_MARKERS = {
     'jfif-tags.js': 'JFIF Version',
     'png-file-tags.js': 'Grayscale with Alpha',
     'tag-names-0th-ifd.js': 'ProcessingSoftware',
+    'tag-names-0th-ifd-descriptions.js': 'Reduced-resolution image',
     'tag-names-exif-ifd.js': 'SpectralSensitivity',
-    'tag-names-gps-ifd.js': 'GPSVersionID',
+    'tag-names-exif-ifd-descriptions.js': 'Trilinear sensor',
+    // Quoted, since getGPSVersionIDDescription in the descriptions module also holds the bare name.
+    'tag-names-gps-ifd.js': '\'GPSVersionID\'',
+    'tag-names-gps-ifd-descriptions.js': 'Version 2.2',
     'tag-names-interoperability-ifd.js': 'InteroperabilityIndex',
     'tag-names-utils.js:getEncodedString': '[JIS encoded text]',
     'image-header-jpeg.js:warnAboutMultipleExifSegments': 'Will pick the best candidate segment.',
     'image-header-jpeg.js:APP13_IPTC_IDENTIFIER': 'Photoshop 3.0',
     'iptc-tags.js': 'No IPTC NAA resource block.',
     'iptc-tag-names.js': 'Model Version',
+    'iptc-tag-names-descriptions.js': 'IPTC7901 Recommended Message Format',
     'xml.js': '<?xpacket begin',
     'xmp-tags.js': 'application/xml',
     'xmp-namespaces.js': 'prefix not bound to a namespace',
@@ -108,13 +113,17 @@ const MODULE_PROBES = {
         {label: 'tag-names-exif-ifd.js', when: whenIncludedInFull('exif')},
         {label: 'tag-names-gps-ifd.js', when: whenIncludedInFull('exif')},
         {label: 'tag-names-interoperability-ifd.js', when: whenIncludedInFull('exif')},
+        {label: 'tag-names-0th-ifd-descriptions.js', when: whenIncludedInFull('exif')},
+        {label: 'tag-names-exif-ifd-descriptions.js', when: whenIncludedInFull('exif')},
+        {label: 'tag-names-gps-ifd-descriptions.js', when: whenIncludedInFull('exif')},
         // Only reached from descriptions in the dictionaries above.
         {label: 'tag-names-utils.js:getEncodedString', when: whenIncludedInFull('exif')}
     ],
     iptc: [
         // Read from JPEG APP13, from the Exif IPTC-NAA tag and from PNG text.
         {label: 'iptc-tags.js', when: whenIncluded('iptc')},
-        {label: 'iptc-tag-names.js', when: whenIncludedInFull('iptc')}
+        {label: 'iptc-tag-names.js', when: whenIncludedInFull('iptc')},
+        {label: 'iptc-tag-names-descriptions.js', when: whenIncludedInFull('iptc')}
     ],
     xmp: [
         {label: 'xml.js', when: whenIncluded('xmp')},
