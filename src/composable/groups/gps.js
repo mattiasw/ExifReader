@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {getCalculatedGpsValue} from '../../tag-names-utils.js';
-import {IFD_TYPE_GPS} from '../../ifd-types.js';
+import {GPS_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 // Derived from the Exif tags, so it reads no block.
@@ -11,17 +11,9 @@ export const gps = {
     key: 'gps',
     consumes: [],
     emits: [],
-    // GPSLatitudeRef, GPSLatitude, GPSLongitudeRef, GPSLongitude, GPSAltitudeRef and GPSAltitude.
-    descriptors: [
-        {ifd: IFD_TYPE_GPS, id: 0x0001},
-        {ifd: IFD_TYPE_GPS, id: 0x0002},
-        {ifd: IFD_TYPE_GPS, id: 0x0003},
-        {ifd: IFD_TYPE_GPS, id: 0x0004},
-        {ifd: IFD_TYPE_GPS, id: 0x0005},
-        {ifd: IFD_TYPE_GPS, id: 0x0006},
-    ],
     merge: () => ({slot: 'gps', mode: 'gps'}),
     mergeDeps: {getGpsGroupFromExifTags},
+    exifDependencies: GPS_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };
 

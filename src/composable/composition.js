@@ -87,7 +87,6 @@ function mergeMakerNoteGroups(groups) {
         key: makerNoteGroups[0].key,
         consumes: ['makerNote'],
         emits: [],
-        descriptors: makerNoteGroups[0].descriptors,
         decoders,
         read: (block, ctx) => readMakerNoteWithDecoders(block, ctx, decoders),
         merge: makerNoteGroups[0].merge,

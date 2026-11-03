@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import Composite from '../../composite.js';
+import {COMPOSITE_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 // Derived from the Exif and XMP tags, so it reads no block.
@@ -10,8 +11,8 @@ export const composite = {
     key: 'composite',
     consumes: [],
     emits: [],
-    descriptors: [],
     merge: () => ({slot: 'composite', mode: 'composite'}),
     mergeDeps: {Composite},
+    exifDependencies: COMPOSITE_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };

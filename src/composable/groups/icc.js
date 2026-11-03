@@ -4,19 +4,18 @@
 
 import {isThenable} from '../../utils.js';
 import IccTags from '../../icc-tags.js';
-import {IFD_TYPE_0TH} from '../../ifd-types.js';
 import {parsedTags, getEmbeddableMergeDescriptor} from '../group-helpers.js';
+import {ICC_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const icc = {
     key: 'icc',
     consumes: ['icc'],
     emits: [],
-    // ICC_Profile.
-    descriptors: [{ifd: IFD_TYPE_0TH, id: 0x8773}],
     read: readIccBlock,
     merge: (block) => getEmbeddableMergeDescriptor(block, 'icc', 'carriedIcc'),
     suppressions: [{kind: 'icc', isSuppressed: isCarriedIccSuppressed}],
+    exifDependencies: ICC_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };
 

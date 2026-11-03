@@ -4,7 +4,6 @@
 
 import {expect} from 'chai';
 import Thumbnail from '../../../../src/thumbnail.js';
-import TagNames0thIfd from '../../../../src/tag-names-0th-ifd.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {thumbnail} from '../../../../src/composable/groups/thumbnail.js';
 import {getContext, recordCalls} from '../test-context.js';
@@ -17,15 +16,6 @@ describe('composable/groups/thumbnail', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
-    });
-
-    it('should consume the thumbnail kind and inject the two JPEGInterchangeFormat tags', () => {
-        expect(thumbnail.key).to.equal('thumbnail');
-        expect(thumbnail.consumes).to.deep.equal(['thumbnail']);
-        expect(thumbnail.emits).to.deep.equal([]);
-        expect(thumbnail.descriptors).to.deep.equal([{ifd: '1st', id: 0x0201}, {ifd: '1st', id: 0x0202}]);
-        expect(TagNames0thIfd[0x0201]).to.equal('JPEGInterchangeFormat');
-        expect(TagNames0thIfd[0x0202]).to.equal('JPEGInterchangeFormatLength');
     });
 
     it('should merge as a thumbnail candidate of the block\'s rank', () => {

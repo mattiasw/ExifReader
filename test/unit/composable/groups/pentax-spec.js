@@ -6,7 +6,6 @@ import {expect} from 'chai';
 import PentaxTags from '../../../../src/pentax-tags.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {pentax, pentaxDecoder} from '../../../../src/composable/groups/pentax.js';
-import {MAKER_NOTE_DESCRIPTORS} from '../../../../src/composable/group-helpers.js';
 import {getContext, recordCalls} from '../test-context.js';
 import {getMakerNoteBlock, getPentaxType1Bytes} from './maker-note-test-data.js';
 
@@ -17,13 +16,6 @@ describe('composable/groups/pentax', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
-    });
-
-    it('should consume the makerNote kind into the makerNotes group and inject MakerNote and Make', () => {
-        expect(pentax.key).to.equal('makerNotes');
-        expect(pentax.consumes).to.deep.equal(['makerNote']);
-        expect(pentax.emits).to.deep.equal([]);
-        expect(pentax.descriptors).to.equal(MAKER_NOTE_DESCRIPTORS);
     });
 
     it('should bring the Pentax decoder alone', () => {

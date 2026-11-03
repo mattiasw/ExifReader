@@ -5,6 +5,7 @@
 import {expect} from 'chai';
 import * as Groups from '../../../src/composable/groups.js';
 import {GROUP_BRAND} from '../../../src/composable/brand.js';
+import {EXIF_DEPENDENCY_TAGS, COMPOSITE_DEPENDENCY_TAGS} from '../../../src/tag-filter-config.js';
 import {exif} from '../../../src/composable/groups/exif.js';
 import {composedIptc} from '../../../src/composable/groups/iptc.js';
 import {xmp} from '../../../src/composable/groups/xmp.js';
@@ -46,6 +47,22 @@ describe('composable/groups', () => {
     it('should brand every exported group, canon and pentax included', () => {
         for (const name of Object.keys(Groups).filter((key) => key !== 'allGroups')) {
             expect(Groups[name].brand, name).to.equal(GROUP_BRAND);
+        }
+    });
+
+    it('should carry the Exif tags each group reads through Exif as exifDependencies', () => {
+        const names = Object.keys(Groups).filter((key) => key !== 'allGroups');
+        expect(names).to.include.members(['canon', 'pentax']);
+        for (const name of names) {
+            const group = Groups[name];
+            if (group.key === 'composite') {
+                expect(group.exifDependencies, name).to.equal(COMPOSITE_DEPENDENCY_TAGS.exif);
+            } else if (group.key === 'exif' || group.key === 'mpf') {
+                expect(Object.prototype.hasOwnProperty.call(group, 'exifDependencies'), name).to.equal(false);
+            } else {
+                expect(EXIF_DEPENDENCY_TAGS[group.key], name).to.be.an('array');
+                expect(group.exifDependencies, name).to.equal(EXIF_DEPENDENCY_TAGS[group.key]);
+            }
         }
     });
 });

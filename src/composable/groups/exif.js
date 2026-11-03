@@ -24,7 +24,6 @@ export const exif = {
     key: 'exif',
     consumes: ['exif'],
     emits: ['iptc', 'xmp', 'photoshop', 'icc', 'makerNote', 'thumbnail'],
-    descriptors: [],
     read: readExifBlock,
     merge: getExifMergeDescriptor,
     brand: GROUP_BRAND,

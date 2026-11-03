@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNamesGpsIfd from '../../../../src/tag-names-gps-ifd.js';
 import {gps} from '../../../../src/composable/groups/gps.js';
 
 describe('composable/groups/gps', () => {
@@ -12,13 +11,6 @@ describe('composable/groups/gps', () => {
     it('should be a derived group that reads no block', () => {
         expect(gps).to.not.have.property('read');
         expect(gps.merge()).to.deep.equal({slot: 'gps', mode: 'gps'});
-    });
-
-    it('should inject the six position tags', () => {
-        expect(gps.descriptors.map((descriptor) => descriptor.ifd)).to.deep.equal(['gps', 'gps', 'gps', 'gps', 'gps', 'gps']);
-        expect(gps.descriptors.map((descriptor) => TagNamesGpsIfd[descriptor.id].name)).to.deep.equal([
-            'GPSLatitudeRef', 'GPSLatitude', 'GPSLongitudeRef', 'GPSLongitude', 'GPSAltitudeRef', 'GPSAltitude',
-        ]);
     });
 
     it('should give no group without a complete position', () => {

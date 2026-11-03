@@ -3,7 +3,21 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {EXIF_POINTER_TAGS, getExifTagDependenciesForInclude} from '../../src/tag-filter-config.js';
+import {
+    EXIF_POINTER_TAGS,
+    EXIF_DEPENDENCY_TAGS,
+    COMPOSITE_DEPENDENCY_TAGS,
+    THUMBNAIL_EXIF_DEPENDENCY_TAGS,
+    IPTC_EXIF_DEPENDENCY_TAGS,
+    XMP_EXIF_DEPENDENCY_TAGS,
+    ICC_EXIF_DEPENDENCY_TAGS,
+    PHOTOSHOP_EXIF_DEPENDENCY_TAGS,
+    MAKER_NOTES_EXIF_DEPENDENCY_TAGS,
+    GPS_EXIF_DEPENDENCY_TAGS,
+    COMPOSITE_EXIF_DEPENDENCY_TAGS,
+    getExifTagDependenciesForInclude,
+    addExifTagNamePointers,
+} from '../../src/tag-filter-config.js';
 import TagNamesGpsIfd from '../../src/tag-names-gps-ifd.js';
 import TagNamesInteroperabilityIfd from '../../src/tag-names-interoperability-ifd.js';
 
@@ -72,6 +86,53 @@ describe('tag-filter-config', function () {
                 expect(requiredTags[EXIF_POINTER_TAGS.interoperabilityIfdPointer], name).to.equal(true);
                 expect(requiredTags[EXIF_POINTER_TAGS.gpsInfoIfdPointer], name).to.equal(undefined);
             }
+        });
+    });
+
+    describe('addExifTagNamePointers', function () {
+        it('should add the GPS pointer for a name that starts with GPS in any case', function () {
+            for (const name of ['GPSLatitude', 'gpsaltitude', 'Gps']) {
+                const pointers = {};
+                addExifTagNamePointers(pointers, name);
+
+                expect(pointers, name).to.deep.equal({[EXIF_POINTER_TAGS.gpsInfoIfdPointer]: true});
+            }
+        });
+
+        it('should add the Interoperability pointer for a name that starts with Interoperability or RelatedImage in any case', function () {
+            for (const name of ['InteroperabilityIndex', 'interoperabilityversion', 'RelatedImageWidth', 'RELATEDIMAGELENGTH']) {
+                const pointers = {};
+                addExifTagNamePointers(pointers, name);
+
+                expect(pointers, name).to.deep.equal({[EXIF_POINTER_TAGS.interoperabilityIfdPointer]: true});
+            }
+        });
+
+        it('should add nothing for another name', function () {
+            for (const name of ['DateTime', 'MyGPSLatitude', 'ImageInteroperability', '']) {
+                const pointers = {};
+                addExifTagNamePointers(pointers, name);
+
+                expect(pointers, name).to.deep.equal({});
+            }
+        });
+    });
+
+    describe('dependency tables', function () {
+        it('should build the Exif dependency table from the per-group lists', function () {
+            expect(EXIF_DEPENDENCY_TAGS).to.have.all.keys('thumbnail', 'iptc', 'xmp', 'icc', 'photoshop', 'makerNotes', 'gps');
+            expect(EXIF_DEPENDENCY_TAGS.thumbnail).to.equal(THUMBNAIL_EXIF_DEPENDENCY_TAGS);
+            expect(EXIF_DEPENDENCY_TAGS.iptc).to.equal(IPTC_EXIF_DEPENDENCY_TAGS);
+            expect(EXIF_DEPENDENCY_TAGS.xmp).to.equal(XMP_EXIF_DEPENDENCY_TAGS);
+            expect(EXIF_DEPENDENCY_TAGS.icc).to.equal(ICC_EXIF_DEPENDENCY_TAGS);
+            expect(EXIF_DEPENDENCY_TAGS.photoshop).to.equal(PHOTOSHOP_EXIF_DEPENDENCY_TAGS);
+            expect(EXIF_DEPENDENCY_TAGS.makerNotes).to.equal(MAKER_NOTES_EXIF_DEPENDENCY_TAGS);
+            expect(EXIF_DEPENDENCY_TAGS.gps).to.equal(GPS_EXIF_DEPENDENCY_TAGS);
+        });
+
+        it('should take the composite table\'s Exif list from its own export', function () {
+            expect(COMPOSITE_DEPENDENCY_TAGS).to.have.all.keys('file', 'exif');
+            expect(COMPOSITE_DEPENDENCY_TAGS.exif).to.equal(COMPOSITE_EXIF_DEPENDENCY_TAGS);
         });
     });
 });

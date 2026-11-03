@@ -3,10 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {filterTagsForParse} from '../tag-filter.js';
-import {IFD_TYPE_0TH, IFD_TYPE_EXIF} from '../ifd-types.js';
-
-// MakerNote and Make.
-export const MAKER_NOTE_DESCRIPTORS = [{ifd: IFD_TYPE_EXIF, id: 0x927c}, {ifd: IFD_TYPE_0TH, id: 0x010f}];
 
 export function parsedTags(groupKey, readTags, ctx) {
     return {tags: filterTagsForParse(groupKey, readTags, ctx.tagFilter)};

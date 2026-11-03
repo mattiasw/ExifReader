@@ -4,48 +4,57 @@
 
 import Composition from './composition.js';
 import {exif} from './groups/exif.js';
-import {FORMAT_BRAND, GROUP_BRAND} from './brand.js';
+import {FORMAT_BRAND, GROUP_BRAND, FILTER_BRAND} from './brand.js';
 import {readView} from './read-view.js';
+import {createCompositionTagFilter} from './composition-tag-filter.js';
+import {createTagFilter} from '../tag-filter.js';
+import {FILTER_GROUPS} from '../tag-filter-config.js';
 import Errors from '../errors.js';
 import {objectAssign, getDataViewFromBytes, getByteString, assertPromiseSupport} from '../utils.js';
 
 const FORMATS_IMPORT = '\'exifreader/formats\'';
 const GROUPS_IMPORT = '\'exifreader/groups\'';
 const TAGS_IMPORT = '\'exifreader/tags/exif\'';
-const TABLE_KEYS = ['formats', 'groups', 'tags', 'domParser', 'decompress'];
+const CORE_IMPORT = '\'exifreader/core\'';
+const TABLE_KEYS = ['formats', 'groups', 'tags', 'tagFilter', 'domParser', 'decompress'];
 const DECOMPRESS_KEYS = ['brotli', 'deflate', 'maxDecompressedSize'];
 const BOOLEAN_OPTIONS = ['expanded', 'includeUnknown', 'computed', 'includeOffsets'];
 const SUPPORTED_OPTIONS = BOOLEAN_OPTIONS.concat(['includeTags', 'excludeTags']);
 const INPUT_MESSAGE = 'reader.load: data must be an ArrayBuffer, a SharedArrayBuffer, a DataView, a typed array such as Uint8Array or a Node Buffer, or a Blob or File';
-const ENVIRONMENT = {getDomParser, getBase64Image};
-// includeTags then only caps what is read, so excludeTags applies to every group.
-const LIMITING_ENVIRONMENT = objectAssign({}, ENVIRONMENT, {includeTagsIsLimit: true});
 
 export const errors = {UnsupportedFormatError: Errors.UnsupportedFormatError};
+
+// Only this object references narrowIncludeTags and assertOptions, so a bundle
+// without the tag filter leaves the caller's includeTags handling and the
+// checks of includeTags and excludeTags out too.
+export const tagFilter = {brand: FILTER_BRAND, createTagFilter, narrowIncludeTags, getNarrowedTagFilterFactory, assertOptions};
 
 /**
  * Builds a reader of the given formats, groups and tags only.
  *
- * @param {{formats: Array<object>, groups: (Array<object>|undefined), tags: (Array<object>|undefined), domParser: (object|undefined), decompress: (object|undefined)}} tables
+ * @param {{formats: Array<object>, groups: (Array<object>|undefined), tags: (Array<object>|undefined), tagFilter: (object|undefined), domParser: (object|undefined), decompress: (object|undefined)}} tables
  *     Values imported from 'exifreader/formats', 'exifreader/groups' and
- *     'exifreader/tags/exif', `domParser`, an object with a parseFromString
- *     method, for xmp where there is no global DOMParser, and `decompress`,
- *     {brotli, deflate, maxDecompressedSize} as ExifReader.load takes it, for
- *     every load (each load gets the whole limit).
+ *     'exifreader/tags/exif', `tagFilter` from 'exifreader/core' to let load
+ *     take includeTags and excludeTags, `domParser`, an object with a
+ *     parseFromString method, for xmp where there is no global DOMParser, and
+ *     `decompress`, {brotli, deflate, maxDecompressedSize} as ExifReader.load
+ *     takes it, for every load (each load gets the whole limit).
  * @returns {{load: function}} `load(data, options)` always returns a Promise
  *     of the tags, grouped unless `expanded` is false.
  * @throws {TypeError} When a table is not an array or holds a value that was
- *     not imported from its module, formats is empty, domParser is given and
- *     has no parseFromString method, or decompress is given and is not an
- *     object of optional brotli and deflate functions and a maxDecompressedSize
- *     of zero or more, or has another key.
+ *     not imported from its module, formats is empty, tagFilter is given and
+ *     is not the tagFilter export, domParser is given and has no
+ *     parseFromString method, or decompress is given and is not an object of
+ *     optional brotli and deflate functions and a maxDecompressedSize of zero
+ *     or more, or has another key.
  * @throws {Error} When the groups' emission graph has a cycle or is too deep.
  */
 export function createReader(tables) {
     const given = tables || {};
     assertTableKeys(given);
-    const {formats, groups = [], tags = [], domParser, decompress} = given;
+    const {formats, groups = [], tags = [], tagFilter: filter, domParser, decompress} = given;
     assertTables(formats, groups, tags);
+    assertFilter(filter);
     assertDomParserShape(domParser);
     const decompressConfig = getDecompressConfig(decompress);
 
@@ -55,6 +64,7 @@ export function createReader(tables) {
     const runComposition = addsExif ? compose(formats, groups.concat([exif])) : composition;
     const includeTagsMapping = getIncludeTagsMapping(composition, tags);
     const hasXmp = composition.composed.groups.xmp === true;
+    const environments = getEnvironments(filter ? filter.createTagFilter : getCompositionTagFilterFactory(groups));
 
     return {load};
 
@@ -63,9 +73,10 @@ export function createReader(tables) {
         return Promise.resolve().then(() => {
             const loadOptions = getLoadOptions(options);
             const expanded = loadOptions.expanded === undefined ? true : loadOptions.expanded;
+            assertTagFilterOptions(filter, loadOptions);
             assertDomParser(hasXmp, domParser);
             return getInputDataView(data).then((dataView) => {
-                const run = getRun(objectAssign({}, loadOptions, {domParser, decompress: decompressConfig, expanded}), includeTagsMapping, addsExif);
+                const run = getRun(objectAssign({}, loadOptions, {domParser, decompress: decompressConfig, expanded}), includeTagsMapping, addsExif, filter, environments);
                 return readView(runComposition, dataView, run.options, run.environment);
             }).catch((error) => {
                 throw getReadError(error, unsupportedFormatMessage);
@@ -87,7 +98,7 @@ export function createReader(tables) {
 function assertTableKeys(tables) {
     for (const key in tables) {
         if (TABLE_KEYS.indexOf(key) === -1) {
-            throw new TypeError('createReader: unknown key \'' + key + '\': the keys are formats, groups, tags, domParser and decompress');
+            throw new TypeError('createReader: unknown key \'' + key + '\': the keys are formats, groups, tags, tagFilter, domParser and decompress');
         }
     }
 }
@@ -125,6 +136,12 @@ function isExifTagDescriptor(tag) {
         && tag.ids.length > 0
         && tag.ids.every((id) => typeof id === 'number')
         && tag.group === 'exif';
+}
+
+function assertFilter(filter) {
+    if (filter !== undefined && !(filter && filter.brand === FILTER_BRAND)) {
+        throw new TypeError('createReader: tagFilter must be the tagFilter imported from ' + CORE_IMPORT);
+    }
 }
 
 function assertDomParserShape(domParser) {
@@ -210,6 +227,34 @@ function getIncludeTagsMapping(composition, tags) {
     return mapping;
 }
 
+function getEnvironments(createFilter) {
+    const environment = {getDomParser, getBase64Image, createTagFilter: createFilter};
+    return {
+        environment,
+        // includeTags then only caps what is read, so excludeTags applies to every group.
+        limitingEnvironment: objectAssign({}, environment, {includeTagsIsLimit: true}),
+    };
+}
+
+// Without the tag filter a load passes no includeTags or excludeTags, so the
+// filter only ever sees the reader's own includeTags config.
+function getCompositionTagFilterFactory(groups) {
+    const exifDependencies = getExifDependencies(groups);
+    return ({includeTags}) => createCompositionTagFilter(includeTags, exifDependencies);
+}
+
+// From the groups as given: composing merges the maker-note groups into one
+// that carries no exifDependencies.
+function getExifDependencies(groups) {
+    let dependencies = [];
+    for (let i = 0; i < groups.length; i++) {
+        if (groups[i].exifDependencies !== undefined) {
+            dependencies = dependencies.concat(groups[i].exifDependencies);
+        }
+    }
+    return dependencies;
+}
+
 function getLoadOptions(options) {
     if (options === undefined) {
         return {};
@@ -222,7 +267,6 @@ function getLoadOptions(options) {
         assertSupportedOption(key);
     }
     BOOLEAN_OPTIONS.forEach((name) => assertBooleanOption(options, name));
-    assertExcludeTagsShape(options.excludeTags);
     return options;
 }
 
@@ -247,11 +291,21 @@ function assertBooleanOption(options, name) {
     }
 }
 
-// A list or a string would strip nothing, as excludeTags[group] is read.
-function assertExcludeTagsShape(excludeTags) {
-    if (excludeTags && (typeof excludeTags !== 'object' || Array.isArray(excludeTags))) {
-        throw new TypeError('reader.load: excludeTags must be an object keyed by group');
+function assertTagFilterOptions(filter, options) {
+    if (filter) {
+        filter.assertOptions(options);
+        return;
     }
+    if (options.includeTags) {
+        throw getMissingFilterError('includeTags');
+    }
+    if (options.excludeTags) {
+        throw getMissingFilterError('excludeTags');
+    }
+}
+
+function getMissingFilterError(option) {
+    return new TypeError('reader.load: ' + option + ' needs the tag filter: add tagFilter, imported from ' + CORE_IMPORT + ', to createReader');
 }
 
 function assertDomParser(hasXmp, domParser) {
@@ -288,20 +342,20 @@ function getBytesDataView(bytes) {
 // The composition alone caps a whole group. Only a parse-only Exif group and
 // tag descriptors need includeTags, and a caller's includeTags is narrowed to
 // what the reader composes, never widened.
-function getRun(options, mapping, capsExif) {
+function getRun(options, mapping, addsExif, filter, environments) {
     if (options.includeTags) {
         return {
-            options: objectAssign({}, options, {async: true, includeTags: narrowIncludeTags(options.includeTags, mapping)}),
-            environment: ENVIRONMENT,
+            options: objectAssign({}, options, {async: true, includeTags: filter.narrowIncludeTags(options.includeTags, mapping)}),
+            environment: objectAssign({}, environments.environment, {createTagFilter: filter.getNarrowedTagFilterFactory(mapping)}),
         };
     }
-    if (capsExif) {
+    if (addsExif) {
         return {
             options: objectAssign({}, options, {async: true, includeTags: getIncludeTagsConfig(mapping)}),
-            environment: LIMITING_ENVIRONMENT,
+            environment: environments.limitingEnvironment,
         };
     }
-    return {options: objectAssign({}, options, {async: true}), environment: ENVIRONMENT};
+    return {options: objectAssign({}, options, {async: true}), environment: environments.environment};
 }
 
 function getIncludeTagsConfig(mapping) {
@@ -327,11 +381,45 @@ function deleteEmptyGroups(tags) {
     });
 }
 
+// The shared filter skips what it cannot read: a misspelt group, a value that
+// is not true or an array, a selector that is neither a name nor an id.
+function assertOptions(options) {
+    assertGroups(options.includeTags, 'includeTags');
+    assertGroups(options.excludeTags, 'excludeTags');
+}
+
+function assertGroups(groups, option) {
+    if (!groups) {
+        return;
+    }
+    if (!isPlainObject(groups)) {
+        throw new TypeError('reader.load: ' + option + ' must be an object keyed by group');
+    }
+    Object.keys(groups).forEach((key) => {
+        if (FILTER_GROUPS[key] !== true) {
+            throw new TypeError('reader.load: ' + option + ' has no group \'' + key + '\': the groups are ' + getGroupList());
+        }
+        if (!isGroupValue(groups[key])) {
+            throw new TypeError('reader.load: ' + option + '.' + key + ' must be true, false or an array of tag names or ids');
+        }
+    });
+}
+
+function getGroupList() {
+    const names = Object.keys(FILTER_GROUPS);
+    return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+}
+
+function isGroupValue(value) {
+    return value === undefined || typeof value === 'boolean' || (Array.isArray(value) && value.every(isTagSelector));
+}
+
+function isTagSelector(selector) {
+    return typeof selector === 'string' || typeof selector === 'number';
+}
+
 function narrowIncludeTags(includeTags, mapping) {
     const narrowed = {};
-    if (typeof includeTags !== 'object' || Array.isArray(includeTags)) {
-        return narrowed;
-    }
     Object.keys(includeTags).forEach((key) => {
         if (mapping[key] === true) {
             narrowed[key] = includeTags[key];
@@ -346,8 +434,19 @@ function narrowToDescriptors(value, descriptors) {
     if (!Array.isArray(value)) {
         return getNames(descriptors);
     }
-    // By name: the filter matches an id in every IFD of the group.
-    return getNames(descriptors.filter((descriptor) => value.some((selector) => matchesDescriptor(selector, descriptor))));
+    const selectors = [];
+    descriptors.forEach((descriptor) => {
+        Array.prototype.push.apply(selectors, getDescriptorSelectors(value, descriptor));
+    });
+    return selectors;
+}
+
+// A name selects every id of that name, so a descriptor selected by name passes
+// on its name and one selected only by id passes on just those ids.
+function getDescriptorSelectors(value, descriptor) {
+    const matching = value.filter((selector) => matchesDescriptor(selector, descriptor));
+    const selectedByName = matching.some((selector) => typeof selector === 'string');
+    return selectedByName ? [descriptor.name] : matching;
 }
 
 function matchesDescriptor(selector, descriptor) {
@@ -359,6 +458,34 @@ function matchesDescriptor(selector, descriptor) {
 
 function getNames(descriptors) {
     return descriptors.map((descriptor) => descriptor.name);
+}
+
+// A narrowed id also matches a tag of that id in another IFD of the group, an
+// unknown tag included, so a group of descriptors returns only their names.
+function getNarrowedTagFilterFactory(mapping) {
+    const names = getDescriptorNames(mapping);
+    return (options) => {
+        const filter = createTagFilter(options);
+        return objectAssign({}, filter, {
+            shouldReturnTag(groupKey, tagName, tagId) {
+                return filter.shouldReturnTag(groupKey, tagName, tagId)
+                    && (names[groupKey] === undefined || names[groupKey][String(tagName).toLowerCase()] === true);
+            },
+        });
+    };
+}
+
+function getDescriptorNames(mapping) {
+    const names = Object.create(null);
+    for (const key in mapping) {
+        if (mapping[key] !== true) {
+            names[key] = Object.create(null);
+            mapping[key].forEach((descriptor) => {
+                names[key][descriptor.name.toLowerCase()] = true;
+            });
+        }
+    }
+    return names;
 }
 
 function getDomParser(domParser) {

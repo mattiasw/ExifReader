@@ -5,7 +5,6 @@
 import {expect} from 'chai';
 import {getDataView} from '../../test-utils.js';
 import IccTags from '../../../../src/icc-tags.js';
-import TagNames0thIfd from '../../../../src/tag-names-0th-ifd.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {icc} from '../../../../src/composable/groups/icc.js';
 import {getContext, recordCalls} from '../test-context.js';
@@ -18,14 +17,6 @@ describe('composable/groups/icc', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
-    });
-
-    it('should consume the icc kind and inject ICC_Profile', () => {
-        expect(icc.key).to.equal('icc');
-        expect(icc.consumes).to.deep.equal(['icc']);
-        expect(icc.emits).to.deep.equal([]);
-        expect(icc.descriptors).to.deep.equal([{ifd: '0th', id: 0x8773}]);
-        expect(TagNames0thIfd[0x8773]).to.equal('ICC_Profile');
     });
 
     it('should read the chunks from the file with the async flag and decompression config and filter the tags', () => {

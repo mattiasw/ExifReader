@@ -10,7 +10,6 @@ export const mpf = {
     key: 'mpf',
     consumes: ['mpf'],
     emits: [],
-    descriptors: [],
     read: (block, ctx) => parsedTags('mpf', MpfTags.read(
         ctx.dataView,
         block.dataOffset,

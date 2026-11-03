@@ -117,7 +117,6 @@ describe('composable/composition', () => {
                     expect(merged.key).to.equal('makerNotes');
                     expect(merged.consumes).to.deep.equal(['makerNote']);
                     expect(merged.emits).to.deep.equal([]);
-                    expect(merged.descriptors).to.equal(groups[0].descriptors);
                     expect(merged.merge).to.equal(groups[0].merge);
                     expect(merged.decoders).to.deep.equal([canonDecoder, pentaxDecoder]);
                 }

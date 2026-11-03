@@ -256,6 +256,7 @@ const UNPROBEABLE_REASONS = {
     'brand.js': 'imported by every format and group module, so in every build, and it holds no string literal',
     'canon.js': COMPOSABLE_TABLE_MODULE,
     'composition.js': COMPOSABLE_TABLE_MODULE,
+    'composition-tag-filter.js': 'imported only by the composable entry point, so no custom build reaches it',
     'core.js': COMPOSABLE_ENTRY_MODULE,
     'exif.js': COMPOSABLE_TABLE_MODULE,
     'formats.js': COMPOSABLE_TABLE_MODULE,

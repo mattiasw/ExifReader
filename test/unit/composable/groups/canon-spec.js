@@ -6,7 +6,6 @@ import {expect} from 'chai';
 import CanonTags from '../../../../src/canon-tags.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {canon, canonDecoder} from '../../../../src/composable/groups/canon.js';
-import {MAKER_NOTE_DESCRIPTORS} from '../../../../src/composable/group-helpers.js';
 import {getContext, recordCalls} from '../test-context.js';
 import {getMakerNoteBlock} from './maker-note-test-data.js';
 
@@ -17,13 +16,6 @@ describe('composable/groups/canon', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
-    });
-
-    it('should consume the makerNote kind into the makerNotes group and inject MakerNote and Make', () => {
-        expect(canon.key).to.equal('makerNotes');
-        expect(canon.consumes).to.deep.equal(['makerNote']);
-        expect(canon.emits).to.deep.equal([]);
-        expect(canon.descriptors).to.equal(MAKER_NOTE_DESCRIPTORS);
     });
 
     it('should bring the Canon decoder alone', () => {

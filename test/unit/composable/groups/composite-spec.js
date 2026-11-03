@@ -7,11 +7,7 @@ import Composite from '../../../../src/composite.js';
 import {composite} from '../../../../src/composable/groups/composite.js';
 
 describe('composable/groups/composite', () => {
-    it('should be a derived group that reads no block and injects no tags', () => {
-        expect(composite.key).to.equal('composite');
-        expect(composite.consumes).to.deep.equal([]);
-        expect(composite.emits).to.deep.equal([]);
-        expect(composite.descriptors).to.deep.equal([]);
+    it('should be a derived group that reads no block', () => {
         expect(composite).to.not.have.property('read');
         expect(composite.merge()).to.deep.equal({slot: 'composite', mode: 'composite'});
     });

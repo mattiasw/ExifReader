@@ -4,19 +4,18 @@
 
 import {getCompressionMethod} from '../../utils.js';
 import XmpTags from '../../xmp-tags.js';
-import {IFD_TYPE_0TH} from '../../ifd-types.js';
 import {parsedTags, getBlockDataView, getBrobDataView, getEmbeddableMergeDescriptor} from '../group-helpers.js';
+import {XMP_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const xmp = {
     key: 'xmp',
     consumes: ['xmp'],
     emits: [],
-    // ApplicationNotes.
-    descriptors: [{ifd: IFD_TYPE_0TH, id: 0x02bc}],
     read: readXmpBlock,
     merge: getXmpMergeDescriptor,
     suppressions: [{kind: 'xmp', isSuppressed: isCarriedXmpSuppressed}],
+    exifDependencies: XMP_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };
 

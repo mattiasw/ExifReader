@@ -4,7 +4,7 @@
 
 import {objectAssign, withDecompressBudget, getDataView, assertPromiseSupport, MAX_METADATA_BLOCKS} from '../utils.js';
 import ImageHeader from '../image-header.js';
-import {createTagFilter, filterTagsForReturn} from '../tag-filter.js';
+import {filterTagsForReturn} from '../tag-filter.js';
 import {buildTagsFromMergeBlocks} from '../loadview-pipeline.js';
 import {run, createContext} from '../engine.js';
 import {isPngTextChunkBlock} from './group-helpers.js';
@@ -18,9 +18,11 @@ import {isPngTextChunkBlock} from './group-helpers.js';
  * @param {object} options The load options (`expanded`, `async`, `computed`,
  *     `includeUnknown`, `includeOffsets`, `domParser`, `includeTags`,
  *     `excludeTags`, `decompress`).
- * @param {{getDomParser: function, getBase64Image: function, includeTagsIsLimit: (boolean|undefined)}} environment
- *     How XMP gets a DOM parser and a thumbnail its base64, and whether
- *     includeTags only caps what is read (see createTagFilter).
+ * @param {{getDomParser: function, getBase64Image: function, createTagFilter: function, includeTagsIsLimit: (boolean|undefined)}} environment
+ *     How XMP gets a DOM parser and a thumbnail its base64, what builds the
+ *     tag filter from includeTags, excludeTags and includeTagsIsLimit, and
+ *     whether includeTags only caps what is read (see createTagFilter in
+ *     tag-filter.js).
  * @returns {object|Promise<object>} The tags, or a promise of them when
  *     `options.async` is set.
  * @throws {UnsupportedFormatError} Synchronously, when no composed format
@@ -46,7 +48,7 @@ export function readView(composition, dataView, options, environment) {
     }
     const blocks = async ? allBlocks : allBlocks.filter((block) => !composition.isHiddenInSyncMode(block));
 
-    const tagFilter = createTagFilter({includeTags, excludeTags, includeTagsIsLimit: environment.includeTagsIsLimit});
+    const tagFilter = environment.createTagFilter({includeTags, excludeTags, includeTagsIsLimit: environment.includeTagsIsLimit});
     const context = createContext({
         dataView,
         options: {expanded, async, computed, includeUnknown, includeOffsets, domParser, includeTags, excludeTags},

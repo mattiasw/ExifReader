@@ -9,16 +9,18 @@ import {brotliDecompressSync, inflateSync} from 'node:zlib';
 import {expect} from 'chai';
 import {DOMParser as XmldomParser} from '@xmldom/xmldom';
 import * as Core from '../../../src/composable/core.js';
-import {createReader, errors} from '../../../src/composable/core.js';
-import {GROUP_BRAND} from '../../../src/composable/brand.js';
+import {createReader, errors, tagFilter} from '../../../src/composable/core.js';
+import {GROUP_BRAND, FORMAT_BRAND} from '../../../src/composable/brand.js';
 import * as ExifReader from '../../../src/exif-reader.js';
 import Errors from '../../../src/errors.js';
 import ImageHeader from '../../../src/image-header.js';
 import {allFormats, tiff, jpeg, png, jxl, xml} from '../../../src/composable/formats.js';
 import {file, jpegHeader} from '../../../src/composable/formats/jpeg.js';
 import {
-    allGroups, exif, iptc, xmp, icc, mpf, canon, pentax, makerNotes, gps, composite, thumbnail,
+    allGroups, exif, iptc, xmp, icc, photoshop, mpf, canon, pentax, makerNotes, gps, composite, thumbnail,
 } from '../../../src/composable/groups.js';
+import {WhiteBalance, InteroperabilityIndex, Make as MakeTag} from '../../../src/composable/tags/exif.js';
+import {createTagFilter} from '../../../src/tag-filter.js';
 import {getDataView, swapProperties} from '../test-utils.js';
 import {
     ascii,
@@ -72,6 +74,7 @@ const JPEG = getJpeg(
 );
 const XMP_SIDECAR = '<?xpacket begin=""?>' + getXmpPacket({Title: 'xmp'}) + '<?xpacket end="w"?>';
 const NOISE = '-'.repeat(32);
+const GROUPS_MESSAGE = 'the groups are exif, iptc, xmp, icc, photoshop, makerNotes, mpf, file, jfif, png, riff, gif, gps, composite and thumbnail';
 const DOM_PARSER_OPTION_MESSAGE = 'reader.load: the domParser option is not supported: pass domParser to createReader';
 const DECOMPRESS_OPTION_MESSAGE = 'reader.load: the decompress option is not supported: pass decompress to createReader';
 const UNKNOWN_COMPRESSION_TEXT = '<text using unknown compression>';
@@ -88,8 +91,8 @@ describe('composable/core', () => {
     });
 
     describe('createReader', () => {
-        it('should be the only export besides errors, with no default export', () => {
-            expect(Object.keys(Core).sort()).to.deep.equal(['createReader', 'errors']);
+        it('should export createReader, errors and tagFilter, with no default export', () => {
+            expect(Object.keys(Core).sort()).to.deep.equal(['createReader', 'errors', 'tagFilter']);
         });
 
         it('should return an object with a load function', () => {
@@ -127,11 +130,28 @@ describe('composable/core', () => {
             expect(() => createReader({formats: [jpeg], tags: null})).to.throw(TypeError, message);
         });
 
-        it('should reject a key that is not formats, groups, tags, domParser or decompress', () => {
+        it('should reject a key that is not formats, groups, tags, tagFilter, domParser or decompress', () => {
             expect(() => createReader({formats: [jpeg], group: [exif]}))
-                .to.throw(TypeError, 'createReader: unknown key \'group\': the keys are formats, groups, tags, domParser and decompress');
+                .to.throw(TypeError, 'createReader: unknown key \'group\': the keys are formats, groups, tags, tagFilter, domParser and decompress');
             expect(() => createReader(Object.create({formats: [jpeg], tag: [DATE_TIME]})))
-                .to.throw(TypeError, 'createReader: unknown key \'tag\': the keys are formats, groups, tags, domParser and decompress');
+                .to.throw(TypeError, 'createReader: unknown key \'tag\': the keys are formats, groups, tags, tagFilter, domParser and decompress');
+            expect(() => createReader({formats: [jpeg], filter: tagFilter}))
+                .to.throw(TypeError, 'createReader: unknown key \'filter\': the keys are formats, groups, tags, tagFilter, domParser and decompress');
+        });
+
+        it('should accept the tag filter as tagFilter', () => {
+            expect(() => createReader({formats: [jpeg], tagFilter})).to.not.throw();
+            expect(() => createReader({formats: [jpeg], groups: [exif], tags: [DATE_TIME], tagFilter})).to.not.throw();
+            expect(() => createReader({formats: [jpeg], tagFilter: undefined})).to.not.throw();
+        });
+
+        it('should need tagFilter to be the tag filter when given', () => {
+            const message = 'createReader: tagFilter must be the tagFilter imported from \'exifreader/core\'';
+            const copy = Object.assign({}, tagFilter);
+            for (const value of [null, {}, true, exif, jpeg, createTagFilter, tagFilter.createTagFilter, {brand: GROUP_BRAND}, {brand: FORMAT_BRAND}]) {
+                expect(() => createReader({formats: [jpeg], tagFilter: value}), String(value)).to.throw(TypeError, message);
+            }
+            expect(() => createReader({formats: [jpeg], tagFilter: copy})).to.not.throw();
         });
 
         it('should need domParser to be a DOM parser when given', () => {
@@ -143,16 +163,11 @@ describe('composable/core', () => {
             expect(() => createReader({formats: [jpeg], domParser: {parseFromString: () => undefined}})).to.not.throw();
         });
 
-        it('should take domParser left out or undefined as none, and without xmp in groups', () => {
-            expect(() => createReader({formats: [jpeg], groups: [xmp]})).to.not.throw();
-            expect(() => createReader({formats: [jpeg], groups: [xmp], domParser: undefined})).to.not.throw();
-            expect(() => createReader({formats: [jpeg], groups: [exif], domParser: new XmldomParser()})).to.not.throw();
-            expect(() => createReader({formats: [jpeg], domParser: new XmldomParser()})).to.not.throw();
-        });
-
-        it('should check domParser after the tables', () => {
+        it('should check domParser after tagFilter and the tables', () => {
             expect(() => createReader({formats: [{}], domParser: null}))
                 .to.throw(TypeError, 'createReader: formats[0] is not a value imported from \'exifreader/formats\'');
+            expect(() => createReader({formats: [jpeg], tagFilter: null, domParser: null}))
+                .to.throw(TypeError, 'createReader: tagFilter must be the tagFilter imported from \'exifreader/core\'');
         });
 
         it('should need decompress to be an object when given', () => {
@@ -213,9 +228,11 @@ describe('composable/core', () => {
             expect(() => createReader({formats: [jpeg], decompress: {maxDecompressedSize: 1024}})).to.not.throw();
         });
 
-        it('should check decompress after domParser and the tables', () => {
+        it('should check decompress after domParser, tagFilter and the tables', () => {
             expect(() => createReader({formats: [{}], decompress: null}))
                 .to.throw(TypeError, 'createReader: formats[0] is not a value imported from \'exifreader/formats\'');
+            expect(() => createReader({formats: [jpeg], tagFilter: null, decompress: null}))
+                .to.throw(TypeError, 'createReader: tagFilter must be the tagFilter imported from \'exifreader/core\'');
             expect(() => createReader({formats: [jpeg], domParser: null, decompress: null}))
                 .to.throw(TypeError, 'createReader: domParser must be a DOM parser, an object with a parseFromString method');
         });
@@ -223,6 +240,13 @@ describe('composable/core', () => {
         it('should check the decompress keys before the decompress fields', () => {
             expect(() => createReader({formats: [jpeg], decompress: {brotli: 42, gzip: 1}}))
                 .to.throw(TypeError, 'createReader: decompress has no key \'gzip\': the keys are brotli, deflate and maxDecompressedSize');
+        });
+
+        it('should check tagFilter after the tables', () => {
+            expect(() => createReader({formats: [{}], tagFilter: null}))
+                .to.throw(TypeError, 'createReader: formats[0] is not a value imported from \'exifreader/formats\'');
+            expect(() => createReader({formats: [jpeg], tags: [{}], tagFilter: null}))
+                .to.throw(TypeError, 'createReader: tags[0] is not a value imported from \'exifreader/tags/exif\'');
         });
 
         it('should check the arrays before their elements', () => {
@@ -308,7 +332,7 @@ describe('composable/core', () => {
     });
 
     describe('load', () => {
-        const allReader = createReader({formats: allFormats, groups: allGroups, domParser: new XmldomParser()});
+        const filteredAllReader = createReader({formats: allFormats, groups: allGroups, tagFilter, domParser: new XmldomParser()});
         const exifReader = createReader({formats: FORMATS_BUT_XML, groups: [exif, thumbnail]});
 
         it('should return a promise and not throw for any input or options', async () => {
@@ -411,9 +435,7 @@ describe('composable/core', () => {
                 42,
             ];
             for (const input of inputs) {
-                const error = await getRejection(exifReader.load(input));
-                expect(error, String(input)).to.be.an.instanceof(TypeError);
-                expect(error.message).to.equal(INPUT_MESSAGE);
+                await expectRejection(exifReader.load(input), INPUT_MESSAGE, String(input));
             }
         });
 
@@ -475,51 +497,34 @@ describe('composable/core', () => {
 
         it('should reject options that are not an object', async () => {
             for (const options of [null, 'expanded', true, 1]) {
-                const error = await getRejection(exifReader.load(getDataView(JPEG), options));
-                expect(error, String(options)).to.be.an.instanceof(TypeError);
-                expect(error.message).to.equal('reader.load: options must be an object');
+                await expectRejection(exifReader.load(getDataView(JPEG), options), 'reader.load: options must be an object', String(options));
             }
         });
 
         it('should reject the async option whatever its value', async () => {
             for (const async of [true, false, undefined]) {
-                const error = await getRejection(exifReader.load(getDataView(JPEG), {async}));
-                expect(error).to.be.an.instanceof(TypeError);
-                expect(error.message).to.equal('reader.load: the async option is not supported: load always returns a Promise');
+                await expectRejection(exifReader.load(getDataView(JPEG), {async}), 'reader.load: the async option is not supported: load always returns a Promise', String(async));
             }
         });
 
         it('should reject the length option', async () => {
-            const error = await getRejection(exifReader.load(getDataView(JPEG), {length: 100}));
-
-            expect(error).to.be.an.instanceof(TypeError);
-            expect(error.message).to.equal('reader.load: the length option is not supported: to read the first bytes of a Blob or File, pass blob.slice(0, length)');
+            await expectRejection(exifReader.load(getDataView(JPEG), {length: 100}), 'reader.load: the length option is not supported: to read the first bytes of a Blob or File, pass blob.slice(0, length)');
         });
 
         it('should reject the domParser option whatever its value', async () => {
             for (const domParser of [new XmldomParser(), undefined, null, {}, 42]) {
-                const error = await getRejection(exifReader.load(getDataView(JPEG), {domParser}));
-                expect(error).to.be.an.instanceof(TypeError);
-                expect(error.message).to.equal(DOM_PARSER_OPTION_MESSAGE);
+                await expectRejection(exifReader.load(getDataView(JPEG), {domParser}), DOM_PARSER_OPTION_MESSAGE, String(domParser));
             }
         });
 
         it('should reject the decompress option whatever its value', async () => {
-            const readers = [exifReader, createReader({formats: [png], decompress: {maxDecompressedSize: 1024}})];
-            for (const reader of readers) {
-                for (const decompress of [{}, undefined, null, 42, {maxDecompressedSize: 1}]) {
-                    const error = await getRejection(reader.load(getDataView(JPEG), {decompress}));
-                    expect(error, String(decompress)).to.be.an.instanceof(TypeError);
-                    expect(error.message, String(decompress)).to.equal(DECOMPRESS_OPTION_MESSAGE);
-                }
+            for (const decompress of [{}, undefined, null, 42, {maxDecompressedSize: 1}]) {
+                await expectRejection(exifReader.load(getDataView(JPEG), {decompress}), DECOMPRESS_OPTION_MESSAGE, String(decompress));
             }
         });
 
         it('should reject an unknown option by name', async () => {
-            const error = await getRejection(exifReader.load(getDataView(JPEG), {expanded: true, includeUnkown: true}));
-
-            expect(error).to.be.an.instanceof(TypeError);
-            expect(error.message).to.equal('reader.load: unknown option \'includeUnkown\'');
+            await expectRejection(exifReader.load(getDataView(JPEG), {expanded: true, includeUnkown: true}), 'reader.load: unknown option \'includeUnkown\'');
         });
 
         it('should reject an option carried by the prototype of options', async () => {
@@ -532,9 +537,7 @@ describe('composable/core', () => {
                 [Object.create({expanded: 0}), getBooleanOptionMessage('expanded')],
             ];
             for (const [options, message] of cases) {
-                const error = await getRejection(exifReader.load(getDataView(JPEG), options));
-                expect(error, message).to.be.an.instanceof(TypeError);
-                expect(error.message).to.equal(message);
+                await expectRejection(exifReader.load(getDataView(JPEG), options), message, message);
             }
         });
 
@@ -596,15 +599,62 @@ describe('composable/core', () => {
             });
         });
 
-        it('should reject excludeTags that is not an object keyed by group', async () => {
-            for (const excludeTags of [['gps', 'xmp'], 'gps', true, 1]) {
-                const error = await getRejection(exifReader.load(getDataView(JPEG), {excludeTags}));
-                expect(error, JSON.stringify(excludeTags)).to.be.an.instanceof(TypeError);
-                expect(error.message).to.equal('reader.load: excludeTags must be an object keyed by group');
-            }
+        describe('without the tag filter', () => {
+            const includeMessage = 'reader.load: includeTags needs the tag filter: add tagFilter, imported from \'exifreader/core\', to createReader';
+            const excludeMessage = 'reader.load: excludeTags needs the tag filter: add tagFilter, imported from \'exifreader/core\', to createReader';
+
+            it('should reject includeTags or excludeTags without throwing', async () => {
+                const cases = [
+                    [{includeTags: {exif: ['Make']}}, includeMessage],
+                    [{includeTags: true}, includeMessage],
+                    [{excludeTags: {exif: ['Make']}}, excludeMessage],
+                    [{excludeTags: {}}, excludeMessage],
+                    [{includeTags: {exif: true}, excludeTags: {xmp: true}}, includeMessage],
+                    [{includeTags: {exif: true}, excludeTags: null}, includeMessage],
+                    [{includeTags: 0, excludeTags: {xmp: true}}, excludeMessage],
+                    [{includeTags: {exiff: true}}, includeMessage],
+                    [{excludeTags: {gps: 'yes'}}, excludeMessage],
+                    [{excludeTags: 'gps'}, excludeMessage],
+                    [{excludeTags: ['gps']}, excludeMessage],
+                ];
+                for (const reader of [exifReader, createReader({formats: [jpeg], tags: [DATE_TIME]}), createReader({formats: [jpeg], groups: [gps]})]) {
+                    for (const [options, message] of cases) {
+                        let result;
+                        expect(() => {
+                            result = reader.load(getDataView(JPEG), options);
+                        }).to.not.throw();
+                        expect(result).to.be.an.instanceof(Promise);
+                        const error = await getRejection(result);
+                        expect(error, JSON.stringify(options)).to.be.an.instanceof(TypeError);
+                        expect(error.message, JSON.stringify(options)).to.equal(message);
+                    }
+                }
+            });
+
+            it('should check the options before the tag filter and the tag filter before the DOM parser', async () => {
+                restores.push(swapProperties(globalThis, {DOMParser: undefined}));
+                const reader = createReader({formats: [jpeg], groups: [xmp]});
+
+                expect((await getRejection(reader.load(getDataView(JPEG), {includeTags: {xmp: true}, bogus: 1}))).message).to.equal('reader.load: unknown option \'bogus\'');
+                expect((await getRejection(reader.load(getDataView(JPEG), {includeTags: {xmp: true}}))).message).to.equal(includeMessage);
+                expect((await getRejection(reader.load(getDataView(JPEG), {includeTags: {xmp: true}, domParser: new XmldomParser()}))).message).to.equal(DOM_PARSER_OPTION_MESSAGE);
+                expect((await getRejection(reader.load(getDataView(JPEG), {domParser: new XmldomParser(), excludeTags: 'xmp'}))).message).to.equal(DOM_PARSER_OPTION_MESSAGE);
+            });
+
+            it('should read with the tag filter composed', async () => {
+                const reader = createReader({formats: [jpeg], groups: [exif], tagFilter});
+
+                const included = await reader.load(getDataView(JPEG), {includeTags: {exif: ['Make']}});
+                const excluded = await reader.load(getDataView(JPEG), {excludeTags: {exif: ['Model']}});
+
+                expect(Object.keys(included)).to.deep.equal(['exif']);
+                expect(Object.keys(included.exif)).to.deep.equal(['Make']);
+                expect(excluded.exif.Make.description).to.equal('Canon');
+                expect(excluded.exif.Model).to.equal(undefined);
+            });
         });
 
-        it('should treat a falsy excludeTags as none', async () => {
+        it('should treat a falsy excludeTags as none on a reader without the tag filter', async () => {
             const expected = await exifReader.load(getDataView(JPEG), {expanded: true});
             for (const excludeTags of [undefined, null, false, 0, '']) {
                 expect(await exifReader.load(getDataView(JPEG), {expanded: true, excludeTags}), JSON.stringify(excludeTags)).to.deep.equal(expected);
@@ -621,7 +671,7 @@ describe('composable/core', () => {
                 excludeTags: {exif: ['Model']},
             };
 
-            const tags = await allReader.load(getDataView(JPEG), options);
+            const tags = await filteredAllReader.load(getDataView(JPEG), options);
 
             expect(Object.keys(tags).sort()).to.deep.equal(['exif', 'metadataRange', 'xmp']);
             expect(Object.keys(tags.exif)).to.deep.equal(['Make', 'Model']);
@@ -913,7 +963,7 @@ describe('composable/core', () => {
                     const tags = await createReader(Object.assign({formats: [format]}, tables)).load(bytes);
                     expect(tags.file.FileType.value, fileName).to.equal(value);
                 }
-                const narrowed = await createReader({formats: [format], groups: [exif]}).load(bytes, {includeTags: {file: true}});
+                const narrowed = await createReader({formats: [format], groups: [exif], tagFilter}).load(bytes, {includeTags: {file: true}});
                 expect(narrowed, fileName).to.deep.equal({file: {FileType: {value, description: value.toUpperCase()}}});
             }
         });
@@ -925,7 +975,7 @@ describe('composable/core', () => {
             ));
 
             expect((await createReader({formats: [png]}).load(pngImage)).png.Comment.description).to.equal('Compressed');
-            expect((await createReader({formats: [png]}).load(pngImage, {includeTags: {png: true}})).png.Comment.description).to.equal('Compressed');
+            expect((await createReader({formats: [png], tagFilter}).load(pngImage, {includeTags: {png: true}})).png.Comment.description).to.equal('Compressed');
             expect((await createReader({formats: [png], tags: [DATE_TIME]}).load(pngImage)).exif.DateTime.description).to.equal('2020:01:01 00:00:00');
         });
 
@@ -948,43 +998,28 @@ describe('composable/core', () => {
         describe('includeTags', () => {
             const exifOnlyReader = createReader({formats: [jpeg], groups: [exif]});
 
-            it('should narrow the output', async () => {
-                const tags = await exifOnlyReader.load(getDataView(JPEG), {expanded: true, includeTags: {exif: ['DateTime']}});
+            it('should never widen it to a group the reader reads but does not compose', async () => {
+                const reader = createReader({formats: [jpeg], groups: [gps], tagFilter});
 
-                expect(Object.keys(tags)).to.deep.equal(['exif']);
-                expect(Object.keys(tags.exif)).to.deep.equal(['DateTime']);
+                for (const includeUnknown of [false, true]) {
+                    const tags = await reader.load(getDataView(JPEG), {expanded: true, includeUnknown, includeTags: {exif: true}});
+
+                    expect(tags, String(includeUnknown)).to.deep.equal({});
+                }
             });
 
-            it('should never widen it to a group the reader does not compose', async () => {
-                const tags = await exifOnlyReader.load(getDataView(JPEG), {expanded: true, includeTags: {exif: ['Make'], xmp: true, iptc: true, gps: true, Thumbnail: true, thumbnail: true}});
-
-                expect(Object.keys(tags)).to.deep.equal(['exif']);
-                expect(Object.keys(tags.exif)).to.deep.equal(['Make']);
-            });
-
-            it('should treat a falsy value as no includeTags', async () => {
+            it('should treat a falsy value as no includeTags on a reader without the tag filter', async () => {
                 const expected = await exifOnlyReader.load(getDataView(JPEG), {expanded: true});
                 for (const includeTags of [false, 0, '', null, undefined]) {
                     expect(await exifOnlyReader.load(getDataView(JPEG), {expanded: true, includeTags}), String(includeTags)).to.deep.equal(expected);
                 }
                 expect(expected.exif.Make.description).to.equal('Canon');
             });
-
-            it('should return nothing for a value that is not an object of groups', async () => {
-                for (const includeTags of [true, ['exif'], 'exif', Object.assign(['exif'], {exif: true})]) {
-                    expect(await exifOnlyReader.load(getDataView(JPEG), {expanded: true, includeTags}), String(includeTags)).to.deep.equal({});
-                }
-            });
-
-            it('should not take an inherited property name for a composed group', async () => {
-                for (const includeTags of [{constructor: true}, JSON.parse('{"__proto__": true}'), {toString: true, hasOwnProperty: true}]) {
-                    expect(await exifOnlyReader.load(getDataView(JPEG), {expanded: true, includeTags}), JSON.stringify(includeTags)).to.deep.equal({});
-                }
-            });
         });
 
         describe('tag descriptors', () => {
             const dateTimeReader = createReader({formats: [jpeg], tags: [DATE_TIME]});
+            const filteredDateTimeReader = createReader({formats: [jpeg], tags: [DATE_TIME], tagFilter});
 
             it('should return only the described tags of their group', async () => {
                 const tags = await dateTimeReader.load(getDataView(JPEG), {expanded: true});
@@ -995,7 +1030,7 @@ describe('composable/core', () => {
             });
 
             it('should be narrowed by includeTags by name or id, and never widened', async () => {
-                const load = (includeTags) => dateTimeReader.load(getDataView(JPEG), {expanded: true, includeTags});
+                const load = (includeTags) => filteredDateTimeReader.load(getDataView(JPEG), {expanded: true, includeTags});
 
                 expect(await load({exif: ['Make']})).to.deep.equal({});
                 expect(Object.keys((await load({exif: ['datetime', 'Make']})).exif)).to.deep.equal(['DateTime']);
@@ -1003,16 +1038,114 @@ describe('composable/core', () => {
                 expect(Object.keys((await load({exif: [TAG_DATE_TIME]})).exif)).to.deep.equal(['DateTime']);
                 expect(await load({exif: [TAG_MAKE]})).to.deep.equal({});
                 expect(Object.keys((await load({exif: true})).exif)).to.deep.equal(['DateTime']);
-                expect(Object.keys((await load({exif: 'all'})).exif)).to.deep.equal(['DateTime']);
-                expect(await load({exif: [{}]})).to.deep.equal({});
             });
 
             it('should not widen an id selector to a tag of another IFD with the same id', async () => {
-                const reader = createReader({formats: [jpeg], tags: [{name: 'InteroperabilityIndex', ids: [TAG_GPS_LATITUDE_REF], group: 'exif'}]});
+                const reader = createReader({formats: [jpeg], tags: [{name: 'InteroperabilityIndex', ids: [TAG_GPS_LATITUDE_REF], group: 'exif'}], tagFilter});
 
                 const tags = await reader.load(getDataView(JPEG), {expanded: true, includeTags: {exif: [TAG_GPS_LATITUDE_REF]}});
 
                 expect(tags.exif).to.equal(undefined);
+            });
+
+            describe('with a descriptor of more than one id', () => {
+                const WHITE_BALANCE_ID = 0xa403;
+                const WHITE_BALANCE_ALIAS_ID = 0xfe4e;
+                const whiteBalanceJpeg = getJpeg(
+                    getSof0Segment(),
+                    getExifSegment(getTiff({
+                        ifd0: [ascii(TAG_MAKE, 'Canon')],
+                        exifIfd: [short(WHITE_BALANCE_ID, 1), ascii(WHITE_BALANCE_ALIAS_ID, 'As Shot')],
+                    }))
+                );
+                // IFD0 is read before the Exif IFD, so a read of both ids ends at the Exif IFD's value.
+                const aliasInIfd0Jpeg = getJpeg(
+                    getSof0Segment(),
+                    getExifSegment(getTiff({
+                        ifd0: [ascii(WHITE_BALANCE_ALIAS_ID, 'As Shot')],
+                        exifIfd: [short(WHITE_BALANCE_ID, 1)],
+                    }))
+                );
+                const whiteBalanceReader = createReader({formats: [jpeg], tags: [WhiteBalance, MakeTag], tagFilter});
+
+                it('should read only the selected id when selected by that id', async () => {
+                    const {composed, standard} = await loadBoth({exif: [WHITE_BALANCE_ID]});
+
+                    expect(composed.exif.WhiteBalance).to.deep.equal(standard.exif.WhiteBalance);
+                    expect(composed.exif.WhiteBalance.value).to.equal(1);
+                    expect(composed.exif.WhiteBalance.description).to.equal('Manual white balance');
+                });
+
+                it('should read only the alias id when selected by it', async () => {
+                    const {composed, standard} = await loadBoth({exif: [WHITE_BALANCE_ALIAS_ID]}, aliasInIfd0Jpeg);
+
+                    expect(composed.exif.WhiteBalance).to.deep.equal(standard.exif.WhiteBalance);
+                    expect(composed.exif.WhiteBalance.description).to.equal('As Shot');
+                });
+
+                it('should read every id when selected by name, also next to an id', async () => {
+                    for (const selector of [['WhiteBalance'], ['WhiteBalance', WHITE_BALANCE_ID], [WHITE_BALANCE_ID, 'whitebalance']]) {
+                        const {composed, standard} = await loadBoth({exif: selector});
+
+                        expect(composed.exif.WhiteBalance, JSON.stringify(selector)).to.deep.equal(standard.exif.WhiteBalance);
+                        expect(composed.exif.WhiteBalance.description, JSON.stringify(selector)).to.equal('As Shot');
+                    }
+                });
+
+                it('should read the id selected next to a tag of another descriptor', async () => {
+                    const {composed, standard} = await loadBoth({exif: [WHITE_BALANCE_ID, TAG_MAKE]});
+
+                    expect(composed.exif).to.deep.equal(standard.exif);
+                    expect(Object.keys(composed.exif).sort()).to.deep.equal(['Make', 'WhiteBalance']);
+                    expect(composed.exif.WhiteBalance.description).to.equal('Manual white balance');
+                });
+
+                it('should not return an unknown tag of another IFD that has the selected id', async () => {
+                    const reader = createReader({formats: [jpeg], tags: [WhiteBalance, InteroperabilityIndex], tagFilter});
+                    const bytes = getJpeg(
+                        getSof0Segment(),
+                        getExifSegment(getTiff({
+                            exifIfd: [short(WHITE_BALANCE_ID, 1)],
+                            interopIfd: [ascii(TAG_GPS_LATITUDE_REF, 'R98'), short(WHITE_BALANCE_ID, 2)],
+                        }))
+                    );
+
+                    const tags = await reader.load(getDataView(bytes), {
+                        expanded: true,
+                        includeUnknown: true,
+                        includeTags: {exif: [WHITE_BALANCE_ID, 'InteroperabilityIndex']},
+                    });
+
+                    expect(Object.keys(tags.exif).sort()).to.deep.equal(['InteroperabilityIndex', 'WhiteBalance']);
+                    expect(tags.exif.WhiteBalance.value).to.equal(1);
+                });
+
+                it('should not return a tag of another IFD that has the selected id', async () => {
+                    const descriptor = {name: 'WhiteBalance', ids: [WHITE_BALANCE_ID, TAG_GPS_LATITUDE_REF], group: 'exif'};
+                    const reader = createReader({formats: [jpeg], tags: [descriptor], tagFilter});
+
+                    const tags = await reader.load(getDataView(JPEG), {expanded: true, includeTags: {exif: [TAG_GPS_LATITUDE_REF]}});
+
+                    expect(tags.exif || {}).to.deep.equal({});
+                });
+
+                it('should not widen an id selector to another id of the same name', async () => {
+                    const descriptor = {name: 'WhiteBalance', ids: [WHITE_BALANCE_ID], group: 'exif'};
+                    const reader = createReader({formats: [jpeg], tags: [descriptor], tagFilter});
+                    const bytes = getJpeg(getSof0Segment(), getExifSegment(getTiff({exifIfd: [ascii(WHITE_BALANCE_ALIAS_ID, 'As Shot')]})));
+
+                    const tags = await reader.load(getDataView(bytes), {expanded: true, includeTags: {exif: [WHITE_BALANCE_ID]}});
+
+                    expect(tags.exif).to.equal(undefined);
+                });
+
+                async function loadBoth(includeTags, bytes = whiteBalanceJpeg) {
+                    const options = {expanded: true, includeTags};
+                    return {
+                        composed: await whiteBalanceReader.load(getDataView(bytes), options),
+                        standard: await ExifReader.load(getDataView(bytes), Object.assign({async: true}, options)),
+                    };
+                }
             });
 
             it('should leave a whole composed group as it is', async () => {
@@ -1025,7 +1158,7 @@ describe('composable/core', () => {
             });
 
             it('should be subject to excludeTags', async () => {
-                const tags = await dateTimeReader.load(getDataView(JPEG), {expanded: true, excludeTags: {exif: ['DateTime']}});
+                const tags = await filteredDateTimeReader.load(getDataView(JPEG), {expanded: true, excludeTags: {exif: ['DateTime']}});
 
                 expect(tags.exif).to.equal(undefined);
                 expect(Object.keys(tags)).to.include('file');
@@ -1080,29 +1213,29 @@ describe('composable/core', () => {
 
             it('should drop xmp whether or not something caps Exif', async () => {
                 for (const groups of [[exif, xmp], [xmp]]) {
-                    const tags = await createReader({formats: [jpeg], groups, domParser}).load(getDataView(JPEG), {expanded: true, excludeTags: {xmp: true}});
+                    const tags = await createReader({formats: [jpeg], groups, tagFilter, domParser}).load(getDataView(JPEG), {expanded: true, excludeTags: {xmp: true}});
                     expect(tags.xmp).to.equal(undefined);
-                    const kept = await createReader({formats: [jpeg], groups, domParser}).load(getDataView(JPEG), {expanded: true});
+                    const kept = await createReader({formats: [jpeg], groups, tagFilter, domParser}).load(getDataView(JPEG), {expanded: true});
                     expect(kept.xmp.Title.value).to.equal('xmp');
                 }
             });
 
             it('should drop gps on a gps-only reader', async () => {
-                const tags = await createReader({formats: [jpeg], groups: [gps]}).load(getDataView(JPEG), {expanded: true, excludeTags: {gps: true}});
+                const tags = await createReader({formats: [jpeg], groups: [gps], tagFilter}).load(getDataView(JPEG), {expanded: true, excludeTags: {gps: true}});
 
                 expect(tags.gps).to.equal(undefined);
             });
 
             it('should drop the thumbnail whether or not something caps Exif', async () => {
                 for (const groups of [[exif, thumbnail], [thumbnail]]) {
-                    const tags = await createReader({formats: [jpeg], groups}).load(getDataView(JPEG), {expanded: true, excludeTags: {thumbnail: true}});
+                    const tags = await createReader({formats: [jpeg], groups, tagFilter}).load(getDataView(JPEG), {expanded: true, excludeTags: {thumbnail: true}});
                     expect(tags.Thumbnail).to.equal(undefined);
                 }
             });
 
             it('should drop maker notes when the MakerNote tag is excluded', async () => {
                 for (const groups of [[makerNotes], [canon, pentax], [exif, makerNotes]]) {
-                    const reader = createReader({formats: [jpeg], groups});
+                    const reader = createReader({formats: [jpeg], groups, tagFilter});
                     expect((await reader.load(getDataView(JPEG), {expanded: true})).makerNotes.LensModel.description).to.equal('canon lens');
                     expect((await reader.load(getDataView(JPEG), {expanded: true, includeTags: {makerNotes: true}})).makerNotes.LensModel.description).to.equal('canon lens');
                     const tags = await reader.load(getDataView(JPEG), {expanded: true, includeTags: {makerNotes: true}, excludeTags: {exif: ['MakerNote']}});
@@ -1112,11 +1245,163 @@ describe('composable/core', () => {
             });
 
             it('should let the caller\'s own includeTags entry win over its excludeTags entry for the same group', async () => {
-                const reader = createReader({formats: [jpeg], groups: [exif, xmp], domParser});
+                const reader = createReader({formats: [jpeg], groups: [exif, xmp], tagFilter, domParser});
 
                 const tags = await reader.load(getDataView(JPEG), {expanded: true, includeTags: {xmp: true}, excludeTags: {xmp: true}});
 
                 expect(tags.xmp.Title.value).to.equal('xmp');
+            });
+        });
+
+        describe('a malformed includeTags or excludeTags', () => {
+            const OPTIONS = ['includeTags', 'excludeTags'];
+            const reader = createReader({formats: [jpeg], groups: [exif], tagFilter});
+            const load = (options) => reader.load(getDataView(JPEG), options);
+            const getValueMessage = (option, group) => 'reader.load: ' + option + '.' + group + ' must be true, false or an array of tag names or ids';
+
+            it('should reject either option that is not an object keyed by group, without throwing', async () => {
+                for (const option of OPTIONS) {
+                    for (const value of [true, 1, 'exif', ['exif'], Object.assign(['exif'], {exif: true})]) {
+                        let result;
+                        expect(() => {
+                            result = load({[option]: value});
+                        }).to.not.throw();
+                        await expectRejection(result, 'reader.load: ' + option + ' must be an object keyed by group', option + ' ' + String(value));
+                    }
+                }
+            });
+
+            it('should reject a Map, a Set or a Date as either option', async () => {
+                for (const option of OPTIONS) {
+                    for (const value of [new Map([['exif', true]]), new Set(['exif']), new Date()]) {
+                        await expectRejection(load({[option]: value}), 'reader.load: ' + option + ' must be an object keyed by group', option + ' ' + value.constructor.name);
+                    }
+                }
+            });
+
+            it('should accept an object of groups without a prototype', async () => {
+                const includeTags = Object.assign(Object.create(null), {exif: ['Make']});
+                const excludeTags = Object.assign(Object.create(null), {exif: ['Make']});
+
+                expect(Object.keys((await load({expanded: true, includeTags})).exif)).to.deep.equal(['Make']);
+                expect((await load({expanded: true, excludeTags})).exif.Make).to.equal(undefined);
+            });
+
+            it('should reject a key that is not a group, with the list of groups', async () => {
+                for (const option of OPTIONS) {
+                    for (const key of ['exiff', 'gsp', 'Exif', 'thumbnails', 'constructor', 'toString', 'hasOwnProperty']) {
+                        await expectRejection(load({[option]: {[key]: true}}), 'reader.load: ' + option + ' has no group \'' + key + '\': ' + GROUPS_MESSAGE, option + ' ' + key);
+                    }
+                    await expectRejection(load({[option]: JSON.parse('{"__proto__": true}')}), 'reader.load: ' + option + ' has no group \'__proto__\': ' + GROUPS_MESSAGE, option);
+                }
+            });
+
+            it('should reject a key that is not a group whatever its value', async () => {
+                for (const option of OPTIONS) {
+                    for (const value of [false, undefined, ['Make']]) {
+                        await expectRejection(load({[option]: {exiff: value}}), 'reader.load: ' + option + ' has no group \'exiff\': ' + GROUPS_MESSAGE, option + ' ' + String(value));
+                    }
+                }
+            });
+
+            it('should reject a group value that is not true, false or an array', async () => {
+                for (const option of OPTIONS) {
+                    for (const group of ['exif', 'gps']) {
+                        for (const value of [null, 0, 1, NaN, '', 'yes', 'all', 'MakerNote', {}, {Make: true}]) {
+                            await expectRejection(load({[option]: {[group]: value}}), getValueMessage(option, group), option + ' ' + group + ' ' + JSON.stringify(value));
+                        }
+                    }
+                }
+            });
+
+            it('should reject an array element that is neither a string nor a number', async () => {
+                for (const option of OPTIONS) {
+                    for (const value of [[{}], [null], [undefined], [true], [['Make']], ['Make', {}], [0x010f, null]]) {
+                        await expectRejection(load({[option]: {exif: value}}), getValueMessage(option, 'exif'), option + ' ' + String(value));
+                        await expectRejection(load({[option]: {gps: value}}), getValueMessage(option, 'gps'), option + ' gps ' + String(value));
+                    }
+                }
+            });
+
+            it('should accept names and ids in one array, and an empty array', async () => {
+                const named = await load({expanded: true, includeTags: {exif: ['Make', 0x010f]}});
+                const excluded = await load({expanded: true, excludeTags: {exif: ['Make', 0x0110]}});
+
+                expect(Object.keys(named.exif)).to.deep.equal(['Make']);
+                expect(excluded.exif.Make).to.equal(undefined);
+                expect(excluded.exif.Model).to.equal(undefined);
+                expect(await load({expanded: true, excludeTags: {exif: []}})).to.deep.equal(await load({expanded: true}));
+                expect(await load({expanded: true, includeTags: {exif: []}})).to.deep.equal({});
+            });
+
+            it('should accept false and undefined as a group value', async () => {
+                const expected = await load({expanded: true});
+
+                expect(await load({expanded: true, includeTags: {exif: false}})).to.be.an('object');
+                expect(await load({expanded: true, includeTags: {exif: undefined}})).to.be.an('object');
+                expect(await load({expanded: true, excludeTags: {exif: false}})).to.deep.equal(expected);
+                expect(await load({expanded: true, excludeTags: {exif: undefined}})).to.deep.equal(expected);
+            });
+
+            it('should take a falsy option as a whole as no option', async () => {
+                const expected = await load({expanded: true});
+                for (const option of OPTIONS) {
+                    for (const value of [false, 0, '', null, undefined]) {
+                        expect(await load({expanded: true, [option]: value}), option + ' ' + String(value)).to.deep.equal(expected);
+                    }
+                }
+            });
+
+            it('should accept a known group the reader does not compose and leave it out of the result', async () => {
+                const expected = await load({expanded: true});
+
+                const included = await load({expanded: true, includeTags: {exif: ['Make'], xmp: true, gps: ['GPSLatitude'], iptc: ['By-line'], thumbnail: false}});
+                const excluded = await load({expanded: true, excludeTags: {xmp: true, gps: ['GPSLatitude'], thumbnail: true}});
+
+                expect(Object.keys(included)).to.deep.equal(['exif']);
+                expect(Object.keys(included.exif)).to.deep.equal(['Make']);
+                expect(excluded).to.deep.equal(expected);
+            });
+
+            it('should accept every group name as a key', async () => {
+                const groupNames = ['exif', 'iptc', 'xmp', 'icc', 'photoshop', 'makerNotes', 'mpf', 'file', 'jfif', 'png', 'riff', 'gif', 'gps', 'composite', 'thumbnail'];
+                const excludeTags = Object.fromEntries(groupNames.map((name) => [name, false]));
+                const includeTags = Object.assign({exif: true}, excludeTags, {exif: ['Make']});
+
+                expect(Object.keys((await load({expanded: true, includeTags})).exif)).to.deep.equal(['Make']);
+                expect(await load({expanded: true, excludeTags})).to.deep.equal(await load({expanded: true}));
+            });
+
+            it('should check includeTags before excludeTags, and each key in turn', async () => {
+                const includeMessage = 'reader.load: includeTags has no group \'exiff\': ' + GROUPS_MESSAGE;
+
+                await expectRejection(load({includeTags: {exiff: true}, excludeTags: {gsp: true}}), includeMessage);
+                await expectRejection(load({includeTags: {exif: 1}, excludeTags: {gsp: true}}), getValueMessage('includeTags', 'exif'));
+                await expectRejection(load({includeTags: {exif: 1, exiff: true}}), getValueMessage('includeTags', 'exif'));
+                await expectRejection(load({includeTags: {exiff: true, exif: 1}}), includeMessage);
+                await expectRejection(load({includeTags: {exif: true}, excludeTags: {gps: 'yes', gsp: true}}), getValueMessage('excludeTags', 'gps'));
+                await expectRejection(load({includeTags: 'exif', excludeTags: {gsp: true}}), 'reader.load: includeTags must be an object keyed by group');
+            });
+
+            it('should check the boolean options before includeTags and excludeTags', async () => {
+                await expectRejection(load({includeTags: {exiff: true}, computed: 1}), getBooleanOptionMessage('computed'));
+                await expectRejection(load({excludeTags: 'exif', expanded: 'false'}), getBooleanOptionMessage('expanded'));
+            });
+
+            it('should check the options before the DOM parser and the input data', async () => {
+                restores.push(swapProperties(globalThis, {DOMParser: undefined}));
+                const xmpReader = createReader({formats: [jpeg], groups: [exif, xmp], tagFilter});
+                const xmpLoad = (options, data) => xmpReader.load(data === undefined ? getDataView(JPEG) : data, options);
+
+                await expectRejection(xmpLoad({includeTags: {exiff: true}, bogus: 1}), 'reader.load: unknown option \'bogus\'');
+                await expectRejection(xmpLoad({includeTags: {exiff: true}}), 'reader.load: includeTags has no group \'exiff\': ' + GROUPS_MESSAGE);
+                await expectRejection(xmpLoad({excludeTags: {xmp: 'yes'}}), getValueMessage('excludeTags', 'xmp'));
+                await expectRejection(xmpLoad({includeTags: {exif: [{}]}}, 'not an image'), getValueMessage('includeTags', 'exif'));
+                expect((await getRejection(xmpLoad({includeTags: {exif: true}}, 'not an image'))).message).to.contain('no DOM parser is available');
+                await expectRejection(xmpLoad({includeTags: {exif: true}, domParser: new XmldomParser()}), DOM_PARSER_OPTION_MESSAGE);
+                await expectRejection(xmpLoad({includeTags: {exif: true}, domParser: new XmldomParser()}, 'not an image'), DOM_PARSER_OPTION_MESSAGE);
+                const parserReader = createReader({formats: [jpeg], groups: [exif, xmp], tagFilter, domParser: new XmldomParser()});
+                await expectRejection(parserReader.load('not an image', {includeTags: {exif: true}}), INPUT_MESSAGE);
             });
         });
 
@@ -1137,8 +1422,33 @@ describe('composable/core', () => {
             expect(tags.Thumbnail.base64).to.equal(undefined);
         });
 
+        it('should read the same without the tag filter as with it when the load filters nothing', async () => {
+            const domParser = new XmldomParser();
+            const allGroupsButExif = allGroups.filter((group) => group !== exif);
+            const compositions = [
+                {formats: allFormats, groups: allGroups},
+                {formats: FORMATS_BUT_XML, groups: [canon, pentax]},
+                {formats: allFormats, groups: allGroupsButExif},
+                {formats: FORMATS_BUT_XML, tags: [DATE_TIME]},
+                {formats: FORMATS_BUT_XML, tags: [{name: 'GPSLatitude', ids: [TAG_GPS_LATITUDE], group: 'exif'}]},
+            ].concat([exif, iptc, xmp, icc, photoshop, mpf, canon, pentax, makerNotes, gps, composite, thumbnail].map((group) => ({formats: FORMATS_BUT_XML, groups: [group]})));
+            const images = [['Canon maker note', getBytes(JPEG)]].concat(['test.jpg', 'test-iptc.jpg', 'test.png', 'test.tiff', 'test.heic', 'test.avif', 'test.jxl', 'test.gif']
+                .map((fileName) => [fileName, fs.readFileSync(path.join(IMAGES_PATH, fileName))]));
+            for (const [fileName, bytes] of images) {
+                for (const tables of compositions) {
+                    const reader = createReader(Object.assign({domParser}, tables));
+                    const filteredReader = createReader(Object.assign({tagFilter, domParser}, tables));
+                    for (const expanded of [false, true]) {
+                        const label = [fileName, getKeys(tables.groups), getKeys(tables.tags), expanded].join(' ');
+                        expect(await reader.load(bytes, {expanded}), label).to.deep.equal(await filteredReader.load(bytes, {expanded}));
+                    }
+                }
+            }
+        });
+
         it('should match the default entry for every format and group', async () => {
             const domParser = new XmldomParser();
+            const allReader = createReader({formats: allFormats, groups: allGroups, domParser});
             for (const fileName of ['test.jpg', 'test-iptc.jpg', 'test.png', 'test.tiff', 'test.heic', 'test.avif', 'test.jxl', 'test.gif']) {
                 const bytes = fs.readFileSync(path.join(IMAGES_PATH, fileName));
                 for (const expanded of [false, true]) {
@@ -1163,6 +1473,10 @@ function getGroup(kind, emits) {
         read: () => ({tags: {}}),
         merge: () => ({slot: kind, mode: 'assign'}),
     };
+}
+
+function getKeys(table) {
+    return (table || []).map((value) => value.key || value.name).join('+');
 }
 
 function sliceStub() {

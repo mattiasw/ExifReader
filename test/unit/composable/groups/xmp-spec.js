@@ -6,7 +6,6 @@ import {expect} from 'chai';
 import {getDataView} from '../../test-utils.js';
 import {COMPRESSION_METHOD_BROTLI} from '../../../../src/utils.js';
 import XmpTags from '../../../../src/xmp-tags.js';
-import TagNames0thIfd from '../../../../src/tag-names-0th-ifd.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {xmp} from '../../../../src/composable/groups/xmp.js';
 import {getContext, recordCalls} from '../test-context.js';
@@ -20,14 +19,6 @@ describe('composable/groups/xmp', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
-    });
-
-    it('should consume the xmp kind and inject ApplicationNotes', () => {
-        expect(xmp.key).to.equal('xmp');
-        expect(xmp.consumes).to.deep.equal(['xmp']);
-        expect(xmp.emits).to.deep.equal([]);
-        expect(xmp.descriptors).to.deep.equal([{ifd: '0th', id: 0x02bc}]);
-        expect(TagNames0thIfd[0x02bc]).to.equal('ApplicationNotes');
     });
 
     describe('reading a finder block', () => {

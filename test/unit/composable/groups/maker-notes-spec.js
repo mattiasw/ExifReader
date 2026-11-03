@@ -6,9 +6,6 @@ import {expect} from 'chai';
 import CanonTags from '../../../../src/canon-tags.js';
 import PentaxTags from '../../../../src/pentax-tags.js';
 import {makerNotes} from '../../../../src/composable/groups/maker-notes.js';
-import {canonDecoder} from '../../../../src/composable/groups/canon.js';
-import {pentaxDecoder} from '../../../../src/composable/groups/pentax.js';
-import {MAKER_NOTE_DESCRIPTORS} from '../../../../src/composable/group-helpers.js';
 import {getContext, recordCalls} from '../test-context.js';
 import {getMakerNoteBlock, getPentaxType1Bytes} from './maker-note-test-data.js';
 
@@ -19,19 +16,6 @@ describe('composable/groups/maker-notes', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
-    });
-
-    it('should consume the makerNote kind into the makerNotes group and inject MakerNote and Make', () => {
-        expect(makerNotes.key).to.equal('makerNotes');
-        expect(makerNotes.consumes).to.deep.equal(['makerNote']);
-        expect(makerNotes.emits).to.deep.equal([]);
-        expect(makerNotes.descriptors).to.equal(MAKER_NOTE_DESCRIPTORS);
-    });
-
-    it('should bring the Canon and the Pentax decoders, Canon first', () => {
-        expect(makerNotes.decoders).to.have.lengthOf(2);
-        expect(makerNotes.decoders[0]).to.equal(canonDecoder);
-        expect(makerNotes.decoders[1]).to.equal(pentaxDecoder);
     });
 
     it('should read a Pentax type-1 maker note with the Pentax decoder', () => {

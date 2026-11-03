@@ -5,10 +5,7 @@
 import {expect} from 'chai';
 import {getDataView} from '../test-utils.js';
 import {createTagFilter} from '../../../src/tag-filter.js';
-import TagNames0thIfd from '../../../src/tag-names-0th-ifd.js';
-import TagNamesExifIfd from '../../../src/tag-names-exif-ifd.js';
 import {
-    MAKER_NOTE_DESCRIPTORS,
     parsedTags,
     getBlockDataView,
     getBrobDataView,
@@ -19,12 +16,6 @@ import {
 import {getContext} from './test-context.js';
 
 describe('composable/group-helpers', () => {
-    it('should describe MakerNote and Make', () => {
-        expect(MAKER_NOTE_DESCRIPTORS).to.deep.equal([{ifd: 'exif', id: 0x927c}, {ifd: '0th', id: 0x010f}]);
-        expect(TagNamesExifIfd[0x927c].name).to.equal('MakerNote');
-        expect(TagNames0thIfd[0x010f]).to.equal('Make');
-    });
-
     it('should filter parsed tags by the context\'s filter for the group', () => {
         const ctx = getContext({tagFilter: createTagFilter({includeTags: {exif: ['Make']}})});
 

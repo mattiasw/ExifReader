@@ -28,7 +28,7 @@ const path = require('path');
 const {DOMParser, onErrorStopParsing} = require('@xmldom/xmldom');
 
 const ExifReader = require('../../src/exif-reader.js');
-const {createReader} = require('../../src/composable/core.js');
+const {createReader, tagFilter} = require('../../src/composable/core.js');
 const Formats = require('../../src/composable/formats.js');
 const Groups = require('../../src/composable/groups.js');
 const IptcTagNames = require('../../src/iptc-tag-names.js').default;
@@ -91,6 +91,7 @@ describe('composable reader against the default entry', function () {
 
     const images = fs.readdirSync(IMAGES_PATH).sort();
     const allReader = createReader({formats: Formats.allFormats, groups: Groups.allGroups, domParser});
+    const filteredAllReader = createReader({formats: Formats.allFormats, groups: Groups.allGroups, tagFilter, domParser});
     const tagReader = createReader({formats: ALL_FORMATS_BUT_XML, tags: [DATE_TIME_ORIGINAL], domParser});
     const readerWithMakerNotesOf = {
         canon: createReader({formats: ALL_FORMATS_BUT_XML, groups: [Groups.canon], domParser}),
@@ -136,7 +137,8 @@ describe('composable reader against the default entry', function () {
                     for (const expanded of modes) {
                         const loadOptions = Object.assign({}, BASE, options, {expanded});
                         const expected = withRepeatableIptcArrays(asComposedGroups(await getReference(loadOptions), expanded), expanded);
-                        const actual = await getOutcome(() => allReader.load(bytes, loadOptions));
+                        const reader = options.includeTags || options.excludeTags ? filteredAllReader : allReader;
+                        const actual = await getOutcome(() => reader.load(bytes, loadOptions));
                         expect(withoutUnsupportedFormatMessage(actual), JSON.stringify(Object.assign({}, options, {expanded})))
                             .to.deep.equal(withoutUnsupportedFormatMessage(expected));
                     }
@@ -154,7 +156,8 @@ describe('composable reader against the default entry', function () {
                     }
                     for (const options of [{}].concat(composition.excludeTags.map((excludeTags) => ({excludeTags})))) {
                         const loadOptions = Object.assign({}, BASE, options, {expanded: true});
-                        const actual = await getOutcome(() => composition.reader.load(bytes, loadOptions));
+                        const reader = options.excludeTags ? composition.filteredReader : composition.reader;
+                        const actual = await getOutcome(() => reader.load(bytes, loadOptions));
                         if (!hasFormat(composition, fileType)) {
                             expectUnsupportedFormat(actual, composition.name, composition.formats);
                             continue;
@@ -245,6 +248,7 @@ function getExcludeTagsFor(group) {
 function withReader(composition) {
     return Object.assign({excludeTags: []}, composition, {
         reader: createReader({formats: composition.formats, groups: composition.groups, domParser}),
+        filteredReader: createReader({formats: composition.formats, groups: composition.groups, tagFilter, domParser}),
     });
 }
 

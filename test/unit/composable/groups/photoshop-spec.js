@@ -4,8 +4,6 @@
 
 import {expect} from 'chai';
 import PhotoshopTags from '../../../../src/photoshop-tags.js';
-import TagNames0thIfd from '../../../../src/tag-names-0th-ifd.js';
-import TagNamesExifIfd from '../../../../src/tag-names-exif-ifd.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {photoshop} from '../../../../src/composable/groups/photoshop.js';
 import {getContext, recordCalls} from '../test-context.js';
@@ -17,15 +15,6 @@ describe('composable/groups/photoshop', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
-    });
-
-    it('should consume the photoshop kind and inject ImageSourceData and PhotoshopSettings', () => {
-        expect(photoshop.key).to.equal('photoshop');
-        expect(photoshop.consumes).to.deep.equal(['photoshop']);
-        expect(photoshop.emits).to.deep.equal([]);
-        expect(photoshop.descriptors).to.deep.equal([{ifd: 'exif', id: 0x935c}, {ifd: '0th', id: 0x8649}]);
-        expect(TagNamesExifIfd[0x935c]).to.equal('ImageSourceData');
-        expect(TagNames0thIfd[0x8649]).to.equal('PhotoshopSettings');
     });
 
     it('should read the settings bytes and filter the tags', () => {

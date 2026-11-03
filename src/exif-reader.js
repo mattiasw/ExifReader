@@ -16,6 +16,7 @@ import DOMParser from './dom-parser.js';
 import exifErrors from './errors.js';
 import Composition from './composable/composition.js';
 import {readView} from './composable/read-view.js';
+import {createTagFilter} from './tag-filter.js';
 import {tiff} from './composable/formats/tiff.js';
 import {jpegHeader, file, jfif} from './composable/formats/jpeg.js';
 import {pngHeader, pngFile, pngText, pngChunk} from './composable/formats/png.js';
@@ -73,7 +74,7 @@ function loadFromData(data, options) {
 }
 
 export function loadView(dataView, options = {}) {
-    return readView(getDefaultComposition(), dataView, options, {getDomParser: DOMParser.get, getBase64Image});
+    return readView(getDefaultComposition(), dataView, options, {getDomParser: DOMParser.get, getBase64Image, createTagFilter});
 }
 
 function getDefaultComposition() {

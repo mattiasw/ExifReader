@@ -17,11 +17,7 @@ describe('composable/groups/mpf', () => {
         }
     });
 
-    it('should consume the mpf kind and inject no tags', () => {
-        expect(mpf.key).to.equal('mpf');
-        expect(mpf.consumes).to.deep.equal(['mpf']);
-        expect(mpf.emits).to.deep.equal([]);
-        expect(mpf.descriptors).to.deep.equal([]);
+    it('should assign its tags to the mpf slot', () => {
         expect(mpf.merge({})).to.deep.equal({slot: 'mpf', mode: 'assign'});
     });
 

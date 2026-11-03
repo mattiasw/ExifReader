@@ -9,6 +9,7 @@ import Composition from '../../../src/composable/composition.js';
 import Errors from '../../../src/errors.js';
 import {allFormats} from '../../../src/composable/formats.js';
 import {allGroups, exif, iptc} from '../../../src/composable/groups.js';
+import {createTagFilter, NOOP_TAG_FILTER} from '../../../src/tag-filter.js';
 import {getDataView} from '../test-utils.js';
 import {
     ascii,
@@ -84,6 +85,7 @@ describe('composable/read-view', () => {
                 calls.push(['getBase64Image', image.byteLength]);
                 return 'base64';
             },
+            createTagFilter,
         };
 
         const tags = readView(ALL, getDataView(JPEG), {expanded: true, domParser}, environment);
@@ -98,6 +100,25 @@ describe('composable/read-view', () => {
 
         expect(readView(ALL, getDataView(JPEG), options, getEnvironment()).exif.Make.description).to.equal('Make');
         expect(readView(ALL, getDataView(JPEG), options, getEnvironment({includeTagsIsLimit: true})).exif.Make).to.equal(undefined);
+    });
+
+    it('should build its filter with the environment\'s factory', () => {
+        const calls = [];
+        const includeTags = {exif: true};
+        const excludeTags = {xmp: true};
+        const environment = getEnvironment({includeTagsIsLimit: true});
+        environment.createTagFilter = (options) => {
+            calls.push(options);
+            return Object.assign({}, NOOP_TAG_FILTER, {isActive: true, shouldReturnGroup: (groupKey) => groupKey !== 'exif'});
+        };
+
+        const tags = readView(ALL, getDataView(JPEG), {expanded: true, includeTags, excludeTags}, environment);
+
+        expect(tags.exif).to.equal(undefined);
+        expect(tags.Thumbnail.image.byteLength).to.equal(THUMBNAIL_IMAGE.length);
+        expect(calls).to.deep.equal([{includeTags, excludeTags, includeTagsIsLimit: true}]);
+        expect(calls[0].includeTags).to.equal(includeTags);
+        expect(calls[0].excludeTags).to.equal(excludeTags);
     });
 
     it('should return a promise in async mode', async () => {
@@ -118,6 +139,7 @@ function getEnvironment({includeTagsIsLimit} = {}) {
     return {
         getDomParser: (domParser) => ({parser: domParser || new DOMParser()}),
         getBase64Image: () => undefined,
+        createTagFilter,
         includeTagsIsLimit,
     };
 }

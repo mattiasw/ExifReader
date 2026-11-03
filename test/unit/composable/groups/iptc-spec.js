@@ -5,7 +5,6 @@
 import {expect} from 'chai';
 import {getDataView} from '../../test-utils.js';
 import IptcTags from '../../../../src/iptc-tags.js';
-import TagNames0thIfd from '../../../../src/tag-names-0th-ifd.js';
 import {getValueBudget} from '../../../../src/tags-helpers.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {iptc, composedIptc, withRepeatableAsArrays} from '../../../../src/composable/groups/iptc.js';
@@ -20,14 +19,6 @@ describe('composable/groups/iptc', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
-    });
-
-    it('should consume the iptc kind and inject IPTC-NAA', () => {
-        expect(iptc.key).to.equal('iptc');
-        expect(iptc.consumes).to.deep.equal(['iptc']);
-        expect(iptc.emits).to.deep.equal([]);
-        expect(iptc.descriptors).to.deep.equal([{ifd: '0th', id: 0x83bb}]);
-        expect(TagNames0thIfd[0x83bb]).to.equal('IPTC-NAA');
     });
 
     it('should read the block\'s view at its offset with the shared value budget and filter the tags', () => {

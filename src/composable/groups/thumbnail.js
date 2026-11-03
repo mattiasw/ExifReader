@@ -3,18 +3,17 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import Thumbnail from '../../thumbnail.js';
-import {IFD_TYPE_1ST} from '../../ifd-types.js';
 import {filterTagsForParse} from '../../tag-filter.js';
+import {THUMBNAIL_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const thumbnail = {
     key: 'thumbnail',
     consumes: ['thumbnail'],
     emits: [],
-    // JPEGInterchangeFormat and JPEGInterchangeFormatLength.
-    descriptors: [{ifd: IFD_TYPE_1ST, id: 0x0201}, {ifd: IFD_TYPE_1ST, id: 0x0202}],
     read: readThumbnailBlock,
     merge: (block) => ({slot: 'thumbnail', mode: 'thumbnailCandidate', rank: block.rank}),
+    exifDependencies: THUMBNAIL_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };
 

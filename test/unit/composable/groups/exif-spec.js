@@ -30,7 +30,6 @@ describe('composable/groups/exif', () => {
         expect(exif.key).to.equal('exif');
         expect(exif.consumes).to.deep.equal(['exif']);
         expect(exif.emits).to.deep.equal(['iptc', 'xmp', 'photoshop', 'icc', 'makerNote', 'thumbnail']);
-        expect(exif.descriptors).to.deep.equal([]);
     });
 
     describe('reading the main block', () => {
