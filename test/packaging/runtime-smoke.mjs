@@ -17,7 +17,11 @@ const SPECIFIERS = [
     'exifreader/dist/exif-reader.js',
     'exifreader/src/exif-reader',
     'exifreader/dist/exif-reader',
-    'exifreader/src/composable/x.js'
+    'exifreader/src/composable/internal.js',
+    'exifreader/core',
+    'exifreader/formats',
+    'exifreader/groups',
+    'exifreader/tags/exif'
 ];
 const ROOT_FILE_SUFFIX = 'node_modules/exifreader/dist/exif-reader.js';
 const EXPECTED_TAG = '2011:06:28 12:06:14';

@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `errors.UnsupportedFormatError`, thrown when no supported format recognizes
   the input.
+- The `exifreader/core` (`createReader`, whose `reader.load` always returns a
+  Promise of the tags, grouped by default and flat with `expanded: false`),
+  `exifreader/formats`, `exifreader/groups` and `exifreader/tags/*` (`exif`,
+  `iptc`, `mpf`) subpaths, ES modules only, with their TypeScript definitions.
+  The TypeScript type of the grouped result of `reader.load` has only the groups
+  and tags the reader composes.
 
 ### Changed
 

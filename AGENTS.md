@@ -96,6 +96,8 @@ This is **not** a TypeScript project, but `exif-reader.d.ts` provides types for 
 2. Update `test/types/exif-reader.ts` with type-level tests (including `@ts-expect-error` for invalid usage)
 3. Verify with `npm run test:types`
 
+The types of the composable subpaths are tested in `test/types/packed/composable.mts`. `npm run test:types` does not compile it; `npm run test:build` does, against the packed package.
+
 ## Tests
 
 Every source file has a corresponding `test/unit/*-spec.js`. New code needs tests. Coverage thresholds are enforced (via `c8`, configured in `package.json`).

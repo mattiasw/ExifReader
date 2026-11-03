@@ -21,6 +21,28 @@
     "webpack.config.js"
   ],
   "types": "./exif-reader.d.ts",
+  "typesVersions": {
+    "*": {
+      "core": [
+        "./src/composable/core.d.ts"
+      ],
+      "formats": [
+        "./src/composable/formats.d.ts"
+      ],
+      "groups": [
+        "./src/composable/groups.d.ts"
+      ],
+      "tags/exif": [
+        "./src/composable/tags/exif.d.ts"
+      ],
+      "tags/iptc": [
+        "./src/composable/tags/iptc.d.ts"
+      ],
+      "tags/mpf": [
+        "./src/composable/tags/mpf.d.ts"
+      ]
+    }
+  },
   "exports": {
     ".": {
       "types": "./exif-reader.d.ts",
@@ -30,6 +52,30 @@
       "import": "./dist/exif-reader.js",
       "require": "./dist/exif-reader.js",
       "default": "./dist/exif-reader.js"
+    },
+    "./core": {
+      "types": "./src/composable/core.d.ts",
+      "default": "./src/composable/core.js"
+    },
+    "./formats": {
+      "types": "./src/composable/formats.d.ts",
+      "default": "./src/composable/formats.js"
+    },
+    "./groups": {
+      "types": "./src/composable/groups.d.ts",
+      "default": "./src/composable/groups.js"
+    },
+    "./tags/exif": {
+      "types": "./src/composable/tags/exif.d.ts",
+      "default": "./src/composable/tags/exif.js"
+    },
+    "./tags/iptc": {
+      "types": "./src/composable/tags/iptc.d.ts",
+      "default": "./src/composable/tags/iptc.js"
+    },
+    "./tags/mpf": {
+      "types": "./src/composable/tags/mpf.d.ts",
+      "default": "./src/composable/tags/mpf.js"
     },
     "./package.json": "./package.json",
     "./src/exif-reader": "./src/exif-reader.js",

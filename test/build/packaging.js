@@ -23,7 +23,34 @@ const SPECIFIERS = [
     {specifier: 'exifreader/src/exif-reader', file: 'src/exif-reader.js', shape: API_SHAPE},
     {specifier: 'exifreader/dist/exif-reader', file: 'dist/exif-reader.js', shape: API_SHAPE}
 ];
-const BLOCKED_SPECIFIERS = ['exifreader/bin/cli.js', 'exifreader/src/composable/core.js'];
+// ES modules without a default export, so their shape is that of the namespace.
+const SUBPATH_SPECIFIERS = [
+    {specifier: 'exifreader/core', file: 'src/composable/core.js', shape: {createReader: 'function', errors: 'object', tagFilter: 'object'}},
+    {specifier: 'exifreader/formats', file: 'src/composable/formats.js', shape: {jpeg: 'object', allFormats: 'object'}},
+    {specifier: 'exifreader/groups', file: 'src/composable/groups.js', shape: {exif: 'object', allGroups: 'object'}},
+    {specifier: 'exifreader/tags/exif', file: 'src/composable/tags/exif.js', shape: {DateTimeOriginal: 'object'}},
+    {specifier: 'exifreader/tags/iptc', file: 'src/composable/tags/iptc.js', shape: {ModelVersion: 'object'}},
+    {specifier: 'exifreader/tags/mpf', file: 'src/composable/tags/mpf.js', shape: {MPFVersion: 'object'}}
+];
+const SUBPATH_TYPE_FILES = [
+    'src/composable/core.d.ts',
+    'src/composable/formats.d.ts',
+    'src/composable/groups.d.ts',
+    'src/composable/tags/exif.d.ts',
+    'src/composable/tags/iptc.d.ts',
+    'src/composable/tags/mpf.d.ts'
+];
+const TAG_MODULE_FILES = [
+    'src/composable/tags/exif.js',
+    'src/composable/tags/iptc.js',
+    'src/composable/tags/mpf.js'
+];
+const BLOCKED_SPECIFIERS = [
+    'exifreader/bin/cli.js',
+    'exifreader/src/composable/core.js',
+    'exifreader/src/composable/internal.js',
+    'exifreader/tags/exiff'
+];
 const NOT_EXPORTED_CODE = 'ERR_PACKAGE_PATH_NOT_EXPORTED';
 
 // Bundlers that honour the module condition keep getting the ES module source;
@@ -59,7 +86,8 @@ const WEB_BUNDLE_SPECIFIER = 'exifreader/dist/exif-reader.js';
 const WEB_FALLBACKS = {http: false, https: false};
 
 const TYPE_CONSUMERS_PATH = path.join(ROOT_PATH, 'test', 'types', 'packed');
-const TYPE_CONSUMER_FILES = ['consumer.ts', 'consumer.mts'];
+const TYPE_CONSUMER_FILES = ['consumer.ts', 'consumer.mts', 'composable.mts'];
+const NO_NODE_TYPES_CONSUMER_FILE = 'no-node-types.mts';
 const TSC_PATH = path.join(ROOT_PATH, 'node_modules', 'typescript', 'bin', 'tsc');
 const TYPE_MODES = [
     {moduleResolution: 'bundler', module: 'esnext'},
@@ -89,6 +117,10 @@ describe('packaging', function () {
     it('ships src/package.json and no custom build marker in the npm tarball', () => {
         expect(packedFiles).to.include('src/package.json');
         expect(packedFiles).to.not.include('dist/.exifreader-custom-build.json');
+    });
+
+    it('ships the type definitions and the generated tag modules of the subpaths', () => {
+        expect(packedFiles).to.include.members([...SUBPATH_TYPE_FILES, ...TAG_MODULE_FILES]);
     });
 
     it('ships a dist without webpack\'s __non_webpack_require__', () => {
@@ -124,6 +156,15 @@ describe('packaging', function () {
             });
         });
 
+        SUBPATH_SPECIFIERS.forEach(({specifier, file, shape}) => {
+            it(`resolves and loads the ES module ${specifier}`, () => {
+                const result = results.subpaths[specifier];
+                expect(result.error, 'resolution error').to.equal(undefined);
+                expect(result.resolved).to.equal(path.join(installedDir, file));
+                expect(result.loaded).to.deep.equal(shape);
+            });
+        });
+
         BLOCKED_SPECIFIERS.forEach((specifier) => {
             it(`refuses ${specifier} as not exported`, () => {
                 expect(results.blocked[specifier]).to.deep.equal({error: NOT_EXPORTED_CODE});
@@ -148,6 +189,15 @@ describe('packaging', function () {
         SPECIFIERS.forEach(({specifier, file, shape}) => {
             it(`resolves and loads ${specifier}`, () => {
                 const result = results.resolutions[specifier];
+                expect(result.error, 'resolution error').to.equal(undefined);
+                expect(result.resolved).to.equal(pathToFileURL(path.join(installedDir, file)).href);
+                expect(result.loaded).to.deep.equal(shape);
+            });
+        });
+
+        SUBPATH_SPECIFIERS.forEach(({specifier, file, shape}) => {
+            it(`resolves and loads the ES module ${specifier}`, () => {
+                const result = results.subpaths[specifier];
                 expect(result.error, 'resolution error').to.equal(undefined);
                 expect(result.resolved).to.equal(pathToFileURL(path.join(installedDir, file)).href);
                 expect(result.loaded).to.deep.equal(shape);
@@ -274,25 +324,43 @@ describe('packaging', function () {
 
     describe('types through the packed package', () => {
         before(() => {
-            TYPE_CONSUMER_FILES.forEach((fileName) => {
+            [...TYPE_CONSUMER_FILES, NO_NODE_TYPES_CONSUMER_FILE].forEach((fileName) => {
                 fs.copyFileSync(path.join(TYPE_CONSUMERS_PATH, fileName), path.join(consumerDir, fileName));
             });
         });
 
         TYPE_MODES.forEach(({moduleResolution, module}) => {
-            it(`type-checks both consumers against exif-reader.d.ts under moduleResolution ${moduleResolution}`, () => {
-                const tsconfigPath = writeTsconfig(consumerDir, moduleResolution, module);
+            it(`type-checks every consumer against exif-reader.d.ts and the subpath type definitions under moduleResolution ${moduleResolution}`, () => {
+                const tsconfigPath = writeTsconfig(consumerDir, moduleResolution, {
+                    module,
+                    moduleResolution,
+                    typeRoots: [path.join(ROOT_PATH, 'node_modules', '@types')],
+                    types: ['node']
+                }, TYPE_CONSUMER_FILES);
 
-                const result = spawnSync(process.execPath, [TSC_PATH, '-p', tsconfigPath, '--listFiles'], {
-                    cwd: consumerDir,
-                    encoding: 'utf8',
-                    timeout: PACK_TIMEOUT_MS
-                });
+                const listedFiles = runTsc(consumerDir, tsconfigPath);
 
-                expect(result.status, [result.stdout, result.stderr, result.error].filter(Boolean).join('\n')).to.equal(0);
-                const listedFiles = result.stdout.split(/\r?\n/).map(toForwardSlashes);
                 expect(listedFiles).to.include(toForwardSlashes(path.join(installedDir, 'exif-reader.d.ts')));
+                expect(listedFiles).to.include.members(SUBPATH_TYPE_FILES.map((file) => toForwardSlashes(path.join(installedDir, file))));
             });
+        });
+
+        it('rejects a non-byte input to exifreader/core when no Node types resolve', () => {
+            const emptyTypeRoot = path.join(path.dirname(consumerDir), 'empty-type-roots');
+            fs.mkdirSync(emptyTypeRoot, {recursive: true});
+            const tsconfigPath = writeTsconfig(consumerDir, 'no-node-types', {
+                module: 'esnext',
+                moduleResolution: 'bundler',
+                lib: ['es2022', 'dom'],
+                skipLibCheck: true,
+                typeRoots: [emptyTypeRoot],
+                types: []
+            }, [NO_NODE_TYPES_CONSUMER_FILE]);
+
+            const listedFiles = runTsc(consumerDir, tsconfigPath);
+
+            expect(listedFiles).to.include(toForwardSlashes(path.join(installedDir, 'src', 'composable', 'core.d.ts')));
+            expect(listedFiles.filter((file) => file.includes('/@types/node/'))).to.deep.equal([]);
         });
     });
 
@@ -380,6 +448,17 @@ ${specifiersSource()}.forEach((specifier) => {
     }
 });
 
+const subpaths = {};
+${subpathSpecifiersSource()}.forEach(({specifier, shape}) => {
+    try {
+        const resolved = require.resolve(specifier);
+        const loaded = require(specifier);
+        subpaths[specifier] = {resolved, loaded: summarizeNamespace(loaded, shape)};
+    } catch (error) {
+        subpaths[specifier] = {error: error.code || error.message};
+    }
+});
+
 const blocked = {};
 ${blockedSpecifiersSource()}.forEach((specifier) => {
     try {
@@ -395,7 +474,7 @@ try {
 } catch (error) {
     install = {error: error.code || error.message};
 }
-process.stdout.write(JSON.stringify({resolutions, blocked, install}));
+process.stdout.write(JSON.stringify({resolutions, subpaths, blocked, install}));
 `;
 }
 
@@ -415,6 +494,17 @@ for (const specifier of ${specifiersSource()}) {
     }
 }
 
+const subpaths = {};
+for (const {specifier, shape} of ${subpathSpecifiersSource()}) {
+    try {
+        const resolved = import.meta.resolve(specifier);
+        const loaded = await import(specifier);
+        subpaths[specifier] = {resolved, loaded: summarizeNamespace(loaded, shape)};
+    } catch (error) {
+        subpaths[specifier] = {error: error.code || error.message};
+    }
+}
+
 const blocked = {};
 for (const specifier of ${blockedSpecifiersSource()}) {
     try {
@@ -424,7 +514,7 @@ for (const specifier of ${blockedSpecifiersSource()}) {
     }
 }
 
-process.stdout.write(JSON.stringify({resolutions, blocked, staticDefaultImport: summarize(exifReader)}));
+process.stdout.write(JSON.stringify({resolutions, subpaths, blocked, staticDefaultImport: summarize(exifReader)}));
 `;
 }
 
@@ -497,11 +587,23 @@ function summarize(value) {
     }
     return summary;
 }
+
+function summarizeNamespace(namespace, shape) {
+    const summary = {};
+    Object.keys(shape).forEach((key) => {
+        summary[key] = typeof namespace[key];
+    });
+    return summary;
+}
 `;
 }
 
 function specifiersSource() {
     return JSON.stringify(SPECIFIERS.map(({specifier}) => specifier));
+}
+
+function subpathSpecifiersSource() {
+    return JSON.stringify(SUBPATH_SPECIFIERS.map(({specifier, shape}) => ({specifier, shape})));
 }
 
 function blockedSpecifiersSource() {
@@ -521,22 +623,30 @@ function resolveWithWebpack(compiler, dependencyType, context, specifier) {
     });
 }
 
-function writeTsconfig(consumerDir, moduleResolution, module) {
-    const tsconfigPath = path.join(consumerDir, `tsconfig.${moduleResolution}.json`);
+function writeTsconfig(consumerDir, name, compilerOptions, files) {
+    const tsconfigPath = path.join(consumerDir, `tsconfig.${name}.json`);
     const tsconfig = {
         compilerOptions: {
             strict: true,
             noEmit: true,
             target: 'es2022',
-            module,
-            moduleResolution,
-            typeRoots: [path.join(ROOT_PATH, 'node_modules', '@types')],
-            types: ['node']
+            ...compilerOptions
         },
-        files: TYPE_CONSUMER_FILES
+        files
     };
     fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 4));
     return tsconfigPath;
+}
+
+function runTsc(cwd, tsconfigPath) {
+    const result = spawnSync(process.execPath, [TSC_PATH, '-p', tsconfigPath, '--listFiles'], {
+        cwd,
+        encoding: 'utf8',
+        timeout: PACK_TIMEOUT_MS
+    });
+
+    expect(result.status, [result.stdout, result.stderr, result.error].filter(Boolean).join('\n')).to.equal(0);
+    return result.stdout.split(/\r?\n/).map(toForwardSlashes);
 }
 
 function toForwardSlashes(filePath) {

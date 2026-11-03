@@ -33,7 +33,11 @@ const SPECIFIERS = [
     'exifreader/dist/exif-reader.js',
     'exifreader/src/exif-reader',
     'exifreader/dist/exif-reader',
-    'exifreader/src/composable/x.js'
+    'exifreader/src/composable/internal.js',
+    'exifreader/core',
+    'exifreader/formats',
+    'exifreader/groups',
+    'exifreader/tags/exif'
 ];
 
 // What each tool resolves with the exports map as shipped, in SPECIFIERS
@@ -44,33 +48,40 @@ const SPECIFIERS = [
 // webpack node module-first gets the UMD through the node condition, where
 // its mainFields had picked the source. metro web gets the source through the
 // browser condition, where its main field had picked the UMD. The two
-// extension-less columns came with their explicit map entries. See README.md
-// to refresh it.
+// extension-less columns came with their explicit map entries.
+// exifreader/src/composable/internal.js does not exist on purpose: it stands
+// for any composable internal, so a null in a leg that reports only a missing
+// module is not proof of refusal (REFUSAL_LEGS below are). The four subpaths
+// resolve to their src/composable file under every import kind in each tool
+// that honours exports, to null where exports is ignored (parcel without
+// packageExports, metro exports off), as there are no root shim files, and,
+// under tsc 5 node10, to their d.ts through typesVersions, which leaves the
+// root on exif-reader.d.ts. See README.md to refresh it.
 const EXPECTED = {
-    'webpack esm': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'webpack commonjs': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'webpack node module-first': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'webpack node main-first': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'esbuild browser import': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'esbuild browser require': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'esbuild node import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'esbuild node require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'esbuild browser conditions': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'vite': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'rollup + node-resolve': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'parcel': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'parcel packageExports': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'metro exports on import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'metro exports on require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'metro exports off': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'metro web': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'tsc 5 node10': ['exif-reader.d.ts', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'node import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'node require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'bun import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'bun require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'deno import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null],
-    'deno require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null]
+    'webpack esm': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'webpack commonjs': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'webpack node module-first': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'webpack node main-first': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'esbuild browser import': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'esbuild browser require': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'esbuild node import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'esbuild node require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'esbuild browser conditions': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'vite': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'rollup + node-resolve': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'parcel': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, null, null, null, null],
+    'parcel packageExports': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'metro exports on import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'metro exports on require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'metro exports off': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, null, null, null, null],
+    'metro web': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'tsc 5 node10': ['exif-reader.d.ts', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.d.ts', 'src/composable/formats.d.ts', 'src/composable/groups.d.ts', 'src/composable/tags/exif.d.ts'],
+    'node import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'node require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'bun import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'bun require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'deno import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
+    'deno require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js']
 };
 
 // Legs whose refusal message says "not exported". The others report only a missing
@@ -88,7 +99,7 @@ const REFUSAL_LEGS = [
     'parcel packageExports'
 ];
 const REFUSAL_PATTERN = /not exported|ERR_PACKAGE_PATH_NOT_EXPORTED/i;
-const REFUSAL_SPECIFIER = 'exifreader/src/composable/x.js';
+const REFUSAL_SPECIFIER = 'exifreader/src/composable/internal.js';
 
 const TOOL_PACKAGES = [
     'esbuild',

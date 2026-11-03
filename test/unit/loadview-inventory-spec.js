@@ -25,9 +25,7 @@ import {
     TAG_SOFTWARE,
     TAG_APPLICATION_NOTES,
     TAG_IPTC_NAA,
-    TAG_PHOTOSHOP_SETTINGS,
     TAG_ICC_PROFILE,
-    TAG_IMAGE_SOURCE_DATA,
     TAG_FOCAL_LENGTH,
     TAG_FOCAL_LENGTH_IN_35MM_FILM,
     TAG_FOCAL_PLANE_X_RESOLUTION,
@@ -51,7 +49,6 @@ import {
     getNaaBlock,
     headline,
     objectName,
-    getPhotoshopResource,
     getIccProfile,
     getXmpPacket,
     getJpeg,
@@ -61,8 +58,8 @@ import {
     getIptcSegment,
     getIccSegment,
     getMpfSegment,
-    getJfifSegment,
     getSof0Segment,
+    getJpegWithEverything,
     getPng,
     getPngChunk,
     getTextChunk,
@@ -1673,42 +1670,6 @@ function getTiffWithCarriedXmp() {
 
 function getTiffWithThumbnail(marker, thumbnailOptions = {}) {
     return getTiff({ifd0: [ascii(TAG_MAKE, marker)], thumbnail: objectAssign({image: '\xff\xd8' + marker + '\xff\xd9'}, thumbnailOptions)});
-}
-
-// A JPEG with SOF0, JFIF, an Exif block carrying all five groups plus GPS,
-// focal length tags and an IFD1 thumbnail, and an MPF segment; with
-// `segments`, also APP13 IPTC, APP1 XMP and APP2 ICC segments.
-function getJpegWithEverything({segments = true} = {}) {
-    const tiff = getTiff({
-        ifd0: [
-            ascii(TAG_MAKE, 'Canon'),
-            undefinedBytes(TAG_IPTC_NAA, getIptcDatasets([headline('carried')])),
-            bytes(TAG_APPLICATION_NOTES, getXmpPacket({Title: 'carried'})),
-            bytes(TAG_IMAGE_SOURCE_DATA, 'x'),
-            bytes(TAG_PHOTOSHOP_SETTINGS, getPhotoshopResource(0x0bb7, 'path')),
-            undefinedBytes(TAG_ICC_PROFILE, getIccProfile('CARR')),
-        ],
-        exifIfd: [
-            rational(TAG_FOCAL_LENGTH, 50, 1),
-            short(TAG_FOCAL_LENGTH_IN_35MM_FILM, 100),
-            canonMakerNote([ascii(TAG_CANON_LENS_MODEL, 'canon lens')]),
-        ],
-        gpsIfd: [ascii(TAG_GPS_LATITUDE_REF, 'N'), rationals(TAG_GPS_LATITUDE, [[1, 1], [0, 1], [0, 1]])],
-        thumbnail: {image: '\xff\xd8thumb\xff\xd9'},
-    });
-    const mpfSegment = getMpfSegment(getTiff({ifd0: [long(TAG_MPF_NUMBER_OF_IMAGES, 2)]}));
-    if (!segments) {
-        return getJpeg(getSof0Segment(), getJfifSegment(), getExifSegment(tiff), mpfSegment);
-    }
-    return getJpeg(
-        getSof0Segment(),
-        getJfifSegment(),
-        getExifSegment(tiff),
-        getIptcSegment(getNaaBlock([headline('segment')])),
-        getXmpSegment(getXmpPacket({Title: 'segment'})),
-        getIccSegment(getIccProfile('SEGM')),
-        mpfSegment
-    );
 }
 
 function getExifRawProfileChunk(tiff) {
