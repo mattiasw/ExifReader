@@ -5,6 +5,7 @@
 import Jxl from '../../image-header-jxl.js';
 import JxlFileTags from '../../jxl-file-tags.js';
 import {parsedTags} from '../group-helpers.js';
+import {FORMAT_BRAND} from '../brand.js';
 
 export const jxlHeader = {
     fileType: {value: 'jxl', description: 'JPEG XL'},
@@ -23,4 +24,5 @@ export const jxlFile = {
 export const jxl = {
     header: jxlHeader,
     readers: [jxlFile],
+    brand: FORMAT_BRAND,
 };

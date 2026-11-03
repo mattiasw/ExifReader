@@ -5,6 +5,7 @@
 import {getStringValueFromArray} from '../../utils.js';
 import PentaxTags from '../../pentax-tags.js';
 import {getEmbeddableMergeDescriptor, readMakerNoteWithDecoders, MAKER_NOTE_DESCRIPTORS} from '../group-helpers.js';
+import {GROUP_BRAND} from '../brand.js';
 
 export const pentaxDecoder = {
     name: 'pentax',
@@ -20,6 +21,7 @@ export const pentax = {
     decoders: [pentaxDecoder],
     read: (block, ctx) => readMakerNoteWithDecoders(block, ctx, pentax.decoders),
     merge: (block) => getEmbeddableMergeDescriptor(block, 'makerNotes', 'carriedMakerNotes'),
+    brand: GROUP_BRAND,
 };
 
 function hasPentaxType1Prefix(makerNoteBytes) {

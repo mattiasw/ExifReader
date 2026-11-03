@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {exif} from './groups/exif.js';
-import {iptc} from './groups/iptc.js';
+import {composedIptc as iptc} from './groups/iptc.js';
 import {xmp} from './groups/xmp.js';
 import {icc} from './groups/icc.js';
 import {photoshop} from './groups/photoshop.js';

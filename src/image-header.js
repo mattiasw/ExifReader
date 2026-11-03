@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import Errors from './errors.js';
+
 export default {
     parseAppMarkers
 };
@@ -19,7 +21,8 @@ export default {
  *     matches runs its `find`.
  * @returns {{fileType: {value: string, description: string}, blocks: Array<Object>, ranges: (Array<Object>|undefined), truncated: (boolean|undefined)}}
  *     The blocks the finder found, each `{kind, ...payload}`.
- * @throws {Error} When the data view is not a recognized image format.
+ * @throws {UnsupportedFormatError} When the data view is not a recognized
+ *     image format.
  */
 function parseAppMarkers(dataView, includeRanges, formats) {
     const ranges = includeRanges ? [] : undefined;
@@ -31,7 +34,7 @@ function parseAppMarkers(dataView, includeRanges, formats) {
         }
     }
 
-    throw new Error('Invalid image format');
+    throw new Errors.UnsupportedFormatError('Invalid image format');
 }
 
 function finalize(blocks, fileType, fileTypeDescription, ranges) {

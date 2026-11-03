@@ -5,6 +5,7 @@
 import {getEmbeddableMergeDescriptor, readMakerNoteWithDecoders, MAKER_NOTE_DESCRIPTORS} from '../group-helpers.js';
 import {canonDecoder} from './canon.js';
 import {pentaxDecoder} from './pentax.js';
+import {GROUP_BRAND} from '../brand.js';
 
 // Canon is recognized by Make before Pentax by its type-1 prefix.
 export const makerNotes = {
@@ -15,4 +16,5 @@ export const makerNotes = {
     decoders: [canonDecoder, pentaxDecoder],
     read: (block, ctx) => readMakerNoteWithDecoders(block, ctx, makerNotes.decoders),
     merge: (block) => getEmbeddableMergeDescriptor(block, 'makerNotes', 'carriedMakerNotes'),
+    brand: GROUP_BRAND,
 };

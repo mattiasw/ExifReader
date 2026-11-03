@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import { load, loadView, type Tags, type ExpandedTags } from "../../exif-reader.js";
+import { load, loadView, errors, type Tags, type ExpandedTags } from "../../exif-reader.js";
 
 load("", { includeUnknown: true });
 load("", { computed: true });
@@ -537,3 +537,9 @@ load(new ArrayBuffer(0), { length: "auto", expanded: true });
 load(new ArrayBuffer(0), { length: "auto" });
 // @ts-expect-error  length: 'auto' on a URL still requires both
 load("", { length: "auto" });
+
+const unsupportedFormatError: Error = new errors.UnsupportedFormatError("x");
+unsupportedFormatError instanceof errors.UnsupportedFormatError;
+const metadataMissingError: Error = new errors.MetadataMissingError("x");
+// @ts-expect-error  there is no such error class
+new errors.UnsupportedFormatErorr("x");

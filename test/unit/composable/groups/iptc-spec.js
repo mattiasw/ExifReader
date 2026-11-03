@@ -8,7 +8,9 @@ import IptcTags from '../../../../src/iptc-tags.js';
 import TagNames0thIfd from '../../../../src/tag-names-0th-ifd.js';
 import {getValueBudget} from '../../../../src/tags-helpers.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
-import {iptc} from '../../../../src/composable/groups/iptc.js';
+import {iptc, composedIptc, withRepeatableAsArrays} from '../../../../src/composable/groups/iptc.js';
+import IptcTagNames from '../../../../src/iptc-tag-names.js';
+import {getNaaBlock, headline} from '../../loadview-inventory-images.js';
 import {getContext, recordCalls} from '../test-context.js';
 
 describe('composable/groups/iptc', () => {
@@ -93,6 +95,109 @@ describe('composable/groups/iptc', () => {
             return iptc.suppressions[0].isSuppressed(block, finderBlocks, getContext());
         }
     });
+
+    describe('the group a composed reader gets', () => {
+        it('should read one repeatable dataset as an array where the default entry\'s group reads an object', () => {
+            const block = {kind: 'iptc', dataView: getDataView(getNaaBlock([keywords('k'), headline('h')])), dataOffset: 0};
+
+            const composed = composedIptc.read(block, getContext()).tags;
+            const defaultEntry = iptc.read(block, getContext()).tags;
+
+            expect(composed).to.deep.equal({
+                Keywords: [{id: 0x0219, value: [0x6b], description: 'k'}],
+                Headline: {id: 0x0269, value: [0x68], description: 'h'},
+            });
+            expect(defaultEntry.Keywords).to.deep.equal({id: 0x0219, value: [0x6b], description: 'k'});
+        });
+
+        it('should read with the default entry\'s reader, looked up at call time', () => {
+            const {calls, restore} = recordCalls(IptcTags, 'read', () => ({Keywords: {id: 0x0219, value: 'k'}, Headline: {id: 0x0269, value: 'h'}}));
+            restores.push(restore);
+            const view = getDataView('\x00'.repeat(32));
+            const ctx = getContext({options: {includeUnknown: 'unknown'}});
+
+            const result = composedIptc.read({kind: 'iptc', dataView: view, dataOffset: 4}, ctx);
+
+            expect(result).to.deep.equal({tags: {Keywords: [{id: 0x0219, value: 'k'}], Headline: {id: 0x0269, value: 'h'}}});
+            expect(calls).to.deep.equal([[view, 4, 'unknown', ctx.tagFilter, ctx.valueBudget]]);
+        });
+
+        it('should be the default entry\'s group in everything but the read', () => {
+            for (const name of ['key', 'consumes', 'emits', 'merge', 'fromExif', 'brand']) {
+                expect(composedIptc[name], name).to.deep.equal(iptc[name]);
+            }
+            expect(composedIptc.merge).to.equal(iptc.merge);
+            expect(composedIptc.fromExif).to.equal(iptc.fromExif);
+            expect(composedIptc.suppressions.map(({kind}) => kind)).to.deep.equal(['iptc']);
+            expect(composedIptc.suppressions[0].isSuppressed).to.equal(iptc.suppressions[0].isSuppressed);
+        });
+    });
+
+    describe('wrapping repeatable datasets in arrays', () => {
+        const tagNames = {
+            0x0219: {name: 'Keywords', repeatable: true},
+            0x0250: {name: 'By-line', repeatable: true},
+            0x0269: {name: 'Headline'},
+            0x0205: 'Object Name',
+        };
+
+        it('should wrap a repeatable dataset read once', () => {
+            const keywordsTag = {id: 0x0219, value: 'k', description: 'k'};
+
+            expect(withRepeatableAsArrays({Keywords: keywordsTag}, tagNames)).to.deep.equal({Keywords: [keywordsTag]});
+        });
+
+        it('should leave a repeatable dataset read more than once as its array', () => {
+            const array = [{id: 0x0219, value: 'k'}, {id: 0x0219, value: 'l'}];
+
+            const tags = withRepeatableAsArrays({Keywords: array}, tagNames);
+
+            expect(tags.Keywords).to.equal(array);
+            expect(tags.Keywords).to.deep.equal([{id: 0x0219, value: 'k'}, {id: 0x0219, value: 'l'}]);
+        });
+
+        it('should leave the datasets that are not repeatable, or unknown, as objects', () => {
+            const tags = {
+                'Headline': {id: 0x0269, value: 'h'},
+                'Object Name': {id: 0x0205, value: 'o'},
+                'undefined-4660': {id: 0x1234, value: 'u'},
+            };
+
+            expect(withRepeatableAsArrays(tags, tagNames)).to.deep.equal({
+                'Headline': {id: 0x0269, value: 'h'},
+                'Object Name': {id: 0x0205, value: 'o'},
+                'undefined-4660': {id: 0x1234, value: 'u'},
+            });
+        });
+
+        it('should keep the order of the tags', () => {
+            const tags = withRepeatableAsArrays({
+                'Headline': {id: 0x0269, value: 'h'},
+                'Keywords': {id: 0x0219, value: 'k'},
+                'By-line': {id: 0x0250, value: 'b'},
+            }, tagNames);
+
+            expect(Object.keys(tags)).to.deep.equal(['Headline', 'Keywords', 'By-line']);
+        });
+
+        it('should wrap each of the iptc dictionary\'s repeatable datasets', () => {
+            const dictionary = IptcTagNames['iptc'];
+            const repeatableIds = Object.keys(dictionary).filter((id) => dictionary[id].repeatable).map(Number);
+            const tags = {};
+            repeatableIds.forEach((id) => {
+                tags[dictionary[id].name] = {id, value: 'v'};
+            });
+
+            const wrapped = withRepeatableAsArrays(tags, dictionary);
+
+            expect(repeatableIds).to.have.lengthOf(13);
+            expect(Object.keys(wrapped).filter((name) => Array.isArray(wrapped[name]))).to.have.lengthOf(13);
+        });
+    });
+
+    function keywords(value) {
+        return {record: 2, dataset: 0x19, value};
+    }
 
     function swapIptcRead() {
         const {calls, restore} = recordCalls(IptcTags, 'read', () => ({Headline: {value: 'h'}, ObjectName: {value: 'o'}}));

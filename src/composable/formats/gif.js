@@ -5,6 +5,7 @@
 import Gif from '../../image-header-gif.js';
 import GifFileTags from '../../gif-file-tags.js';
 import {parsedTags} from '../group-helpers.js';
+import {FORMAT_BRAND} from '../brand.js';
 
 export const gifHeader = {
     fileType: {value: 'gif', description: 'GIF'},
@@ -23,4 +24,5 @@ export const gifReader = {
 export const gif = {
     header: gifHeader,
     readers: [gifReader],
+    brand: FORMAT_BRAND,
 };

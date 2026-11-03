@@ -4,6 +4,7 @@
 
 import Heic from '../../image-header-heic.js';
 import {isoBmffFile} from './iso-bmff-file-reader.js';
+import {FORMAT_BRAND} from '../brand.js';
 
 export const heicHeader = {
     fileType: {value: 'heic', description: 'HEIC'},
@@ -14,4 +15,5 @@ export const heicHeader = {
 export const heic = {
     header: heicHeader,
     readers: [isoBmffFile],
+    brand: FORMAT_BRAND,
 };

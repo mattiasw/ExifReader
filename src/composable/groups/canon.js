@@ -4,6 +4,7 @@
 
 import CanonTags from '../../canon-tags.js';
 import {getEmbeddableMergeDescriptor, readMakerNoteWithDecoders, MAKER_NOTE_DESCRIPTORS} from '../group-helpers.js';
+import {GROUP_BRAND} from '../brand.js';
 
 export const canonDecoder = {
     name: 'canon',
@@ -19,4 +20,5 @@ export const canon = {
     decoders: [canonDecoder],
     read: (block, ctx) => readMakerNoteWithDecoders(block, ctx, canon.decoders),
     merge: (block) => getEmbeddableMergeDescriptor(block, 'makerNotes', 'carriedMakerNotes'),
+    brand: GROUP_BRAND,
 };

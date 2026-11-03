@@ -499,6 +499,7 @@ export function loadView(data: DataView, options: CommonOptions & FlatOnly & {as
 
 export namespace errors {
     export class MetadataMissingError extends Error {}
+    export class UnsupportedFormatError extends Error {}
 }
 
 interface ExifTags {

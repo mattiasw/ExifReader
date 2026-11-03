@@ -14,6 +14,7 @@ import {IFD_TYPE_0TH, IFD_TYPE_1ST, IFD_TYPE_EXIF, IFD_TYPE_GPS, IFD_TYPE_INTERO
 import {addDecompressedValueAllowance} from '../../tags-helpers.js';
 import {filterTagsForParse} from '../../tag-filter.js';
 import {getBlockDataView, getBrobDataView} from '../group-helpers.js';
+import {GROUP_BRAND} from '../brand.js';
 
 // Merged on the first read rather than at import, so that a bundle without
 // this group drops the dictionaries.
@@ -26,6 +27,7 @@ export const exif = {
     descriptors: [],
     read: readExifBlock,
     merge: getExifMergeDescriptor,
+    brand: GROUP_BRAND,
 };
 
 // A brob Exif box decompresses through the pool; a decompression failure or a

@@ -15,6 +15,20 @@ function MetadataMissingError(message) {
 
 MetadataMissingError.prototype = new Error;
 
+/**
+ * Thrown when no supported image format recognizes the input.
+ *
+ * @param {string} message The error message.
+ */
+function UnsupportedFormatError(message) {
+    this.name = 'UnsupportedFormatError';
+    this.message = message;
+    this.stack = (new Error(message)).stack;
+}
+
+UnsupportedFormatError.prototype = new Error;
+
 export default {
     MetadataMissingError,
+    UnsupportedFormatError,
 };

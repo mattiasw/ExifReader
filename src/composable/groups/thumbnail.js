@@ -5,6 +5,7 @@
 import Thumbnail from '../../thumbnail.js';
 import {IFD_TYPE_1ST} from '../../ifd-types.js';
 import {filterTagsForParse} from '../../tag-filter.js';
+import {GROUP_BRAND} from '../brand.js';
 
 export const thumbnail = {
     key: 'thumbnail',
@@ -14,6 +15,7 @@ export const thumbnail = {
     descriptors: [{ifd: IFD_TYPE_1ST, id: 0x0201}, {ifd: IFD_TYPE_1ST, id: 0x0202}],
     read: readThumbnailBlock,
     merge: (block) => ({slot: 'thumbnail', mode: 'thumbnailCandidate', rank: block.rank}),
+    brand: GROUP_BRAND,
 };
 
 // The main block's thumbnail is a candidate with or without an image. An

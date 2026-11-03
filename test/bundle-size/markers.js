@@ -219,6 +219,7 @@ const FINDER_WITHOUT_LITERAL = 'a format finder with no literal of its own, so n
 const SHARED_BY_SEVERAL_MODULES = 'shared by several build modules, so its presence follows no single flag';
 const WRITER_MODULE = 'a writer module, never part of a reader bundle';
 const COMPOSABLE_TABLE_MODULE = 'a composable table module; the probes of the modules it imports speak for it';
+const COMPOSABLE_ENTRY_MODULE = 'the composable entry point; no custom build imports it';
 
 // Source files that are neither a marker owner nor in ALWAYS_PRESENT_MODULES.
 const UNPROBEABLE_REASONS = {
@@ -251,8 +252,10 @@ const UNPROBEABLE_REASONS = {
     // Under src/composable/. Its xml.js, thumbnail.js and composite.js share a
     // basename with a module above, which accounts for them.
     'avif.js': COMPOSABLE_TABLE_MODULE,
+    'brand.js': 'imported by every format and group module, so in every build, and it holds no string literal',
     'canon.js': COMPOSABLE_TABLE_MODULE,
     'composition.js': COMPOSABLE_TABLE_MODULE,
+    'core.js': COMPOSABLE_ENTRY_MODULE,
     'exif.js': COMPOSABLE_TABLE_MODULE,
     'formats.js': COMPOSABLE_TABLE_MODULE,
     'gif.js': COMPOSABLE_TABLE_MODULE,
@@ -270,6 +273,7 @@ const UNPROBEABLE_REASONS = {
     'pentax.js': COMPOSABLE_TABLE_MODULE,
     'photoshop.js': COMPOSABLE_TABLE_MODULE,
     'png.js': COMPOSABLE_TABLE_MODULE,
+    'read-view.js': `the load pipeline, in every build since the entry point's loadView delegates to it, and ${NO_UNIQUE_LITERAL}`,
     'tiff.js': COMPOSABLE_TABLE_MODULE,
     'webp.js': COMPOSABLE_TABLE_MODULE,
     'xmp.js': COMPOSABLE_TABLE_MODULE

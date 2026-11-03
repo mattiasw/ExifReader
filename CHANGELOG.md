@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `errors.UnsupportedFormatError`, thrown when no supported format recognizes
+  the input.
+
+### Changed
+
+- Input that no supported format recognizes now throws an
+  `errors.UnsupportedFormatError`. It is still an `Error` with the message
+  `Invalid image format`, but its `name` is now `UnsupportedFormatError`, so
+  `String(error)` changes to `UnsupportedFormatError: Invalid image format`.
+
 ## [4.54.0] - 2026-11-03
 
 ### Changed

@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import Composite from '../../composite.js';
+import {GROUP_BRAND} from '../brand.js';
 
 // Derived from the Exif and XMP tags, so it reads no block.
 export const composite = {
@@ -12,4 +13,5 @@ export const composite = {
     descriptors: [],
     merge: () => ({slot: 'composite', mode: 'composite'}),
     mergeDeps: {Composite},
+    brand: GROUP_BRAND,
 };

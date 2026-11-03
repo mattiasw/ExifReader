@@ -4,8 +4,9 @@
 
 import {expect} from 'chai';
 import * as Groups from '../../../src/composable/groups.js';
+import {GROUP_BRAND} from '../../../src/composable/brand.js';
 import {exif} from '../../../src/composable/groups/exif.js';
-import {iptc} from '../../../src/composable/groups/iptc.js';
+import {composedIptc} from '../../../src/composable/groups/iptc.js';
 import {xmp} from '../../../src/composable/groups/xmp.js';
 import {icc} from '../../../src/composable/groups/icc.js';
 import {photoshop} from '../../../src/composable/groups/photoshop.js';
@@ -23,7 +24,7 @@ describe('composable/groups', () => {
             'allGroups', 'canon', 'composite', 'exif', 'gps', 'icc', 'iptc', 'makerNotes', 'mpf', 'pentax', 'photoshop', 'thumbnail', 'xmp',
         ]);
         expect(Groups.exif).to.equal(exif);
-        expect(Groups.iptc).to.equal(iptc);
+        expect(Groups.iptc).to.equal(composedIptc);
         expect(Groups.xmp).to.equal(xmp);
         expect(Groups.icc).to.equal(icc);
         expect(Groups.photoshop).to.equal(photoshop);
@@ -37,8 +38,14 @@ describe('composable/groups', () => {
     });
 
     it('should list every group, with makerNotes standing for canon and pentax', () => {
-        expect(Groups.allGroups).to.deep.equal([exif, iptc, xmp, icc, photoshop, mpf, makerNotes, gps, composite, thumbnail]);
+        expect(Groups.allGroups).to.deep.equal([exif, composedIptc, xmp, icc, photoshop, mpf, makerNotes, gps, composite, thumbnail]);
         expect(Groups.allGroups).to.not.include(canon);
         expect(Groups.allGroups).to.not.include(pentax);
+    });
+
+    it('should brand every exported group, canon and pentax included', () => {
+        for (const name of Object.keys(Groups).filter((key) => key !== 'allGroups')) {
+            expect(Groups[name].brand, name).to.equal(GROUP_BRAND);
+        }
     });
 });

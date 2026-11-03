@@ -28,6 +28,10 @@ async function parse(imagePath, libraryDir = '../..') {
         if (error instanceof ExifReader.errors.MetadataMissingError) {
             return 'No Exif data found';
         }
+        // The stored outputs predate the named error.
+        if (error && error.name === 'UnsupportedFormatError') {
+            return 'Error: ' + error.message;
+        }
         return error.toString();
     }
 }

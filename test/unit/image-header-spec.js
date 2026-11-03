@@ -5,6 +5,7 @@
 import {expect} from 'chai';
 import {getDataView} from './test-utils.js';
 import ImageHeader from '../../src/image-header.js';
+import Errors from '../../src/errors.js';
 import {allFormats} from '../../src/composable/formats.js';
 
 describe('image-header', () => {
@@ -13,13 +14,19 @@ describe('image-header', () => {
         expect(() => ImageHeader.parseAppMarkers(dataView, false, allFormats)).to.throw(/Invalid image format/);
     });
 
-    it('should fail for invalid image format', () => {
-        const dataView = getDataView('------------');
-        expect(() => ImageHeader.parseAppMarkers(dataView, false, allFormats)).to.throw(/Invalid image format/);
-    });
-
     it('should fail for undefined input value', () => {
         expect(() => ImageHeader.parseAppMarkers(undefined, false, allFormats)).to.throw(/Invalid image format/);
+    });
+
+    it('should throw an UnsupportedFormatError for noise', () => {
+        expect(() => ImageHeader.parseAppMarkers(getDataView('------------'), false, allFormats))
+            .to.throw(Errors.UnsupportedFormatError, /^Invalid image format$/);
+    });
+
+    it('should throw an UnsupportedFormatError for a format not in the list', () => {
+        const formats = allFormats.filter((format) => format.header.fileType.value !== 'tiff');
+        expect(() => ImageHeader.parseAppMarkers(getDataView('II\x2a\x00\x08\x00\x00\x00\x00\x00'), false, formats))
+            .to.throw(Errors.UnsupportedFormatError, /^Invalid image format$/);
     });
 
     it('should fail for every input when no format is composed', () => {

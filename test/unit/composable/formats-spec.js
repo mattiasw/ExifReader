@@ -4,6 +4,7 @@
 
 import {expect} from 'chai';
 import * as Formats from '../../../src/composable/formats.js';
+import {FORMAT_BRAND} from '../../../src/composable/brand.js';
 import {tiff} from '../../../src/composable/formats/tiff.js';
 import {jpeg} from '../../../src/composable/formats/jpeg.js';
 import {png} from '../../../src/composable/formats/png.js';
@@ -31,5 +32,15 @@ describe('composable/formats', () => {
     it('should list every format in detection order', () => {
         expect(Formats.allFormats).to.deep.equal([tiff, jpeg, png, heic, avif, jxl, webp, gif, xml]);
         expect(Formats.allFormats.map((format) => format.header.fileType.value)).to.deep.equal(['tiff', 'jpeg', 'png', 'heic', 'avif', 'jxl', 'webp', 'gif', 'xml']);
+    });
+
+    it('should brand every format, and none of their headers or readers', () => {
+        for (const format of Formats.allFormats) {
+            expect(format.brand, format.header.fileType.value).to.equal(FORMAT_BRAND);
+            expect(format.header).to.not.have.property('brand');
+            for (const reader of format.readers) {
+                expect(reader).to.not.have.property('brand');
+            }
+        }
     });
 });

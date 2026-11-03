@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import Tiff from '../../image-header-tiff.js';
+import {FORMAT_BRAND} from '../brand.js';
 
 export const tiffHeader = {
     fileType: {value: 'tiff', description: 'TIFF'},
@@ -13,4 +14,5 @@ export const tiffHeader = {
 export const tiff = {
     header: tiffHeader,
     readers: [],
+    brand: FORMAT_BRAND,
 };

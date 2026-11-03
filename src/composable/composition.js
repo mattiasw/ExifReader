@@ -32,12 +32,9 @@ export default {
  *     `suppressions`) plus `formats` in detection order, the `derived` groups,
  *     the `composed` facts (`formats`, `groups` and `kinds` maps) and
  *     `isHiddenInSyncMode(block)`.
- * @throws {Error} When xml is composed without xmp, or the groups' emission
- *     graph has a cycle.
+ * @throws {Error} When the groups' emission graph has a cycle.
  */
 function createComposition({formats, groups}) {
-    assertXmlHasXmp(formats, groups);
-
     const engineGroups = getEngineGroups(formats, groups);
     const composition = {
         groups: engineGroups,
@@ -56,13 +53,6 @@ function createComposition({formats, groups}) {
 
     validateComposition(composition);
     return composition;
-}
-
-function assertXmlHasXmp(formats, groups) {
-    const hasXml = formats.some((format) => format.header.fileType.value === 'xml');
-    if (hasXml && !groups.some((group) => group.key === 'xmp')) {
-        throw new Error('The xml format needs the xmp group');
-    }
 }
 
 function getEngineGroups(formats, groups) {

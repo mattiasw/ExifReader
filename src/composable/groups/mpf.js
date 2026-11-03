@@ -4,6 +4,7 @@
 
 import MpfTags from '../../mpf-tags.js';
 import {parsedTags} from '../group-helpers.js';
+import {GROUP_BRAND} from '../brand.js';
 
 export const mpf = {
     key: 'mpf',
@@ -20,4 +21,5 @@ export const mpf = {
         ctx.getBase64Image
     ), ctx),
     merge: () => ({slot: 'mpf', mode: 'assign'}),
+    brand: GROUP_BRAND,
 };

@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import Xml from '../../xml.js';
+import {FORMAT_BRAND} from '../brand.js';
 
 export const xmlHeader = {
     fileType: {value: 'xml', description: 'XML'},
@@ -13,4 +14,5 @@ export const xmlHeader = {
 export const xml = {
     header: xmlHeader,
     readers: [],
+    brand: FORMAT_BRAND,
 };

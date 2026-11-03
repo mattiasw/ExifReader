@@ -4,6 +4,7 @@
 
 import Avif from '../../image-header-avif.js';
 import {isoBmffFile} from './iso-bmff-file-reader.js';
+import {FORMAT_BRAND} from '../brand.js';
 
 export const avifHeader = {
     fileType: {value: 'avif', description: 'AVIF'},
@@ -14,4 +15,5 @@ export const avifHeader = {
 export const avif = {
     header: avifHeader,
     readers: [isoBmffFile],
+    brand: FORMAT_BRAND,
 };

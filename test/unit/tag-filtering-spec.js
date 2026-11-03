@@ -15,6 +15,7 @@ import IccTags from '../../src/icc-tags.js';
 import FileTags from '../../src/file-tags.js';
 import Thumbnail from '../../src/thumbnail.js';
 import Composite from '../../src/composite.js';
+import {createTagFilter} from '../../src/tag-filter.js';
 
 const restoreFunctions = [];
 
@@ -705,6 +706,35 @@ describe('tag filtering options', function () {
 
         expect(tags.makerNotes.LensType).to.not.equal(undefined);
         expect(tags.makerNotes.LensModel).to.equal(undefined);
+    });
+});
+
+describe('createTagFilter includeTagsIsLimit', () => {
+    it('should ignore an exclude entry for a group that includeTags lists, without the option', () => {
+        const filter = createTagFilter({includeTags: {exif: true, xmp: true}, excludeTags: {exif: ['MakerNote'], xmp: true}});
+
+        expect(filter.shouldReturnTag('exif', 'MakerNote', 0x927c)).to.equal(true);
+        expect(filter.shouldParseTag('exif', 'MakerNote', 0x927c)).to.equal(true);
+        expect(filter.shouldReturnGroup('xmp')).to.equal(true);
+        expect(filter.shouldReturnTag('xmp', 'Rating')).to.equal(true);
+    });
+
+    it('should apply an exclude list to a group that includeTags lists, with the option', () => {
+        const filter = createTagFilter({includeTags: {exif: true}, excludeTags: {exif: ['MakerNote']}, includeTagsIsLimit: true});
+
+        expect(filter.shouldReturnTag('exif', 'MakerNote', 0x927c)).to.equal(false);
+        expect(filter.shouldParseTag('exif', 'MakerNote', 0x927c)).to.equal(false);
+        expect(filter.shouldReturnTag('exif', 'Make', 0x010f)).to.equal(true);
+        expect(filter.shouldParseTag('exif', 'Make', 0x010f)).to.equal(true);
+    });
+
+    it('should apply an exclude true to a group that includeTags lists, with the option', () => {
+        const filter = createTagFilter({includeTags: {exif: true, xmp: true}, excludeTags: {xmp: true}, includeTagsIsLimit: true});
+
+        expect(filter.shouldReturnGroup('xmp')).to.equal(false);
+        expect(filter.shouldReturnTag('xmp', 'Rating')).to.equal(false);
+        expect(filter.shouldParseTag('xmp', 'Rating')).to.equal(false);
+        expect(filter.shouldReturnGroup('exif')).to.equal(true);
     });
 });
 

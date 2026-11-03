@@ -354,8 +354,9 @@ function createPool(limit) {
 }
 
 /**
- * Throws when the groups' static emission graph has a cycle: a kind that,
- * through the groups consuming it and what they emit, leads back to itself.
+ * Throws when the groups' static emission graph has a cycle (a kind that,
+ * through the groups consuming it and what they emit, leads back to itself) or
+ * a chain of consumed kinds longer than MAX_BLOCK_DEPTH.
  *
  * @param {{groups: Array<object>}} composition
  */
@@ -374,6 +375,14 @@ export function validateComposition(composition) {
         visit(kind);
     }
 
+    // Runs after the cycle check, so the recursion ends.
+    const depths = Object.create(null);
+    for (const kind in edges) {
+        if (getDepth(kind) > MAX_BLOCK_DEPTH) {
+            throw new Error('The group emission graph is deeper than ' + MAX_BLOCK_DEPTH + ' blocks through ' + kind);
+        }
+    }
+
     function visit(kind) {
         if (states[kind] === 'done') {
             return;
@@ -387,5 +396,15 @@ export function validateComposition(composition) {
             visit(emitted[i]);
         }
         states[kind] = 'done';
+    }
+
+    // A kind no group consumes is dropped at run time, so it adds no depth.
+    function getDepth(kind) {
+        if (depths[kind] === undefined) {
+            depths[kind] = 1 + edges[kind].reduce((deepest, emitted) => (
+                edges[emitted] === undefined ? deepest : Math.max(deepest, getDepth(emitted))
+            ), 0);
+        }
+        return depths[kind];
     }
 }

@@ -6,6 +6,7 @@ import Jpeg from '../../image-header-jpeg.js';
 import FileTags from '../../file-tags.js';
 import JfifTags from '../../jfif-tags.js';
 import {parsedTags} from '../group-helpers.js';
+import {FORMAT_BRAND} from '../brand.js';
 
 export const jpegHeader = {
     fileType: {value: 'jpeg', description: 'JPEG'},
@@ -32,6 +33,7 @@ export const jfif = {
 export const jpeg = {
     header: jpegHeader,
     readers: [file, jfif],
+    brand: FORMAT_BRAND,
 };
 
 function readFileBlock(block, ctx) {

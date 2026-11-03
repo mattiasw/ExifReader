@@ -6,6 +6,7 @@ import {getCompressionMethod} from '../../utils.js';
 import XmpTags from '../../xmp-tags.js';
 import {IFD_TYPE_0TH} from '../../ifd-types.js';
 import {parsedTags, getBlockDataView, getBrobDataView, getEmbeddableMergeDescriptor} from '../group-helpers.js';
+import {GROUP_BRAND} from '../brand.js';
 
 export const xmp = {
     key: 'xmp',
@@ -16,6 +17,7 @@ export const xmp = {
     read: readXmpBlock,
     merge: getXmpMergeDescriptor,
     suppressions: [{kind: 'xmp', isSuppressed: isCarriedXmpSuppressed}],
+    brand: GROUP_BRAND,
 };
 
 // Only the JPEG XL finder makes a compressed (brob) block.

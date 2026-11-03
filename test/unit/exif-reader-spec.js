@@ -19,6 +19,7 @@ import * as Formats from '../../src/composable/formats.js';
 import {jpegHeader} from '../../src/composable/formats/jpeg.js';
 import {pngHeader} from '../../src/composable/formats/png.js';
 import * as Groups from '../../src/composable/groups.js';
+import {iptc as iptcGroup} from '../../src/composable/groups/iptc.js';
 import Tags from '../../src/tags.js';
 import TagNames from '../../src/tag-names.js';
 import MpfTags from '../../src/mpf-tags.js';
@@ -95,6 +96,19 @@ describe('exif-reader', function () {
     it('should throw an error if the passed buffer is non-compliant', () => {
         expect(() => ExifReader.load()).to.throw();
     });
+
+    it('should expose UnsupportedFormatError next to MetadataMissingError', () => {
+        expect(ExifReader.errors.UnsupportedFormatError).to.be.a('function');
+        expect(ExifReader.errors.MetadataMissingError).to.be.a('function');
+        expect(ExifReader.default.errors).to.equal(ExifReader.errors);
+    });
+
+    for (const async of [false, true]) {
+        it(`should throw an UnsupportedFormatError synchronously from loadView for noise, async ${async}`, () => {
+            expect(() => ExifReader.loadView(getDataView('-'.repeat(32)), {async}))
+                .to.throw(ExifReader.errors.UnsupportedFormatError, /^Invalid image format$/);
+        });
+    }
 
     describe('managing file loading internally', () => {
         const IMAGE = '<image>';
@@ -4925,8 +4939,9 @@ describe('exif-reader', function () {
             expect(tables.formats.map((format) => format.header)).to.deep.equal(DEFAULT_HEADERS);
             const {tiff, heic, avif, jxl, webp, gif, xml} = Formats;
             expect(tables.formats.filter((format) => [tiff, heic, avif, jxl, webp, gif, xml].includes(format))).to.have.lengthOf(7);
-            const {exif, iptc, xmp, icc, mpf, photoshop, makerNotes, thumbnail, gps, composite} = Groups;
-            expect(tables.groups).to.deep.equal([exif, iptc, xmp, icc, mpf, photoshop, makerNotes, thumbnail, gps, composite]);
+            const {exif, xmp, icc, mpf, photoshop, makerNotes, thumbnail, gps, composite} = Groups;
+            // groups.js has the iptc group of a composed reader; the default entry keeps the module's own.
+            expect(tables.groups).to.deep.equal([exif, iptcGroup, xmp, icc, mpf, photoshop, makerNotes, thumbnail, gps, composite]);
         });
 
         for (const flag of Object.keys(DROPPED_ENTRIES)) {

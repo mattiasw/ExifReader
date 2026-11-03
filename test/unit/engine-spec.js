@@ -456,6 +456,62 @@ describe('engine', () => {
 
             expect(() => validateComposition(composition)).to.not.throw();
         });
+
+        it('should pass a chain of consumed kinds exactly as deep as the block depth limit', () => {
+            expect(MAX_BLOCK_DEPTH).to.equal(3);
+            const composition = getComposition([
+                group('a', [], {emits: ['b']}),
+                group('b', [], {emits: ['c']}),
+                group('c', []),
+            ]);
+
+            expect(() => validateComposition(composition)).to.not.throw();
+        });
+
+        it('should throw on a chain of consumed kinds deeper than the block depth limit', () => {
+            const composition = getComposition([
+                group('a', [], {emits: ['b']}),
+                group('b', [], {emits: ['c']}),
+                group('c', [], {emits: ['d']}),
+                group('d', []),
+            ]);
+
+            expect(() => validateComposition(composition)).to.throw('The group emission graph is deeper than 3 blocks through a');
+        });
+
+        it('should name the first kind in group order whose chain is too deep', () => {
+            const composition = getComposition([
+                group('z', []),
+                group('b', [], {emits: ['c']}),
+                group('c', [], {emits: ['d']}),
+                group('d', [], {emits: ['z']}),
+                group('a', [], {emits: ['b']}),
+            ]);
+
+            expect(() => validateComposition(composition)).to.throw('The group emission graph is deeper than 3 blocks through b');
+        });
+
+        it('should not count an emitted kind that no group consumes', () => {
+            const composition = getComposition([
+                group('a', [], {emits: ['b']}),
+                group('b', [], {emits: ['c']}),
+                group('c', [], {emits: ['unconsumed']}),
+            ]);
+
+            expect(() => validateComposition(composition)).to.not.throw();
+        });
+
+        it('should throw the cycle message for a cycle reached only through a long chain', () => {
+            const composition = getComposition([
+                group('a', [], {emits: ['b']}),
+                group('b', [], {emits: ['c']}),
+                group('c', [], {emits: ['d']}),
+                group('d', [], {emits: ['e']}),
+                group('e', [], {emits: ['c']}),
+            ]);
+
+            expect(() => validateComposition(composition)).to.throw('The group emission graph has a cycle through c');
+        });
     });
 
     describe('context', () => {

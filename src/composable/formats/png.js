@@ -7,6 +7,7 @@ import PngFileTags from '../../png-file-tags.js';
 import PngTextTags, {hasRawIptcProfile} from '../../png-text-tags.js';
 import PngTags from '../../png-tags.js';
 import {parsedTags, isPngTextChunkBlock} from '../group-helpers.js';
+import {FORMAT_BRAND} from '../brand.js';
 
 export const pngHeader = {
     fileType: {value: 'png', description: 'PNG'},
@@ -43,9 +44,10 @@ export const pngChunk = {
 export const png = {
     header: pngHeader,
     readers: [pngFile, pngText, pngChunk],
+    brand: FORMAT_BRAND,
 };
 
-// Decision 2026-10-21: sync mode leaves the compressed-text chunk type out,
+// Sync mode leaves the compressed-text chunk type out,
 // whatever its header says (see isHiddenInSyncMode in composition.js).
 function isCompressedTextChunkTypeBlock(block) {
     return isPngTextChunkBlock(block) && block.text.chunkType === TYPE_ZTXT;

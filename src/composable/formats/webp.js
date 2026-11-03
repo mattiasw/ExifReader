@@ -5,6 +5,7 @@
 import Webp from '../../image-header-webp.js';
 import Vp8xTags from '../../vp8x-tags.js';
 import {parsedTags} from '../group-helpers.js';
+import {FORMAT_BRAND} from '../brand.js';
 
 export const webpHeader = {
     fileType: {value: 'webp', description: 'WebP'},
@@ -23,4 +24,5 @@ export const riff = {
 export const webp = {
     header: webpHeader,
     readers: [riff],
+    brand: FORMAT_BRAND,
 };

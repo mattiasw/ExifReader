@@ -4,6 +4,7 @@
 
 import {getCalculatedGpsValue} from '../../tag-names-utils.js';
 import {IFD_TYPE_GPS} from '../../ifd-types.js';
+import {GROUP_BRAND} from '../brand.js';
 
 // Derived from the Exif tags, so it reads no block.
 export const gps = {
@@ -21,6 +22,7 @@ export const gps = {
     ],
     merge: () => ({slot: 'gps', mode: 'gps'}),
     mergeDeps: {getGpsGroupFromExifTags},
+    brand: GROUP_BRAND,
 };
 
 function getGpsGroupFromExifTags(exifTags) {

@@ -45,16 +45,6 @@ describe('composable/composition', () => {
 
             expect(composition.formats).to.deep.equal([tiff, jpeg]);
         });
-
-        it('should reject xml without the xmp group', () => {
-            expect(() => createComposition({formats: [xml], groups: [exif]})).to.throw(Error, /xml.*xmp/);
-            expect(() => createComposition({formats: [xml, jpeg]})).to.throw(Error, /xml.*xmp/);
-        });
-
-        it('should take xml with the xmp group, and the xmp group without xml', () => {
-            expect(createComposition({formats: [xml], groups: [xmp]}).formats).to.deep.equal([xml]);
-            expect(createComposition({formats: [jpeg], groups: [xmp]}).formats).to.deep.equal([jpeg]);
-        });
     });
 
     describe('the engine groups', () => {
