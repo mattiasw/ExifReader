@@ -21,7 +21,7 @@ Users can configure custom builds (via `package.json` `"exifreader"` key) to inc
 
 1. Add a `USE_<NAME>` flag to `src/constants.js`
 2. Add the module name to the `modules` array in `bin/parse-config.js`
-3. Read the new flag only in `src/exif-reader.js`, `src/loadview-pipeline.js` or the format dispatch in `src/image-header.js`, the files the string-replace regex in `webpack.config.js` covers (so `Constants.USE_*` gets replaced). A new module never reads `Constants` itself; it takes its gating from the orchestrator as an argument
+3. Read the new flag only in `src/exif-reader.js` or `src/loadview-pipeline.js`, the files the string-replace regex in `webpack.config.js` covers (so `Constants.USE_*` gets replaced). A new module never reads `Constants` itself; it takes its gating from the orchestrator as an argument
 4. Add test entries in `test/build/custom-builds.json`
 5. Document the module in the README custom build table
 

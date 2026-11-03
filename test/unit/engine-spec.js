@@ -519,6 +519,14 @@ describe('engine', () => {
             expect(context.getDomParser).to.equal(getDomParser);
         });
 
+        it('should carry the facts about what is composed', () => {
+            const composed = {formats: {jxl: true}, groups: {}, kinds: {}};
+
+            const context = createContext({dataView: getDataView(''), options: {}, tagFilter: createTagFilter(), composed});
+
+            expect(context.composed).to.equal(composed);
+        });
+
         it('should run decompress with the decompression config and reject when it fails', async () => {
             const context = getContext({async: true, deflate: () => Promise.reject(new Error('deflate failed'))});
 

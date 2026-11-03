@@ -2,17 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import Constants from './constants.js';
-import Tiff from './image-header-tiff.js';
-import Jpeg from './image-header-jpeg.js';
-import Png from './image-header-png.js';
-import Heic from './image-header-heic.js';
-import Avif from './image-header-avif.js';
-import Jxl from './image-header-jxl.js';
-import Webp from './image-header-webp.js';
-import Gif from './image-header-gif.js';
-import Xml from './xml.js';
-
 export default {
     parseAppMarkers
 };
@@ -25,47 +14,21 @@ export default {
  *     each block's bytes sit in the file. The result then gains `ranges`, a
  *     list of `{block, start, end}` in file order, and `truncated`, true when
  *     the finder never reached the end of the file's metadata.
+ * @param {Array<{header: {fileType: {value: string, description: string}, detect: function, find: function}}>} formats
+ *     The composed formats in detection order; the first whose `detect`
+ *     matches runs its `find`.
  * @returns {{fileType: {value: string, description: string}, blocks: Array<Object>, ranges: (Array<Object>|undefined), truncated: (boolean|undefined)}}
  *     The blocks the finder found, each `{kind, ...payload}`.
  * @throws {Error} When the data view is not a recognized image format.
  */
-function parseAppMarkers(dataView, includeRanges) {
+function parseAppMarkers(dataView, includeRanges, formats) {
     const ranges = includeRanges ? [] : undefined;
 
-    if (Constants.USE_TIFF && Tiff.isTiffFile(dataView)) {
-        return finalize(Tiff.findTiffOffsets(), 'tiff', 'TIFF', ranges);
-    }
-
-    if (Constants.USE_JPEG && Jpeg.isJpegFile(dataView)) {
-        return finalize(Jpeg.findJpegOffsets(dataView, ranges), 'jpeg', 'JPEG', ranges);
-    }
-
-    if (Constants.USE_PNG && Png.isPngFile(dataView)) {
-        return finalize(Png.findPngOffsets(dataView, ranges), 'png', 'PNG', ranges);
-    }
-
-    if (Constants.USE_HEIC && Heic.isHeicFile(dataView)) {
-        return finalize(Heic.findHeicOffsets(dataView, ranges), 'heic', 'HEIC', ranges);
-    }
-
-    if (Constants.USE_AVIF && Avif.isAvifFile(dataView)) {
-        return finalize(Avif.findAvifOffsets(dataView, ranges), 'avif', 'AVIF', ranges);
-    }
-
-    if (Constants.USE_JXL && Jxl.isJxlFile(dataView)) {
-        return finalize(Jxl.findJxlOffsets(dataView, ranges), 'jxl', 'JPEG XL', ranges);
-    }
-
-    if (Constants.USE_WEBP && Webp.isWebpFile(dataView)) {
-        return finalize(Webp.findOffsets(dataView, ranges), 'webp', 'WebP', ranges);
-    }
-
-    if (Constants.USE_GIF && Gif.isGifFile(dataView)) {
-        return finalize(Gif.findOffsets(dataView, ranges), 'gif', 'GIF', ranges);
-    }
-
-    if (Constants.USE_XMP && Xml.isXMLFile(dataView)) {
-        return finalize(Xml.findOffsets(dataView, ranges), 'xml', 'XML', ranges);
+    for (let i = 0; i < formats.length; i++) {
+        const header = formats[i].header;
+        if (header.detect(dataView)) {
+            return finalize(header.find(dataView, ranges), header.fileType.value, header.fileType.description, ranges);
+        }
     }
 
     throw new Error('Invalid image format');

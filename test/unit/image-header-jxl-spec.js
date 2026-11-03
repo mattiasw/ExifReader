@@ -36,6 +36,10 @@ describe('image-header-jxl', () => {
         expect(ImageHeaderJxl.isJxlFile(getDataView('\x00\x00\x00\x0CJXL'))).to.be.false;
     });
 
+    it('should not recognize a value that is not a DataView', () => {
+        expect(ImageHeaderJxl.isJxlFile({})).to.be.false;
+    });
+
     it('should return no blocks for a JXL file with no metadata boxes', () => {
         expect(findBlocks(JXL_SIGNATURE + FTYP_BOX)).to.deep.equal([]);
     });

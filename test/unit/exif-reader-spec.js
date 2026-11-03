@@ -14,6 +14,11 @@ import ByteOrder from '../../src/byte-order.js';
 import {getArrayBuffer, getDataView, getByteStringFromNumber, getConsoleWarnSpy, swapProperties} from './test-utils.js';
 import Constants from '../../src/constants.js';
 import ImageHeader from '../../src/image-header.js';
+import Composition from '../../src/composable/composition.js';
+import * as Formats from '../../src/composable/formats.js';
+import {jpegHeader} from '../../src/composable/formats/jpeg.js';
+import {pngHeader} from '../../src/composable/formats/png.js';
+import * as Groups from '../../src/composable/groups.js';
 import Tags from '../../src/tags.js';
 import TagNames from '../../src/tag-names.js';
 import MpfTags from '../../src/mpf-tags.js';
@@ -4872,6 +4877,185 @@ describe('exif-reader', function () {
             expect(tags).to.not.have.property('FileType');
             expect(tags.MyXmpTag.value).to.equal(42);
         });
+    });
+
+    describe('the default composition', () => {
+        const ALL_FORMAT_ENTRIES = [
+            'tiff',
+            'jpeg', 'jpeg:file', 'jpeg:jfif',
+            'png', 'png:pngFile', 'png:pngText', 'png:pngChunk',
+            'heic', 'heic:isoBmffFile',
+            'avif', 'avif:isoBmffFile',
+            'jxl', 'jxl:jxlFile',
+            'webp', 'webp:riff',
+            'gif', 'gif:gif',
+            'xml',
+        ];
+        const DEFAULT_HEADERS = [
+            Formats.tiff.header, jpegHeader, pngHeader, Formats.heic.header, Formats.avif.header,
+            Formats.jxl.header, Formats.webp.header, Formats.gif.header, Formats.xml.header,
+        ];
+        const ALL_GROUP_ENTRIES = ['exif', 'iptc', 'xmp', 'icc', 'mpf', 'photoshop', 'makerNotes', 'thumbnail', 'gps', 'composite'];
+        const DROPPED_ENTRIES = {
+            USE_TIFF: ['tiff'],
+            USE_JPEG: ['jpeg', 'jpeg:file', 'jpeg:jfif'],
+            USE_FILE: ['jpeg:file'],
+            USE_JFIF: ['jpeg:jfif'],
+            USE_PNG: ['png', 'png:pngFile', 'png:pngText', 'png:pngChunk'],
+            USE_PNG_FILE: ['png:pngFile'],
+            USE_HEIC: ['heic', 'heic:isoBmffFile'],
+            USE_AVIF: ['avif', 'avif:isoBmffFile'],
+            USE_JXL: ['jxl', 'jxl:jxlFile'],
+            USE_WEBP: ['webp', 'webp:riff'],
+            USE_GIF: ['gif', 'gif:gif'],
+            USE_XMP: ['xml', 'xmp'],
+            USE_EXIF: ['exif', 'thumbnail', 'gps'],
+            USE_THUMBNAIL: ['thumbnail'],
+            USE_IPTC: ['iptc'],
+            USE_ICC: ['icc'],
+            USE_MPF: ['mpf'],
+            USE_PHOTOSHOP: ['photoshop'],
+            USE_MAKER_NOTES: ['makerNotes'],
+        };
+
+        it('should compose every format and group of the tables', () => {
+            const tables = captureDefaultTables();
+
+            expect(getEntries(tables)).to.deep.equal(ALL_FORMAT_ENTRIES.concat(ALL_GROUP_ENTRIES));
+            expect(tables.formats.map((format) => format.header)).to.deep.equal(DEFAULT_HEADERS);
+            const {tiff, heic, avif, jxl, webp, gif, xml} = Formats;
+            expect(tables.formats.filter((format) => [tiff, heic, avif, jxl, webp, gif, xml].includes(format))).to.have.lengthOf(7);
+            const {exif, iptc, xmp, icc, mpf, photoshop, makerNotes, thumbnail, gps, composite} = Groups;
+            expect(tables.groups).to.deep.equal([exif, iptc, xmp, icc, mpf, photoshop, makerNotes, thumbnail, gps, composite]);
+        });
+
+        for (const flag of Object.keys(DROPPED_ENTRIES)) {
+            it(`should drop exactly ${DROPPED_ENTRIES[flag].join(', ')} without ${flag}`, () => {
+                swap(Constants, {[flag]: false});
+
+                const entries = getEntries(captureDefaultTables());
+
+                expect(entries).to.deep.equal(ALL_FORMAT_ENTRIES.concat(ALL_GROUP_ENTRIES).filter((entry) => !DROPPED_ENTRIES[flag].includes(entry)));
+            });
+        }
+
+        it('should build the default composition at import, so that an invalid one throws there', async () => {
+            swap(Composition, {
+                createComposition() {
+                    throw new Error('The group emission graph has a cycle through exif');
+                }
+            });
+
+            let error;
+            try {
+                // The query gives a fresh instance of the entry, which shares the swapped Composition.
+                await import('../../src/exif-reader.js?import-time-composition');
+            } catch (caught) {
+                error = caught;
+            }
+
+            expect(error && error.message).to.equal('The group emission graph has a cycle through exif');
+        });
+
+        it('should hand the composed formats to the format detection', () => {
+            let receivedFormats;
+            swap(ImageHeader, {
+                parseAppMarkers(_dataView, _includeRanges, formats) {
+                    receivedFormats = formats;
+                    return {fileType: {value: 'jpeg', description: 'JPEG'}, blocks: []};
+                }
+            });
+
+            ExifReader.loadView(getDataView(''));
+
+            expect(receivedFormats.map((format) => format.header)).to.deep.equal(DEFAULT_HEADERS);
+        });
+
+        it('should compose once for loads with the same tables', () => {
+            loadWithOtherTables();
+            const compositions = countCompositions();
+
+            loadIgnoringFormatErrors();
+            loadIgnoringFormatErrors();
+
+            expect(compositions()).to.equal(1);
+        });
+
+        it('should compose again when a flag changes the tables', () => {
+            loadIgnoringFormatErrors();
+            swap(Constants, {USE_TIFF: false});
+            const compositions = countCompositions();
+
+            loadIgnoringFormatErrors();
+
+            expect(compositions()).to.equal(1);
+        });
+
+        it('should compose again when a flag drops the last entries of the tables', () => {
+            const gifFile = getDataView('GIF89a' + '\x00'.repeat(7));
+            swap(Constants, {USE_EXIF: false, USE_IPTC: false, USE_XMP: false, USE_ICC: false, USE_MPF: false, USE_PHOTOSHOP: false, USE_MAKER_NOTES: false});
+            expect(ExifReader.loadView(gifFile).FileType.value).to.equal('gif');
+
+            swap(Constants, {USE_GIF: false});
+
+            expect(() => ExifReader.loadView(gifFile)).to.throw('Invalid image format');
+        });
+
+        // The entry keeps its composition while the tables stay the same, so
+        // a load with other tables first makes the next load compose.
+        function loadWithOtherTables() {
+            const restore = swapProperties(Constants, {USE_TIFF: !Constants.USE_TIFF});
+            try {
+                loadIgnoringFormatErrors();
+            } finally {
+                restore();
+            }
+        }
+
+        function countCompositions() {
+            let count = 0;
+            const originalCreateComposition = Composition.createComposition;
+            swap(Composition, {
+                createComposition(tables) {
+                    count++;
+                    return originalCreateComposition(tables);
+                }
+            });
+            return () => count;
+        }
+
+        function captureDefaultTables() {
+            loadWithOtherTables();
+            const tables = [];
+            const originalCreateComposition = Composition.createComposition;
+            swap(Composition, {
+                createComposition(composedTables) {
+                    tables.push(composedTables);
+                    return originalCreateComposition(composedTables);
+                }
+            });
+            loadIgnoringFormatErrors();
+            return tables[0];
+        }
+
+        function loadIgnoringFormatErrors() {
+            try {
+                ExifReader.loadView(getDataView(getJpeg(getExifSegment(getTiff()))));
+            } catch (error) {
+                expect(error.message).to.equal('Invalid image format');
+            }
+        }
+
+        function getEntries({formats, groups}) {
+            const entries = [];
+            for (const format of formats) {
+                entries.push(format.header.fileType.value);
+                for (const reader of format.readers.filter(Boolean)) {
+                    entries.push(`${format.header.fileType.value}:${reader.consumes[0]}`);
+                }
+            }
+            return entries.concat(groups.map((group) => group.key));
+        }
     });
 });
 

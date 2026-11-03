@@ -83,7 +83,7 @@ module.exports = {
                 }
             },
             {
-                test: /[/\\](exif-reader|image-header|loadview-pipeline)\.js$/,
+                test: /[/\\](exif-reader|loadview-pipeline)\.js$/,
                 loader: 'string-replace-loader',
                 options: {
                     multiple: getConstantReplacements(includedModules)

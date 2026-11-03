@@ -6,11 +6,12 @@ import {expect} from 'chai';
 import {getDataView} from './test-utils.js';
 import ByteOrder from '../../src/byte-order.js';
 import ImageHeader from '../../src/image-header.js';
+import {allFormats} from '../../src/composable/formats.js';
 
 describe('byte order', () => {
     it('should find byte order data', () => {
         const dataView = getDataView('\xff\xd8\xff\xe100Exif\x00\x00\x49\x49');
-        const {blocks} = ImageHeader.parseAppMarkers(dataView);
+        const {blocks} = ImageHeader.parseAppMarkers(dataView, false, allFormats);
         expect(ByteOrder.getByteOrder(dataView, blocks[0].tiffHeaderOffset)).to.equal(ByteOrder.LITTLE_ENDIAN);
     });
 

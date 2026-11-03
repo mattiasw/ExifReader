@@ -218,6 +218,7 @@ const NO_UNIQUE_LITERAL = 'no string literal unique to it in code';
 const FINDER_WITHOUT_LITERAL = 'a format finder with no literal of its own, so no probe shows the finder itself';
 const SHARED_BY_SEVERAL_MODULES = 'shared by several build modules, so its presence follows no single flag';
 const WRITER_MODULE = 'a writer module, never part of a reader bundle';
+const COMPOSABLE_TABLE_MODULE = 'a composable table module; the probes of the modules it imports speak for it';
 
 // Source files that are neither a marker owner nor in ALWAYS_PRESENT_MODULES.
 const UNPROBEABLE_REASONS = {
@@ -245,8 +246,33 @@ const UNPROBEABLE_REASONS = {
     'byte-order.js': SHARED_BY_SEVERAL_MODULES,
     'tag-names-common.js': SHARED_BY_SEVERAL_MODULES,
     'types.js': SHARED_BY_SEVERAL_MODULES,
-    'exif-reader.js': 'the entry point; its unique literals are keys inside the icc and png gates, which those modules\' own probes cover',
-    'exif-tag-table.js': WRITER_MODULE
+    'exif-reader.js': 'the entry point, in every build; the format and group modules it gates are probed through the modules they import',
+    'exif-tag-table.js': WRITER_MODULE,
+    // Under src/composable/. Its xml.js, thumbnail.js and composite.js share a
+    // basename with a module above, which accounts for them.
+    'avif.js': COMPOSABLE_TABLE_MODULE,
+    'canon.js': COMPOSABLE_TABLE_MODULE,
+    'composition.js': COMPOSABLE_TABLE_MODULE,
+    'exif.js': COMPOSABLE_TABLE_MODULE,
+    'formats.js': COMPOSABLE_TABLE_MODULE,
+    'gif.js': COMPOSABLE_TABLE_MODULE,
+    'gps.js': COMPOSABLE_TABLE_MODULE,
+    'group-helpers.js': COMPOSABLE_TABLE_MODULE,
+    'groups.js': COMPOSABLE_TABLE_MODULE,
+    'heic.js': COMPOSABLE_TABLE_MODULE,
+    'icc.js': COMPOSABLE_TABLE_MODULE,
+    'iptc.js': COMPOSABLE_TABLE_MODULE,
+    'iso-bmff-file-reader.js': COMPOSABLE_TABLE_MODULE,
+    'jpeg.js': COMPOSABLE_TABLE_MODULE,
+    'jxl.js': COMPOSABLE_TABLE_MODULE,
+    'maker-notes.js': COMPOSABLE_TABLE_MODULE,
+    'mpf.js': COMPOSABLE_TABLE_MODULE,
+    'pentax.js': COMPOSABLE_TABLE_MODULE,
+    'photoshop.js': COMPOSABLE_TABLE_MODULE,
+    'png.js': COMPOSABLE_TABLE_MODULE,
+    'tiff.js': COMPOSABLE_TABLE_MODULE,
+    'webp.js': COMPOSABLE_TABLE_MODULE,
+    'xmp.js': COMPOSABLE_TABLE_MODULE
 };
 
 const UNPROBEABLE_MODULES = Object.keys(UNPROBEABLE_REASONS);

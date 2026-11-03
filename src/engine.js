@@ -256,14 +256,16 @@ function getNodeMergeBlocks(node) {
 
 /**
  * Builds the per-load state the groups share: the input, the options, the
- * budgets and the entry's helpers.
+ * budgets, the entry's helpers and the facts about what is composed.
  *
- * @param {{dataView: DataView, options: object, tagFilter: object, decompressConfig: object, getBase64Image: function, getDomParser: function}} parts
+ * @param {{dataView: DataView, options: object, tagFilter: object, decompressConfig: object, getBase64Image: function, getDomParser: function, composed: object}} parts
+ *     `composed` is the composition's `{formats, groups, kinds}` maps, which
+ *     the readers consult instead of the build flags.
  * @returns {object} The context, with `decompress` running through a pool of at
  *     most MAX_DECOMPRESSIONS_IN_FLIGHT tasks and `getValueBudget(view)`
  *     creating one budget on its first call.
  */
-export function createContext({dataView, options, tagFilter, decompressConfig, getBase64Image, getDomParser}) {
+export function createContext({dataView, options, tagFilter, decompressConfig, getBase64Image, getDomParser, composed}) {
     const pool = createPool(MAX_DECOMPRESSIONS_IN_FLIGHT);
     const inputByteLength = getInputByteLength(dataView);
     const context = {
@@ -273,6 +275,7 @@ export function createContext({dataView, options, tagFilter, decompressConfig, g
         decompressConfig,
         getBase64Image,
         getDomParser,
+        composed,
         valueBudget: undefined,
         decompressedApplicationNotesSize: 0,
         copiedThumbnailSize: 0,
