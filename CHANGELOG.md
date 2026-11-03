@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.54.0] - 2026-11-03
+
 ### Changed
 
 - A PNG's text chunks (tEXt, iTXt and zTXt) are read up to the first 4096;
@@ -2394,7 +2396,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.53.0...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.54.0...HEAD
+[4.54.0]: https://github.com/mattiasw/ExifReader/compare/v4.53.0...v4.54.0
 [4.53.0]: https://github.com/mattiasw/ExifReader/compare/v4.52.0...v4.53.0
 [4.52.0]: https://github.com/mattiasw/ExifReader/compare/v4.51.0...v4.52.0
 [4.51.0]: https://github.com/mattiasw/ExifReader/compare/v4.50.0...v4.51.0
