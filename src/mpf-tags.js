@@ -6,7 +6,7 @@ import ByteOrder from './byte-order.js';
 import Types from './types.js';
 import TagNamesMpfIfd from './tag-names-mpf-ifd.js';
 import {IFD_TYPE_MPF} from './ifd-types.js';
-import {deferInit, getBase64Image} from './utils.js';
+import {deferInit} from './utils.js';
 import {readIfd, get0thIfdOffset} from './tags-helpers.js';
 
 export default {
@@ -31,7 +31,8 @@ function read(
     includeUnknown,
     computed = false,
     tagFilter = undefined,
-    valueBudget = undefined
+    valueBudget = undefined,
+    getBase64Image = undefined
 ) {
     try {
         const byteOrder = ByteOrder.getByteOrder(dataView, dataOffset);
@@ -52,7 +53,7 @@ function read(
             valueBudget,
             getTagNames()
         );
-        return addMpfImages(dataView, dataOffset, tags, byteOrder);
+        return addMpfImages(dataView, dataOffset, tags, byteOrder, getBase64Image);
     } catch (error) {
         return {};
     }
@@ -65,7 +66,7 @@ function getTagNames() {
     return tagNames;
 }
 
-function addMpfImages(dataView, dataOffset, tags, byteOrder) {
+function addMpfImages(dataView, dataOffset, tags, byteOrder, getBase64Image) {
     if (!tags['MPEntry']) {
         return tags;
     }
@@ -115,9 +116,11 @@ function addMpfImages(dataView, dataOffset, tags, byteOrder) {
         const end = Math.min(start + Math.max(imageSize, 0), bufferLength, start + remainingImageBytes);
         images[i].image = dataView.buffer.slice(byteOffset + start, byteOffset + end);
         remainingImageBytes -= end - start;
-        deferInit(images[i], 'base64', function () {
-            return getBase64Image(this.image);
-        });
+        if (getBase64Image) {
+            deferInit(images[i], 'base64', function () {
+                return getBase64Image(this.image);
+            });
+        }
     }
 
     tags['Images'] = images;

@@ -5,12 +5,9 @@
 import {expect} from 'chai';
 import {objectAssign} from '../../src/utils.js';
 import Constants from '../../src/constants.js';
-import Thumbnail from '../../src/thumbnail.js';
 import {swapProperties, LINEAR_TIME_TIMEOUT_MS, expectTimeRatioBelow} from './test-utils.js';
 import {
-    addPngTextReadTagsToTagsAndGroups,
     buildTagsFromMergeBlocks,
-    CARRIED_GROUP_SLOTS,
     MERGE_ORDER,
     mergeAssignGroup,
     mergeBlock,
@@ -64,6 +61,7 @@ describe('loadView pipeline module', function () {
         const tags = mergeBlock({
             block: {slot: 'exif', group: 'exif', mode: 'merge', tags: {B: {value: 2}}},
             tags: originalTags,
+            parsedGroups: {},
             expanded: true,
             tagFilter: createTagFilter({}),
             deps: createPipelineDeps(),
@@ -74,469 +72,418 @@ describe('loadView pipeline module', function () {
         expect(tags.exif.B.value).to.equal(2);
     });
 
-    it('should include embedded exif/iptc even when png is excluded', function () {
-        const parsedGroups = {};
-        const tagFilter = createTagFilter({
-            returnGroups: {
-                exif: true,
-                iptc: true,
-                png: false,
-            },
-        });
+    describe('parsed groups', function () {
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
 
-        const tags = addPngTextReadTagsToTagsAndGroups({
-            readTags: {PngTag: {value: 'z'}},
-            embeddedExifTags: {EmbeddedExif: {value: 'x'}},
-            embeddedIptcTags: {EmbeddedIptc: {value: 'y'}},
-            parsedGroups,
-            expanded: false,
-            tagFilter,
-            tags: {},
-            deps: createPipelineDeps(),
-        });
+            it(`should write the parsed group of an assign block, also when the group is not returned, in ${mode} mode`, function () {
+                const parsedGroups = {};
+                const exifTags = {Model: {value: 'model'}};
 
-        expect(tags.EmbeddedExif.value).to.equal('x');
-        expect(tags.EmbeddedIptc.value).to.equal('y');
-        expect(tags.PngTag).to.equal(undefined);
-        expect(parsedGroups.exif.EmbeddedExif.value).to.equal('x');
-        expect(parsedGroups.iptc.EmbeddedIptc.value).to.equal('y');
+                const tags = buildBlockTags({
+                    blocks: [{slot: 'exif', group: 'exif', mode: 'assign', tags: exifTags}],
+                    expanded,
+                    parsedGroups,
+                    tagFilter: createTagFilter({returnGroups: {exif: false}}),
+                });
+
+                expect(tags).to.deep.equal({});
+                expect(parsedGroups.exif).to.equal(exifTags);
+            });
+
+            it(`should merge the parsed group of a merge block into an existing one without mutating it, in ${mode} mode`, function () {
+                const parsedExifTags = {Make: {value: 'make'}};
+                const parsedGroups = {exif: parsedExifTags};
+
+                buildBlockTags({
+                    blocks: [{slot: 'exif', group: 'exif', mode: 'merge', tags: {Model: {value: 'model'}}}],
+                    expanded,
+                    parsedGroups,
+                    tagFilter: createTagFilter({returnGroups: {exif: false}}),
+                });
+
+                expect(parsedExifTags).to.deep.equal({Make: {value: 'make'}});
+                expect(parsedGroups.exif).to.deep.equal({Make: {value: 'make'}, Model: {value: 'model'}});
+            });
+
+            it(`should write the parsed pngFile group of a pngFile block, also when png is not returned, in ${mode} mode`, function () {
+                const parsedGroups = {};
+                const fileTags = {Width: {value: 1}};
+
+                const tags = buildBlockTags({
+                    blocks: [{slot: 'pngFile', group: 'png', mode: 'pngFile', tags: fileTags}],
+                    expanded,
+                    parsedGroups,
+                    tagFilter: createTagFilter({returnGroups: {png: false}}),
+                });
+
+                expect(tags).to.deep.equal({});
+                expect(parsedGroups.pngFile).to.equal(fileTags);
+            });
+        }
     });
 
-    it('should merge PNG text tags named __exif and __iptc into the png group in expanded mode', function () {
-        const readTags = getPngTextTagsWithSentinelNames();
-        const parsedGroups = {};
-
-        const tags = addPngTextReadTagsToTagsAndGroups({
-            readTags,
-            parsedGroups,
-            expanded: true,
-            tagFilter: createTagFilter({}),
-            tags: {},
-            deps: createPipelineDeps(),
-        });
-
-        expect(tags.exif).to.equal(undefined);
-        expect(tags.iptc).to.equal(undefined);
-        expect(parsedGroups.exif).to.equal(undefined);
-        expect(parsedGroups.iptc).to.equal(undefined);
-        expect(tags.png).to.deep.equal(getPngTextTagsWithSentinelNames());
-        expect(readTags).to.deep.equal(getPngTextTagsWithSentinelNames());
-    });
-
-    it('should merge PNG text tags named __exif and __iptc into the top level in flat mode', function () {
-        const readTags = getPngTextTagsWithSentinelNames();
-        const parsedGroups = {};
-
-        const tags = addPngTextReadTagsToTagsAndGroups({
-            readTags,
-            parsedGroups,
-            expanded: false,
-            tagFilter: createTagFilter({}),
-            tags: {},
-            deps: createPipelineDeps(),
-        });
-
-        expect(tags).to.deep.equal(getPngTextTagsWithSentinelNames());
-        expect(parsedGroups.exif).to.equal(undefined);
-        expect(parsedGroups.iptc).to.equal(undefined);
-        expect(readTags).to.deep.equal(getPngTextTagsWithSentinelNames());
-    });
-
-    function getPngTextTagsWithSentinelNames() {
-        return {
-            __exif: {value: 'FROMFILE', description: 'FROMFILE'},
-            __iptc: {value: 'FROMFILE', description: 'FROMFILE'},
-        };
-    }
-
-    it('should remove an existing Thumbnail tag if thumbnailIfdTags is missing', function () {
-        const tagFilter = createTagFilter({
-            returnGroups: {thumbnail: true},
-            returnTags: {'thumbnail.Thumbnail': true},
-        });
-
-        const tags = mergeBlock({
-            block: {slot: 'thumbnail', mode: 'thumbnail'},
-            deferredResults: {},
-            parsedGroups: {},
-            expanded: false,
-            tagFilter,
-            dataView: {},
-            tiffHeaderOffset: undefined,
-            fileType: undefined,
-            thumbnailIfdTags: undefined,
-            tags: {Thumbnail: {value: 'existing'}},
-            deps: createPipelineDeps(),
-        });
-
-        expect(tags).to.not.have.property('Thumbnail');
-    });
-
-    it('should remove an existing Thumbnail tag if Thumbnail.get returns nothing for the thumbnail IFD tags', function () {
-        const tags = mergeBlock({
-            block: {slot: 'thumbnail', mode: 'thumbnail'},
-            deferredResults: {},
-            parsedGroups: {},
-            expanded: false,
-            tagFilter: createTagFilter({}),
-            dataView: {},
-            tiffHeaderOffset: 0,
-            fileType: undefined,
-            thumbnailIfdTags: {Compression: {value: 1}},
-            tags: {Thumbnail: {value: 'from file data'}},
-            deps: createPipelineDeps(),
-        });
-
-        expect(tags).to.not.have.property('Thumbnail');
-    });
-
-    it('should keep a Thumbnail tag without an image if there are thumbnail IFD tags', function () {
-        const tagFilter = createTagFilter({
-            returnGroups: {thumbnail: true},
-            returnTags: {'thumbnail.Thumbnail': true},
-        });
-        const thumbnailIfdTags = {Compression: {value: 1}};
-        const deps = createPipelineDeps();
-        deps.Thumbnail = Thumbnail;
-
-        const tags = mergeBlock({
-            block: {slot: 'thumbnail', mode: 'thumbnail'},
-            deferredResults: {},
-            parsedGroups: {},
-            expanded: false,
-            tagFilter,
-            dataView: {},
-            tiffHeaderOffset: 0,
-            fileType: undefined,
-            thumbnailIfdTags,
-            tags: {},
-            deps,
-        });
-
-        expect(tags.Thumbnail).to.deep.equal({Compression: {value: 1}});
-    });
-
-    it('should pass the filtered thumbnail IFD tags, not the raw ones, to Thumbnail.get', function () {
-        const tagFilter = createTagFilter({
-            returnGroups: {thumbnail: true},
-            returnTags: {'thumbnail.Thumbnail': true},
-        });
-        const thumbnailIfdTags = {Compression: {value: 1}};
-        const filteredThumbnailIfdTags = {Compression: {value: 1}, Filtered: true};
-        const deps = createPipelineDeps();
-        let filterArguments;
-        let receivedThumbnailIfdTags;
-        deps.filterTagsForParse = (...args) => {
-            filterArguments = args;
-
-            return filteredThumbnailIfdTags;
-        };
-        deps.Thumbnail = {
-            get(view, parsedThumbnailIfdTags) {
-                receivedThumbnailIfdTags = parsedThumbnailIfdTags;
-
-                return undefined;
-            },
+    describe('nested containers', function () {
+        const CARRIED_GROUPS = {
+            iptc: {Headline: {value: 'headline'}},
+            xmp: {Rating: {value: '5'}, _raw: '<x:xmpmeta/>'},
+            photoshop: {ClippingPathName: {value: 'path1'}},
+            icc: {ProfileVersion: {value: '4.3'}},
+            makerNotes: {AutoRotate: {value: 0}},
         };
 
-        mergeBlock({
-            block: {slot: 'thumbnail', mode: 'thumbnail'},
-            deferredResults: {},
-            parsedGroups: {},
-            expanded: false,
-            tagFilter,
-            dataView: {},
-            tiffHeaderOffset: 0,
-            fileType: undefined,
-            thumbnailIfdTags,
-            tags: {},
-            deps,
+        it('should merge the carried groups of an Exif container into their groups in expanded mode', function () {
+            const {tags, parsedGroups} = buildCarriedGroupTags({
+                steps: [getExifContainer(CARRIED_GROUPS)],
+                expanded: true,
+            });
+
+            for (const groupKey of Object.keys(CARRIED_GROUPS)) {
+                expect(tags[groupKey]).to.deep.equal(CARRIED_GROUPS[groupKey]);
+                expect(parsedGroups[groupKey]).to.deep.equal(CARRIED_GROUPS[groupKey]);
+            }
+            expect(tags.exif).to.deep.equal({Model: {value: 'model'}});
+            expect(tags).to.not.have.property('Headline');
         });
 
-        expect(filterArguments).to.deep.equal(['thumbnail', thumbnailIfdTags, tagFilter]);
-        expect(receivedThumbnailIfdTags).to.equal(filteredThumbnailIfdTags);
-    });
+        it('should merge the carried groups of an Exif container top level, XMP without its raw packet, in flat mode', function () {
+            const {tags, parsedGroups} = buildCarriedGroupTags({
+                steps: [getExifContainer(CARRIED_GROUPS)],
+                expanded: false,
+            });
 
-    it('should not return a PNG text tag named Thumbnail when there is no thumbnail IFD', function () {
-        const tags = buildTagsFromMergeBlocks({
-            mergeBlocks: [
-                {slot: 'deferredPngText', group: 'png', mode: 'pngText', deferredKey: 'pngText'},
-                {slot: 'thumbnail', mode: 'thumbnail'},
-            ],
-            deferredResults: {
-                pngText: [
-                    {readTags: {Thumbnail: {value: 'my thumbnail note'}}},
-                    {embeddedExifTags: {Model: {value: 'model'}}, embeddedExifThumbnail: {JPEGInterchangeFormat: {value: 272}}},
+            expect(JSON.stringify(tags)).to.equal(JSON.stringify({
+                Headline: {value: 'headline'},
+                ClippingPathName: {value: 'path1'},
+                ProfileVersion: {value: '4.3'},
+                AutoRotate: {value: 0},
+                Model: {value: 'model'},
+                Rating: {value: '5'},
+            }));
+            expect(parsedGroups.xmp).to.deep.equal(CARRIED_GROUPS.xmp);
+            expect(parsedGroups.makerNotes).to.deep.equal(CARRIED_GROUPS.makerNotes);
+        });
+
+        it('should sort the blocks of a container by slot whatever their order, and apply the container at its own slot', function () {
+            const {tags} = buildCarriedGroupTags({
+                steps: [
+                    {slot: 'xmp', group: 'xmp', mode: 'assign', tags: {Rating: {value: 'segment'}, Source: {value: 'segment'}}},
+                    {slot: 'exif', mode: 'nested', blocks: [
+                        {slot: 'carriedXmp', group: 'xmp', mode: 'merge', tags: {Rating: {value: 'carried'}}},
+                        {slot: 'exif', group: 'exif', mode: 'merge', tags: {Rating: {value: 'exif'}, Model: {value: 'model'}}},
+                        {slot: 'carriedIptc', group: 'iptc', mode: 'merge', tags: {Rating: {value: 'iptc'}}},
+                    ]},
+                    {slot: 'file', group: 'file', mode: 'assign', tags: {FileSize: {value: 1}}},
                 ],
-            },
-            parsedGroups: {},
-            expanded: false,
-            tagFilter: createTagFilter({}),
-            dataView: {},
-            tiffHeaderOffset: undefined,
-            fileType: undefined,
-            pngTextIsAsync: false,
-            thumbnailIfdTags: undefined,
-            deps: createPipelineDeps(),
+                expanded: false,
+            });
+
+            expect(tags.Rating.value).to.equal('segment');
+            expect(Object.keys(tags)).to.deep.equal(['FileSize', 'Rating', 'Model', 'Source']);
         });
 
-        expect(tags).to.not.have.property('Thumbnail');
-    });
+        it('should apply a container at the brobExif slot after the xmp segment and before the icc segment in flat mode', function () {
+            const {tags} = buildCarriedGroupTags({
+                steps: [
+                    {slot: 'icc', group: 'icc', mode: 'assign', tags: {Collision: {value: 'icc'}}},
+                    {slot: 'brobExif', mode: 'nested', blocks: [{slot: 'exif', group: 'exif', mode: 'merge', tags: {Collision: {value: 'brob'}, Model: {value: 'brob'}}}]},
+                    {slot: 'xmp', group: 'xmp', mode: 'assign', tags: {Collision: {value: 'xmp'}, Model: {value: 'xmp'}}},
+                ],
+                expanded: false,
+            });
 
-    describe('thumbnail step with raw profile thumbnails', function () {
-        const MAIN_WITH_IMAGE = {type: 'image/jpeg', image: 'main'};
-        const MAIN_WITHOUT_IMAGE = {Compression: {value: 1}};
+            expect(tags.Collision.value).to.equal('icc');
+            expect(tags.Model.value).to.equal('brob');
+        });
+
+        it('should merge a nested Exif block into an existing parsed Exif group without mutating it', function () {
+            const parsedExifTags = {Make: {value: 'make'}};
+            const parsedGroups = {exif: parsedExifTags};
+
+            buildCarriedGroupTags({
+                steps: [{slot: 'brobExif', mode: 'nested', blocks: [{slot: 'exif', group: 'exif', mode: 'merge', tags: {Model: {value: 'model'}}}]}],
+                expanded: true,
+                parsedGroups,
+            });
+
+            expect(parsedExifTags).to.deep.equal({Make: {value: 'make'}});
+            expect(parsedGroups.exif).to.deep.equal({Make: {value: 'make'}, Model: {value: 'model'}});
+        });
 
         for (const expanded of [false, true]) {
             const mode = expanded ? 'expanded' : 'flat';
 
-            it(`should return a raw profile thumbnail top level, not as an Exif tag, when there is no main thumbnail in ${mode} mode`, function () {
-                const rawThumbnail = getRawThumbnail('raw');
-                const parsedGroups = {};
-
-                const tags = buildThumbnailTags({
-                    steps: [getSyncBlock({embeddedExifThumbnail: rawThumbnail})],
+            it(`should only keep a carried group in the parsed groups when the group is not returned in ${mode} mode`, function () {
+                const {tags, parsedGroups} = buildCarriedGroupTags({
+                    steps: [getExifContainer({makerNotes: CARRIED_GROUPS.makerNotes, xmp: CARRIED_GROUPS.xmp})],
                     expanded,
-                    parsedGroups,
+                    tagFilter: createTagFilter({returnGroups: {makerNotes: false, xmp: false}}),
                 });
 
-                expect(tags.Thumbnail).to.equal(rawThumbnail);
-                expect(expanded ? tags.exif : tags).to.have.property('Model');
-                if (expanded) {
-                    expect(tags.exif).to.not.have.property('Thumbnail');
-                }
-                expect(parsedGroups.exif).to.deep.equal({Model: {value: 'model'}});
+                expect(tags).to.not.have.property('makerNotes');
+                expect(tags).to.not.have.property('xmp');
+                expect(tags).to.not.have.property('AutoRotate');
+                expect(tags).to.not.have.property('Rating');
+                expect(parsedGroups.makerNotes).to.deep.equal(CARRIED_GROUPS.makerNotes);
+                expect(parsedGroups.xmp).to.deep.equal(CARRIED_GROUPS.xmp);
             });
 
-            it(`should return the raw profile thumbnail of a deferred item top level, not as an Exif tag, in ${mode} mode`, function () {
-                const rawThumbnail = getRawThumbnail('raw');
-                const parsedGroups = {};
+            it(`should merge the carried groups from the tags returned for them in ${mode} mode`, function () {
+                const deps = createPipelineDeps();
+                deps.filterTagsForReturn = (groupKey, readTags) => {
+                    const returnedTags = objectAssign({}, readTags);
+                    delete returnedTags.Hidden;
+                    return returnedTags;
+                };
 
-                const tags = buildThumbnailTags({
-                    steps: [getDeferredBlock()],
-                    deferredResults: {pngText: [{embeddedExifTags: {Model: {value: 'model'}}, embeddedExifThumbnail: rawThumbnail}]},
+                const {tags, parsedGroups} = buildCarriedGroupTags({
+                    steps: [getExifContainer({makerNotes: {AutoRotate: {value: 0}, Hidden: {value: 1}}})],
                     expanded,
-                    parsedGroups,
+                    deps,
                 });
 
-                expect(tags.Thumbnail).to.equal(rawThumbnail);
-                if (expanded) {
-                    expect(tags.exif).to.deep.equal({Model: {value: 'model'}});
-                }
-                expect(parsedGroups.exif).to.deep.equal({Model: {value: 'model'}});
+                expect(expanded ? tags.makerNotes : tags).to.not.have.property('Hidden');
+                expect((expanded ? tags.makerNotes : tags).AutoRotate).to.deep.equal({value: 0});
+                expect(parsedGroups.makerNotes.Hidden).to.deep.equal({value: 1});
+            });
+
+            it(`should merge the containers of two raw profiles group by group without mutating the first in ${mode} mode`, function () {
+                const first = getExifContainer({makerNotes: {AutoRotate: {value: 'first'}, LensType: {value: 'first'}}});
+                const firstSnapshot = structuredClone(first);
+
+                const {tags, parsedGroups} = buildCarriedGroupTags({
+                    steps: [{slot: 'pngText', mode: 'nested', blocks: [
+                        ...first.blocks,
+                        ...getExifContainer({makerNotes: {AutoRotate: {value: 'second'}}}, {Model: {value: 'second'}}).blocks,
+                    ]}],
+                    expanded,
+                });
+
+                const makerNotes = expanded ? tags.makerNotes : tags;
+                expect(makerNotes.AutoRotate).to.deep.equal({value: 'second'});
+                expect(makerNotes.LensType).to.deep.equal({value: 'first'});
+                expect((expanded ? tags.exif : tags).Model).to.deep.equal({value: 'second'});
+                expect(parsedGroups.makerNotes).to.deep.equal({AutoRotate: {value: 'second'}, LensType: {value: 'first'}});
+                expect(first).to.deep.equal(firstSnapshot);
             });
         }
 
-        it('should return the main thumbnail when it has an image, over a raw profile thumbnail', function () {
-            const tags = buildThumbnailTags({
-                steps: [getSyncBlock({embeddedExifThumbnail: getRawThumbnail('raw')})],
-                mainThumbnail: MAIN_WITH_IMAGE,
+        it('should keep a _raw tag of a carried group other than XMP in flat mode', function () {
+            const {tags} = buildCarriedGroupTags({
+                steps: [getExifContainer({makerNotes: {_raw: {value: 'maker notes'}}})],
+                expanded: false,
             });
 
-            expect(tags.Thumbnail).to.equal(MAIN_WITH_IMAGE);
+            expect(tags._raw).to.deep.equal({value: 'maker notes'});
         });
 
-        it('should return a raw profile thumbnail with an image over a main thumbnail without one', function () {
-            const rawThumbnail = getRawThumbnail('raw');
-
-            const tags = buildThumbnailTags({
-                steps: [getSyncBlock({embeddedExifThumbnail: rawThumbnail})],
-                mainThumbnail: MAIN_WITHOUT_IMAGE,
+        it('should let Exif win over the maker notes, and ApplicationNotes XMP over Exif, in flat mode', function () {
+            const {tags} = buildCarriedGroupTags({
+                steps: [getExifContainer({
+                    makerNotes: {LensModel: {value: 'maker notes'}, Rating: {value: 'maker notes'}},
+                    xmp: {Rating: {value: 'xmp'}},
+                }, {LensModel: {value: 'exif'}, Rating: {value: 'exif'}})],
+                expanded: false,
             });
 
-            expect(tags.Thumbnail).to.equal(rawThumbnail);
+            expect(tags.LensModel.value).to.equal('exif');
+            expect(tags.Rating.value).to.equal('xmp');
         });
 
-        it('should return the main thumbnail without an image when no raw profile thumbnail has one', function () {
-            const tags = buildThumbnailTags({
-                steps: [getSyncBlock({embeddedExifThumbnail: {type: 'image/jpeg'}}), getDeferredBlock()],
-                deferredResults: {pngText: [{embeddedExifThumbnail: {Compression: {value: 6}}}]},
-                mainThumbnail: MAIN_WITHOUT_IMAGE,
+        it('should return the carried groups ahead of Exif and in reading order in expanded mode', function () {
+            const {tags} = buildCarriedGroupTags({
+                steps: [getExifContainer({
+                    makerNotes: CARRIED_GROUPS.makerNotes,
+                    icc: CARRIED_GROUPS.icc,
+                    photoshop: CARRIED_GROUPS.photoshop,
+                    xmp: CARRIED_GROUPS.xmp,
+                    iptc: CARRIED_GROUPS.iptc,
+                }), {slot: 'pngFile', group: 'png', mode: 'pngFile', tags: {Width: {value: 1}}}],
+                expanded: true,
             });
 
-            expect(tags.Thumbnail).to.equal(MAIN_WITHOUT_IMAGE);
+            expect(Object.keys(tags)).to.deep.equal(['iptc', 'xmp', 'photoshop', 'icc', 'makerNotes', 'exif', 'png', 'pngFile']);
         });
 
-        it('should never return a raw profile thumbnail without an image', function () {
-            const tags = buildThumbnailTags({
-                steps: [getSyncBlock({embeddedExifThumbnail: {type: 'image/jpeg'}}), getDeferredBlock()],
-                deferredResults: {pngText: [{embeddedExifThumbnail: {Compression: {value: 6}}}]},
+        it('should merge a container nested in a container', function () {
+            const {tags} = buildCarriedGroupTags({
+                steps: [{slot: 'pngText', mode: 'nested', blocks: [
+                    {slot: 'pngText', group: 'png', mode: 'pngTextTags', tags: {Comment: {value: 'text'}}},
+                    {slot: 'exif', mode: 'nested', blocks: [
+                        {slot: 'exif', group: 'exif', mode: 'merge', tags: {Model: {value: 'model'}}},
+                        {slot: 'carriedIptc', group: 'iptc', mode: 'merge', tags: {Headline: {value: 'h'}}},
+                    ]},
+                ]}],
+                expanded: true,
             });
+
+            expect(Object.keys(tags)).to.deep.equal(['iptc', 'exif', 'png', 'pngText']);
+        });
+
+        // The main Exif block's container: the carried groups as read, then Exif.
+        function getExifContainer(carriedGroups, exifTags = {Model: {value: 'model'}}) {
+            const carriedSlots = {iptc: 'carriedIptc', xmp: 'carriedXmp', photoshop: 'carriedPhotoshop', icc: 'carriedIcc', makerNotes: 'carriedMakerNotes'};
+            const blocks = Object.keys(carriedGroups).map((groupKey) => ({
+                slot: carriedSlots[groupKey],
+                group: groupKey,
+                mode: 'merge',
+                tags: carriedGroups[groupKey],
+            }));
+            blocks.unshift({slot: 'exif', group: 'exif', mode: 'merge', tags: exifTags});
+            return {slot: 'exif', mode: 'nested', blocks};
+        }
+
+        function buildCarriedGroupTags({
+            steps,
+            expanded,
+            tagFilter = createTagFilter({}),
+            parsedGroups = {},
+            deps = createPipelineDeps(),
+        }) {
+            const tags = buildBlockTags({blocks: steps, expanded, tagFilter, parsedGroups, deps});
+            return {tags, parsedGroups};
+        }
+    });
+
+    describe('thumbnail step', function () {
+        const MAIN_WITH_IMAGE = {type: 'image/jpeg', image: 'main'};
+        const MAIN_WITHOUT_IMAGE = {Compression: {value: 1}};
+
+        it('should remove an existing Thumbnail tag when there is no candidate', function () {
+            const tags = buildThumbnailTags({candidates: [], tags: {Thumbnail: {value: 'existing'}}});
 
             expect(tags).to.not.have.property('Thumbnail');
         });
 
-        it('should return the raw profile thumbnail of the synchronous step over a deferred one', function () {
-            const syncThumbnail = getRawThumbnail('sync');
+        it('should keep a main thumbnail without an image', function () {
+            const tags = buildThumbnailTags({candidates: [getCandidate('main', MAIN_WITHOUT_IMAGE)]});
 
-            const tags = buildThumbnailTags({
-                steps: [getSyncBlock({embeddedExifThumbnail: syncThumbnail}), getDeferredBlock()],
-                deferredResults: {pngText: [{embeddedExifThumbnail: getRawThumbnail('deferred')}]},
-            });
-
-            expect(tags.Thumbnail).to.equal(syncThumbnail);
+            expect(tags.Thumbnail).to.equal(MAIN_WITHOUT_IMAGE);
         });
 
-        it('should return the first deferred raw profile thumbnail with an image', function () {
-            const firstWithImage = getRawThumbnail('first');
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
 
-            const tags = buildThumbnailTags({
-                steps: [getSyncBlock({}), getDeferredBlock()],
-                deferredResults: {
-                    pngText: [
-                        {embeddedExifThumbnail: {type: 'image/jpeg'}},
-                        {readTags: {MyTag: {value: 'my value'}}},
-                        {embeddedExifThumbnail: firstWithImage},
-                        {embeddedExifThumbnail: getRawThumbnail('second')},
-                    ],
-                },
+            it(`should return an embedded thumbnail top level when there is no main one in ${mode} mode`, function () {
+                const embedded = getEmbeddedThumbnail('raw');
+
+                const tags = buildThumbnailTags({
+                    candidates: [{slot: 'exif', mode: 'nested', blocks: [
+                        {slot: 'exif', group: 'exif', mode: 'merge', tags: {Model: {value: 'model'}}},
+                        getCandidate('embedded', embedded),
+                    ]}],
+                    expanded,
+                });
+
+                expect(tags.Thumbnail).to.equal(embedded);
+                expect(expanded ? tags.exif : tags).to.have.property('Model');
+                if (expanded) {
+                    expect(tags.exif).to.not.have.property('Thumbnail');
+                }
             });
+        }
+
+        it('should return the main thumbnail when it has an image, over an embedded one', function () {
+            const tags = buildThumbnailTags({candidates: [getCandidate('embedded', getEmbeddedThumbnail('raw')), getCandidate('main', MAIN_WITH_IMAGE)]});
+
+            expect(tags.Thumbnail).to.equal(MAIN_WITH_IMAGE);
+        });
+
+        it('should return an embedded thumbnail with an image over a main one without', function () {
+            const embedded = getEmbeddedThumbnail('raw');
+
+            const tags = buildThumbnailTags({candidates: [getCandidate('main', MAIN_WITHOUT_IMAGE), getCandidate('embedded', embedded)]});
+
+            expect(tags.Thumbnail).to.equal(embedded);
+        });
+
+        it('should return the main thumbnail without an image when no embedded one has an image', function () {
+            const tags = buildThumbnailTags({candidates: [
+                getCandidate('main', MAIN_WITHOUT_IMAGE),
+                getCandidate('embedded', {type: 'image/jpeg'}),
+                getCandidate('embedded', {Compression: {value: 6}}),
+            ]});
+
+            expect(tags.Thumbnail).to.equal(MAIN_WITHOUT_IMAGE);
+        });
+
+        it('should never return an embedded thumbnail without an image', function () {
+            const tags = buildThumbnailTags({candidates: [getCandidate('embedded', {type: 'image/jpeg'}), getCandidate('embedded', {Compression: {value: 6}})]});
+
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should return the first embedded thumbnail with an image in merge order', function () {
+            const firstWithImage = getEmbeddedThumbnail('first');
+
+            const tags = buildThumbnailTags({candidates: [
+                {slot: 'deferredPngText', mode: 'nested', blocks: [getCandidate('embedded', getEmbeddedThumbnail('deferred'))]},
+                getCandidate('embedded', {type: 'image/jpeg'}),
+                {slot: 'pngText', mode: 'nested', blocks: [getCandidate('embedded', firstWithImage), getCandidate('embedded', getEmbeddedThumbnail('second'))]},
+            ]});
 
             expect(tags.Thumbnail).to.equal(firstWithImage);
         });
 
-        it('should return no raw profile thumbnail when the thumbnail group is filtered out', function () {
+        it('should return no thumbnail when the thumbnail group is filtered out', function () {
             const tags = buildThumbnailTags({
-                steps: [getSyncBlock({embeddedExifThumbnail: getRawThumbnail('raw')})],
+                candidates: [getCandidate('main', MAIN_WITH_IMAGE)],
                 tagFilter: createTagFilter({returnGroups: {thumbnail: false}}),
             });
 
             expect(tags).to.not.have.property('Thumbnail');
         });
 
-        it('should return no raw profile thumbnail when the Thumbnail tag is filtered out', function () {
+        it('should return no thumbnail when the Thumbnail tag is filtered out', function () {
             const tags = buildThumbnailTags({
-                steps: [getSyncBlock({embeddedExifThumbnail: getRawThumbnail('raw')})],
+                candidates: [getCandidate('main', MAIN_WITH_IMAGE)],
                 tagFilter: createTagFilter({returnTags: {'thumbnail.Thumbnail': false}}),
             });
 
             expect(tags).to.not.have.property('Thumbnail');
         });
 
-        it('should not read a main thumbnail when there is no thumbnail IFD', function () {
-            const rawThumbnail = getRawThumbnail('raw');
-            const deps = createPipelineDeps();
-            let thumbnailGetCalls = 0;
-            deps.Thumbnail = {
-                get() {
-                    thumbnailGetCalls++;
-                    return MAIN_WITH_IMAGE;
-                },
-            };
+        for (const constant of ['USE_EXIF', 'USE_THUMBNAIL']) {
+            it(`should return no thumbnail in a build without ${constant}`, function () {
+                swap(Constants, {[constant]: false});
 
-            const tags = buildTagsFromMergeBlocks({
-                mergeBlocks: [getSyncBlock({embeddedExifThumbnail: rawThumbnail}), {slot: 'thumbnail', mode: 'thumbnail'}],
-                deferredResults: {},
-                parsedGroups: {},
-                expanded: false,
-                tagFilter: createTagFilter({}),
-                dataView: {},
-                tiffHeaderOffset: 0,
-                fileType: undefined,
-                pngTextBlocks: [],
-                pngTextIsAsync: false,
-                thumbnailIfdTags: undefined,
-                deps,
-            });
-
-            expect(thumbnailGetCalls).to.equal(0);
-            expect(tags.Thumbnail).to.equal(rawThumbnail);
-        });
-
-        it('should return a collected raw profile thumbnail from the thumbnail step', function () {
-            const rawThumbnail = getRawThumbnail('raw');
-
-            const tags = applyThumbnailStepWithRawThumbnails([rawThumbnail]);
-
-            expect(tags.Thumbnail).to.equal(rawThumbnail);
-        });
-
-        for (const [description, constants] of [
-            ['USE_PNG and USE_JXL', {USE_PNG: false, USE_JXL: false}],
-            ['USE_EXIF', {USE_EXIF: false}],
-            ['USE_THUMBNAIL', {USE_THUMBNAIL: false}],
-        ]) {
-            it(`should return no raw profile thumbnail in a build without ${description}`, function () {
-                swap(Constants, constants);
-
-                const tags = applyThumbnailStepWithRawThumbnails([getRawThumbnail('raw')]);
+                const tags = buildThumbnailTags({candidates: [getCandidate('main', MAIN_WITH_IMAGE)]});
 
                 expect(tags).to.not.have.property('Thumbnail');
             });
         }
 
-        for (const constant of ['USE_PNG', 'USE_JXL']) {
-            it(`should return an embedded thumbnail in a build with only ${constant} of the two`, function () {
-                swap(Constants, {USE_PNG: constant === 'USE_PNG', USE_JXL: constant === 'USE_JXL'});
-                const rawThumbnail = getRawThumbnail('raw');
+        it('should take the candidates given to mergeBlock', function () {
+            const thumbnails = [{rank: 'embedded', thumbnail: getEmbeddedThumbnail('raw')}];
 
-                const tags = applyThumbnailStepWithRawThumbnails([rawThumbnail]);
-
-                expect(tags.Thumbnail).to.equal(rawThumbnail);
-            });
-        }
-
-        function getRawThumbnail(image) {
-            return {type: 'image/jpeg', image};
-        }
-
-        function getSyncBlock({embeddedExifThumbnail}) {
-            return getPngTextBlock({
-                readTags: {},
-                embeddedExifTags: {Model: {value: 'model'}},
-                embeddedExifThumbnail,
-            });
-        }
-
-        function getDeferredBlock() {
-            return {slot: 'deferredPngText', group: 'png', mode: 'pngText', deferredKey: 'pngText'};
-        }
-
-        function buildThumbnailTags({
-            steps,
-            deferredResults = {},
-            expanded = false,
-            parsedGroups = {},
-            tagFilter = createTagFilter({}),
-            mainThumbnail,
-        }) {
-            const deps = createPipelineDeps();
-            deps.Thumbnail = {
-                get() {
-                    return mainThumbnail;
-                },
-            };
-
-            return buildTagsFromMergeBlocks({
-                mergeBlocks: steps.concat([{slot: 'thumbnail', mode: 'thumbnail'}]),
-                deferredResults,
-                parsedGroups,
-                expanded,
-                tagFilter,
-                dataView: {},
-                tiffHeaderOffset: 0,
-                fileType: undefined,
-                pngTextBlocks: [],
-                pngTextIsAsync: false,
-                thumbnailIfdTags: mainThumbnail ? {Compression: {value: 6}} : undefined,
-                deps,
-            });
-        }
-
-        function applyThumbnailStepWithRawThumbnails(embeddedExifThumbnails) {
-            return mergeBlock({
+            const tags = mergeBlock({
                 block: {slot: 'thumbnail', mode: 'thumbnail'},
-                deferredResults: {},
                 parsedGroups: {},
                 expanded: false,
                 tagFilter: createTagFilter({}),
                 dataView: {},
-                tiffHeaderOffset: undefined,
                 fileType: undefined,
-                thumbnailIfdTags: undefined,
-                embeddedExifThumbnails,
+                thumbnails,
                 tags: {},
                 deps: createPipelineDeps(),
+            });
+
+            expect(tags.Thumbnail).to.equal(thumbnails[0].thumbnail);
+        });
+
+        function getEmbeddedThumbnail(image) {
+            return {type: 'image/jpeg', image};
+        }
+
+        function getCandidate(rank, thumbnail) {
+            return {slot: 'thumbnail', group: 'thumbnail', mode: 'thumbnailCandidate', rank, tags: thumbnail};
+        }
+
+        function buildThumbnailTags({candidates, expanded = false, tagFilter = createTagFilter({}), tags = {}}) {
+            return buildBlockTags({
+                blocks: candidates.concat([{slot: 'thumbnail', mode: 'thumbnail'}, {slot: 'file', group: 'file', mode: 'assign', tags}]),
+                expanded,
+                tagFilter,
             });
         }
     });
@@ -593,14 +540,11 @@ describe('loadView pipeline module', function () {
                 mode: 'assign',
                 tags: {Collision: {value: 1}, _raw: '<xml/>'},
             },
-            deferredResults: {},
             parsedGroups: {},
             expanded: false,
             tagFilter,
             dataView: {},
-            tiffHeaderOffset: undefined,
             fileType: undefined,
-            thumbnailIfdTags: undefined,
             tags: {},
             deps: createPipelineDeps(),
         });
@@ -652,14 +596,11 @@ describe('loadView pipeline module', function () {
         it('should keep a group FileType tag in expanded mode when the file FileType tag is filtered out', function () {
             const tags = mergeBlock({
                 block: {slot: 'fileType', mode: 'fileType'},
-                deferredResults: {},
                 parsedGroups: {},
                 expanded: true,
                 tagFilter: createTagFilter({returnTags: {'file.FileType': false}}),
                 dataView: {},
-                tiffHeaderOffset: undefined,
                 fileType: LIBRARY_FILE_TYPE,
-                thumbnailIfdTags: undefined,
                 tags: {xmp: {FileType: {value: 'from file data'}}},
                 deps: createPipelineDeps(),
             });
@@ -671,14 +612,11 @@ describe('loadView pipeline module', function () {
         function applyFileTypeStep({tagFilter, fileType}) {
             return mergeBlock({
                 block: {slot: 'fileType', mode: 'fileType'},
-                deferredResults: {},
                 parsedGroups: {},
                 expanded: false,
                 tagFilter,
                 dataView: {},
-                tiffHeaderOffset: undefined,
                 fileType,
-                thumbnailIfdTags: undefined,
                 tags: {FileType: {value: 'from file data'}, Other: {value: 1}},
                 deps: createPipelineDeps(),
             });
@@ -694,14 +632,11 @@ describe('loadView pipeline module', function () {
 
             const tags = mergeBlock({
                 block: {slot: 'metadataRange', mode: 'metadataRange', metadataBlocks: blocks},
-                deferredResults: {},
                 parsedGroups: {},
                 expanded: true,
                 tagFilter: createTagFilter({}),
                 dataView: {byteLength: 1024},
-                tiffHeaderOffset: undefined,
                 fileType: undefined,
-                thumbnailIfdTags: undefined,
                 tags: {},
                 deps: createPipelineDeps(),
             });
@@ -725,14 +660,11 @@ describe('loadView pipeline module', function () {
                     metadataBlocks: [{type: 'exif', start: 2, end: 100}],
                     metadataTruncated: true,
                 },
-                deferredResults: {},
                 parsedGroups: {},
                 expanded: true,
                 tagFilter: createTagFilter({}),
                 dataView: {byteLength: 1024},
-                tiffHeaderOffset: undefined,
                 fileType: undefined,
-                thumbnailIfdTags: undefined,
                 tags: {},
                 deps: createPipelineDeps(),
             });
@@ -750,14 +682,11 @@ describe('loadView pipeline module', function () {
                         {type: 'exif', start: 2, end: 9999},
                     ],
                 },
-                deferredResults: {},
                 parsedGroups: {},
                 expanded: true,
                 tagFilter: createTagFilter({}),
                 dataView: {byteLength: 1024},
-                tiffHeaderOffset: undefined,
                 fileType: undefined,
-                thumbnailIfdTags: undefined,
                 tags: {},
                 deps: createPipelineDeps(),
             });
@@ -773,14 +702,11 @@ describe('loadView pipeline module', function () {
                     mode: 'metadataRange',
                     metadataBlocks: [{type: 'exif', start: 0, end: 100}],
                 },
-                deferredResults: {},
                 parsedGroups: {},
                 expanded: false,
                 tagFilter: createTagFilter({}),
                 dataView: {byteLength: 1024},
-                tiffHeaderOffset: undefined,
                 fileType: undefined,
-                thumbnailIfdTags: undefined,
                 tags: {},
                 deps: createPipelineDeps(),
             });
@@ -791,14 +717,11 @@ describe('loadView pipeline module', function () {
         it('should not attach metadataRange when there are no blocks', function () {
             const tags = mergeBlock({
                 block: {slot: 'metadataRange', mode: 'metadataRange', metadataBlocks: []},
-                deferredResults: {},
                 parsedGroups: {},
                 expanded: true,
                 tagFilter: createTagFilter({}),
                 dataView: {byteLength: 1024},
-                tiffHeaderOffset: undefined,
                 fileType: undefined,
-                thumbnailIfdTags: undefined,
                 tags: {},
                 deps: createPipelineDeps(),
             });
@@ -816,14 +739,11 @@ describe('loadView pipeline module', function () {
                         {type: 'exif', start: 2, end: 100},
                     ],
                 },
-                deferredResults: {},
                 parsedGroups: {},
                 expanded: true,
                 tagFilter: createTagFilter({}),
                 dataView: {byteLength: 1024},
-                tiffHeaderOffset: undefined,
                 fileType: undefined,
-                thumbnailIfdTags: undefined,
                 tags: {},
                 deps: createPipelineDeps(),
             });
@@ -849,14 +769,11 @@ describe('loadView pipeline module', function () {
                     mode: 'metadataRange',
                     metadataBlocks: [{type: 'mpf', start: 2, end: 200}],
                 },
-                deferredResults: {},
                 parsedGroups,
                 expanded: true,
                 tagFilter: createTagFilter({}),
                 dataView: {byteLength: 9000},
-                tiffHeaderOffset: undefined,
                 fileType: undefined,
-                thumbnailIfdTags: undefined,
                 tags: {},
                 deps: createPipelineDeps(),
             });
@@ -892,14 +809,11 @@ describe('loadView pipeline module', function () {
                     mode: 'metadataRange',
                     metadataBlocks: [{type: 'mpf', start: 2, end: 200}],
                 },
-                deferredResults: {},
                 parsedGroups,
                 expanded: true,
                 tagFilter: createTagFilter({}),
                 dataView: {byteLength: 8000},
-                tiffHeaderOffset: undefined,
                 fileType: undefined,
-                thumbnailIfdTags: undefined,
                 tags: {},
                 deps: createPipelineDeps(),
             });
@@ -936,14 +850,11 @@ describe('loadView pipeline module', function () {
                         {type: 'mpf', start: 2, end: 200},
                     ],
                 },
-                deferredResults: {},
                 parsedGroups,
                 expanded: true,
                 tagFilter: createTagFilter({}),
                 dataView: {byteLength: 9000},
-                tiffHeaderOffset: undefined,
                 fileType: undefined,
-                thumbnailIfdTags: undefined,
                 tags: {},
                 deps: createPipelineDeps(),
             });
@@ -967,653 +878,391 @@ describe('loadView pipeline module', function () {
                 {slot: 'file', group: 'file', mode: 'assign', tags: {Collision: {value: 'first'}}},
                 {slot: 'exif', group: 'exif', mode: 'assign', tags: {Collision: {value: 'second'}}},
             ],
-            deferredResults: {},
             parsedGroups: {},
             expanded: false,
             tagFilter,
             dataView: {},
-            tiffHeaderOffset: undefined,
             fileType: undefined,
             pngTextBlocks: [],
             pngTextIsAsync: false,
-            thumbnailIfdTags: undefined,
             deps: createPipelineDeps(),
         });
 
         expect(tags.Collision.value).to.equal('second');
     });
-    describe('deferred PNG text list block', function () {
-        const MANY_ITEMS = 8000;
 
-        it('should merge many deferred items in linear time in flat mode', function () {
+    describe('many PNG text blocks', function () {
+        const MANY_BLOCKS = 8000;
+
+        it('should merge many pngTextTags blocks in linear time in flat mode', function () {
             this.timeout(LINEAR_TIME_TIMEOUT_MS);
             this.retries(2);
-            const baselineItems = getSingleTagItems(MANY_ITEMS / 8);
-            const items = getSingleTagItems(MANY_ITEMS);
+            const baselineBlocks = getSingleTagBlocks(MANY_BLOCKS / 8);
+            const blocks = getSingleTagBlocks(MANY_BLOCKS);
 
-            const {tags} = expectTimeRatioBelow(
-                () => buildDeferredPngTextTags({items: baselineItems, expanded: false}),
-                () => buildDeferredPngTextTags({items, expanded: false}),
+            const tags = expectTimeRatioBelow(
+                () => buildBlockTags({blocks: baselineBlocks, expanded: false}),
+                () => buildBlockTags({blocks, expanded: false}),
                 24
             );
 
-            expect(Object.keys(tags)).to.have.lengthOf(MANY_ITEMS);
-            expect(tags[`k${MANY_ITEMS - 1}`].value).to.equal(MANY_ITEMS - 1);
+            expect(Object.keys(tags)).to.have.lengthOf(MANY_BLOCKS);
+            expect(tags[`k${MANY_BLOCKS - 1}`].value).to.equal(MANY_BLOCKS - 1);
         });
 
-        it('should merge many deferred items in linear time in expanded mode', function () {
+        it('should merge many pngTextTags blocks in linear time in expanded mode', function () {
             this.timeout(LINEAR_TIME_TIMEOUT_MS);
             this.retries(2);
-            const baselineItems = getSingleTagItems(MANY_ITEMS / 8);
-            const items = getSingleTagItems(MANY_ITEMS);
+            const baselineBlocks = getSingleTagBlocks(MANY_BLOCKS / 8);
+            const blocks = getSingleTagBlocks(MANY_BLOCKS);
 
-            const {tags} = expectTimeRatioBelow(
-                () => buildDeferredPngTextTags({items: baselineItems, expanded: true}),
-                () => buildDeferredPngTextTags({items, expanded: true}),
+            const tags = expectTimeRatioBelow(
+                () => buildBlockTags({blocks: baselineBlocks, expanded: true}),
+                () => buildBlockTags({blocks, expanded: true}),
                 24
             );
 
-            expect(Object.keys(tags.png)).to.have.lengthOf(MANY_ITEMS);
-            expect(Object.keys(tags.pngText)).to.have.lengthOf(MANY_ITEMS);
+            expect(Object.keys(tags.png)).to.have.lengthOf(MANY_BLOCKS);
+            expect(Object.keys(tags.pngText)).to.have.lengthOf(MANY_BLOCKS);
         });
 
-        for (const expanded of [false, true]) {
-            const mode = expanded ? 'expanded' : 'flat';
+        it('should merge many blocks nested in one container in linear time', function () {
+            this.timeout(LINEAR_TIME_TIMEOUT_MS);
+            this.retries(2);
+            const baselineBlocks = getSingleTagBlocks(MANY_BLOCKS / 8);
+            const blocks = getSingleTagBlocks(MANY_BLOCKS);
 
-            it(`should give the same result as one merge per item in ${mode} mode`, function () {
-                expectSameAsOneMergePerItem({expanded});
-            });
+            const tags = expectTimeRatioBelow(
+                () => buildBlockTags({blocks: [{slot: 'pngText', mode: 'nested', blocks: baselineBlocks}], expanded: true}),
+                () => buildBlockTags({blocks: [{slot: 'pngText', mode: 'nested', blocks}], expanded: true}),
+                24
+            );
 
-            it(`should give the same result as one merge per item with a tag filter in ${mode} mode`, function () {
-                const deps = createPipelineDeps();
-                deps.filterTagsForReturn = (groupKey, readTags) => {
-                    if (groupKey !== 'exif') {
-                        return readTags;
-                    }
-                    const returnedTags = objectAssign({}, readTags);
-                    delete returnedTags.Model;
-                    return returnedTags;
-                };
-
-                const {parsedGroups} = expectSameAsOneMergePerItem({expanded, deps});
-
-                expect(parsedGroups.exif.Model.value).to.equal('exif model');
-            });
-        }
-
-        it('should give the expected flat result for a mix of PNG, Exif and IPTC items', function () {
-            const {tags, parsedGroups} = buildDeferredPngTextTags({
-                items: getMixedItems(),
-                expanded: false,
-                stepsBefore: [{slot: 'pngFile', group: 'png', mode: 'pngFile', tags: {Width: {value: 100}}}],
-            });
-
-            expect(JSON.stringify(tags)).to.equal(JSON.stringify({
-                Width: {value: 100},
-                Software: {value: 'exif software'},
-                Title: {value: 'title 2'},
-                Make: {value: 'png make'},
-                Headline: {value: 'headline 2'},
-                Comment: {value: 'comment'},
-                Model: {value: 'exif model'},
-                Keywords: {value: 'keywords'},
-            }));
-            expect(JSON.stringify(parsedGroups.exif)).to.equal(JSON.stringify({
-                Software: {value: 'exif software'},
-                Make: {value: 'exif make 2'},
-                Model: {value: 'exif model'},
-            }));
-            expect(JSON.stringify(parsedGroups.iptc)).to.equal(JSON.stringify({
-                Headline: {value: 'headline 2'},
-                Keywords: {value: 'keywords'},
-            }));
+            expect(Object.keys(tags.png)).to.have.lengthOf(MANY_BLOCKS);
         });
 
         for (const expanded of [false, true]) {
             const mode = expanded ? 'expanded' : 'flat';
 
             it(`should let a later duplicate keyword win in ${mode} mode`, function () {
-                const {tags} = buildDeferredPngTextTags({
-                    items: [{readTags: {MyTag: {value: 'first'}}}, {readTags: {MyTag: {value: 'second'}}}],
+                const tags = buildBlockTags({
+                    blocks: [getTextTagsBlock({k: {value: 'first'}}), getTextTagsBlock({k: {value: 'second'}})],
                     expanded,
                 });
 
-                expect((expanded ? tags.png : tags).MyTag.value).to.equal('second');
-            });
-
-            it(`should merge several Exif items in ${mode} mode`, function () {
-                const {tags, parsedGroups} = buildDeferredPngTextTags({
-                    items: [
-                        {embeddedExifTags: {Make: {value: 'make 1'}, Model: {value: 'model'}}},
-                        {embeddedExifTags: {Make: {value: 'make 2'}, Software: {value: 'software'}}},
-                    ],
-                    expanded,
-                });
-
-                const expectedExifTags = {
-                    Make: {value: 'make 2'},
-                    Model: {value: 'model'},
-                    Software: {value: 'software'},
-                };
-                expect(parsedGroups.exif).to.deep.equal(expectedExifTags);
-                if (expanded) {
-                    expect(tags.exif).to.deep.equal(expectedExifTags);
-                    expect(tags.exif).to.not.equal(parsedGroups.exif);
-                } else {
-                    expect(tags).to.deep.equal(expectedExifTags);
-                }
+                expect((expanded ? tags.png : tags).k.value).to.equal('second');
             });
         }
 
-        for (const expanded of [false, true]) {
-            const mode = expanded ? 'expanded' : 'flat';
+        it('should not mutate the PNG file tags from an earlier pngFile block', function () {
+            const fileTags = {Width: {value: 1}};
 
-            it(`should merge several IPTC items in ${mode} mode`, function () {
-                const {tags, parsedGroups} = buildDeferredPngTextTags({
-                    items: [
-                        {embeddedIptcTags: {Headline: {value: 'headline 1'}, Keywords: {value: 'keywords'}}},
-                        {embeddedIptcTags: {Headline: {value: 'headline 2'}, Caption: {value: 'caption'}}},
-                    ],
-                    expanded,
-                });
-
-                const expectedIptcTags = {
-                    Headline: {value: 'headline 2'},
-                    Keywords: {value: 'keywords'},
-                    Caption: {value: 'caption'},
-                };
-                expect(parsedGroups.iptc).to.deep.equal(expectedIptcTags);
-                if (expanded) {
-                    expect(tags.iptc).to.deep.equal(expectedIptcTags);
-                    expect(tags.iptc).to.not.equal(parsedGroups.iptc);
-                } else {
-                    expect(tags).to.deep.equal(expectedIptcTags);
-                }
-            });
-        }
-
-        it('should let a later embedded Exif tag win over a PNG keyword of the same name in flat mode', function () {
-            const {tags} = buildDeferredPngTextTags({
-                items: [{readTags: {Software: {value: 'png software'}}}, {embeddedExifTags: {Software: {value: 'exif software'}}}],
-                expanded: false,
-            });
-
-            expect(tags.Software.value).to.equal('exif software');
-        });
-
-        it('should let a later PNG keyword win over an embedded Exif tag of the same name in flat mode', function () {
-            const {tags} = buildDeferredPngTextTags({
-                items: [{embeddedExifTags: {Software: {value: 'exif software'}}}, {readTags: {Software: {value: 'png software'}}}],
-                expanded: false,
-            });
-
-            expect(tags.Software.value).to.equal('png software');
-        });
-
-        it('should not mutate the PNG file tags from an earlier mergePngFile step', function () {
-            const pngFileTags = {Width: {value: 100}};
-            const pngFileTagsSnapshot = structuredClone(pngFileTags);
-
-            const {tags} = buildDeferredPngTextTags({
-                items: [{readTags: {MyTag: {value: 'text'}}}],
-                expanded: true,
-                stepsBefore: [{slot: 'pngFile', group: 'png', mode: 'pngFile', tags: pngFileTags}],
-            });
-
-            expect(pngFileTags).to.deep.equal(pngFileTagsSnapshot);
-            expect(tags.pngFile).to.deep.equal({Width: {value: 100}});
-            expect(tags.png).to.deep.equal({Width: {value: 100}, MyTag: {value: 'text'}});
-        });
-
-        for (const expanded of [false, true]) {
-            const mode = expanded ? 'expanded' : 'flat';
-
-            it(`should not mutate the synchronous PNG text tags in ${mode} mode`, function () {
-                const syncReadTags = {SyncTag: {value: 'sync'}};
-                const syncReadTagsSnapshot = structuredClone(syncReadTags);
-
-                const {tags} = buildDeferredPngTextTags({
-                    items: [{readTags: {MyTag: {value: 'text'}}}, {embeddedExifTags: {Make: {value: 'make'}}}],
-                    expanded,
-                    stepsBefore: [{slot: 'pngText', group: 'png', mode: 'pngText', item: {readTags: syncReadTags}}],
-                });
-
-                expect(syncReadTags).to.deep.equal(syncReadTagsSnapshot);
-                expect(expanded ? tags.png : tags).to.include.keys('SyncTag', 'MyTag');
-            });
-        }
-
-        it('should not mutate an existing parsed Exif group', function () {
-            const parsedExifTags = {Make: {value: 'make 1'}};
-            const parsedGroups = {exif: parsedExifTags};
-
-            buildDeferredPngTextTags({
-                items: [{embeddedExifTags: {Model: {value: 'model'}}}],
-                expanded: true,
-                parsedGroups,
-            });
-
-            expect(parsedExifTags).to.deep.equal({Make: {value: 'make 1'}});
-            expect(parsedGroups.exif).to.deep.equal({Make: {value: 'make 1'}, Model: {value: 'model'}});
-        });
-
-        it('should merge embedded Exif and IPTC tags from the synchronous step at the top level in flat mode', function () {
-            const {tags, parsedGroups} = buildPngTextTags({
-                steps: [getSyncBlockWithEmbeddedTags()],
-                expanded: false,
-            });
-
-            expect(tags).to.deep.equal({
-                SyncTag: {value: 'sync'},
-                Model: {value: 'model'},
-                Headline: {value: 'headline'},
-            });
-            expect(parsedGroups.exif).to.deep.equal({Model: {value: 'model'}});
-            expect(parsedGroups.iptc).to.deep.equal({Headline: {value: 'headline'}});
-        });
-
-        it('should merge embedded Exif and IPTC tags from the synchronous step into their groups in expanded mode', function () {
-            const {tags, parsedGroups} = buildPngTextTags({
-                steps: [getSyncBlockWithEmbeddedTags()],
+            const tags = buildBlockTags({
+                blocks: [{slot: 'pngFile', group: 'png', mode: 'pngFile', tags: fileTags}, getTextTagsBlock({k: {value: 'text'}})],
                 expanded: true,
             });
 
-            expect(tags.exif).to.deep.equal({Model: {value: 'model'}});
-            expect(tags.iptc).to.deep.equal({Headline: {value: 'headline'}});
-            expect(tags.png).to.deep.equal({SyncTag: {value: 'sync'}});
-            expect(tags).to.not.have.property('Model');
-            expect(tags).to.not.have.property('Headline');
-            expect(parsedGroups.exif).to.deep.equal({Model: {value: 'model'}});
-            expect(parsedGroups.iptc).to.deep.equal({Headline: {value: 'headline'}});
+            expect(fileTags).to.deep.equal({Width: {value: 1}});
+            expect(tags.pngFile).to.equal(fileTags);
+            expect(tags.png).to.deep.equal({Width: {value: 1}, k: {value: 'text'}});
         });
 
-        for (const expanded of [false, true]) {
-            const mode = expanded ? 'expanded' : 'flat';
+        it('should not mutate the tags of a pngTextTags block', function () {
+            const textTags = {k: {value: 'first'}};
 
-            it(`should let a deferred Exif tag win over the synchronous step's and not mutate the synchronous tags in ${mode} mode`, function () {
-                const syncStep = getSyncBlockWithEmbeddedTags();
-                const syncStepSnapshot = structuredClone(syncStep);
-
-                const {tags, parsedGroups} = buildDeferredPngTextTags({
-                    items: [{embeddedExifTags: {Model: {value: 'deferred model'}, Make: {value: 'make'}}}],
-                    expanded,
-                    stepsBefore: [syncStep],
-                });
-
-                const exifTags = expanded ? tags.exif : tags;
-                expect(syncStep).to.deep.equal(syncStepSnapshot);
-                expect(exifTags.Model).to.deep.equal({value: 'deferred model'});
-                expect(exifTags.Make).to.deep.equal({value: 'make'});
-                expect(parsedGroups.exif).to.deep.equal({Model: {value: 'deferred model'}, Make: {value: 'make'}});
+            const tags = buildBlockTags({
+                blocks: [getTextTagsBlock(textTags), getTextTagsBlock({k: {value: 'second'}})],
+                expanded: true,
             });
+
+            expect(textTags).to.deep.equal({k: {value: 'first'}});
+            expect(tags.png.k.value).to.equal('second');
+        });
+
+        function getSingleTagBlocks(count) {
+            const blocks = [];
+            for (let i = 0; i < count; i++) {
+                blocks.push(getTextTagsBlock({['k' + i]: {value: i}}));
+            }
+            return blocks;
         }
 
-        function getSyncBlockWithEmbeddedTags() {
-            return getPngTextBlock({
-                readTags: {SyncTag: {value: 'sync'}},
-                embeddedExifTags: {Model: {value: 'model'}},
-                embeddedIptcTags: {Headline: {value: 'headline'}},
-            });
-        }
-
-        function getSingleTagItems(count) {
-            return Array.from({length: count}, (_, index) => ({readTags: {[`k${index}`]: {value: index}}}));
-        }
-
-        function getMixedItems() {
-            return [
-                {readTags: {Software: {value: 'png software'}, Title: {value: 'title 1'}}},
-                {embeddedExifTags: {Software: {value: 'exif software'}, Make: {value: 'exif make 1'}}},
-                {embeddedIptcTags: {Headline: {value: 'headline 1'}}},
-                {},
-                {readTags: {Title: {value: 'title 2'}, Comment: {value: 'comment'}}},
-                {embeddedExifTags: {Make: {value: 'exif make 2'}, Model: {value: 'exif model'}}},
-                {readTags: {Make: {value: 'png make'}}},
-                {embeddedIptcTags: {Headline: {value: 'headline 2'}, Keywords: {value: 'keywords'}}},
-            ];
-        }
-
-        function expectSameAsOneMergePerItem({expanded, deps = createPipelineDeps()}) {
-            const stepsBefore = [{slot: 'pngFile', group: 'png', mode: 'pngFile', tags: {Width: {value: 100}}}];
-            const actual = buildDeferredPngTextTags({items: getMixedItems(), expanded, deps, stepsBefore});
-            const expected = buildPngTextTagsOneMergePerItem({items: getMixedItems(), expanded, deps, stepsBefore});
-
-            expect(JSON.stringify(actual.tags)).to.equal(JSON.stringify(expected.tags));
-            expect(JSON.stringify(actual.parsedGroups)).to.equal(JSON.stringify(expected.parsedGroups));
-
-            return actual;
-        }
-
-        function buildPngTextTagsOneMergePerItem({items, expanded, deps, stepsBefore}) {
-            const {tags: tagsBefore, parsedGroups} = buildPngTextTags({steps: stepsBefore, expanded, deps});
-            const tagFilter = createTagFilter({});
-            const tags = items.reduce((mergedTags, item) => addPngTextReadTagsToTagsAndGroups({
-                readTags: item.readTags || {},
-                embeddedExifTags: item.embeddedExifTags,
-                embeddedIptcTags: item.embeddedIptcTags,
-                parsedGroups,
-                expanded,
-                tagFilter,
-                tags: mergedTags,
-                deps,
-            }), tagsBefore);
-            return {tags, parsedGroups};
-        }
-
-        function buildDeferredPngTextTags({items, expanded, deps, parsedGroups, stepsBefore = []}) {
-            return buildPngTextTags({
-                steps: stepsBefore.concat([{slot: 'deferredPngText', group: 'png', mode: 'pngText', deferredKey: 'pngText'}]),
-                deferredResults: {pngText: items},
-                expanded,
-                deps,
-                parsedGroups,
-            });
-        }
-
-        function buildPngTextTags({steps, deferredResults = {}, expanded, deps = createPipelineDeps(), parsedGroups = {}}) {
-            const tags = buildTagsFromMergeBlocks({
-                mergeBlocks: steps,
-                deferredResults,
-                parsedGroups,
-                expanded,
-                tagFilter: createTagFilter({}),
-                dataView: {},
-                tiffHeaderOffset: undefined,
-                fileType: undefined,
-                pngTextBlocks: [],
-                pngTextIsAsync: false,
-                thumbnailIfdTags: undefined,
-                deps,
-            });
-            return {tags, parsedGroups};
+        function getTextTagsBlock(tags) {
+            return {slot: 'pngText', group: 'png', mode: 'pngTextTags', tags};
         }
     });
 
-    describe('groups an Exif block carries', function () {
-        const CARRIED_GROUPS = {
-            iptc: {Headline: {value: 'headline'}},
-            xmp: {Rating: {value: '5'}, _raw: '<x:xmpmeta/>'},
-            photoshop: {ClippingPathName: {value: 'path1'}},
-            icc: {ProfileVersion: {value: '4.3'}},
-            makerNotes: {AutoRotate: {value: 0}},
-        };
-
-        it('should merge the carried groups of a PNG raw profile into their groups in expanded mode', function () {
-            const {tags, parsedGroups} = buildCarriedGroupTags({
-                steps: [getCarriedGroupsBlock(CARRIED_GROUPS)],
-                expanded: true,
-            });
-
-            for (const groupKey of Object.keys(CARRIED_GROUPS)) {
-                expect(tags[groupKey]).to.deep.equal(CARRIED_GROUPS[groupKey]);
-                expect(parsedGroups[groupKey]).to.deep.equal(CARRIED_GROUPS[groupKey]);
-            }
-            expect(tags.exif).to.deep.equal({Model: {value: 'model'}});
-            expect(tags).to.not.have.property('Headline');
-        });
-
-        it('should merge the carried groups of a PNG raw profile top level, XMP without its raw packet, in flat mode', function () {
-            const {tags, parsedGroups} = buildCarriedGroupTags({
-                steps: [getCarriedGroupsBlock(CARRIED_GROUPS)],
-                expanded: false,
-            });
-
-            expect(JSON.stringify(tags)).to.equal(JSON.stringify({
-                Headline: {value: 'headline'},
-                ClippingPathName: {value: 'path1'},
-                ProfileVersion: {value: '4.3'},
-                AutoRotate: {value: 0},
-                Model: {value: 'model'},
-                Rating: {value: '5'},
-            }));
-            expect(parsedGroups.xmp).to.deep.equal(CARRIED_GROUPS.xmp);
-            expect(parsedGroups.makerNotes).to.deep.equal(CARRIED_GROUPS.makerNotes);
-        });
-
+    describe('icc block', function () {
         for (const expanded of [false, true]) {
             const mode = expanded ? 'expanded' : 'flat';
 
-            it(`should only keep a carried group in the parsed groups when the group is not returned in ${mode} mode`, function () {
-                const {tags, parsedGroups} = buildCarriedGroupTags({
-                    steps: [getCarriedGroupsBlock({makerNotes: CARRIED_GROUPS.makerNotes, xmp: CARRIED_GROUPS.xmp})],
+            it(`should write the parsed icc group, also when the icc group is not returned, in ${mode} mode`, function () {
+                const parsedGroups = {};
+                const iccTags = {ProfileVersion: {value: '4.3'}};
+
+                const tags = buildBlockTags({
+                    blocks: [{slot: 'icc', group: 'icc', mode: 'assign', tags: iccTags}],
                     expanded,
-                    tagFilter: createTagFilter({returnGroups: {makerNotes: false, xmp: false}}),
+                    parsedGroups,
+                    tagFilter: createTagFilter({returnGroups: {icc: false}}),
                 });
 
-                expect(tags).to.not.have.property('makerNotes');
-                expect(tags).to.not.have.property('xmp');
-                expect(tags).to.not.have.property('AutoRotate');
-                expect(tags).to.not.have.property('Rating');
-                expect(parsedGroups.makerNotes).to.deep.equal(CARRIED_GROUPS.makerNotes);
-                expect(parsedGroups.xmp).to.deep.equal(CARRIED_GROUPS.xmp);
-            });
-
-            it(`should merge the carried groups from the tags returned for them in ${mode} mode`, function () {
-                const deps = createPipelineDeps();
-                deps.filterTagsForReturn = (groupKey, readTags) => {
-                    const returnedTags = objectAssign({}, readTags);
-                    delete returnedTags.Hidden;
-                    return returnedTags;
-                };
-
-                const {tags, parsedGroups} = buildCarriedGroupTags({
-                    steps: [getCarriedGroupsBlock({makerNotes: {AutoRotate: {value: 0}, Hidden: {value: 1}}})],
-                    expanded,
-                    deps,
-                });
-
-                expect(expanded ? tags.makerNotes : tags).to.not.have.property('Hidden');
-                expect((expanded ? tags.makerNotes : tags).AutoRotate).to.deep.equal({value: 0});
-                expect(parsedGroups.makerNotes.Hidden).to.deep.equal({value: 1});
+                expect(tags).to.deep.equal({});
+                expect(parsedGroups.icc).to.equal(iccTags);
             });
         }
 
-        it('should keep a _raw tag of a carried group other than XMP in flat mode', function () {
-            const {tags} = buildCarriedGroupTags({
-                steps: [getCarriedGroupsBlock({makerNotes: {_raw: {value: 'maker notes'}}})],
-                expanded: false,
-            });
+        it('should return an empty icc group for an empty ICC result in expanded output', function () {
+            const parsedGroups = {};
 
-            expect(tags._raw).to.deep.equal({value: 'maker notes'});
-        });
-
-        it('should let Exif win over the maker notes, and ApplicationNotes XMP over Exif, in flat mode', function () {
-            const {tags} = buildCarriedGroupTags({
-                steps: [getPngTextBlock({
-                    readTags: {},
-                    embeddedExifTags: {LensModel: {value: 'exif'}, Rating: {value: 'exif'}},
-                    exifCarriedGroups: {
-                        makerNotes: {LensModel: {value: 'maker notes'}, Rating: {value: 'maker notes'}},
-                        xmp: {Rating: {value: 'xmp'}},
-                    },
-                })],
-                expanded: false,
-            });
-
-            expect(tags.LensModel.value).to.equal('exif');
-            expect(tags.Rating.value).to.equal('xmp');
-        });
-
-        it('should return the carried groups ahead of Exif and in reading order in expanded mode', function () {
-            const {tags} = buildCarriedGroupTags({
-                steps: [getCarriedGroupsBlock({
-                    makerNotes: CARRIED_GROUPS.makerNotes,
-                    icc: CARRIED_GROUPS.icc,
-                    photoshop: CARRIED_GROUPS.photoshop,
-                    xmp: CARRIED_GROUPS.xmp,
-                    iptc: CARRIED_GROUPS.iptc,
-                })],
+            const tags = buildBlockTags({
+                blocks: [{slot: 'icc', group: 'icc', mode: 'assign', tags: {}}],
                 expanded: true,
+                parsedGroups,
             });
 
-            expect(Object.keys(tags)).to.deep.equal(['iptc', 'xmp', 'photoshop', 'icc', 'makerNotes', 'exif', 'png']);
+            expect(tags).to.deep.equal({icc: {}});
+            expect(parsedGroups.icc).to.deep.equal({});
+        });
+    });
+
+    describe('brob XMP block', function () {
+        const EARLIER_XMP = {Title: {value: 'earlier'}, Keep: {value: 'earlier'}, _raw: '<earlier/>'};
+
+        it('should replace a non-empty earlier xmp group in expanded output', function () {
+            const tags = buildBrobXmpTags({brobTags: {Title: {value: 'brob'}, _raw: '<brob/>'}, expanded: true});
+
+            expect(tags.xmp).to.deep.equal({Title: {value: 'brob'}, _raw: '<brob/>'});
+        });
+
+        it('should merge into the earlier XMP tags key by key, without _raw, in flat output', function () {
+            const tags = buildBrobXmpTags({brobTags: {Title: {value: 'brob'}, _raw: '<brob/>'}, expanded: false});
+
+            expect(tags).to.deep.equal({Title: {value: 'brob'}, Keep: {value: 'earlier'}});
         });
 
         for (const expanded of [false, true]) {
             const mode = expanded ? 'expanded' : 'flat';
 
-            it(`should merge the carried groups of deferred raw profiles in order without mutating earlier groups in ${mode} mode`, function () {
-                const syncStep = getCarriedGroupsBlock({makerNotes: {AutoRotate: {value: 'sync'}, LensType: {value: 'sync'}}});
-                const syncStepSnapshot = structuredClone(syncStep);
+            it(`should leave the earlier xmp group and the parsed xmp group alone for an empty brob XMP in ${mode} mode`, function () {
+                const parsedGroups = {xmp: EARLIER_XMP};
 
-                const {tags, parsedGroups} = buildCarriedGroupTags({
-                    steps: [syncStep, {slot: 'deferredPngText', group: 'png', mode: 'pngText', deferredKey: 'pngText'}],
-                    deferredResults: {pngText: [
-                        {
-                            embeddedExifTags: {Model: {value: 'first'}},
-                            exifCarriedGroups: {makerNotes: {AutoRotate: {value: 'first'}, ShotInfo: {value: 'first'}}},
-                        },
-                        {
-                            embeddedExifTags: {Model: {value: 'second'}},
-                            exifCarriedGroups: {makerNotes: {AutoRotate: {value: 'second'}}, photoshop: CARRIED_GROUPS.photoshop},
-                        },
-                    ]},
-                    expanded,
-                });
+                const tags = buildBrobXmpTags({brobTags: {}, expanded, parsedGroups});
 
-                const expectedMakerNotes = {
-                    AutoRotate: {value: 'second'},
-                    LensType: {value: 'sync'},
-                    ShotInfo: {value: 'first'},
-                };
-                expect(syncStep).to.deep.equal(syncStepSnapshot);
-                expect(parsedGroups.makerNotes).to.deep.equal(expectedMakerNotes);
-                expect(parsedGroups.photoshop).to.deep.equal(CARRIED_GROUPS.photoshop);
+                expect(parsedGroups.xmp).to.equal(EARLIER_XMP);
                 if (expanded) {
-                    expect(tags.makerNotes).to.deep.equal(expectedMakerNotes);
-                    expect(tags.photoshop).to.deep.equal(CARRIED_GROUPS.photoshop);
+                    expect(tags.xmp).to.deep.equal(EARLIER_XMP);
                 } else {
-                    expect(tags).to.deep.include(expectedMakerNotes);
-                    expect(tags.ClippingPathName).to.deep.equal({value: 'path1'});
+                    expect(tags).to.deep.equal({Title: {value: 'earlier'}, Keep: {value: 'earlier'}});
                 }
             });
+
+            it(`should write the parsed xmp group even when the xmp group is not returned in ${mode} mode`, function () {
+                const parsedGroups = {xmp: EARLIER_XMP};
+                const brobTags = {Title: {value: 'brob'}};
+
+                const tags = buildBlockTags({
+                    blocks: [getBrobXmpBlock(brobTags)],
+                    expanded,
+                    parsedGroups,
+                    tagFilter: createTagFilter({returnGroups: {xmp: false}}),
+                });
+
+                expect(tags).to.deep.equal({});
+                expect(parsedGroups.xmp).to.equal(brobTags);
+            });
+
+            it(`should merge nothing in a build without JXL in ${mode} mode`, function () {
+                swap(Constants, {USE_JXL: false});
+                const parsedGroups = {};
+
+                const tags = buildBlockTags({
+                    blocks: [getBrobXmpBlock({Title: {value: 'brob'}})],
+                    expanded,
+                    parsedGroups,
+                });
+
+                expect(tags).to.deep.equal({});
+                expect(parsedGroups).to.deep.equal({});
+            });
         }
 
-        describe('brob Exif block', function () {
-            for (const expanded of [false, true]) {
-                const mode = expanded ? 'expanded' : 'flat';
+        function buildBrobXmpTags({brobTags, expanded, parsedGroups = {}}) {
+            return buildBlockTags({
+                blocks: [getBrobXmpBlock(brobTags), {slot: 'xmp', group: 'xmp', mode: 'assign', tags: EARLIER_XMP}],
+                expanded,
+                parsedGroups,
+            });
+        }
 
-                it(`should merge the brob Exif, the groups it carries and its thumbnail in ${mode} mode`, function () {
-                    const thumbnail = {type: 'image/jpeg', image: 'brob'};
+        function getBrobXmpBlock(tags) {
+            return {slot: 'brobXmp', group: 'xmp', mode: 'brobXmp', tags};
+        }
+    });
 
-                    const {tags, parsedGroups} = buildCarriedGroupTags({
-                        steps: [getBrobBlock(), {slot: 'thumbnail', mode: 'thumbnail'}],
-                        deferredResults: {brobExif: {
-                            exifTags: {LensModel: {value: 'exif'}},
-                            carriedGroups: {
-                                makerNotes: {LensModel: {value: 'maker notes'}, AutoRotate: {value: 0}},
-                                xmp: CARRIED_GROUPS.xmp,
-                            },
-                            thumbnail,
-                        }},
-                        expanded,
-                    });
+    describe('PNG fan-out', function () {
+        const FILE_TAGS = {Width: {value: 'file'}, Shared: {value: 'file'}};
+        const TEXT_TAGS = {Comment: {value: 'text'}, Shared: {value: 'text'}};
+        const CHUNK_TAGS = {PixelsPerUnitX: {value: 'chunk'}, Shared: {value: 'chunk'}};
 
-                    expect(tags.Thumbnail).to.equal(thumbnail);
-                    expect(parsedGroups.exif).to.deep.equal({LensModel: {value: 'exif'}});
-                    expect(parsedGroups.makerNotes.AutoRotate).to.deep.equal({value: 0});
-                    expect(parsedGroups.xmp).to.deep.equal(CARRIED_GROUPS.xmp);
-                    if (expanded) {
-                        expect(Object.keys(tags)).to.deep.equal(['xmp', 'makerNotes', 'exif', 'Thumbnail']);
-                        expect(tags.exif).to.deep.equal({LensModel: {value: 'exif'}});
-                        expect(tags.makerNotes.LensModel).to.deep.equal({value: 'maker notes'});
-                        expect(tags.xmp).to.deep.equal(CARRIED_GROUPS.xmp);
-                    } else {
-                        expect(tags.LensModel).to.deep.equal({value: 'exif'});
-                        expect(tags.AutoRotate).to.deep.equal({value: 0});
-                        expect(tags.Rating).to.deep.equal({value: '5'});
-                        expect(tags).to.not.have.property('_raw');
+        it('should gather the file, text and chunk tags into png in that order whatever the push order', function () {
+            const tags = buildPngTags({blocks: getPngBlocks().reverse()});
+
+            expect(Object.keys(tags.png)).to.deep.equal(['Width', 'Shared', 'Comment', 'PixelsPerUnitX']);
+            expect(tags.png.Shared.value).to.equal('chunk');
+        });
+
+        it('should keep the file tags alone in pngFile and the text tags in pngText', function () {
+            const tags = buildPngTags({blocks: getPngBlocks()});
+
+            expect(Object.keys(tags)).to.deep.equal(['png', 'pngFile', 'pngText']);
+            expect(tags.pngFile).to.deep.equal(FILE_TAGS);
+            expect(tags.pngText).to.deep.equal(TEXT_TAGS);
+        });
+
+        it('should let the text tags win over the file tags, and the chunk tags over the text tags, in flat output', function () {
+            const tags = buildPngTags({blocks: getPngBlocks().reverse(), expanded: false});
+
+            expect(Object.keys(tags)).to.deep.equal(['Width', 'Shared', 'Comment', 'PixelsPerUnitX']);
+            expect(tags.Shared.value).to.equal('chunk');
+        });
+
+        it('should add no pngText group for a text block without text tags', function () {
+            const tags = buildPngTags({blocks: [getFileBlock(), getTextBlock({})]});
+
+            expect(Object.keys(tags)).to.deep.equal(['png', 'pngFile']);
+        });
+
+        it('should copy png into pngText when there are text chunks but no text tags', function () {
+            const tags = buildPngTags({
+                blocks: [getFileBlock(), {slot: 'pngText', mode: 'nested', blocks: [getTextBlock({}), {slot: 'exif', group: 'exif', mode: 'merge', tags: {Model: {value: 'model'}}}]}],
+                hasPngTextData: true,
+            });
+
+            expect(Object.keys(tags)).to.deep.equal(['png', 'pngFile', 'exif', 'pngText']);
+            expect(tags.pngText).to.deep.equal(FILE_TAGS);
+            expect(tags.pngText).to.not.equal(tags.png);
+        });
+
+        it('should keep the text tags in pngText when there are text chunks', function () {
+            const tags = buildPngTags({blocks: getPngBlocks(), hasPngTextData: true});
+
+            expect(tags.pngText).to.deep.equal(TEXT_TAGS);
+        });
+
+        it('should replace pngText with a copy of png when the text chunks are read asynchronously', function () {
+            const tags = buildPngTags({blocks: getPngBlocks(), pngTextIsAsync: true});
+
+            expect(tags.pngText).to.deep.equal(tags.png);
+            expect(tags.pngText).to.not.equal(tags.png);
+        });
+
+        for (const [description, options] of [
+            ['in flat output', {expanded: false}],
+            ['without a png group', {blocks: [{slot: 'exif', group: 'exif', mode: 'assign', tags: {Model: {value: 'model'}}}]}],
+            ['when png is not returned', {tagFilter: createTagFilter({returnGroups: {png: false}})}],
+            // Without PNG the pngFile block merges nothing, so a merge block fills png.
+            ['in a build without PNG', {constants: {USE_PNG: false}, blocks: [{slot: 'pngChunk', group: 'png', mode: 'merge', tags: CHUNK_TAGS}]}],
+        ]) {
+            for (const copyOption of ['pngTextIsAsync', 'hasPngTextData']) {
+                it(`should not copy png into pngText for ${copyOption} ${description}`, function () {
+                    if (options.constants) {
+                        swap(Constants, options.constants);
                     }
+
+                    const tags = buildPngTags(objectAssign({blocks: [getFileBlock()], [copyOption]: true}, options));
+
+                    expect(tags).to.not.have.property('pngText');
                 });
             }
+        }
 
-            it('should merge the brob Exif into an existing parsed Exif group without mutating it', function () {
-                const parsedExifTags = {Make: {value: 'make'}};
-                const parsedGroups = {exif: parsedExifTags};
+        it('should not mutate an earlier png group when merging text tags into it', function () {
+            const fileTags = structuredClone(FILE_TAGS);
 
-                buildCarriedGroupTags({
-                    steps: [getBrobBlock()],
-                    deferredResults: {brobExif: {exifTags: {Model: {value: 'model'}}, carriedGroups: {}}},
+            const tags = buildPngTags({blocks: [getFileBlock(fileTags), getTextBlock(TEXT_TAGS)]});
+
+            expect(fileTags).to.deep.equal(FILE_TAGS);
+            expect(tags.pngFile).to.equal(fileTags);
+        });
+
+        for (const blockMode of ['pngFile', 'pngTextTags']) {
+            it(`should merge nothing from a ${blockMode} block in a build without PNG`, function () {
+                swap(Constants, {USE_PNG: false});
+                const parsedGroups = {};
+
+                const tags = mergeBlockIntoTags({
+                    block: {slot: 'pngText', group: 'png', mode: blockMode, tags: TEXT_TAGS},
                     expanded: true,
                     parsedGroups,
                 });
 
-                expect(parsedExifTags).to.deep.equal({Make: {value: 'make'}});
-                expect(parsedGroups.exif).to.deep.equal({Make: {value: 'make'}, Model: {value: 'model'}});
-            });
-
-            it('should keep the brob Exif out of the returned tags when the exif group is not returned', function () {
-                const {tags, parsedGroups} = buildCarriedGroupTags({
-                    steps: [getBrobBlock()],
-                    deferredResults: {brobExif: {exifTags: {Model: {value: 'model'}}, carriedGroups: {}}},
-                    expanded: true,
-                    tagFilter: createTagFilter({returnGroups: {exif: false}}),
-                });
-
-                expect(tags).to.deep.equal({});
-                expect(parsedGroups.exif).to.deep.equal({Model: {value: 'model'}});
-            });
-
-            it('should leave the tags alone when the brob Exif could not be read', function () {
-                const {tags, parsedGroups} = buildCarriedGroupTags({
-                    steps: [getBrobBlock(), {slot: 'thumbnail', mode: 'thumbnail'}],
-                    deferredResults: {brobExif: undefined},
-                    expanded: true,
-                });
-
-                expect(tags).to.deep.equal({});
+                expect(tags).to.deep.equal({Existing: {value: 'existing'}});
                 expect(parsedGroups).to.deep.equal({});
-            });
-
-            it('should add no exif group for an empty brob Exif but still return its thumbnail', function () {
-                const thumbnail = {type: 'image/jpeg', image: 'brob'};
-
-                const {tags, parsedGroups} = buildCarriedGroupTags({
-                    steps: [getBrobBlock(), {slot: 'thumbnail', mode: 'thumbnail'}],
-                    deferredResults: {brobExif: {exifTags: {}, carriedGroups: {}, thumbnail}},
-                    expanded: true,
-                });
-
-                expect(tags).to.deep.equal({Thumbnail: thumbnail});
-                expect(parsedGroups).to.deep.equal({});
-            });
-
-            function getBrobBlock() {
-                return {slot: 'brobExif', group: 'exif', mode: 'embeddedExif', deferredKey: 'brobExif'};
-            }
-        });
-
-        function getCarriedGroupsBlock(exifCarriedGroups) {
-            return getPngTextBlock({
-                readTags: {},
-                embeddedExifTags: {Model: {value: 'model'}},
-                exifCarriedGroups,
             });
         }
 
-        function buildCarriedGroupTags({
-            steps,
-            deferredResults = {},
-            expanded,
-            tagFilter = createTagFilter({}),
-            parsedGroups = {},
-            deps = createPipelineDeps(),
-        }) {
-            const tags = buildTagsFromMergeBlocks({
-                mergeBlocks: steps,
-                deferredResults,
-                parsedGroups,
-                expanded,
-                tagFilter,
-                dataView: {},
-                tiffHeaderOffset: undefined,
-                fileType: undefined,
-                pngTextBlocks: [],
-                pngTextIsAsync: false,
-                thumbnailIfdTags: undefined,
+        it('should not return the text tags of a pngTextTags block when png is not returned', function () {
+            const tags = mergeBlockIntoTags({
+                block: {slot: 'pngText', group: 'png', mode: 'pngTextTags', tags: TEXT_TAGS},
+                expanded: true,
+                tagFilter: createTagFilter({returnGroups: {png: false}}),
+            });
+
+            expect(tags).to.deep.equal({Existing: {value: 'existing'}});
+        });
+
+        it('should merge the returned text tags of a pngTextTags block', function () {
+            const deps = createPipelineDeps();
+            deps.filterTagsForReturn = (groupKey) => ({Returned: {value: groupKey}});
+
+            const tags = mergeBlockIntoTags({
+                block: {slot: 'pngText', group: 'png', mode: 'pngTextTags', tags: TEXT_TAGS},
+                expanded: true,
                 deps,
             });
-            return {tags, parsedGroups};
+
+            expect(tags.png).to.deep.equal({Returned: {value: 'png'}});
+            expect(tags.pngText).to.deep.equal({Returned: {value: 'png'}});
+        });
+
+        it('should merge the text tags of several blocks at the top level in flat output', function () {
+            const tags = buildPngTags({
+                blocks: [getTextBlock({A: {value: 1}}), getTextBlock({B: {value: 2}})],
+                expanded: false,
+            });
+
+            expect(tags).to.deep.equal({A: {value: 1}, B: {value: 2}});
+        });
+
+        function getPngBlocks() {
+            return [
+                getFileBlock(),
+                getTextBlock(TEXT_TAGS),
+                {slot: 'pngChunk', group: 'png', mode: 'merge', tags: CHUNK_TAGS},
+            ];
+        }
+
+        function getFileBlock(fileTags = FILE_TAGS) {
+            return {slot: 'pngFile', group: 'png', mode: 'pngFile', tags: fileTags};
+        }
+
+        function getTextBlock(textTags) {
+            return {slot: 'pngText', group: 'png', mode: 'pngTextTags', tags: textTags};
+        }
+
+        function buildPngTags({
+            blocks,
+            expanded = true,
+            tagFilter = createTagFilter({}),
+            hasPngTextData = false,
+            pngTextIsAsync = false,
+        }) {
+            const deps = createPipelineDeps();
+            const pngTextBlocks = [{kind: 'pngText'}];
+            deps.hasPngTextData = (blocksToCheck) => hasPngTextData && blocksToCheck === pngTextBlocks;
+
+            return buildBlockTags({blocks, expanded, tagFilter, deps, pngTextBlocks, pngTextIsAsync});
         }
     });
 
@@ -1621,9 +1270,6 @@ describe('loadView pipeline module', function () {
         it('should list the same slots, each once, in both orderings', function () {
             expect(MERGE_ORDER.flat.slice().sort()).to.deep.equal(MERGE_ORDER.expanded.slice().sort());
             expect(new Set(MERGE_ORDER.expanded).size).to.equal(MERGE_ORDER.expanded.length);
-            for (const slot of Object.values(CARRIED_GROUP_SLOTS)) {
-                expect(MERGE_ORDER.expanded).to.include(slot);
-            }
         });
 
         it('should order the groups by slot in expanded output whatever the push order', function () {
@@ -1740,313 +1386,6 @@ describe('loadView pipeline module', function () {
         });
     });
 
-    describe('deferred ICC block', function () {
-        for (const expanded of [false, true]) {
-            const mode = expanded ? 'expanded' : 'flat';
-
-            it(`should write the parsed icc group at merge time, also when the icc group is not returned, in ${mode} mode`, function () {
-                const parsedGroups = {};
-                const deps = createPipelineDeps();
-                deps.filterTagsForParse = (groupKey, readTags) => objectAssign({Parsed: {value: groupKey}}, readTags);
-
-                const tags = buildBlockTags({
-                    blocks: [getDeferredIccBlock()],
-                    deferredResults: {iccApp: {ProfileVersion: {value: '4.3'}}},
-                    expanded,
-                    parsedGroups,
-                    tagFilter: createTagFilter({returnGroups: {icc: false}}),
-                    deps,
-                });
-
-                expect(tags).to.deep.equal({});
-                expect(parsedGroups.icc).to.deep.equal({Parsed: {value: 'icc'}, ProfileVersion: {value: '4.3'}});
-            });
-        }
-
-        it('should return the deferred icc group in expanded output', function () {
-            const tags = buildBlockTags({
-                blocks: [getDeferredIccBlock()],
-                deferredResults: {iccApp: {ProfileVersion: {value: '4.3'}}},
-                expanded: true,
-            });
-
-            expect(tags).to.deep.equal({icc: {ProfileVersion: {value: '4.3'}}});
-        });
-
-        it('should return an empty icc group for an empty deferred ICC result in expanded output', function () {
-            const parsedGroups = {};
-
-            const tags = buildBlockTags({
-                blocks: [getDeferredIccBlock()],
-                deferredResults: {iccApp: {}},
-                expanded: true,
-                parsedGroups,
-            });
-
-            expect(tags).to.deep.equal({icc: {}});
-            expect(parsedGroups.icc).to.deep.equal({});
-        });
-
-        function getDeferredIccBlock() {
-            return {slot: 'icc', group: 'icc', mode: 'assign', deferredKey: 'iccApp'};
-        }
-    });
-
-    describe('brob XMP block', function () {
-        const EARLIER_XMP = {Title: {value: 'earlier'}, Keep: {value: 'earlier'}, _raw: '<earlier/>'};
-
-        it('should replace a non-empty earlier xmp group in expanded output', function () {
-            const tags = buildBrobXmpTags({resolved: {Title: {value: 'brob'}, _raw: '<brob/>'}, expanded: true});
-
-            expect(tags.xmp).to.deep.equal({Title: {value: 'brob'}, _raw: '<brob/>'});
-        });
-
-        it('should merge into the earlier XMP tags key by key, without _raw, in flat output', function () {
-            const tags = buildBrobXmpTags({resolved: {Title: {value: 'brob'}, _raw: '<brob/>'}, expanded: false});
-
-            expect(tags).to.deep.equal({Title: {value: 'brob'}, Keep: {value: 'earlier'}});
-        });
-
-        for (const expanded of [false, true]) {
-            const mode = expanded ? 'expanded' : 'flat';
-
-            for (const [description, resolved] of [['an empty', {}], ['a failed', undefined]]) {
-                it(`should leave the earlier xmp group and the parsed xmp group alone for ${description} brob XMP in ${mode} mode`, function () {
-                    const parsedGroups = {xmp: EARLIER_XMP};
-
-                    const tags = buildBrobXmpTags({resolved, expanded, parsedGroups});
-
-                    expect(parsedGroups.xmp).to.equal(EARLIER_XMP);
-                    if (expanded) {
-                        expect(tags.xmp).to.deep.equal(EARLIER_XMP);
-                    } else {
-                        expect(tags).to.deep.equal({Title: {value: 'earlier'}, Keep: {value: 'earlier'}});
-                    }
-                });
-            }
-
-            it(`should write the parsed xmp group even when the xmp group is not returned in ${mode} mode`, function () {
-                const parsedGroups = {xmp: EARLIER_XMP};
-                const resolved = {Title: {value: 'brob'}};
-
-                const tags = buildBlockTags({
-                    blocks: [getBrobXmpBlock()],
-                    deferredResults: {brobXmp: resolved},
-                    expanded,
-                    parsedGroups,
-                    tagFilter: createTagFilter({returnGroups: {xmp: false}}),
-                });
-
-                expect(tags).to.deep.equal({});
-                expect(parsedGroups.xmp).to.equal(resolved);
-            });
-
-            it(`should merge nothing in a build without JXL in ${mode} mode`, function () {
-                swap(Constants, {USE_JXL: false});
-                const parsedGroups = {};
-
-                const tags = buildBlockTags({
-                    blocks: [getBrobXmpBlock()],
-                    deferredResults: {brobXmp: {Title: {value: 'brob'}}},
-                    expanded,
-                    parsedGroups,
-                });
-
-                expect(tags).to.deep.equal({});
-                expect(parsedGroups).to.deep.equal({});
-            });
-        }
-
-        function buildBrobXmpTags({resolved, expanded, parsedGroups = {}}) {
-            return buildBlockTags({
-                blocks: [getBrobXmpBlock(), {slot: 'xmp', group: 'xmp', mode: 'assign', tags: EARLIER_XMP}],
-                deferredResults: {brobXmp: resolved},
-                expanded,
-                parsedGroups,
-            });
-        }
-
-        function getBrobXmpBlock() {
-            return {slot: 'brobXmp', group: 'xmp', mode: 'brobXmp', deferredKey: 'brobXmp'};
-        }
-    });
-
-    it('should merge nothing from a brob Exif block in a build without JXL', function () {
-        swap(Constants, {USE_JXL: false});
-        const parsedGroups = {};
-
-        const tags = buildBlockTags({
-            blocks: [{slot: 'brobExif', group: 'exif', mode: 'embeddedExif', deferredKey: 'brobExif'}, {slot: 'thumbnail', mode: 'thumbnail'}],
-            deferredResults: {brobExif: {exifTags: {Model: {value: 'model'}}, carriedGroups: {}, thumbnail: {image: 'brob'}}},
-            expanded: true,
-            parsedGroups,
-        });
-
-        expect(tags).to.deep.equal({});
-        expect(parsedGroups).to.deep.equal({});
-    });
-
-    describe('PNG fan-out', function () {
-        const FILE_TAGS = {Width: {value: 'file'}, Shared: {value: 'file'}};
-        const TEXT_TAGS = {Comment: {value: 'text'}, Shared: {value: 'text'}};
-        const CHUNK_TAGS = {PixelsPerUnitX: {value: 'chunk'}, Shared: {value: 'chunk'}};
-
-        it('should gather the file, text and chunk tags into png in that order whatever the push order', function () {
-            const tags = buildPngTags({blocks: getPngBlocks().reverse()});
-
-            expect(Object.keys(tags.png)).to.deep.equal(['Width', 'Shared', 'Comment', 'PixelsPerUnitX']);
-            expect(tags.png.Shared.value).to.equal('chunk');
-        });
-
-        it('should keep the file tags alone in pngFile and the text tags in pngText', function () {
-            const tags = buildPngTags({blocks: getPngBlocks()});
-
-            expect(Object.keys(tags)).to.deep.equal(['png', 'pngFile', 'pngText']);
-            expect(tags.pngFile).to.deep.equal(FILE_TAGS);
-            expect(tags.pngText).to.deep.equal(TEXT_TAGS);
-        });
-
-        it('should let the text tags win over the file tags, and the chunk tags over the text tags, in flat output', function () {
-            const tags = buildPngTags({blocks: getPngBlocks().reverse(), expanded: false});
-
-            expect(Object.keys(tags)).to.deep.equal(['Width', 'Shared', 'Comment', 'PixelsPerUnitX']);
-            expect(tags.Shared.value).to.equal('chunk');
-        });
-
-        it('should add no pngText group for a text item without text tags', function () {
-            const tags = buildPngTags({blocks: [getFileBlock(), getPngTextBlock({readTags: {}})]});
-
-            expect(Object.keys(tags)).to.deep.equal(['png', 'pngFile']);
-        });
-
-        it('should copy png into pngText when there are text chunks but no text tags', function () {
-            const tags = buildPngTags({
-                blocks: [getFileBlock(), getPngTextBlock({readTags: {}, embeddedExifTags: {Model: {value: 'model'}}})],
-                hasPngTextData: true,
-            });
-
-            expect(Object.keys(tags)).to.deep.equal(['png', 'pngFile', 'exif', 'pngText']);
-            expect(tags.pngText).to.deep.equal(FILE_TAGS);
-            expect(tags.pngText).to.not.equal(tags.png);
-        });
-
-        it('should keep the text tags in pngText when there are text chunks', function () {
-            const tags = buildPngTags({blocks: getPngBlocks(), hasPngTextData: true});
-
-            expect(tags.pngText).to.deep.equal(TEXT_TAGS);
-        });
-
-        it('should replace pngText with a copy of png when the text chunks are read asynchronously', function () {
-            const tags = buildPngTags({blocks: getPngBlocks(), pngTextIsAsync: true});
-
-            expect(tags.pngText).to.deep.equal(tags.png);
-            expect(tags.pngText).to.not.equal(tags.png);
-        });
-
-        for (const [description, options] of [
-            ['in flat output', {expanded: false}],
-            ['without a png group', {blocks: [{slot: 'exif', group: 'exif', mode: 'assign', tags: {Model: {value: 'model'}}}]}],
-            ['when png is not returned', {tagFilter: createTagFilter({returnGroups: {png: false}})}],
-            // Without PNG the pngFile block merges nothing, so a merge block fills png.
-            ['in a build without PNG', {constants: {USE_PNG: false}, blocks: [{slot: 'pngChunk', group: 'png', mode: 'merge', tags: CHUNK_TAGS}]}],
-        ]) {
-            for (const copyOption of ['pngTextIsAsync', 'hasPngTextData']) {
-                it(`should not copy png into pngText for ${copyOption} ${description}`, function () {
-                    if (options.constants) {
-                        swap(Constants, options.constants);
-                    }
-
-                    const tags = buildPngTags(objectAssign({blocks: [getFileBlock()], [copyOption]: true}, options));
-
-                    expect(tags).to.not.have.property('pngText');
-                });
-            }
-        }
-
-        it('should merge nothing for a deferred PNG text list without a result', function () {
-            const tags = buildPngTags({
-                blocks: [getFileBlock(), {slot: 'deferredPngText', group: 'png', mode: 'pngText', deferredKey: 'pngText'}],
-            });
-
-            expect(tags).to.deep.equal({png: FILE_TAGS, pngFile: FILE_TAGS});
-        });
-
-        it('should not mutate an earlier png group when merging text tags into it', function () {
-            const fileTags = structuredClone(FILE_TAGS);
-
-            const tags = buildPngTags({blocks: [getFileBlock(fileTags), getPngTextBlock({readTags: TEXT_TAGS})]});
-
-            expect(fileTags).to.deep.equal(FILE_TAGS);
-            expect(tags.pngFile).to.equal(fileTags);
-        });
-
-        for (const blockMode of ['pngFile', 'pngText', 'pngTextTags']) {
-            it(`should merge nothing from a ${blockMode} block in a build without PNG`, function () {
-                swap(Constants, {USE_PNG: false});
-                const parsedGroups = {};
-
-                const tags = mergeBlockIntoTags({
-                    block: {slot: 'pngText', group: 'png', mode: blockMode, tags: TEXT_TAGS, item: {readTags: TEXT_TAGS}},
-                    expanded: true,
-                    parsedGroups,
-                });
-
-                expect(tags).to.deep.equal({Existing: {value: 'existing'}});
-                expect(parsedGroups).to.deep.equal({});
-            });
-        }
-
-        it('should not return the text tags of a pngTextTags block when png is not returned', function () {
-            const tags = mergeBlockIntoTags({
-                block: {slot: 'pngText', group: 'png', mode: 'pngTextTags', tags: TEXT_TAGS},
-                expanded: true,
-                tagFilter: createTagFilter({returnGroups: {png: false}}),
-            });
-
-            expect(tags).to.deep.equal({Existing: {value: 'existing'}});
-        });
-
-        it('should merge the returned text tags of a pngTextTags block', function () {
-            const deps = createPipelineDeps();
-            deps.filterTagsForReturn = (groupKey) => ({Returned: {value: groupKey}});
-
-            const tags = mergeBlockIntoTags({
-                block: {slot: 'pngText', group: 'png', mode: 'pngTextTags', tags: TEXT_TAGS},
-                expanded: true,
-                deps,
-            });
-
-            expect(tags.png).to.deep.equal({Returned: {value: 'png'}});
-            expect(tags.pngText).to.deep.equal({Returned: {value: 'png'}});
-        });
-
-        function getPngBlocks() {
-            return [
-                getFileBlock(),
-                getPngTextBlock({readTags: TEXT_TAGS}),
-                {slot: 'pngChunk', group: 'png', mode: 'merge', tags: CHUNK_TAGS},
-            ];
-        }
-
-        function getFileBlock(fileTags = FILE_TAGS) {
-            return {slot: 'pngFile', group: 'png', mode: 'pngFile', tags: fileTags};
-        }
-
-        function buildPngTags({
-            blocks,
-            expanded = true,
-            tagFilter = createTagFilter({}),
-            hasPngTextData = false,
-            pngTextIsAsync = false,
-        }) {
-            const deps = createPipelineDeps();
-            const pngTextBlocks = [{kind: 'pngText'}];
-            deps.hasPngTextData = (blocksToCheck) => hasPngTextData && blocksToCheck === pngTextBlocks;
-
-            return buildBlockTags({blocks, expanded, tagFilter, deps, pngTextBlocks, pngTextIsAsync});
-        }
-    });
-
     describe('derived blocks', function () {
         it('should not add a gps group in flat output', function () {
             const deps = createPipelineDeps();
@@ -2141,7 +1480,6 @@ describe('loadView pipeline module', function () {
 
     function buildBlockTags({
         blocks,
-        deferredResults = {},
         expanded,
         parsedGroups = {},
         tagFilter = createTagFilter({}),
@@ -2151,16 +1489,13 @@ describe('loadView pipeline module', function () {
     }) {
         return buildTagsFromMergeBlocks({
             mergeBlocks: blocks,
-            deferredResults,
             parsedGroups,
             expanded,
             tagFilter,
             dataView: {},
-            tiffHeaderOffset: undefined,
             fileType: undefined,
             pngTextBlocks,
             pngTextIsAsync,
-            thumbnailIfdTags: undefined,
             deps,
         });
     }
@@ -2175,33 +1510,21 @@ describe('loadView pipeline module', function () {
         return mergeBlock({
             block,
             tags: {Existing: {value: 'existing'}},
-            deferredResults: {},
             parsedGroups,
             expanded,
             tagFilter,
             dataView: {},
-            tiffHeaderOffset: undefined,
             fileType: undefined,
-            thumbnailIfdTags: undefined,
             deps,
         });
     }
 });
-
-function getPngTextBlock(item) {
-    return {slot: 'pngText', group: 'png', mode: 'pngText', item};
-}
 
 function createPipelineDeps() {
     return {
         objectAssign,
         hasPngTextData() {
             return false;
-        },
-        filterTagsForParse(groupKey, readTags) {
-            void groupKey;
-
-            return readTags;
         },
         filterTagsForReturn(groupKey, readTags) {
             void groupKey;
@@ -2212,11 +1535,6 @@ function createPipelineDeps() {
             return undefined;
         },
         Composite: {
-            get() {
-                return undefined;
-            },
-        },
-        Thumbnail: {
             get() {
                 return undefined;
             },
@@ -2255,14 +1573,11 @@ function applyGpsStep(gpsGroup) {
 
     return mergeBlock({
         block: {slot: 'gps', mode: 'gps'},
-        deferredResults: {},
         parsedGroups: {exif: {SomeExifTag: {value: 42}}},
         expanded: true,
         tagFilter: createTagFilter({}),
         dataView: {},
-        tiffHeaderOffset: undefined,
         fileType: undefined,
-        thumbnailIfdTags: undefined,
         tags: {MyTag: {value: 42}},
         deps,
     });
@@ -2278,14 +1593,11 @@ function applyCompositeStep(compositeTags) {
 
     return mergeBlock({
         block: {slot: 'composite', mode: 'composite'},
-        deferredResults: {},
         parsedGroups: {},
         expanded: false,
         tagFilter: createTagFilter({}),
         dataView: {},
-        tiffHeaderOffset: undefined,
         fileType: undefined,
-        thumbnailIfdTags: undefined,
         tags: {MyTag: {value: 42}},
         deps,
     });

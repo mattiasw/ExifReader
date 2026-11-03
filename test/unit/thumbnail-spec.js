@@ -5,6 +5,7 @@
 import {expect} from 'chai';
 import {getDataView, getArrayBuffer} from './test-utils.js';
 import Thumbnail from '../../src/thumbnail.js';
+import {getBase64Image} from '../../src/base64-image.js';
 
 const OFFSET_TEST_VALUE = 4;
 const COMPRESSION_JPEG = 6;
@@ -19,7 +20,7 @@ describe('thumbnail', () => {
         const image = '\x47\x11\x48\x12\x49\x13';
         const dataView = getDataView('\x00\x00\x00\x00\x00\x01' + image + '\x02\x03');
 
-        expect(Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE)).to.deep.equal({
+        expect(Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE, getBase64Image)).to.deep.equal({
             type: 'image/jpeg',
             image: getArrayBuffer(image),
             ...thumbnailTags
@@ -34,7 +35,7 @@ describe('thumbnail', () => {
         const image = '\x47\x11\x48\x12\x49\x13';
         const dataView = getDataView('\x00\x00\x00\x00\x00\x01' + image + '\x02\x03');
 
-        expect(Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE)).to.deep.equal({
+        expect(Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE, getBase64Image)).to.deep.equal({
             type: 'image/jpeg',
             image: getArrayBuffer(image),
             ...thumbnailTags
@@ -49,12 +50,26 @@ describe('thumbnail', () => {
         const image = '\x47\x11\x48\x12\x49\x13';
         const dataView = getDataView('\x00\x00\x00\x00\x00\x01' + image);
 
-        expect(Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE)).to.deep.equal({
+        expect(Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE, getBase64Image)).to.deep.equal({
             type: 'image/jpeg',
             image: getArrayBuffer(image),
             base64: Buffer.from(image).toString('base64'),
             ...thumbnailTags
         });
+    });
+
+    it('should define no base64 property without a base64 helper', () => {
+        const thumbnailTags = {
+            JPEGInterchangeFormat: {value: 2},
+            JPEGInterchangeFormatLength: {value: 6}
+        };
+        const image = '\x47\x11\x48\x12\x49\x13';
+        const dataView = getDataView('\x00\x00\x00\x00\x00\x01' + image);
+
+        const result = Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE);
+
+        expect(Array.from(new Uint8Array(result.image))).to.deep.equal(Array.from(getArrayBuffer(image)));
+        expect(Object.keys(result)).to.not.include('base64');
     });
 
     it('should abort for undefined tags', () => {
@@ -84,7 +99,7 @@ describe('thumbnail', () => {
         const content = '\x00\x00\x00\x00\x00\x01' + image + '\x02\x03';
         const dataView = getPaddedDataView(content, 5);
 
-        const result = Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE);
+        const result = Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE, getBase64Image);
 
         expect(Array.from(new Uint8Array(result.image))).to.deep.equal(Array.from(getArrayBuffer(image)));
     });
@@ -130,7 +145,7 @@ describe('thumbnail', () => {
         const image = '\x47\x11\x48\x12\x49\x13\x02\x03';
         const dataView = getDataView('\x00\x00\x00\x00\x00\x01' + image);
 
-        const result = Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE);
+        const result = Thumbnail.get(dataView, thumbnailTags, OFFSET_TEST_VALUE, getBase64Image);
 
         expect(result.type).to.equal('image/jpeg');
         expect(Array.from(new Uint8Array(result.image))).to.deep.equal(Array.from(getArrayBuffer(image)));
@@ -246,7 +261,7 @@ describe('thumbnail', () => {
 function expectNoThumbnail(dataView, thumbnailTags, tiffHeaderOffset) {
     const keysBefore = Object.keys(thumbnailTags);
 
-    const result = Thumbnail.get(dataView, thumbnailTags, tiffHeaderOffset);
+    const result = Thumbnail.get(dataView, thumbnailTags, tiffHeaderOffset, getBase64Image);
 
     expect(result.image).to.be.undefined;
     expect(result.base64).to.be.undefined;

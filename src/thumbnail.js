@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {deferInit, getBase64Image} from './utils.js';
+import {deferInit} from './utils.js';
 
 // https://exiftool.org/TagNames/EXIF.html#Compression
 const COMPRESSION_JPEG = [6, 7, 99];
@@ -11,7 +11,7 @@ export default {
     get,
 };
 
-function get(dataView, thumbnailTags, tiffHeaderOffset) {
+function get(dataView, thumbnailTags, tiffHeaderOffset, getBase64Image) {
     if (hasJpegThumbnail(thumbnailTags)) {
         const offset = tiffHeaderOffset + thumbnailTags.JPEGInterchangeFormat.value;
         const length = thumbnailTags.JPEGInterchangeFormatLength.value;
@@ -20,9 +20,11 @@ function get(dataView, thumbnailTags, tiffHeaderOffset) {
             thumbnailTags.type = 'image/jpeg';
             const byteOffset = dataView.byteOffset;
             thumbnailTags.image = dataView.buffer.slice(byteOffset + offset, byteOffset + offset + length);
-            deferInit(thumbnailTags, 'base64', function () {
-                return getBase64Image(this.image);
-            });
+            if (getBase64Image) {
+                deferInit(thumbnailTags, 'base64', function () {
+                    return getBase64Image(this.image);
+                });
+            }
         }
     }
 

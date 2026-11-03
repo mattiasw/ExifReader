@@ -7,9 +7,9 @@ import {fileURLToPath} from 'node:url';
 import vm from 'node:vm';
 import {deflateSync} from 'node:zlib';
 import {expect} from 'chai';
-import {getCharacterArray, getBase64Image} from '../../src/utils.js';
+import {getCharacterArray} from '../../src/utils.js';
+import {getBase64Image} from '../../src/base64-image.js';
 import * as ExifReader from '../../src/exif-reader.js';
-import exifErrors from '../../src/errors.js';
 import ByteOrder from '../../src/byte-order.js';
 import {getArrayBuffer, getDataView, getByteStringFromNumber, getConsoleWarnSpy, swapProperties} from './test-utils.js';
 import Constants from '../../src/constants.js';
@@ -455,9 +455,9 @@ describe('exif-reader', function () {
         expect(() => ExifReader.load(getBufferLikeData('\x00\x00\x00\x00'))).to.throw(TypeError, /typed array/);
     });
 
-    it('should fail when there is no Exif data', () => {
+    it('should give no tags when the finder found nothing', () => {
         swapImageHeader({});
-        expect(() => ExifReader.loadView()).to.throw(exifErrors.MetadataMissingError);
+        expect(ExifReader.loadView()).to.deep.equal({});
     });
 
     it('should be able to find file data segment', () => {
@@ -466,42 +466,47 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
-    describe('potential metadata in sync mode', () => {
+    describe('blocks hidden in sync mode', () => {
         // Decision 2026-10-21: the finder reports zTXt and iCCP chunks in every
-        // mode, but sync mode must keep treating a file with nothing else as empty.
+        // mode, but sync mode must keep leaving them unread.
         const ZTXT_BLOCK = {kind: 'pngText', compression: 'deflate', text: {chunkType: 'zTXt', name: 'K', valueOffset: 20, valueLength: 2}};
         const ICCP_BLOCK = {kind: 'icc', compression: 'deflate', chunks: [{offset: 20, length: 2, chunkNumber: 1, chunksTotal: 1, profileName: 'P', compressionMethod: 0}]};
 
-        beforeEach(() => {
-            swap(PngTextTags, {read: () => ({readTags: {}})});
-            swap(IccTags, {read: () => ({})});
-        });
-
-        it('should not count a zTXt text block or an iCCP block as potential metadata in sync mode', async () => {
+        it('should not read a zTXt text block or an iCCP block in sync mode, and read them in async mode', async () => {
             for (const block of [ZTXT_BLOCK, ICCP_BLOCK]) {
+                const textReadCalls = countReadCalls([PngTextTags], () => ({tags: {}}));
+                const iccReadCalls = countReadCalls([IccTags], () => ({}));
+                const readCalls = () => textReadCalls() + iccReadCalls();
                 swapImageHeader({blocks: [block]});
 
-                expect(() => ExifReader.loadView(getDataView('\x00'.repeat(32))), block.kind).to.throw(exifErrors.MetadataMissingError);
+                expect(ExifReader.loadView(getDataView('\x00'.repeat(32))), block.kind).to.deep.equal({});
+                expect(readCalls(), block.kind).to.equal(0);
                 expect(await ExifReader.loadView(getDataView('\x00'.repeat(32)), {async: true}), block.kind).to.deep.equal({});
+                expect(readCalls(), block.kind).to.equal(1);
             }
         });
 
-        it('should count an uncompressed tEXt block as potential metadata in both modes', async () => {
+        it('should read an uncompressed tEXt block in both modes', async () => {
             swapImageHeader({blocks: [getTextBlock(20)]});
+            swap(PngTextTags, {read: () => ({tags: {MyTag: 42}})});
 
-            expect(ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.deep.equal({});
-            expect(await ExifReader.loadView(getDataView('\x00'.repeat(32)), {async: true})).to.deep.equal({});
+            expect(ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.deep.equal({MyTag: 42});
+            expect(await ExifReader.loadView(getDataView('\x00'.repeat(32)), {async: true})).to.deep.equal({MyTag: 42});
         });
 
-        it('should count a compressed iTXt block but not a brob block as potential metadata in sync mode', () => {
+        it('should read neither a compressed iTXt block nor a brob block in sync mode', () => {
+            const readCalls = countReadCalls([PngTextTags], () => ({tags: {}}));
             const compressedItxtBlock = {kind: 'pngText', compression: 'deflate', text: {chunkType: 'iTXt', name: 'K', valueOffset: 20, valueLength: 2}};
             swapImageHeader({blocks: [compressedItxtBlock]});
 
             expect(ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.deep.equal({});
+            expect(readCalls()).to.equal(0);
 
             swapImageHeader({blocks: [{kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10}]});
+            const tagsReadCalls = countReadCalls([Tags], () => ({tags: {}, byteOrder: ByteOrder.BIG_ENDIAN}));
 
-            expect(() => ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.throw(exifErrors.MetadataMissingError);
+            expect(ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.deep.equal({});
+            expect(tagsReadCalls()).to.equal(0);
         });
     });
 
@@ -533,7 +538,7 @@ describe('exif-reader', function () {
         expect(tags.metadataRange.end).to.equal(png.length - 12);
     });
 
-    it('should count the ISO-BMFF file block as potential metadata with HEIC or AVIF support, not without both', () => {
+    it('should read the ISO-BMFF file block with HEIC or AVIF support, not without both', () => {
         swapImageHeader({blocks: [{kind: 'isoBmffFile', imageDimensionsOffset: OFFSET_TEST_VALUE}]});
         swapTagsRead(IsoBmffFileTags, {MyTag: 42});
 
@@ -548,27 +553,26 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal({MyTag: 42});
 
         swap(Constants, {USE_HEIC: false});
+        const readCalls = countReadCalls([IsoBmffFileTags], () => ({MyTag: 42}));
 
-        expect(() => ExifReader.loadView()).to.throw(exifErrors.MetadataMissingError);
+        expect(ExifReader.loadView()).to.deep.equal({});
+        expect(readCalls()).to.equal(0);
     });
 
-    it('should not count a block of an unknown kind as potential metadata', () => {
+    it('should drop a block of an unknown kind in both modes', async () => {
         swapImageHeader({blocks: [{kind: 'bogus', dataOffset: OFFSET_TEST_VALUE}]});
 
-        expect(() => ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.throw(exifErrors.MetadataMissingError);
-        expect(() => ExifReader.loadView(getDataView('\x00'.repeat(32)), {async: true})).to.throw(exifErrors.MetadataMissingError);
+        expect(ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.deep.equal({});
+        expect(await ExifReader.loadView(getDataView('\x00'.repeat(32)), {async: true})).to.deep.equal({});
     });
 
-    it('should neither read nor count an xmp or icc block without chunks', () => {
-        swap(XmpTags, {read: () => {
-            throw new Error('XmpTags.read was called.');
-        }});
-        swap(IccTags, {read: () => {
-            throw new Error('IccTags.read was called.');
-        }});
+    it('should not read an xmp or icc block without chunks in either mode', async () => {
+        const readCalls = countReadCalls([XmpTags, IccTags], () => ({MyTag: 42}));
         swapImageHeader({blocks: [{kind: 'xmp', chunks: []}, {kind: 'icc', chunks: []}]});
 
-        expect(() => ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.throw(exifErrors.MetadataMissingError);
+        expect(ExifReader.loadView(getDataView('\x00'.repeat(32)))).to.deep.equal({});
+        expect(await ExifReader.loadView(getDataView('\x00'.repeat(32)), {async: true})).to.deep.equal({});
+        expect(readCalls()).to.equal(0);
     });
 
     it('should be able to find JFIF data segment', () => {
@@ -619,10 +623,10 @@ describe('exif-reader', function () {
     it('should pass exifDataView from BMFF multi-extent items to CanonTags.read instead of the source dataView', () => {
         const myExifTags = {
             Make: {value: ['Canon']},
-            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+            MakerNote: {value: [1, 2, 3]}
         };
         const SYNTHETIC = {synthetic: true};
-        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE, dataView: SYNTHETIC}]}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE, dataView: SYNTHETIC}]}, Tags, myExifTags, OFFSET_TEST_VALUE_MAKER_NOTE);
         let capturedDataView;
         swap(CanonTags, {
             read(dataView) {
@@ -637,10 +641,10 @@ describe('exif-reader', function () {
 
     it('should pass exifDataView from BMFF multi-extent items to PentaxTags.read instead of the source dataView', () => {
         const myExifTags = {
-            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE, value: getCharacterArray('PENTAX \x00\x00\x00')}
+            MakerNote: {value: getCharacterArray('PENTAX \x00\x00\x00')}
         };
         const SYNTHETIC = {synthetic: true};
-        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE, dataView: SYNTHETIC}]}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE, dataView: SYNTHETIC}]}, Tags, myExifTags, OFFSET_TEST_VALUE_MAKER_NOTE);
         let capturedDataView;
         swap(PentaxTags, {
             read(dataView) {
@@ -656,7 +660,7 @@ describe('exif-reader', function () {
     it('should pass the decoded-value budget of the Exif read on to CanonTags.read and MpfTags.read', () => {
         const capturedBudgets = captureDecodedValueBudgets({
             Make: {value: ['Canon']},
-            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+            MakerNote: {value: [1, 2, 3]}
         });
 
         ExifReader.loadView(getDataView('\x00'.repeat(16)));
@@ -669,7 +673,7 @@ describe('exif-reader', function () {
 
     it('should pass the decoded-value budget of the Exif read on to PentaxTags.read', () => {
         const capturedBudgets = captureDecodedValueBudgets({
-            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE, value: getCharacterArray('PENTAX \x00\x00\x00')}
+            MakerNote: {value: getCharacterArray('PENTAX \x00\x00\x00')}
         });
 
         ExifReader.loadView(getDataView('\x00'.repeat(16)));
@@ -679,26 +683,29 @@ describe('exif-reader', function () {
         expect(capturedBudgets.makerNotes).to.equal(capturedBudgets.exif);
     });
 
-    it('should pass the decoded-value budget of the Exif read on to PngTextTags.read', () => {
-        const capturedBudgets = capturePngTextValueBudgets([{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]);
+    it('should pass the decoded-value budget of the Exif read on to the Exif read of a raw profile', () => {
+        const budgets = captureTagsReadBudgets();
+        const png = getPngWithChunks(getPngChunk('eXIf', 'MM\x00\x2a' + getByteStringFromNumber(8, 4) + '\x00\x00'), getPngChunk('tEXt', 'Raw profile type exif\x00' + getRawExifProfile('MM\x00\x2a' + getByteStringFromNumber(8, 4) + '\x00\x00')));
 
-        ExifReader.loadView(getDataView('\x00'.repeat(16)));
+        ExifReader.loadView(getDataView(png));
 
-        expect(capturedBudgets.exif).to.be.an('object');
-        expect(capturedBudgets.pngText).to.equal(capturedBudgets.exif);
+        expect(budgets).to.have.lengthOf(2);
+        expect(budgets[0]).to.be.an('object');
+        expect(budgets[1]).to.equal(budgets[0]);
     });
 
-    it('should give PngTextTags.read a decoded-value budget sized from the file when there is no Exif', () => {
-        const capturedBudgets = capturePngTextValueBudgets([]);
+    it('should give the Exif read of a raw profile a decoded-value budget sized from the file when there is no Exif', () => {
+        const budgets = captureTagsReadBudgets();
+        const png = getPngWithChunks(getPngChunk('tEXt', 'Raw profile type exif\x00' + getRawExifProfile('MM\x00\x2a' + getByteStringFromNumber(8, 4) + '\x00\x00')));
 
-        ExifReader.loadView(getDataView('\x00'.repeat(16)));
+        ExifReader.loadView(getDataView(png));
 
-        expect(capturedBudgets.exif).to.be.undefined;
-        expect(capturedBudgets.pngText).to.deep.equal({
-            remaining: 4 * 16,
-            ifdEntriesRemaining: 4 * Math.floor(16 / 12),
+        expect(budgets).to.have.lengthOf(1);
+        expect(budgets[0]).to.deep.equal({
+            remaining: 4 * png.length,
+            ifdEntriesRemaining: 4 * Math.floor(png.length / 12),
             decompressedAllowanceRemaining: 1024 * 1024,
-            iptcDatasetsRemaining: 1024 + Math.floor(16 / 48),
+            iptcDatasetsRemaining: 1024 + Math.floor(png.length / 48),
             decompressedIptcAllowanceRemaining: 8192
         });
     });
@@ -941,8 +948,8 @@ describe('exif-reader', function () {
             PhotoshopSettings: {value: [1]},
             ICC_Profile: {value: [1]},
             Make: {value: ['Canon']},
-            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
-        });
+            MakerNote: {value: [1, 2, 3]}
+        }, OFFSET_TEST_VALUE_MAKER_NOTE);
         swapTagsRead(IptcTags, {Headline: {value: 'headline'}});
         swapXmpTagsRead({Rating: {value: '5'}});
         swap(PhotoshopTags, {read: () => ({ClippingPathName: {value: 'path1'}})});
@@ -963,8 +970,8 @@ describe('exif-reader', function () {
                 PhotoshopSettings: {value: [1]},
                 ICC_Profile: {value: [1]},
                 Make: {value: ['Canon']},
-                MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
-            });
+                MakerNote: {value: [1, 2, 3]}
+            }, OFFSET_TEST_VALUE_MAKER_NOTE);
             const readGroupKeys = [];
             for (const [groupKey, readerModule] of [
                 ['iptc', IptcTags],
@@ -1002,11 +1009,11 @@ describe('exif-reader', function () {
     it('should be able to find Canon MakerNote segment', () => {
         const myExifTags = {
             Make: {value: ['Canon']},
-            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+            MakerNote: {value: [1, 2, 3]}
         };
         const myCanonTags = {AutoRotate: 42};
         const myTags = {...myExifTags, ...myCanonTags};
-        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags, OFFSET_TEST_VALUE_MAKER_NOTE);
         swapMakerNoteTagsRead(myCanonTags, CanonTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
@@ -1019,14 +1026,14 @@ describe('exif-reader', function () {
         };
         const myExifTags = {
             Make: {value: ['Canon']},
-            MakerNote: {__offset: OFFSET_TEST_VALUE_MAKER_NOTE},
+            MakerNote: {value: [1, 2, 3]},
             LensModel: exifLensModel
         };
         const myCanonTags = {
             LensModel: makerNotesLensModel,
             LensType: {value: 61182, description: '61182'}
         };
-        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags, OFFSET_TEST_VALUE_MAKER_NOTE);
         swapMakerNoteTagsRead(myCanonTags, CanonTags);
 
         const tags = ExifReader.loadView();
@@ -1038,13 +1045,12 @@ describe('exif-reader', function () {
     it('should be able to find Pentax Type 1 MakerNote segment', () => {
         const myExifTags = {
             MakerNote: {
-                __offset: OFFSET_TEST_VALUE_MAKER_NOTE,
                 value: getCharacterArray('PENTAX \x00')
             }
         };
         const myPentaxTags = {Artist: 'Arty'};
         const myTags = {...myExifTags, ...myPentaxTags};
-        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags, OFFSET_TEST_VALUE_MAKER_NOTE);
         swapMakerNoteTagsRead(myPentaxTags, PentaxTags);
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
@@ -1052,12 +1058,65 @@ describe('exif-reader', function () {
     it('should skip a MakerNote whose value lies outside the file', () => {
         const myExifTags = {
             MakerNote: {
-                __offset: OFFSET_TEST_VALUE_MAKER_NOTE,
                 value: '<faulty value>'
             }
         };
-        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags);
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags, OFFSET_TEST_VALUE_MAKER_NOTE);
         expect(ExifReader.loadView()).to.deep.equal(myExifTags);
+    });
+
+    it('should read neither Canon nor Pentax maker notes for another make', () => {
+        const myExifTags = {
+            Make: {value: ['Other']},
+            MakerNote: {value: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+        };
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags, OFFSET_TEST_VALUE_MAKER_NOTE);
+        const readCalls = countReadCalls([CanonTags, PentaxTags], () => ({AutoRotate: 42}));
+
+        expect(ExifReader.loadView()).to.deep.equal(myExifTags);
+        expect(readCalls()).to.equal(0);
+    });
+
+    it('should not read an Exif block the finder reported without a TIFF header offset', () => {
+        swapImageHeader({blocks: [{kind: 'exif'}]});
+        const readCalls = countReadCalls([Tags], () => ({tags: {MyTag: 42}, byteOrder: 0}));
+
+        expect(ExifReader.loadView()).to.deep.equal({});
+        expect(readCalls()).to.equal(0);
+    });
+
+    it('should not read a maker note that is only the Pentax type 1 prefix', () => {
+        const myExifTags = {
+            MakerNote: {value: getCharacterArray('PENTAX ')}
+        };
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags, OFFSET_TEST_VALUE_MAKER_NOTE);
+        const readCalls = countReadCalls([CanonTags, PentaxTags], () => ({AutoRotate: 42}));
+
+        expect(ExifReader.loadView()).to.deep.equal(myExifTags);
+        expect(readCalls()).to.equal(0);
+    });
+
+    it('should read the Exif box of a JXL and leave a brob Exif box the finder also reported alone', async () => {
+        const myTags = {MyExifTag: 42};
+        let brotliCalls = 0;
+        swapForLoadView({
+            fileType: {value: 'jxl', description: 'JPEG XL'},
+            blocks: [
+                {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
+                {kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE},
+            ],
+        }, Tags, myTags);
+
+        const tags = await ExifReader.loadView(new DataView(new ArrayBuffer(10)), {
+            async: true,
+            decompress: {brotli: () => {
+                brotliCalls++;
+                return Promise.resolve(new ArrayBuffer(10));
+            }}
+        });
+
+        expect(tags).to.deep.equal({...myTags, FileType: {value: 'jxl', description: 'JPEG XL'}});
+        expect(brotliCalls).to.equal(0);
     });
 
     it('should skip Photoshop settings whose value lies outside the file', () => {
@@ -1141,7 +1200,7 @@ describe('exif-reader', function () {
                 {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
             ],
         });
-        swapTagsRead(Tags, {MakerNote: {value: [1, 2, 3], __offset: 5}});
+        swapTagsRead(Tags, {MakerNote: {value: [1, 2, 3]}}, 5);
 
         const result = await ExifReader.loadView(
             new DataView(new ArrayBuffer(10)),
@@ -1224,7 +1283,7 @@ describe('exif-reader', function () {
         const INPUT_LENGTH = 10;
         const CANON_EXIF_TAGS = {
             Make: {value: ['Canon']},
-            MakerNote: {value: [1, 2, 3], __offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+            MakerNote: {value: [1, 2, 3]}
         };
 
         it('should read the groups of brob Exif', async () => {
@@ -1297,7 +1356,7 @@ describe('exif-reader', function () {
                     return pentaxTags;
                 }
             });
-            const pentaxNote = {value: getCharacterArray('PENTAX \x00\x00\x00'), __offset: OFFSET_TEST_VALUE_MAKER_NOTE};
+            const pentaxNote = {value: getCharacterArray('PENTAX \x00\x00\x00')};
 
             const {tags, tagsReadCalls} = await loadBrobExifRecording({
                 exifTags: {MakerNote: pentaxNote},
@@ -1526,7 +1585,7 @@ describe('exif-reader', function () {
             swap(Tags, {
                 read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
                     tagsReadCalls.push({dataView, tiffHeaderOffset, tagFilter, valueBudget});
-                    return {tags: structuredClone(exifTags), byteOrder: ByteOrder.LITTLE_ENDIAN};
+                    return {tags: structuredClone(exifTags), byteOrder: ByteOrder.LITTLE_ENDIAN, makerNoteOffset: OFFSET_TEST_VALUE_MAKER_NOTE};
                 }
             });
 
@@ -1917,7 +1976,7 @@ describe('exif-reader', function () {
                 {kind: 'exif', compression: 'brotli', dataOffset: 0, length: 10},
             ],
         });
-        swapTagsRead(Tags, {MakerNote: {value: [1, 2, 3], __offset: 5}});
+        swapTagsRead(Tags, {MakerNote: {value: [1, 2, 3]}}, 5);
 
         const result = await ExifReader.loadView(
             new DataView(new ArrayBuffer(10)),
@@ -2392,25 +2451,26 @@ describe('exif-reader', function () {
             };
         });
 
-        it('should handle when file tags have been excluded', () => {
+        it('should not read file tags when they have been excluded', () => {
             useFlags.USE_FILE = false;
             swapForCustomBuild({blocks: [{kind: 'file', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            expectNothingRead([FileTags]);
         });
 
-        it('should handle when JFIF tags have been excluded', () => {
+        it('should not read JFIF tags when they have been excluded', () => {
             useFlags.USE_JFIF = false;
             swapForCustomBuild({blocks: [{kind: 'jfif', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            expectNothingRead([JfifTags]);
         });
 
-        it('should handle when PNG file tags have been excluded', () => {
+        it('should not read PNG file tags when they have been excluded', () => {
             useFlags.USE_PNG_FILE = false;
             swapForCustomBuild({blocks: [{kind: 'pngFile', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            expectNothingRead([PngFileTags]);
         });
 
-        it('should handle when JPEG files have been excluded', () => {
+        it('should read an IPTC segment but no file or JFIF tags when JPEG files have been excluded', () => {
+            // A build without JPEG has no finder reporting these blocks; the iptc group is gated on IPTC alone.
             useFlags.USE_JPEG = false;
             swapForCustomBuild({
                 blocks: [
@@ -2419,20 +2479,26 @@ describe('exif-reader', function () {
                     {kind: 'iptc', dataOffset: OFFSET_TEST_VALUE},
                 ],
             }, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            swapTagsRead(IptcTags, {MyIptcTag: 44});
+            const readCalls = countReadCalls([FileTags, JfifTags], () => ({MyTag: 42}));
+
+            expect(ExifReader.loadView()).to.deep.equal({MyIptcTag: 44});
+            expect(readCalls()).to.equal(0);
         });
 
-        it('should handle when Exif tags have been excluded', () => {
+        it('should not read Exif tags when they have been excluded', () => {
             useFlags.USE_EXIF = false;
             swapForCustomBuild({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            expectNothingRead([Tags]);
         });
 
-        it('should handle thumbnail when Exif tags have been excluded', () => {
+        it('should not read a thumbnail when Exif tags have been excluded', () => {
             useFlags.USE_EXIF = false;
-            swap(Thumbnail, {get: () => true});
-            swapForCustomBuild({}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            swapForCustomBuild({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, useFlags);
+            const thumbnailCalls = countReadCalls([Thumbnail], () => true, 'get');
+
+            expect(ExifReader.loadView()).to.deep.equal({});
+            expect(thumbnailCalls()).to.equal(0);
         });
 
         it('should calculate composite tags when Exif tags but not XMP tags have been excluded', () => {
@@ -2454,43 +2520,51 @@ describe('exif-reader', function () {
             expect(ExifReader.loadView()).to.deep.equal(myTags);
         });
 
-        it('should handle when IPTC tags have been excluded', () => {
+        it('should not read IPTC tags when they have been excluded', () => {
             useFlags.USE_IPTC = false;
             swapForCustomBuild({blocks: [{kind: 'iptc', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            expectNothingRead([IptcTags]);
         });
 
-        it('should handle when XMP tags have been excluded', () => {
+        it('should not read XMP tags when they have been excluded', () => {
             useFlags.USE_XMP = false;
             swapForCustomBuild({blocks: [{kind: 'xmp', chunks: [{dataOffset: OFFSET_TEST_VALUE, length: XMP_FIELD_LENGTH_TEST_VALUE}]}]}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            expectNothingRead([XmpTags]);
         });
 
-        it('should handle when ICC tags have been excluded', () => {
+        it('should not read ICC tags when they have been excluded', () => {
             useFlags.USE_ICC = false;
             swapForCustomBuild({blocks: [{kind: 'icc', chunks: [OFFSET_TEST_VALUE_ICC2_1, OFFSET_TEST_VALUE_ICC2_2]}]}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            expectNothingRead([IccTags]);
         });
 
-        it('should handle when MPF tags have been excluded', () => {
+        it('should not read MPF tags when they have been excluded', () => {
             useFlags.USE_MPF = false;
             swapForCustomBuild({blocks: [{kind: 'mpf', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            expectNothingRead([MpfTags]);
         });
 
-        it('should handle when PNG files have been excluded', () => {
+        it('should not read PNG tags when PNG files have been excluded', () => {
             useFlags.USE_PNG = false;
-            swapForCustomBuild({blocks: [{kind: 'pngFile', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            swapForCustomBuild({blocks: [{kind: 'pngFile', dataOffset: OFFSET_TEST_VALUE}, getTextBlock(OFFSET_TEST_VALUE), {kind: 'pngChunk', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
+            expectNothingRead([PngFileTags, PngTextTags, PngTags]);
         });
 
-        it('should handle when GIF files have been excluded', () => {
+        it('should not read GIF tags when GIF files have been excluded', () => {
             useFlags.USE_GIF = false;
             swapForCustomBuild({blocks: [{kind: 'gif', dataOffset: OFFSET_TEST_VALUE}]}, useFlags);
-            expect(() => ExifReader.loadView()).to.throw(/No Exif data/);
+            expectNothingRead([GifFileTags]);
         });
 
+        function expectNothingRead(readerModules) {
+            const readCalls = countReadCalls(readerModules, () => ({MyTag: 42}));
+
+            expect(ExifReader.loadView()).to.deep.equal({});
+            expect(readCalls()).to.equal(0);
+        }
+
         it('should handle when JPEG files but not WebP files have been excluded', () => {
+            // A build without JPEG has no finder reporting an IPTC segment; a stubbed one is read.
             useFlags.USE_JPEG = false;
             const myTags = {
                 exif: {MyExifTag: 43},
@@ -2514,6 +2588,7 @@ describe('exif-reader', function () {
 
             expect(ExifReader.loadView({}, {expanded: true})).to.deep.equal({
                 exif: myTags.exif,
+                iptc: myTags.iptc,
                 xmp: myTags.xmp,
                 icc: myTags.icc,
                 Thumbnail: myTags.Thumbnail,
@@ -4447,46 +4522,48 @@ describe('exif-reader', function () {
                 expect(tags).to.not.have.property('Thumbnail');
             });
 
-            it('should pass PngTextTags.read a thumbnail reader for the decoded raw profile', () => {
-                const getThumbnail = capturePngTextThumbnailReader({});
+            it('should read the thumbnail of a raw profile from the decoded profile with the base64 helper', () => {
+                const calls = captureThumbnailGetCalls({});
 
-                const thumbnailIfdTags = {JPEGInterchangeFormat: {value: 2}, JPEGInterchangeFormatLength: {value: 4}};
-                const thumbnail = getThumbnail(getDataView('Exif\x00\x00MM\xff\xd8\xff\xd9'), thumbnailIfdTags, 6);
-
-                expect(Buffer.from(thumbnail.image).toString('latin1')).to.equal('\xff\xd8\xff\xd9');
+                expect(calls).to.have.lengthOf(1);
+                const [dataView, thumbnailIfdTags, tiffHeaderOffset, base64Helper] = calls[0];
+                expect(Buffer.from(dataView.buffer).toString('latin1').slice(0, 6)).to.equal('Exif\x00\x00');
+                expect(thumbnailIfdTags.JPEGInterchangeFormatLength.value).to.equal(RAW_PROFILE_THUMBNAIL.length);
+                expect(tiffHeaderOffset).to.equal(6);
+                expect(base64Helper).to.equal(getBase64Image);
             });
 
             for (const [description, options] of [
                 ['the thumbnail group is excluded', {excludeTags: {thumbnail: true}}],
                 ['the Thumbnail tag is excluded', {excludeTags: {thumbnail: ['Thumbnail']}}],
             ]) {
-                it(`should pass PngTextTags.read no thumbnail reader when ${description}`, () => {
-                    expect(capturePngTextThumbnailReader(options)).to.be.undefined;
+                it(`should not read the thumbnail of a raw profile when ${description}`, () => {
+                    expect(captureThumbnailGetCalls(options)).to.deep.equal([]);
                 });
             }
 
             for (const constant of ['USE_EXIF', 'USE_THUMBNAIL']) {
-                it(`should pass PngTextTags.read no thumbnail reader in a build without ${constant}`, () => {
+                it(`should not read the thumbnail of a raw profile in a build without ${constant}`, () => {
                     swap(Constants, {[constant]: false});
 
-                    expect(capturePngTextThumbnailReader({})).to.be.undefined;
+                    expect(captureThumbnailGetCalls({})).to.deep.equal([]);
                 });
             }
 
-            function capturePngTextThumbnailReader(options) {
-                const originalRead = PngTextTags.read;
-                let getThumbnail = 'not called';
-                swap(PngTextTags, {
-                    read: (...args) => {
-                        getThumbnail = args[8];
-                        return originalRead(...args);
+            function captureThumbnailGetCalls(options) {
+                const calls = [];
+                const originalGet = Thumbnail.get;
+                swap(Thumbnail, {
+                    get: (...args) => {
+                        calls.push(args);
+                        return originalGet(...args);
                     }
                 });
                 const png = getPngWithChunks(getRawProfileTextChunk(getTiffWithThumbnail(RAW_PROFILE_THUMBNAIL)));
 
                 ExifReader.loadView(getDataView(png), options);
 
-                return getThumbnail;
+                return calls;
             }
 
             function swapThumbnailGetRecordingImageLengths() {
@@ -4508,7 +4585,7 @@ describe('exif-reader', function () {
         describe('groups the Exif carries', () => {
             const CANON_EXIF_TAGS = {
                 Make: {value: ['Canon']},
-                MakerNote: {value: [1, 2, 3], __offset: OFFSET_TEST_VALUE_MAKER_NOTE}
+                MakerNote: {value: [1, 2, 3]}
             };
             const EXIF_TIFF = 'MM\x00\x2a' + getByteStringFromNumber(8, 4) + '<exif>';
 
@@ -4620,7 +4697,7 @@ describe('exif-reader', function () {
             function swapTagsReadReturning(exifTags) {
                 swap(Tags, {
                     read() {
-                        return {tags: structuredClone(exifTags), byteOrder: ByteOrder.LITTLE_ENDIAN};
+                        return {tags: structuredClone(exifTags), byteOrder: ByteOrder.LITTLE_ENDIAN, makerNoteOffset: OFFSET_TEST_VALUE_MAKER_NOTE};
                     }
                 });
             }
@@ -4844,9 +4921,24 @@ class BufferPolyfillView extends Uint8Array {
     }
 }
 
-function swapForLoadView(appMarkersValue, tagsModule, tagsValue) {
+function swapForLoadView(appMarkersValue, tagsModule, tagsValue, makerNoteOffset = undefined) {
     swapImageHeader(appMarkersValue);
-    swapTagsRead(tagsModule, tagsValue);
+    swapTagsRead(tagsModule, tagsValue, makerNoteOffset);
+}
+
+// Swaps the method of every module for a stub returning `result()` and gives
+// back a function that reports the number of calls.
+function countReadCalls(modules, result, method = 'read') {
+    let calls = 0;
+    for (const module of modules) {
+        swap(module, {
+            [method]() {
+                calls++;
+                return result();
+            }
+        });
+    }
+    return () => calls;
 }
 
 // A stub without `blocks` stands for a finder that found nothing.
@@ -4867,12 +4959,13 @@ function swapImageHeaderDynamic(parseAppMarkersImpl) {
     swap(ImageHeader, {parseAppMarkers: parseAppMarkersImpl});
 }
 
-function swapTagsRead(tagsModule, tagsValue) {
+// `makerNoteOffset` is what Tags.read reports for a MakerNote in the tags.
+function swapTagsRead(tagsModule, tagsValue, makerNoteOffset = undefined) {
     swap(tagsModule, {
         read(dataView, offset) {
             if (Array.isArray(dataView) || (offset === OFFSET_TEST_VALUE)) {
                 if (tagsModule === Tags) {
-                    return {tags: tagsValue, byteOrder: ByteOrder.BIG_ENDIAN};
+                    return {tags: tagsValue, byteOrder: ByteOrder.BIG_ENDIAN, makerNoteOffset};
                 }
                 return tagsValue;
             }
@@ -4901,7 +4994,7 @@ function captureDecodedValueBudgets(exifTags) {
     swap(Tags, {
         read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
             capturedBudgets.exif = valueBudget;
-            return {tags: exifTags, byteOrder: ByteOrder.BIG_ENDIAN};
+            return {tags: exifTags, byteOrder: ByteOrder.BIG_ENDIAN, makerNoteOffset: OFFSET_TEST_VALUE_MAKER_NOTE};
         }
     });
     swap(CanonTags, {
@@ -4925,22 +5018,17 @@ function captureDecodedValueBudgets(exifTags) {
     return capturedBudgets;
 }
 
-function capturePngTextValueBudgets(blocks) {
-    const capturedBudgets = {};
-    swapImageHeader({blocks: [...blocks, getTextBlock(0)]});
+// Records the budget given to every Tags.read call: the main Exif block's and
+// each raw profile's.
+function captureTagsReadBudgets() {
+    const budgets = [];
     swap(Tags, {
         read(dataView, tiffHeaderOffset, includeUnknown, computed, tagFilter, valueBudget) {
-            capturedBudgets.exif = valueBudget;
+            budgets.push(valueBudget);
             return {tags: {}, byteOrder: ByteOrder.BIG_ENDIAN};
         }
     });
-    swap(PngTextTags, {
-        read(dataView, pngTextBlocks, async, includeUnknown, computed, tagFilter, decompressConfig, valueBudget) {
-            capturedBudgets.pngText = valueBudget;
-            return {readTags: {}, readTagsPromise: undefined};
-        }
-    });
-    return capturedBudgets;
+    return budgets;
 }
 
 function swapXmpTagsRead(tagsValue) {
@@ -5007,13 +5095,17 @@ function swapMakerNoteTagsRead(tagsValue, makerNoteModule) {
     });
 }
 
+// The first block gives its tags at once, the second through a promise.
 function swapPngTextTagsRead(tagsValue, asyncTagsValue) {
     swap(PngTextTags, {
-        read(dataView, pngTextBlocks, async) {
-            if (pngTextBlocks.length === 2 && pngTextBlocks[0].text.valueOffset === OFFSET_TEST_VALUE && pngTextBlocks[1].text.valueOffset === SECOND_OFFSET_TEST_VALUE) {
-                return {readTags: tagsValue, readTagsPromise: async ? Promise.resolve([{readTags: asyncTagsValue}]) : undefined};
+        read(block) {
+            if (block.text.valueOffset === OFFSET_TEST_VALUE) {
+                return {tags: tagsValue};
             }
-            return {};
+            if (block.text.valueOffset === SECOND_OFFSET_TEST_VALUE) {
+                return Promise.resolve({tags: asyncTagsValue});
+            }
+            return undefined;
         }
     });
 }
@@ -5324,6 +5416,11 @@ function getPngWithCompressedEmptyKeywords(datasetCount) {
 // A JPEG whose APP13 segment holds datasetCount empty Keywords datasets.
 function getJpegWithEmptyKeywords(datasetCount) {
     return '\xff\xd8' + getAppSegment('\xff\xed', 'Photoshop 3.0\x00' + getEmptyKeywordsNaaBlock(datasetCount)) + '\xff\xd9';
+}
+
+function getRawExifProfile(tiff) {
+    const data = 'Exif\x00\x00' + tiff;
+    return `\nexif\n${String(data.length).padStart(8, ' ')}\n${Buffer.from(data, 'latin1').toString('hex')}`;
 }
 
 function getPngWithChunks(...chunks) {
