@@ -115,7 +115,7 @@ There is no module-mocking library, and none should be introduced. To isolate a 
 
 Use `npm run test` to run the unit tests and make use of `describe.only` and `it.only` for focused testing.
 
-Mocha defaults to the quiet `dot` reporter locally (`spec` on CI), configured in `.mocharc.cjs`; failures always print in full. Set `EXIFREADER_MOCHA_REPORTER=spec` for per-test output.
+Mocha prints only the closing summary locally (`spec` on CI), configured in `.mocharc.cjs`; failures always print in full. Set `EXIFREADER_MOCHA_REPORTER=spec` for per-test output. The coverage table hides files at 100%; pass `--skip-full=false` to `c8` to see them.
 
 ### TDD: red-green-refactor
 

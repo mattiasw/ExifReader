@@ -100,7 +100,7 @@ export default defineConfig([
         },
     },
     {
-        files: ['bin/**/*.js', 'webpack.config.js', 'cypress.config.js', '.mocharc.cjs'],
+        files: ['bin/**/*.js', 'webpack.config.js', 'cypress.config.js', '.mocharc.cjs', 'test/quiet-reporter.cjs'],
         languageOptions: {
             ecmaVersion: 2022,
             globals: {
