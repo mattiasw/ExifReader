@@ -163,6 +163,7 @@
       "lcov",
       "text"
     ],
+    "skip-full": true,
     "exclude": [
       "test/**",
       ".mocharc.cjs"
