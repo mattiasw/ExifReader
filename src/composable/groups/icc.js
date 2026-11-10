@@ -5,7 +5,6 @@
 import {isThenable} from '../../utils.js';
 import IccTags from '../../icc-tags.js';
 import {parsedTags, getEmbeddableMergeDescriptor} from '../group-helpers.js';
-import {ICC_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const icc = {
@@ -15,7 +14,6 @@ export const icc = {
     read: readIccBlock,
     merge: (block) => getEmbeddableMergeDescriptor(block, 'icc', 'carriedIcc'),
     suppressions: [{kind: 'icc', isSuppressed: isCarriedIccSuppressed}],
-    exifDependencies: ICC_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };
 

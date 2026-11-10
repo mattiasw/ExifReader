@@ -19,12 +19,17 @@ import {file, jpegHeader} from '../../../src/composable/formats/jpeg.js';
 import {
     allGroups, exif, iptc, xmp, icc, photoshop, mpf, canon, pentax, makerNotes, gps, composite, thumbnail,
 } from '../../../src/composable/groups.js';
-import {WhiteBalance, InteroperabilityIndex, Make as MakeTag} from '../../../src/composable/tags/exif.js';
+import {DateTime, DateTimeOriginal, GPSLatitude, WhiteBalance, InteroperabilityIndex, Make as MakeTag} from '../../../src/composable/tags/exif.js';
 import {createTagFilter} from '../../../src/tag-filter.js';
 import {getDataView, swapProperties} from '../test-utils.js';
 import {
     ascii,
     rationals,
+    bytes as byteValues,
+    undefinedBytes,
+    getIptcDatasets,
+    headline,
+    getPhotoshopResource,
     getIccProfile,
     canonMakerNote,
     getTiff,
@@ -36,6 +41,12 @@ import {
     getXmpPacket,
     TAG_MAKE,
     TAG_MODEL,
+    TAG_APPLICATION_NOTES,
+    TAG_IPTC_NAA,
+    TAG_IMAGE_SOURCE_DATA,
+    TAG_PHOTOSHOP_SETTINGS,
+    TAG_ICC_PROFILE,
+    TAG_FOCAL_LENGTH_IN_35MM_FILM,
     TAG_CANON_LENS_MODEL,
     TAG_GPS_LATITUDE_REF,
     TAG_GPS_LATITUDE,
@@ -58,9 +69,11 @@ import {
 
 const IMAGES_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'fixtures', 'images');
 const FORMATS_BUT_XML = allFormats.filter((format) => format !== xml);
+const WHITE_BALANCE_ID = 0xa403;
+const WHITE_BALANCE_ALIAS_ID = 0xfe4e;
 const TAG_DATE_TIME = 0x0132;
+const TAG_DATE_TIME_ORIGINAL = 0x9003;
 const THUMBNAIL_IMAGE = '\xff\xd8thumb\xff\xd9';
-const DATE_TIME = {name: 'DateTime', ids: [TAG_DATE_TIME], group: 'exif'};
 const JPEG = getJpeg(
     getSof0Segment(),
     getJfifSegment(),
@@ -114,7 +127,7 @@ describe('composable/core', () => {
             const message = 'createReader: formats must hold at least one value imported from \'exifreader/formats\'';
             expect(() => createReader({formats: []})).to.throw(TypeError, message);
             expect(() => createReader({formats: [], groups: [exif]})).to.throw(TypeError, message);
-            expect(() => createReader({formats: [], tags: [DATE_TIME]})).to.throw(TypeError, message);
+            expect(() => createReader({formats: [], tags: [DateTime]})).to.throw(TypeError, message);
             expect(() => createReader({formats: [jpeg], groups: [], tags: []})).to.not.throw();
         });
 
@@ -126,23 +139,17 @@ describe('composable/core', () => {
 
         it('should need tags to be an array when given', () => {
             const message = 'createReader: tags must be an array of values imported from \'exifreader/tags/exif\'';
-            expect(() => createReader({formats: [jpeg], tags: DATE_TIME})).to.throw(TypeError, message);
+            expect(() => createReader({formats: [jpeg], tags: DateTime})).to.throw(TypeError, message);
             expect(() => createReader({formats: [jpeg], tags: null})).to.throw(TypeError, message);
         });
 
         it('should reject a key that is not formats, groups, tags, tagFilter, domParser or decompress', () => {
             expect(() => createReader({formats: [jpeg], group: [exif]}))
                 .to.throw(TypeError, 'createReader: unknown key \'group\': the keys are formats, groups, tags, tagFilter, domParser and decompress');
-            expect(() => createReader(Object.create({formats: [jpeg], tag: [DATE_TIME]})))
+            expect(() => createReader(Object.create({formats: [jpeg], tag: [DateTime]})))
                 .to.throw(TypeError, 'createReader: unknown key \'tag\': the keys are formats, groups, tags, tagFilter, domParser and decompress');
             expect(() => createReader({formats: [jpeg], filter: tagFilter}))
                 .to.throw(TypeError, 'createReader: unknown key \'filter\': the keys are formats, groups, tags, tagFilter, domParser and decompress');
-        });
-
-        it('should accept the tag filter as tagFilter', () => {
-            expect(() => createReader({formats: [jpeg], tagFilter})).to.not.throw();
-            expect(() => createReader({formats: [jpeg], groups: [exif], tags: [DATE_TIME], tagFilter})).to.not.throw();
-            expect(() => createReader({formats: [jpeg], tagFilter: undefined})).to.not.throw();
         });
 
         it('should need tagFilter to be the tag filter when given', () => {
@@ -252,7 +259,7 @@ describe('composable/core', () => {
         it('should check the arrays before their elements', () => {
             expect(() => createReader({formats: [{}], groups: exif}))
                 .to.throw(TypeError, 'createReader: groups must be an array of values imported from \'exifreader/groups\'');
-            expect(() => createReader({formats: [jpeg], groups: [{}], tags: DATE_TIME}))
+            expect(() => createReader({formats: [jpeg], groups: [{}], tags: DateTime}))
                 .to.throw(TypeError, 'createReader: tags must be an array of values imported from \'exifreader/tags/exif\'');
         });
 
@@ -280,8 +287,8 @@ describe('composable/core', () => {
                 .to.throw(TypeError, 'createReader: groups[0] is not a value imported from \'exifreader/groups\'');
         });
 
-        it('should accept tag descriptors by shape', () => {
-            expect(() => createReader({formats: [jpeg], tags: [DATE_TIME, {name: 'WhiteBalance', ids: [0xa403, 0x0007], group: 'exif'}]})).to.not.throw();
+        it('should accept the generated Exif tag descriptors', () => {
+            expect(() => createReader({formats: [jpeg], tags: [DateTime, WhiteBalance, GPSLatitude, InteroperabilityIndex]})).to.not.throw();
         });
 
         it('should name the first tag that is not an Exif tag descriptor', () => {
@@ -289,18 +296,23 @@ describe('composable/core', () => {
                 null,
                 'DateTime',
                 TAG_DATE_TIME,
-                {ids: [TAG_DATE_TIME], group: 'exif'},
-                {name: 'DateTime', ids: [], group: 'exif'},
-                {name: 'DateTime', ids: TAG_DATE_TIME, group: 'exif'},
-                {name: 'DateTime', ids: ['0x0132'], group: 'exif'},
-                {name: 'DateTime', ids: '0132', group: 'exif'},
-                {name: 'DateTime', ids: {length: 1, every: () => true}, group: 'exif'},
-                {name: 'DateTime', ids: [TAG_DATE_TIME, 'x'], group: 'exif'},
-                {name: 'DateTime', ids: [TAG_DATE_TIME]},
-                {name: 'Keywords', ids: [25], group: 'iptc'},
+                {...DateTime, name: undefined},
+                {...DateTime, ids: TAG_DATE_TIME},
+                {...DateTime, ids: '0132'},
+                {...DateTime, ids: {length: 1, every: () => true}},
+                {...DateTime, ids: []},
+                {...DateTime, ids: ['0x0132']},
+                {...DateTime, ids: [TAG_DATE_TIME, 'x']},
+                {...DateTime, group: undefined},
+                {...DateTime, group: 'iptc'},
+                {...DateTime, dictionary: undefined},
+                {...DateTime, dictionary: 'iptc'},
+                {...DateTime, dictionary: '1st'},
+                {...DateTime, reader: undefined},
+                {...DateTime, reader: {}},
             ];
             for (const tag of invalidTags) {
-                expect(() => createReader({formats: [jpeg], tags: [DATE_TIME, tag]}), JSON.stringify(tag))
+                expect(() => createReader({formats: [jpeg], tags: [DateTime, tag]}), JSON.stringify(tag))
                     .to.throw(TypeError, 'createReader: tags[1] is not a value imported from \'exifreader/tags/exif\'');
             }
         });
@@ -391,6 +403,16 @@ describe('composable/core', () => {
             });
 
             describe('a group with no entry of its own', () => {
+                const INCLUDE_DATE_TIME_ORIGINAL = {file: true, jfif: true, exif: ['DateTimeOriginal']};
+                const dateTimeOriginalReader = createReader({formats: [jpeg], tags: [DateTimeOriginal]});
+
+                it('should leave out a group composed by tags that finds none', async () => {
+                    const tags = await dateTimeOriginalReader.load(getDataView(JPEG));
+
+                    expect(tags.exif).to.equal(undefined);
+                    expect(tags.file.FileType.value).to.equal('jpeg');
+                });
+
                 it('should leave out a whole group that is empty', async () => {
                     const bytes = getJpeg(getSof0Segment(), getExifSegment(getTiff({ifd0: []})));
 
@@ -416,10 +438,43 @@ describe('composable/core', () => {
                     expect(tags.icc).to.equal(undefined);
                 });
 
+                it('should keep a group that holds one tag', async () => {
+                    const bytes = getJpeg(getSof0Segment(), getExifSegment(getTiff({
+                        ifd0: [ascii(TAG_MAKE, 'Canon')],
+                        exifIfd: [ascii(TAG_DATE_TIME_ORIGINAL, '2020:01:01 00:00:00')],
+                    })));
+
+                    const tags = await dateTimeOriginalReader.load(getDataView(bytes));
+
+                    expect(Object.keys(tags.exif)).to.deep.equal(['DateTimeOriginal']);
+                });
+
                 it('should keep a group whose entries are not tags', async () => {
                     const tags = await createReader({formats: [jpeg], groups: [thumbnail]}).load(getDataView(JPEG));
 
                     expect(Object.keys(tags.Thumbnail)).to.include('image');
+                });
+
+                it('should keep metadataRange', async () => {
+                    const tags = await dateTimeOriginalReader.load(getDataView(JPEG), {includeOffsets: true});
+
+                    expect(tags.exif).to.equal(undefined);
+                    expect(tags.metadataRange.blocks.map((block) => block.type)).to.deep.equal(['file', 'jfif', 'exif']);
+                });
+
+                it('should not change the flat result', async () => {
+                    const expected = await ExifReader.load(getDataView(JPEG), {async: true, includeTags: INCLUDE_DATE_TIME_ORIGINAL});
+
+                    expect(await dateTimeOriginalReader.load(getDataView(JPEG), {expanded: false})).to.deep.equal(expected);
+                });
+
+                it('should leave the default entry with its empty group', async () => {
+                    const options = {async: true, expanded: true, includeTags: INCLUDE_DATE_TIME_ORIGINAL};
+
+                    const standard = await ExifReader.load(getDataView(JPEG), options);
+
+                    expect(standard.exif).to.deep.equal({});
+                    expect((await dateTimeOriginalReader.load(getDataView(JPEG))).exif).to.equal(undefined);
                 });
             });
         });
@@ -617,17 +672,13 @@ describe('composable/core', () => {
                     [{excludeTags: 'gps'}, excludeMessage],
                     [{excludeTags: ['gps']}, excludeMessage],
                 ];
-                for (const reader of [exifReader, createReader({formats: [jpeg], tags: [DATE_TIME]}), createReader({formats: [jpeg], groups: [gps]})]) {
-                    for (const [options, message] of cases) {
-                        let result;
-                        expect(() => {
-                            result = reader.load(getDataView(JPEG), options);
-                        }).to.not.throw();
-                        expect(result).to.be.an.instanceof(Promise);
-                        const error = await getRejection(result);
-                        expect(error, JSON.stringify(options)).to.be.an.instanceof(TypeError);
-                        expect(error.message, JSON.stringify(options)).to.equal(message);
-                    }
+                for (const [options, message] of cases) {
+                    let result;
+                    expect(() => {
+                        result = exifReader.load(getDataView(JPEG), options);
+                    }).to.not.throw();
+                    expect(result).to.be.an.instanceof(Promise);
+                    await expectRejection(result, message, JSON.stringify(options));
                 }
             });
 
@@ -640,18 +691,18 @@ describe('composable/core', () => {
                 expect((await getRejection(reader.load(getDataView(JPEG), {includeTags: {xmp: true}, domParser: new XmldomParser()}))).message).to.equal(DOM_PARSER_OPTION_MESSAGE);
                 expect((await getRejection(reader.load(getDataView(JPEG), {domParser: new XmldomParser(), excludeTags: 'xmp'}))).message).to.equal(DOM_PARSER_OPTION_MESSAGE);
             });
+        });
 
-            it('should read with the tag filter composed', async () => {
-                const reader = createReader({formats: [jpeg], groups: [exif], tagFilter});
+        it('should read with the tag filter composed', async () => {
+            const reader = createReader({formats: [jpeg], groups: [exif], tagFilter});
 
-                const included = await reader.load(getDataView(JPEG), {includeTags: {exif: ['Make']}});
-                const excluded = await reader.load(getDataView(JPEG), {excludeTags: {exif: ['Model']}});
+            const included = await reader.load(getDataView(JPEG), {includeTags: {exif: ['Make']}});
+            const excluded = await reader.load(getDataView(JPEG), {excludeTags: {exif: ['Model']}});
 
-                expect(Object.keys(included)).to.deep.equal(['exif']);
-                expect(Object.keys(included.exif)).to.deep.equal(['Make']);
-                expect(excluded.exif.Make.description).to.equal('Canon');
-                expect(excluded.exif.Model).to.equal(undefined);
-            });
+            expect(Object.keys(included)).to.deep.equal(['exif']);
+            expect(Object.keys(included.exif)).to.deep.equal(['Make']);
+            expect(excluded.exif.Make.description).to.equal('Canon');
+            expect(excluded.exif.Model).to.equal(undefined);
         });
 
         it('should treat a falsy excludeTags as none on a reader without the tag filter', async () => {
@@ -959,7 +1010,7 @@ describe('composable/core', () => {
         it('should return FileType for formats that bring no file reader', async () => {
             for (const [format, fileName, value] of [[tiff, 'test.tiff', 'tiff'], [png, 'test.png', 'png']]) {
                 const bytes = fs.readFileSync(path.join(IMAGES_PATH, fileName));
-                for (const tables of [{groups: []}, {groups: [exif]}, {groups: [gps]}, {tags: [DATE_TIME]}]) {
+                for (const tables of [{groups: []}, {groups: [exif]}, {groups: [gps]}, {tags: [DateTime]}]) {
                     const tags = await createReader(Object.assign({formats: [format]}, tables)).load(bytes);
                     expect(tags.file.FileType.value, fileName).to.equal(value);
                 }
@@ -976,7 +1027,7 @@ describe('composable/core', () => {
 
             expect((await createReader({formats: [png]}).load(pngImage)).png.Comment.description).to.equal('Compressed');
             expect((await createReader({formats: [png], tagFilter}).load(pngImage, {includeTags: {png: true}})).png.Comment.description).to.equal('Compressed');
-            expect((await createReader({formats: [png], tags: [DATE_TIME]}).load(pngImage)).exif.DateTime.description).to.equal('2020:01:01 00:00:00');
+            expect((await createReader({formats: [png], tags: [DateTime]}).load(pngImage)).exif.DateTime.description).to.equal('2020:01:01 00:00:00');
         });
 
         it('should read composite from the merged tags when nothing caps Exif, as the default entry does', async () => {
@@ -989,7 +1040,7 @@ describe('composable/core', () => {
             const expected = await ExifReader.load(pngImage, {async: true});
             expect(expected.FocalLength35efl).to.not.equal(undefined);
 
-            for (const tags of [[], [DATE_TIME]]) {
+            for (const tags of [[], [DateTime]]) {
                 const reader = createReader({formats: [png], groups: [exif, composite], tags});
                 expect(await reader.load(pngImage, {expanded: false}), JSON.stringify(tags)).to.deep.equal(expected);
             }
@@ -1018,8 +1069,8 @@ describe('composable/core', () => {
         });
 
         describe('tag descriptors', () => {
-            const dateTimeReader = createReader({formats: [jpeg], tags: [DATE_TIME]});
-            const filteredDateTimeReader = createReader({formats: [jpeg], tags: [DATE_TIME], tagFilter});
+            const dateTimeReader = createReader({formats: [jpeg], tags: [DateTime]});
+            const filteredDateTimeReader = createReader({formats: [jpeg], tags: [DateTime], tagFilter});
 
             it('should return only the described tags of their group', async () => {
                 const tags = await dateTimeReader.load(getDataView(JPEG), {expanded: true});
@@ -1041,7 +1092,7 @@ describe('composable/core', () => {
             });
 
             it('should not widen an id selector to a tag of another IFD with the same id', async () => {
-                const reader = createReader({formats: [jpeg], tags: [{name: 'InteroperabilityIndex', ids: [TAG_GPS_LATITUDE_REF], group: 'exif'}], tagFilter});
+                const reader = createReader({formats: [jpeg], groups: [gps], tags: [InteroperabilityIndex], tagFilter});
 
                 const tags = await reader.load(getDataView(JPEG), {expanded: true, includeTags: {exif: [TAG_GPS_LATITUDE_REF]}});
 
@@ -1049,8 +1100,6 @@ describe('composable/core', () => {
             });
 
             describe('with a descriptor of more than one id', () => {
-                const WHITE_BALANCE_ID = 0xa403;
-                const WHITE_BALANCE_ALIAS_ID = 0xfe4e;
                 const whiteBalanceJpeg = getJpeg(
                     getSof0Segment(),
                     getExifSegment(getTiff({
@@ -1120,18 +1169,8 @@ describe('composable/core', () => {
                     expect(tags.exif.WhiteBalance.value).to.equal(1);
                 });
 
-                it('should not return a tag of another IFD that has the selected id', async () => {
-                    const descriptor = {name: 'WhiteBalance', ids: [WHITE_BALANCE_ID, TAG_GPS_LATITUDE_REF], group: 'exif'};
-                    const reader = createReader({formats: [jpeg], tags: [descriptor], tagFilter});
-
-                    const tags = await reader.load(getDataView(JPEG), {expanded: true, includeTags: {exif: [TAG_GPS_LATITUDE_REF]}});
-
-                    expect(tags.exif || {}).to.deep.equal({});
-                });
-
                 it('should not widen an id selector to another id of the same name', async () => {
-                    const descriptor = {name: 'WhiteBalance', ids: [WHITE_BALANCE_ID], group: 'exif'};
-                    const reader = createReader({formats: [jpeg], tags: [descriptor], tagFilter});
+                    const reader = createReader({formats: [jpeg], tags: [WhiteBalance], tagFilter});
                     const bytes = getJpeg(getSof0Segment(), getExifSegment(getTiff({exifIfd: [ascii(WHITE_BALANCE_ALIAS_ID, 'As Shot')]})));
 
                     const tags = await reader.load(getDataView(bytes), {expanded: true, includeTags: {exif: [WHITE_BALANCE_ID]}});
@@ -1149,7 +1188,7 @@ describe('composable/core', () => {
             });
 
             it('should leave a whole composed group as it is', async () => {
-                const reader = createReader({formats: [jpeg], groups: [exif], tags: [DATE_TIME]});
+                const reader = createReader({formats: [jpeg], groups: [exif], tags: [DateTime]});
 
                 const tags = await reader.load(getDataView(JPEG), {expanded: true});
 
@@ -1166,39 +1205,36 @@ describe('composable/core', () => {
         });
 
         describe('a group that needs Exif without exif composed', () => {
-            it('should read gps without returning exif', async () => {
-                const tags = await createReader({formats: [jpeg], groups: [gps]}).load(getDataView(JPEG), {expanded: true});
-
-                expect(tags.gps.Latitude).to.equal(1);
-                expect(tags.exif).to.equal(undefined);
-                expect(Object.keys(tags).sort()).to.deep.equal(['file', 'gps', 'jfif']);
-            });
-
-            it('should read the thumbnail without returning exif', async () => {
-                const tags = await createReader({formats: [jpeg], groups: [thumbnail]}).load(getDataView(JPEG), {expanded: true});
-
-                expect(tags.Thumbnail.image.byteLength).to.equal(THUMBNAIL_IMAGE.length);
-                expect(tags.exif).to.equal(undefined);
-            });
-
-            it('should read Canon maker notes without returning exif', async () => {
-                const tags = await createReader({formats: [jpeg], groups: [canon]}).load(getDataView(JPEG), {expanded: true});
-
-                expect(tags.makerNotes.LensModel.description).to.equal('canon lens');
-                expect(tags.exif).to.equal(undefined);
-            });
-
-            it('should read composite without returning exif', async () => {
-                const tags = await createReader({formats: [jpeg], groups: [composite]}).load(getDataView(JPEG), {expanded: true});
-
-                expect(tags.exif).to.equal(undefined);
-                expect(Object.keys(tags).sort()).to.deep.equal(['file', 'jfif']);
-            });
-
             it('should not add exif for a group that needs no Exif', async () => {
                 const tags = await createReader({formats: [jpeg], groups: [mpf]}).load(getDataView(JPEG), {expanded: true, includeOffsets: true});
 
                 expect(tags.metadataRange.blocks.map((block) => block.type)).to.deep.equal(['file', 'jfif']);
+            });
+
+            it('should read what Exif carries for each group that needs it, as the default entry does', async () => {
+                const bytes = getDataView(getJpeg(getSof0Segment(), getJfifSegment(), getExifSegment(getTiff({
+                    ifd0: [
+                        ascii(TAG_MAKE, 'Canon'),
+                        undefinedBytes(TAG_IPTC_NAA, getIptcDatasets([headline('carried')])),
+                        byteValues(TAG_APPLICATION_NOTES, getXmpPacket({Title: 'carried'})),
+                        byteValues(TAG_IMAGE_SOURCE_DATA, 'x'),
+                        byteValues(TAG_PHOTOSHOP_SETTINGS, getPhotoshopResource(0x0bb7, 'path')),
+                        undefinedBytes(TAG_ICC_PROFILE, getIccProfile('CARR')),
+                    ],
+                    exifIfd: [rational(TAG_FOCAL_LENGTH, 50, 1), short(TAG_FOCAL_LENGTH_IN_35MM_FILM, 100), canonMakerNote([ascii(TAG_CANON_LENS_MODEL, 'canon lens')])],
+                    gpsIfd: [ascii(TAG_GPS_LATITUDE_REF, 'N'), rationals(TAG_GPS_LATITUDE, [[1, 1], [0, 1], [0, 1]])],
+                    thumbnail: {image: THUMBNAIL_IMAGE},
+                }))));
+                const domParser = new XmldomParser();
+
+                for (const group of [iptc, xmp, icc, photoshop, canon, makerNotes, gps, composite, thumbnail]) {
+                    const expected = await ExifReader.load(bytes, {async: true, expanded: true, domParser, includeTags: {[group.key]: true, file: true, jfif: true}});
+
+                    const tags = await createReader({formats: [jpeg], groups: [group], domParser}).load(bytes, {expanded: true});
+
+                    expect(tags[group.key === 'thumbnail' ? 'Thumbnail' : group.key], group.key).to.not.equal(undefined);
+                    expect(tags, group.key).to.deep.equal(expected);
+                }
             });
 
             it('should list the parse-only Exif block in metadataRange', async () => {
@@ -1206,6 +1242,115 @@ describe('composable/core', () => {
 
                 expect(tags.metadataRange.blocks.map((block) => block.type)).to.deep.equal(['file', 'jfif', 'exif']);
             });
+        });
+
+        describe('the Exif a composition reads without exif composed', () => {
+            const TAG_UNKNOWN = 0x9999;
+            const TAG_EXPOSURE_TIME = 0x829a;
+            const TAG_GPS_UNKNOWN = 0x0050;
+            const TAG_INTEROPERABILITY_INDEX = 0x0001;
+            const XMP_PACKET = getXmpPacket({Title: 'xmp'});
+            const JPEG_WITH_EVERY_IFD = getJpeg(getSof0Segment(), getJfifSegment(), getExifSegment(getTiff({
+                ifd0: [ascii(TAG_MODEL, 'Model'), ascii(TAG_DATE_TIME, '2020:01:01 00:00:00'), byteValues(TAG_APPLICATION_NOTES, XMP_PACKET), short(TAG_UNKNOWN, 1)],
+                exifIfd: [rationals(TAG_EXPOSURE_TIME, [[1, 100]]), short(TAG_UNKNOWN, 2)],
+                gpsIfd: [ascii(TAG_GPS_LATITUDE_REF, 'N'), rationals(TAG_GPS_LATITUDE, [[1, 1], [0, 1], [0, 1]]), short(TAG_GPS_UNKNOWN, 3)],
+                interopIfd: [ascii(TAG_INTEROPERABILITY_INDEX, 'R98'), short(TAG_UNKNOWN, 4)],
+                thumbnail: {image: THUMBNAIL_IMAGE},
+            })));
+            const FILE_TAGS = {
+                'Bits Per Sample': {value: 8, description: '8'},
+                'Image Height': {value: 1, description: '1px'},
+                'Image Width': {value: 1, description: '1px'},
+                'Color Components': {value: 3, description: '3'},
+                'Subsampling': {value: [[1, 17, 0], [2, 17, 1], [3, 17, 1]], description: 'YCbCr4:4:4 (1 1)'},
+                'FileType': {value: 'jpeg', description: 'JPEG'},
+            };
+            const JFIF_TAGS = {
+                'JFIF Version': {value: 258, description: '1.2'},
+                'Resolution Unit': {value: 0, description: 'None'},
+                'XResolution': {value: 1, description: '1'},
+                'YResolution': {value: 1, description: '1'},
+                'JFIF Thumbnail Width': {value: 0, description: '0px'},
+                'JFIF Thumbnail Height': {value: 0, description: '0px'},
+            };
+            const DATE_TIME_TAG = {id: TAG_DATE_TIME, value: ['2020:01:01 00:00:00'], description: '2020:01:01 00:00:00'};
+            const XMP_TAGS = {
+                about: {value: '', attributes: {}, description: ''},
+                Title: {value: 'xmp', attributes: {}, description: 'xmp'},
+            };
+            const THUMBNAIL_TAGS = {
+                Compression: {id: 0x0103, value: 6, description: 6},
+                JPEGInterchangeFormat: {id: 0x0201, value: 506, description: 506},
+                JPEGInterchangeFormatLength: {id: 0x0202, value: 9, description: 9},
+                type: 'image/jpeg',
+                image: [0xff, 0xd8, 0x74, 0x68, 0x75, 0x6d, 0x62, 0xff, 0xd9],
+                base64: '/9h0aHVtYv/Z',
+            };
+            const CASES = [
+                {
+                    label: 'tags',
+                    tables: {tags: [DateTime]},
+                    flat: {DateTime: DATE_TIME_TAG},
+                    expanded: {exif: {DateTime: DATE_TIME_TAG}},
+                },
+                {
+                    label: 'gps',
+                    tables: {groups: [gps]},
+                    flat: {},
+                    expanded: {gps: {Latitude: 1}},
+                },
+                {
+                    label: 'xmp',
+                    tables: {groups: [xmp]},
+                    flat: XMP_TAGS,
+                    expanded: {xmp: Object.assign({_raw: XMP_PACKET}, XMP_TAGS)},
+                },
+                {
+                    label: 'thumbnail',
+                    tables: {groups: [thumbnail]},
+                    flat: {Thumbnail: THUMBNAIL_TAGS},
+                    expanded: {Thumbnail: THUMBNAIL_TAGS},
+                },
+                {
+                    label: 'tags and thumbnail',
+                    tables: {tags: [DateTime], groups: [thumbnail]},
+                    flat: {DateTime: DATE_TIME_TAG, Thumbnail: THUMBNAIL_TAGS},
+                    expanded: {exif: {DateTime: DATE_TIME_TAG}, Thumbnail: THUMBNAIL_TAGS},
+                },
+            ];
+            const domParser = new XmldomParser();
+
+            for (const {label, tables, flat, expanded} of CASES) {
+                it(`should read ${label} with or without includeUnknown and the tag filter`, async () => {
+                    for (const filter of [undefined, tagFilter]) {
+                        const reader = createReader(Object.assign({formats: [jpeg], tagFilter: filter, domParser}, tables));
+                        for (const includeUnknown of [false, true]) {
+                            const caseLabel = `${label} ${filter ? 'filtered' : ''} ${includeUnknown}`;
+                            const flatTags = await reader.load(getDataView(JPEG_WITH_EVERY_IFD), {includeUnknown, expanded: false});
+                            const expandedTags = await reader.load(getDataView(JPEG_WITH_EVERY_IFD), {includeUnknown, expanded: true});
+                            expect(getPlain(flatTags), caseLabel).to.deep.equal(Object.assign({}, FILE_TAGS, JFIF_TAGS, flat));
+                            expect(getPlain(expandedTags), caseLabel).to.deep.equal(Object.assign({file: FILE_TAGS, jfif: JFIF_TAGS}, expanded));
+                        }
+                    }
+                });
+            }
+
+            it('should describe each id of a descriptor of more than one id', async () => {
+                const reader = createReader({formats: [jpeg], tags: [WhiteBalance]});
+                const cases = [
+                    [ascii(WHITE_BALANCE_ALIAS_ID, 'As Shot'), {id: WHITE_BALANCE_ALIAS_ID, value: ['As Shot'], description: 'As Shot'}],
+                    [short(WHITE_BALANCE_ID, 1), {id: WHITE_BALANCE_ID, value: 1, description: 'Manual white balance'}],
+                ];
+                for (const [entry, expected] of cases) {
+                    const bytes = getDataView(getJpeg(getSof0Segment(), getExifSegment(getTiff({exifIfd: [entry]}))));
+                    expect((await reader.load(bytes, {expanded: false})).WhiteBalance, expected.description).to.deep.equal(expected);
+                    expect((await reader.load(bytes, {expanded: true})).exif.WhiteBalance, expected.description).to.deep.equal(expected);
+                }
+            });
+
+            function getPlain(tags) {
+                return JSON.parse(JSON.stringify(tags, (key, value) => (value instanceof ArrayBuffer ? Array.from(new Uint8Array(value)) : value)));
+            }
         });
 
         describe('excludeTags', () => {
@@ -1429,8 +1574,8 @@ describe('composable/core', () => {
                 {formats: allFormats, groups: allGroups},
                 {formats: FORMATS_BUT_XML, groups: [canon, pentax]},
                 {formats: allFormats, groups: allGroupsButExif},
-                {formats: FORMATS_BUT_XML, tags: [DATE_TIME]},
-                {formats: FORMATS_BUT_XML, tags: [{name: 'GPSLatitude', ids: [TAG_GPS_LATITUDE], group: 'exif'}]},
+                {formats: FORMATS_BUT_XML, tags: [DateTime]},
+                {formats: FORMATS_BUT_XML, tags: [GPSLatitude]},
             ].concat([exif, iptc, xmp, icc, photoshop, mpf, canon, pentax, makerNotes, gps, composite, thumbnail].map((group) => ({formats: FORMATS_BUT_XML, groups: [group]})));
             const images = [['Canon maker note', getBytes(JPEG)]].concat(['test.jpg', 'test-iptc.jpg', 'test.png', 'test.tiff', 'test.heic', 'test.avif', 'test.jxl', 'test.gif']
                 .map((fileName) => [fileName, fs.readFileSync(path.join(IMAGES_PATH, fileName))]));

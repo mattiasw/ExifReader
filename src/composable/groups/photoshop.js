@@ -4,7 +4,6 @@
 
 import PhotoshopTags from '../../photoshop-tags.js';
 import {parsedTags, getEmbeddableMergeDescriptor} from '../group-helpers.js';
-import {PHOTOSHOP_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const photoshop = {
@@ -13,6 +12,5 @@ export const photoshop = {
     emits: [],
     read: (block, ctx) => parsedTags('photoshop', PhotoshopTags.read(block.value, ctx.options.includeUnknown, ctx.tagFilter), ctx),
     merge: (block) => getEmbeddableMergeDescriptor(block, 'photoshop', 'carriedPhotoshop'),
-    exifDependencies: PHOTOSHOP_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };

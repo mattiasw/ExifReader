@@ -31,6 +31,7 @@ const ExifReader = require('../../src/exif-reader.js');
 const {createReader, tagFilter} = require('../../src/composable/core.js');
 const Formats = require('../../src/composable/formats.js');
 const Groups = require('../../src/composable/groups.js');
+const {DateTimeOriginal} = require('../../src/composable/tags/exif.js');
 const IptcTagNames = require('../../src/iptc-tag-names.js').default;
 
 const IMAGES_PATH = path.join(__dirname, '..', 'fixtures', 'images');
@@ -84,15 +85,13 @@ const COMPOSITIONS = getSingleGroupCompositions().concat([
     {name: 'pentax alone', formats: ALL_FORMATS_BUT_XML, groups: [Groups.pentax], excludeTags: [{exif: ['MakerNote']}], onlyWithout: 'canon'},
 ]).map(withReader);
 
-const DATE_TIME_ORIGINAL = {name: 'DateTimeOriginal', ids: [0x9003], group: 'exif'};
-
 describe('composable reader against the default entry', function () {
     this.timeout(60000);
 
     const images = fs.readdirSync(IMAGES_PATH).sort();
     const allReader = createReader({formats: Formats.allFormats, groups: Groups.allGroups, domParser});
     const filteredAllReader = createReader({formats: Formats.allFormats, groups: Groups.allGroups, tagFilter, domParser});
-    const tagReader = createReader({formats: ALL_FORMATS_BUT_XML, tags: [DATE_TIME_ORIGINAL], domParser});
+    const tagReader = createReader({formats: ALL_FORMATS_BUT_XML, tags: [DateTimeOriginal], domParser});
     const readerWithMakerNotesOf = {
         canon: createReader({formats: ALL_FORMATS_BUT_XML, groups: [Groups.canon], domParser}),
         pentax: createReader({formats: ALL_FORMATS_BUT_XML, groups: [Groups.pentax], domParser}),

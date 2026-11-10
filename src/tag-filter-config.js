@@ -49,47 +49,37 @@ function getIdLookup(idRanges) {
     return lookup;
 }
 
-export const THUMBNAIL_EXIF_DEPENDENCY_TAGS = [
-    'JPEGInterchangeFormat',
-    'JPEGInterchangeFormatLength',
-];
-export const IPTC_EXIF_DEPENDENCY_TAGS = ['IPTC-NAA'];
-export const XMP_EXIF_DEPENDENCY_TAGS = ['ApplicationNotes'];
-export const ICC_EXIF_DEPENDENCY_TAGS = ['ICC_Profile'];
-export const PHOTOSHOP_EXIF_DEPENDENCY_TAGS = ['ImageSourceData', 'PhotoshopSettings'];
-export const MAKER_NOTES_EXIF_DEPENDENCY_TAGS = ['MakerNote', 'Make'];
-export const GPS_EXIF_DEPENDENCY_TAGS = [
-    'GPSLatitude',
-    'GPSLatitudeRef',
-    'GPSLongitude',
-    'GPSLongitudeRef',
-    'GPSAltitude',
-    'GPSAltitudeRef',
-];
-
 export const EXIF_DEPENDENCY_TAGS = {
-    thumbnail: THUMBNAIL_EXIF_DEPENDENCY_TAGS,
-    iptc: IPTC_EXIF_DEPENDENCY_TAGS,
-    xmp: XMP_EXIF_DEPENDENCY_TAGS,
-    icc: ICC_EXIF_DEPENDENCY_TAGS,
-    photoshop: PHOTOSHOP_EXIF_DEPENDENCY_TAGS,
-    makerNotes: MAKER_NOTES_EXIF_DEPENDENCY_TAGS,
-    gps: GPS_EXIF_DEPENDENCY_TAGS,
+    thumbnail: [
+        'JPEGInterchangeFormat',
+        'JPEGInterchangeFormatLength',
+    ],
+    iptc: ['IPTC-NAA'],
+    xmp: ['ApplicationNotes'],
+    icc: ['ICC_Profile'],
+    photoshop: ['ImageSourceData', 'PhotoshopSettings'],
+    makerNotes: ['MakerNote', 'Make'],
+    gps: [
+        'GPSLatitude',
+        'GPSLatitudeRef',
+        'GPSLongitude',
+        'GPSLongitudeRef',
+        'GPSAltitude',
+        'GPSAltitudeRef',
+    ],
 };
-
-export const COMPOSITE_EXIF_DEPENDENCY_TAGS = [
-    'FocalLength',
-    'FocalPlaneXResolution',
-    'FocalPlaneYResolution',
-    'FocalPlaneResolutionUnit',
-    'FocalLengthIn35mmFilm',
-    'PixelXDimension',
-    'PixelYDimension',
-];
 
 export const COMPOSITE_DEPENDENCY_TAGS = {
     file: ['Image Width', 'Image Height'],
-    exif: COMPOSITE_EXIF_DEPENDENCY_TAGS,
+    exif: [
+        'FocalLength',
+        'FocalPlaneXResolution',
+        'FocalPlaneYResolution',
+        'FocalPlaneResolutionUnit',
+        'FocalLengthIn35mmFilm',
+        'PixelXDimension',
+        'PixelYDimension',
+    ],
 };
 
 export function getExifTagDependenciesForInclude(includeTags) {

@@ -105,7 +105,8 @@ function getOutputs() {
                 ['exif', TagNamesExifIfd.default],
                 ['gps', TagNamesGpsIfd.default],
                 ['interoperability', TagNamesInteroperabilityIfd.default]
-            ]
+            ],
+            reader: {binding: 'exifBlockReader', file: '../exif-block-reader.js'}
         },
         {
             path: 'src/composable/tags/iptc.js',
@@ -127,14 +128,18 @@ function getModuleText(output, descriptors, descriptionExports) {
     assertNamesAreDeclaredOnce(output, descriptors, imports);
 
     const lines = MPL_HEADER.concat(['', GENERATED_LINE, '']);
-    if (imports.length > 0) {
-        lines.push(...imports.map(getImportText), '');
+    const importLines = imports.map(getImportText);
+    if (output.reader) {
+        importLines.push(`import {${output.reader.binding}} from '${output.reader.file}';`);
+    }
+    if (importLines.length > 0) {
+        lines.push(...importLines, '');
     }
     for (const descriptor of descriptors) {
         if (descriptor.isFirstOfDualName) {
             lines.push(DUAL_NAME_COMMENT);
         }
-        lines.push(getDescriptorText(descriptor, output.group));
+        lines.push(getDescriptorText(descriptor, output));
     }
     return lines.join('\n') + '\n';
 }
@@ -161,6 +166,7 @@ function getDescriptors(output) {
                         ids: [id],
                         dictionary,
                         description,
+                        describedIds: description ? [id] : [],
                         isFirstOfDualName: names.length > 1 && index === 0
                     };
                     descriptors.push(newDescriptor);
@@ -192,6 +198,9 @@ function addId(descriptor, id, dictionary, description) {
         throw new Error(`${describeTag(descriptor.name, id, dictionary)} has two different descriptions`);
     }
     descriptor.ids.push(id);
+    if (description) {
+        descriptor.describedIds.push(id);
+    }
     descriptor.description = descriptor.description || description;
 }
 
@@ -290,15 +299,23 @@ function getSpecifierText(specifier) {
     return `${specifier.importName} as ${specifier.localName}`;
 }
 
-function getDescriptorText(descriptor, group) {
+// describedIds only when some id's dictionary entry has no description, so a
+// reader built from the descriptors describes each id as its dictionary does.
+function getDescriptorText(descriptor, output) {
     const fields = [
         `name: ${getStringLiteral(descriptor.name)}`,
         `ids: [${descriptor.ids.map(getHex).join(', ')}]`,
-        `group: '${group}'`,
+        `group: '${output.group}'`,
         `dictionary: '${descriptor.dictionary}'`
     ];
     if (descriptor.description) {
         fields.push(`description: ${descriptor.reference}`);
+        if (descriptor.describedIds.length < descriptor.ids.length) {
+            fields.push(`describedIds: [${descriptor.describedIds.map(getHex).join(', ')}]`);
+        }
+    }
+    if (output.reader) {
+        fields.push(`reader: ${output.reader.binding}`);
     }
     return `export const ${descriptor.binding} = {${fields.join(', ')}};`;
 }

@@ -258,6 +258,7 @@ const UNPROBEABLE_REASONS = {
     'composition.js': COMPOSABLE_TABLE_MODULE,
     'composition-tag-filter.js': 'imported only by the composable entry point, so no custom build reaches it',
     'core.js': COMPOSABLE_ENTRY_MODULE,
+    'exif-block-reader.js': NO_UNIQUE_LITERAL,
     'exif.js': COMPOSABLE_TABLE_MODULE,
     'formats.js': COMPOSABLE_TABLE_MODULE,
     'gif.js': COMPOSABLE_TABLE_MODULE,

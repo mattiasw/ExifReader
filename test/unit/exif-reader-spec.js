@@ -18,8 +18,16 @@ import Composition from '../../src/composable/composition.js';
 import * as Formats from '../../src/composable/formats.js';
 import {jpegHeader} from '../../src/composable/formats/jpeg.js';
 import {pngHeader} from '../../src/composable/formats/png.js';
-import * as Groups from '../../src/composable/groups.js';
+import {exif as exifGroup} from '../../src/composable/groups/exif.js';
 import {iptc as iptcGroup} from '../../src/composable/groups/iptc.js';
+import {xmp as xmpGroup} from '../../src/composable/groups/xmp.js';
+import {icc as iccGroup} from '../../src/composable/groups/icc.js';
+import {mpf as mpfGroup} from '../../src/composable/groups/mpf.js';
+import {photoshop as photoshopGroup} from '../../src/composable/groups/photoshop.js';
+import {makerNotes as makerNotesGroup} from '../../src/composable/groups/maker-notes.js';
+import {thumbnail as thumbnailGroup} from '../../src/composable/groups/thumbnail.js';
+import {gps as gpsGroup} from '../../src/composable/groups/gps.js';
+import {composite as compositeGroup} from '../../src/composable/groups/composite.js';
 import Tags from '../../src/tags.js';
 import TagNames from '../../src/tag-names.js';
 import MpfTags from '../../src/mpf-tags.js';
@@ -4939,9 +4947,10 @@ describe('exif-reader', function () {
             expect(tables.formats.map((format) => format.header)).to.deep.equal(DEFAULT_HEADERS);
             const {tiff, heic, avif, jxl, webp, gif, xml} = Formats;
             expect(tables.formats.filter((format) => [tiff, heic, avif, jxl, webp, gif, xml].includes(format))).to.have.lengthOf(7);
-            const {exif, xmp, icc, mpf, photoshop, makerNotes, thumbnail, gps, composite} = Groups;
-            // groups.js has the iptc group of a composed reader; the default entry keeps the module's own.
-            expect(tables.groups).to.deep.equal([exif, iptcGroup, xmp, icc, mpf, photoshop, makerNotes, thumbnail, gps, composite]);
+            // The group modules' own objects, which carry no link to the Exif tag descriptors.
+            expect(tables.groups).to.have.ordered.members([
+                exifGroup, iptcGroup, xmpGroup, iccGroup, mpfGroup, photoshopGroup, makerNotesGroup, thumbnailGroup, gpsGroup, compositeGroup,
+            ]);
         });
 
         for (const flag of Object.keys(DROPPED_ENTRIES)) {

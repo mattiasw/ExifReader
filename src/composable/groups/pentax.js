@@ -5,7 +5,6 @@
 import {getStringValueFromArray} from '../../utils.js';
 import PentaxTags from '../../pentax-tags.js';
 import {getEmbeddableMergeDescriptor, readMakerNoteWithDecoders} from '../group-helpers.js';
-import {MAKER_NOTES_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const pentaxDecoder = {
@@ -21,7 +20,6 @@ export const pentax = {
     decoders: [pentaxDecoder],
     read: (block, ctx) => readMakerNoteWithDecoders(block, ctx, pentax.decoders),
     merge: (block) => getEmbeddableMergeDescriptor(block, 'makerNotes', 'carriedMakerNotes'),
-    exifDependencies: MAKER_NOTES_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };
 

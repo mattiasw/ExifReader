@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import Composition from './composition.js';
-import {exif} from './groups/exif.js';
 import {FORMAT_BRAND, GROUP_BRAND, FILTER_BRAND} from './brand.js';
 import {readView} from './read-view.js';
 import {createCompositionTagFilter} from './composition-tag-filter.js';
@@ -17,6 +16,7 @@ const GROUPS_IMPORT = '\'exifreader/groups\'';
 const TAGS_IMPORT = '\'exifreader/tags/exif\'';
 const CORE_IMPORT = '\'exifreader/core\'';
 const TABLE_KEYS = ['formats', 'groups', 'tags', 'tagFilter', 'domParser', 'decompress'];
+const EXIF_DICTIONARIES = ['0th', 'exif', 'gps', 'interoperability'];
 const DECOMPRESS_KEYS = ['brotli', 'deflate', 'maxDecompressedSize'];
 const BOOLEAN_OPTIONS = ['expanded', 'includeUnknown', 'computed', 'includeOffsets'];
 const SUPPORTED_OPTIONS = BOOLEAN_OPTIONS.concat(['includeTags', 'excludeTags']);
@@ -60,8 +60,9 @@ export function createReader(tables) {
 
     const composition = compose(formats, groups);
     const unsupportedFormatMessage = getUnsupportedFormatMessage(composition.formats);
-    const addsExif = needsExif(composition, tags) && composition.composed.groups.exif !== true;
-    const runComposition = addsExif ? compose(formats, groups.concat([exif])) : composition;
+    const exifDescriptors = tags.concat(getExifDependencies(groups));
+    const addsExif = needsExif(exifDescriptors) && composition.composed.groups.exif !== true;
+    const runComposition = addsExif ? compose(formats, groups.concat([getParseOnlyExifGroup(exifDescriptors, groups)])) : composition;
     const includeTagsMapping = getIncludeTagsMapping(composition, tags);
     const hasXmp = composition.composed.groups.xmp === true;
     const environments = getEnvironments(filter ? filter.createTagFilter : getCompositionTagFilterFactory(groups));
@@ -135,7 +136,10 @@ function isExifTagDescriptor(tag) {
         && Array.isArray(tag.ids)
         && tag.ids.length > 0
         && tag.ids.every((id) => typeof id === 'number')
-        && tag.group === 'exif';
+        && tag.group === 'exif'
+        && EXIF_DICTIONARIES.indexOf(tag.dictionary) !== -1
+        && !!tag.reader
+        && typeof tag.reader.createParseOnlyGroup === 'function';
 }
 
 function assertFilter(filter) {
@@ -201,12 +205,37 @@ function getUnsupportedFormatMessage(formats) {
     return 'reader.load: none of this reader\'s formats (' + names.join(', ') + ') recognizes the input: it is in another format or is not an image';
 }
 
-// The derived groups, the blocks Exif carries and the tag descriptors are all
-// read through the Exif group.
-function needsExif(composition, tags) {
-    return exif.emits.some((kind) => composition.composed.kinds[kind] === true)
-        || composition.derived.length > 0
-        || tags.length > 0;
+// From the groups as given: composing merges the maker-note groups into one
+// that carries no exifDependencies.
+function getExifDependencies(groups) {
+    let dependencies = [];
+    for (let i = 0; i < groups.length; i++) {
+        if (groups[i].exifDependencies !== undefined) {
+            dependencies = dependencies.concat(groups[i].exifDependencies);
+        }
+    }
+    return dependencies;
+}
+
+// The groups that consume a block Exif carries and the derived groups carry
+// Exif dependencies, so with the tag descriptors these are all that read Exif.
+function needsExif(exifDescriptors) {
+    return exifDescriptors.length > 0;
+}
+
+// Built by the reader the descriptors link to, so a bundle without one has no
+// Exif reading code.
+function getParseOnlyExifGroup(exifDescriptors, groups) {
+    return exifDescriptors[0].reader.createParseOnlyGroup(exifDescriptors, getIfd1TagNames(groups));
+}
+
+function getIfd1TagNames(groups) {
+    for (let i = 0; i < groups.length; i++) {
+        if (groups[i].ifd1TagNames !== undefined) {
+            return groups[i].ifd1TagNames;
+        }
+    }
+    return undefined;
 }
 
 // The includeTags config this reader stands for: every composed group whole,
@@ -239,20 +268,8 @@ function getEnvironments(createFilter) {
 // Without the tag filter a load passes no includeTags or excludeTags, so the
 // filter only ever sees the reader's own includeTags config.
 function getCompositionTagFilterFactory(groups) {
-    const exifDependencies = getExifDependencies(groups);
-    return ({includeTags}) => createCompositionTagFilter(includeTags, exifDependencies);
-}
-
-// From the groups as given: composing merges the maker-note groups into one
-// that carries no exifDependencies.
-function getExifDependencies(groups) {
-    let dependencies = [];
-    for (let i = 0; i < groups.length; i++) {
-        if (groups[i].exifDependencies !== undefined) {
-            dependencies = dependencies.concat(groups[i].exifDependencies);
-        }
-    }
-    return dependencies;
+    const exifDependencyNames = getNames(getExifDependencies(groups));
+    return ({includeTags}) => createCompositionTagFilter(includeTags, exifDependencyNames);
 }
 
 function getLoadOptions(options) {

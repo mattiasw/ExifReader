@@ -5,7 +5,6 @@
 import {getCompressionMethod} from '../../utils.js';
 import XmpTags from '../../xmp-tags.js';
 import {parsedTags, getBlockDataView, getBrobDataView, getEmbeddableMergeDescriptor} from '../group-helpers.js';
-import {XMP_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const xmp = {
@@ -15,7 +14,6 @@ export const xmp = {
     read: readXmpBlock,
     merge: getXmpMergeDescriptor,
     suppressions: [{kind: 'xmp', isSuppressed: isCarriedXmpSuppressed}],
-    exifDependencies: XMP_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };
 

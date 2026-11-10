@@ -91,11 +91,12 @@ function getConfig(formatKeys, groups, exifValue) {
     return config;
 }
 
+// The names of the groups' dependency descriptors, as createReader passes them.
 function getExifDependencies(groups) {
     let dependencies = [];
     for (const group of groups) {
         if (group.exifDependencies !== undefined) {
-            dependencies = dependencies.concat(group.exifDependencies);
+            dependencies = dependencies.concat(group.exifDependencies.map((descriptor) => descriptor.name));
         }
     }
     return dependencies;

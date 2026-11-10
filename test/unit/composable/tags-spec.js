@@ -6,6 +6,7 @@ import {expect} from 'chai';
 import {createReader} from '../../../src/composable/core.js';
 import * as ExifReader from '../../../src/exif-reader.js';
 import {jpeg} from '../../../src/composable/formats.js';
+import {exifBlockReader} from '../../../src/composable/exif-block-reader.js';
 import {getDataView} from '../test-utils.js';
 import {
     ascii,
@@ -19,6 +20,9 @@ import {
     TAG_MAKE,
     TAG_GPS_LATITUDE,
 } from '../loadview-inventory-images.js';
+import * as ExifTags from '../../../src/composable/tags/exif.js';
+import {ByLine} from '../../../src/composable/tags/iptc.js';
+import {MPFVersion} from '../../../src/composable/tags/mpf.js';
 
 const TAG_DATE_TIME = 0x0132;
 const TAG_RESOLUTION_UNIT = 0x0128;
@@ -39,10 +43,19 @@ const JPEG = getJpeg(
 
 describe('composable/tags', () => {
     describe('the generated exif descriptors', () => {
+        it('should each link to the one Exif block reader and name one of the four Exif dictionaries', () => {
+            const descriptors = Object.values(ExifTags);
+
+            expect(descriptors.length).to.be.above(0);
+            for (const descriptor of descriptors) {
+                expect(descriptor.reader, descriptor.name).to.equal(exifBlockReader);
+                expect(['0th', 'exif', 'gps', 'interoperability'], descriptor.name).to.include(descriptor.dictionary);
+            }
+        });
+
         for (const expanded of [false, true]) {
             it(`should load what includeTags on the default entry loads${expanded ? ', expanded' : ''}`, async () => {
-                const Tags = await import('../../../src/composable/tags/exif.js');
-                const reader = createReader({formats: [jpeg], tags: COMPOSED_NAMES.map((name) => Tags[name])});
+                const reader = createReader({formats: [jpeg], tags: COMPOSED_NAMES.map((name) => ExifTags[name])});
                 const expected = await ExifReader.load(getDataView(JPEG), {async: true, expanded, includeTags: {exif: COMPOSED_NAMES, file: true, jfif: true}});
 
                 const tags = await reader.load(getDataView(JPEG), {expanded});
@@ -58,10 +71,7 @@ describe('composable/tags', () => {
     });
 
     describe('the generated iptc and mpf descriptors', () => {
-        it('should be rejected by createReader', async () => {
-            const {ByLine} = await import('../../../src/composable/tags/iptc.js');
-            const {MPFVersion} = await import('../../../src/composable/tags/mpf.js');
-
+        it('should be rejected by createReader', () => {
             for (const tag of [ByLine, MPFVersion]) {
                 expect(() => createReader({formats: [jpeg], tags: [tag]}), tag.name)
                     .to.throw(TypeError, 'createReader: tags[0] is not a value imported from \'exifreader/tags/exif\'');

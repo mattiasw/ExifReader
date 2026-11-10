@@ -5,5 +5,6 @@
 // One Exif tag from JPEG, as createReader ships it.
 import {createReader} from '../../../src/composable/core.js';
 import {jpeg} from '../../../src/composable/formats.js';
+import {DateTime} from '../../../src/composable/tags/exif.js';
 
-export const reader = createReader({formats: [jpeg], tags: [{name: 'DateTime', ids: [0x0132], group: 'exif'}]});
+export const reader = createReader({formats: [jpeg], tags: [DateTime]});

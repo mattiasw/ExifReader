@@ -4,7 +4,6 @@
 
 import Thumbnail from '../../thumbnail.js';
 import {filterTagsForParse} from '../../tag-filter.js';
-import {THUMBNAIL_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const thumbnail = {
@@ -13,7 +12,6 @@ export const thumbnail = {
     emits: [],
     read: readThumbnailBlock,
     merge: (block) => ({slot: 'thumbnail', mode: 'thumbnailCandidate', rank: block.rank}),
-    exifDependencies: THUMBNAIL_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };
 

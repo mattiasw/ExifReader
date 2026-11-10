@@ -7,7 +7,6 @@ import IptcTags from '../../iptc-tags.js';
 import IptcTagNames from '../../iptc-tag-names.js';
 import {addDecompressedIptcAllowance} from '../../tags-helpers.js';
 import {parsedTags, getBlockDataView, getEmbeddableMergeDescriptor, isPngTextChunkBlock} from '../group-helpers.js';
-import {IPTC_EXIF_DEPENDENCY_TAGS} from '../../tag-filter-config.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const iptc = {
@@ -17,7 +16,6 @@ export const iptc = {
     read: readIptcBlock,
     merge: (block) => getEmbeddableMergeDescriptor(block, 'iptc', 'carriedIptc'),
     suppressions: [{kind: 'iptc', isSuppressed: isMainIptcSuppressed}],
-    exifDependencies: IPTC_EXIF_DEPENDENCY_TAGS,
     brand: GROUP_BRAND,
 };
 // A composed reader gets a repeatable dataset as an array; the default entry keeps iptc.
