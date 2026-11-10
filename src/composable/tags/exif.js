@@ -83,7 +83,30 @@ import {
     getEncodedString,
     getVersionString
 } from '../../tag-names-utils.js';
-import TagNamesCommon, {FocalLengthIn35mmFilm as FocalLengthIn35mmFilmDescription} from '../../tag-names-common.js';
+import {
+    getApertureValueDescription,
+    getColorSpaceDescription,
+    getComponentsConfigurationDescription,
+    getContrastDescription,
+    getCustomRenderedDescription,
+    getExposureModeDescription,
+    getExposureProgramDescription,
+    getExposureTimeDescription,
+    getFNumberDescription,
+    getFocalLengthDescription,
+    getFocalLengthIn35mmFilmDescription,
+    getFocalPlaneResolutionUnitDescription,
+    getLightSourceDescription,
+    getMeteringModeDescription,
+    getResolutionUnitDescription,
+    getSaturationDescription,
+    getSceneCaptureTypeDescription,
+    getSharpnessDescription,
+    getShutterSpeedValueDescription,
+    getWhiteBalanceDescription,
+    getXResolutionDescription,
+    getYResolutionDescription
+} from '../../tag-names-common.js';
 import {exifBlockReader} from '../exif-block-reader.js';
 
 export const ProcessingSoftware = {name: 'ProcessingSoftware', ids: [0x000b], group: 'exif', dictionary: '0th', reader: exifBlockReader};
@@ -109,14 +132,14 @@ export const RowsPerStrip = {name: 'RowsPerStrip', ids: [0x0116], group: 'exif',
 export const StripByteCounts = {name: 'StripByteCounts', ids: [0x0117], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const MinSampleValue = {name: 'MinSampleValue', ids: [0x0118], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const MaxSampleValue = {name: 'MaxSampleValue', ids: [0x0119], group: 'exif', dictionary: '0th', reader: exifBlockReader};
-export const XResolution = {name: 'XResolution', ids: [0x011a], group: 'exif', dictionary: '0th', description: TagNamesCommon.XResolution, reader: exifBlockReader};
-export const YResolution = {name: 'YResolution', ids: [0x011b], group: 'exif', dictionary: '0th', description: TagNamesCommon.YResolution, reader: exifBlockReader};
+export const XResolution = {name: 'XResolution', ids: [0x011a], group: 'exif', dictionary: '0th', description: getXResolutionDescription, reader: exifBlockReader};
+export const YResolution = {name: 'YResolution', ids: [0x011b], group: 'exif', dictionary: '0th', description: getYResolutionDescription, reader: exifBlockReader};
 export const PlanarConfiguration = {name: 'PlanarConfiguration', ids: [0x011c], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const PageName = {name: 'PageName', ids: [0x011d], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const XPosition = {name: 'XPosition', ids: [0x011e], group: 'exif', dictionary: '0th', description: getXPositionDescription, reader: exifBlockReader};
 export const YPosition = {name: 'YPosition', ids: [0x011f], group: 'exif', dictionary: '0th', description: getYPositionDescription, reader: exifBlockReader};
 export const GrayResponseUnit = {name: 'GrayResponseUnit', ids: [0x0122], group: 'exif', dictionary: '0th', description: getGrayResponseUnitDescription, reader: exifBlockReader};
-export const ResolutionUnit = {name: 'ResolutionUnit', ids: [0x0128], group: 'exif', dictionary: '0th', description: TagNamesCommon.ResolutionUnit, reader: exifBlockReader};
+export const ResolutionUnit = {name: 'ResolutionUnit', ids: [0x0128], group: 'exif', dictionary: '0th', description: getResolutionUnitDescription, reader: exifBlockReader};
 export const PageNumber = {name: 'PageNumber', ids: [0x0129], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const TransferFunction = {name: 'TransferFunction', ids: [0x012d], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const Software = {name: 'Software', ids: [0x0131], group: 'exif', dictionary: '0th', reader: exifBlockReader};
@@ -185,8 +208,8 @@ export const CameraSerialNumber = {name: 'CameraSerialNumber', ids: [0xc62f], gr
 export const DNGLensInfo = {name: 'DNGLensInfo', ids: [0xc630], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const ShadowScale = {name: 'ShadowScale', ids: [0xc633], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const MakerNoteSafety = {name: 'MakerNoteSafety', ids: [0xc635], group: 'exif', dictionary: '0th', description: getMakerNoteSafetyDescription, reader: exifBlockReader};
-export const CalibrationIlluminant1 = {name: 'CalibrationIlluminant1', ids: [0xc65a], group: 'exif', dictionary: '0th', description: TagNamesCommon.LightSource, reader: exifBlockReader};
-export const CalibrationIlluminant2 = {name: 'CalibrationIlluminant2', ids: [0xc65b], group: 'exif', dictionary: '0th', description: TagNamesCommon.LightSource, reader: exifBlockReader};
+export const CalibrationIlluminant1 = {name: 'CalibrationIlluminant1', ids: [0xc65a], group: 'exif', dictionary: '0th', description: getLightSourceDescription, reader: exifBlockReader};
+export const CalibrationIlluminant2 = {name: 'CalibrationIlluminant2', ids: [0xc65b], group: 'exif', dictionary: '0th', description: getLightSourceDescription, reader: exifBlockReader};
 export const RawDataUniqueID = {name: 'RawDataUniqueID', ids: [0xc65d], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const OriginalRawFileName = {name: 'OriginalRawFileName', ids: [0xc68b], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const OriginalRawFileData = {name: 'OriginalRawFileData', ids: [0xc68c], group: 'exif', dictionary: '0th', reader: exifBlockReader};
@@ -235,9 +258,9 @@ export const BaselineExposureOffset = {name: 'BaselineExposureOffset', ids: [0xc
 export const DefaultBlackRender = {name: 'DefaultBlackRender', ids: [0xc7a6], group: 'exif', dictionary: '0th', description: getDefaultBlackRenderDescription, reader: exifBlockReader};
 export const NewRawImageDigest = {name: 'NewRawImageDigest', ids: [0xc7a7], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const RawToPreviewGain = {name: 'RawToPreviewGain', ids: [0xc7a8], group: 'exif', dictionary: '0th', reader: exifBlockReader};
-export const ExposureTime = {name: 'ExposureTime', ids: [0x829a], group: 'exif', dictionary: 'exif', description: TagNamesCommon.ExposureTime, reader: exifBlockReader};
-export const FNumber = {name: 'FNumber', ids: [0x829d], group: 'exif', dictionary: 'exif', description: TagNamesCommon.FNumber, reader: exifBlockReader};
-export const ExposureProgram = {name: 'ExposureProgram', ids: [0x8822], group: 'exif', dictionary: 'exif', description: TagNamesCommon.ExposureProgram, reader: exifBlockReader};
+export const ExposureTime = {name: 'ExposureTime', ids: [0x829a], group: 'exif', dictionary: 'exif', description: getExposureTimeDescription, reader: exifBlockReader};
+export const FNumber = {name: 'FNumber', ids: [0x829d], group: 'exif', dictionary: 'exif', description: getFNumberDescription, reader: exifBlockReader};
+export const ExposureProgram = {name: 'ExposureProgram', ids: [0x8822], group: 'exif', dictionary: 'exif', description: getExposureProgramDescription, reader: exifBlockReader};
 export const SpectralSensitivity = {name: 'SpectralSensitivity', ids: [0x8824], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const ISOSpeedRatings = {name: 'ISOSpeedRatings', ids: [0x8827], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const OECF = {name: 'OECF', ids: [0x8828], group: 'exif', dictionary: 'exif', description: getOECFDescription, reader: exifBlockReader};
@@ -256,18 +279,18 @@ export const GooglePlusUploadCode = {name: 'GooglePlusUploadCode', ids: [0x9009]
 export const OffsetTime = {name: 'OffsetTime', ids: [0x9010], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const OffsetTimeOriginal = {name: 'OffsetTimeOriginal', ids: [0x9011], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const OffsetTimeDigitized = {name: 'OffsetTimeDigitized', ids: [0x9012], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
-export const ComponentsConfiguration = {name: 'ComponentsConfiguration', ids: [0x9101], group: 'exif', dictionary: 'exif', description: TagNamesCommon.ComponentsConfiguration, reader: exifBlockReader};
+export const ComponentsConfiguration = {name: 'ComponentsConfiguration', ids: [0x9101], group: 'exif', dictionary: 'exif', description: getComponentsConfigurationDescription, reader: exifBlockReader};
 export const CompressedBitsPerPixel = {name: 'CompressedBitsPerPixel', ids: [0x9102], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
-export const ShutterSpeedValue = {name: 'ShutterSpeedValue', ids: [0x9201], group: 'exif', dictionary: 'exif', description: TagNamesCommon.ShutterSpeedValue, reader: exifBlockReader};
-export const ApertureValue = {name: 'ApertureValue', ids: [0x9202], group: 'exif', dictionary: 'exif', description: TagNamesCommon.ApertureValue, reader: exifBlockReader};
+export const ShutterSpeedValue = {name: 'ShutterSpeedValue', ids: [0x9201], group: 'exif', dictionary: 'exif', description: getShutterSpeedValueDescription, reader: exifBlockReader};
+export const ApertureValue = {name: 'ApertureValue', ids: [0x9202], group: 'exif', dictionary: 'exif', description: getApertureValueDescription, reader: exifBlockReader};
 export const BrightnessValue = {name: 'BrightnessValue', ids: [0x9203], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const ExposureBiasValue = {name: 'ExposureBiasValue', ids: [0x9204], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const MaxApertureValue = {name: 'MaxApertureValue', ids: [0x9205], group: 'exif', dictionary: 'exif', description: getMaxApertureValueDescription, reader: exifBlockReader};
 export const SubjectDistance = {name: 'SubjectDistance', ids: [0x9206], group: 'exif', dictionary: 'exif', description: getSubjectDistanceDescription, reader: exifBlockReader};
-export const MeteringMode = {name: 'MeteringMode', ids: [0x9207], group: 'exif', dictionary: 'exif', description: TagNamesCommon.MeteringMode, reader: exifBlockReader};
-export const LightSource = {name: 'LightSource', ids: [0x9208], group: 'exif', dictionary: 'exif', description: TagNamesCommon.LightSource, reader: exifBlockReader};
+export const MeteringMode = {name: 'MeteringMode', ids: [0x9207], group: 'exif', dictionary: 'exif', description: getMeteringModeDescription, reader: exifBlockReader};
+export const LightSource = {name: 'LightSource', ids: [0x9208], group: 'exif', dictionary: 'exif', description: getLightSourceDescription, reader: exifBlockReader};
 export const Flash = {name: 'Flash', ids: [0x9209], group: 'exif', dictionary: 'exif', description: getFlashDescription, reader: exifBlockReader};
-export const FocalLength = {name: 'FocalLength', ids: [0x920a], group: 'exif', dictionary: 'exif', description: TagNamesCommon.FocalLength, reader: exifBlockReader};
+export const FocalLength = {name: 'FocalLength', ids: [0x920a], group: 'exif', dictionary: 'exif', description: getFocalLengthDescription, reader: exifBlockReader};
 export const ImageNumber = {name: 'ImageNumber', ids: [0x9211], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const SecurityClassification = {name: 'SecurityClassification', ids: [0x9212], group: 'exif', dictionary: 'exif', description: getSecurityClassificationDescription, reader: exifBlockReader};
 export const ImageHistory = {name: 'ImageHistory', ids: [0x9213], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
@@ -285,7 +308,7 @@ export const WaterDepth = {name: 'WaterDepth', ids: [0x9403], group: 'exif', dic
 export const Acceleration = {name: 'Acceleration', ids: [0x9404], group: 'exif', dictionary: 'exif', description: getAccelerationDescription, reader: exifBlockReader};
 export const CameraElevationAngle = {name: 'CameraElevationAngle', ids: [0x9405], group: 'exif', dictionary: 'exif', description: getCameraElevationAngleDescription, reader: exifBlockReader};
 export const FlashpixVersion = {name: 'FlashpixVersion', ids: [0xa000], group: 'exif', dictionary: 'exif', description: getVersionString, reader: exifBlockReader};
-export const ColorSpace = {name: 'ColorSpace', ids: [0xa001], group: 'exif', dictionary: 'exif', description: TagNamesCommon.ColorSpace, reader: exifBlockReader};
+export const ColorSpace = {name: 'ColorSpace', ids: [0xa001], group: 'exif', dictionary: 'exif', description: getColorSpaceDescription, reader: exifBlockReader};
 export const PixelXDimension = {name: 'PixelXDimension', ids: [0xa002], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const PixelYDimension = {name: 'PixelYDimension', ids: [0xa003], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const RelatedSoundFile = {name: 'RelatedSoundFile', ids: [0xa004], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
@@ -294,23 +317,23 @@ export const FlashEnergy = {name: 'FlashEnergy', ids: [0xa20b], group: 'exif', d
 export const SpatialFrequencyResponse = {name: 'SpatialFrequencyResponse', ids: [0xa20c], group: 'exif', dictionary: 'exif', description: getSpatialFrequencyResponseDescription, reader: exifBlockReader};
 export const FocalPlaneXResolution = {name: 'FocalPlaneXResolution', ids: [0xa20e], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const FocalPlaneYResolution = {name: 'FocalPlaneYResolution', ids: [0xa20f], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
-export const FocalPlaneResolutionUnit = {name: 'FocalPlaneResolutionUnit', ids: [0xa210], group: 'exif', dictionary: 'exif', description: TagNamesCommon.FocalPlaneResolutionUnit, reader: exifBlockReader};
+export const FocalPlaneResolutionUnit = {name: 'FocalPlaneResolutionUnit', ids: [0xa210], group: 'exif', dictionary: 'exif', description: getFocalPlaneResolutionUnitDescription, reader: exifBlockReader};
 export const SubjectLocation = {name: 'SubjectLocation', ids: [0xa214], group: 'exif', dictionary: 'exif', description: getSubjectLocationDescription, reader: exifBlockReader};
 export const ExposureIndex = {name: 'ExposureIndex', ids: [0xa215], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const SensingMethod = {name: 'SensingMethod', ids: [0xa217], group: 'exif', dictionary: 'exif', description: getSensingMethodDescription, reader: exifBlockReader};
 export const FileSource = {name: 'FileSource', ids: [0xa300], group: 'exif', dictionary: 'exif', description: getFileSourceDescription, reader: exifBlockReader};
 export const SceneType = {name: 'SceneType', ids: [0xa301], group: 'exif', dictionary: 'exif', description: getSceneTypeDescription, reader: exifBlockReader};
 export const CFAPattern = {name: 'CFAPattern', ids: [0xa302], group: 'exif', dictionary: 'exif', description: getCFAPatternDescription, reader: exifBlockReader};
-export const CustomRendered = {name: 'CustomRendered', ids: [0xa401], group: 'exif', dictionary: 'exif', description: TagNamesCommon.CustomRendered, reader: exifBlockReader};
-export const ExposureMode = {name: 'ExposureMode', ids: [0xa402], group: 'exif', dictionary: 'exif', description: TagNamesCommon.ExposureMode, reader: exifBlockReader};
-export const WhiteBalance = {name: 'WhiteBalance', ids: [0xa403, 0xfe4e], group: 'exif', dictionary: 'exif', description: TagNamesCommon.WhiteBalance, describedIds: [0xa403], reader: exifBlockReader};
+export const CustomRendered = {name: 'CustomRendered', ids: [0xa401], group: 'exif', dictionary: 'exif', description: getCustomRenderedDescription, reader: exifBlockReader};
+export const ExposureMode = {name: 'ExposureMode', ids: [0xa402], group: 'exif', dictionary: 'exif', description: getExposureModeDescription, reader: exifBlockReader};
+export const WhiteBalance = {name: 'WhiteBalance', ids: [0xa403, 0xfe4e], group: 'exif', dictionary: 'exif', description: getWhiteBalanceDescription, describedIds: [0xa403], reader: exifBlockReader};
 export const DigitalZoomRatio = {name: 'DigitalZoomRatio', ids: [0xa404], group: 'exif', dictionary: 'exif', description: getDigitalZoomRatioDescription, reader: exifBlockReader};
-export const FocalLengthIn35mmFilm = {name: 'FocalLengthIn35mmFilm', ids: [0xa405], group: 'exif', dictionary: 'exif', description: FocalLengthIn35mmFilmDescription, reader: exifBlockReader};
-export const SceneCaptureType = {name: 'SceneCaptureType', ids: [0xa406], group: 'exif', dictionary: 'exif', description: TagNamesCommon.SceneCaptureType, reader: exifBlockReader};
+export const FocalLengthIn35mmFilm = {name: 'FocalLengthIn35mmFilm', ids: [0xa405], group: 'exif', dictionary: 'exif', description: getFocalLengthIn35mmFilmDescription, reader: exifBlockReader};
+export const SceneCaptureType = {name: 'SceneCaptureType', ids: [0xa406], group: 'exif', dictionary: 'exif', description: getSceneCaptureTypeDescription, reader: exifBlockReader};
 export const GainControl = {name: 'GainControl', ids: [0xa407], group: 'exif', dictionary: 'exif', description: getGainControlDescription, reader: exifBlockReader};
-export const Contrast = {name: 'Contrast', ids: [0xa408, 0xfe54], group: 'exif', dictionary: 'exif', description: TagNamesCommon.Contrast, describedIds: [0xa408], reader: exifBlockReader};
-export const Saturation = {name: 'Saturation', ids: [0xa409, 0xfe55], group: 'exif', dictionary: 'exif', description: TagNamesCommon.Saturation, describedIds: [0xa409], reader: exifBlockReader};
-export const Sharpness = {name: 'Sharpness', ids: [0xa40a, 0xfe56], group: 'exif', dictionary: 'exif', description: TagNamesCommon.Sharpness, describedIds: [0xa40a], reader: exifBlockReader};
+export const Contrast = {name: 'Contrast', ids: [0xa408, 0xfe54], group: 'exif', dictionary: 'exif', description: getContrastDescription, describedIds: [0xa408], reader: exifBlockReader};
+export const Saturation = {name: 'Saturation', ids: [0xa409, 0xfe55], group: 'exif', dictionary: 'exif', description: getSaturationDescription, describedIds: [0xa409], reader: exifBlockReader};
+export const Sharpness = {name: 'Sharpness', ids: [0xa40a, 0xfe56], group: 'exif', dictionary: 'exif', description: getSharpnessDescription, describedIds: [0xa40a], reader: exifBlockReader};
 export const DeviceSettingDescription = {name: 'DeviceSettingDescription', ids: [0xa40b], group: 'exif', dictionary: 'exif', description: getDeviceSettingDescriptionDescription, reader: exifBlockReader};
 export const SubjectDistanceRange = {name: 'SubjectDistanceRange', ids: [0xa40c], group: 'exif', dictionary: 'exif', description: getSubjectDistanceRangeDescription, reader: exifBlockReader};
 export const ImageUniqueID = {name: 'ImageUniqueID', ids: [0xa420], group: 'exif', dictionary: 'exif', reader: exifBlockReader};

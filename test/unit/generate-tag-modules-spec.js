@@ -225,7 +225,7 @@ describe('generate-tag-modules', () => {
             expect(module.Contrast.describedIds).to.deep.equal([0xa408]);
             expect(module.Saturation.describedIds).to.deep.equal([0xa409]);
             expect(module.Sharpness.describedIds).to.deep.equal([0xa40a]);
-            expect(generateTagModules()[EXIF_PATH]).to.include('description: TagNamesCommon.WhiteBalance, describedIds: [0xa403], reader: exifBlockReader};');
+            expect(generateTagModules()[EXIF_PATH]).to.include('description: getWhiteBalanceDescription, describedIds: [0xa403], reader: exifBlockReader};');
         });
 
         it('should give a name with two ids both, with the description of the described one', async () => {
@@ -264,14 +264,13 @@ describe('generate-tag-modules', () => {
             expect(generateTagModules()[IPTC_PATH]).to.include(DUAL_NAME_COMMENT + '\nexport const ObjectDataPreviewFileFormat = ');
         });
 
-        it('should reference a description object member through the object and alias an import named as a tag', async () => {
-            const module = await importGenerated(EXIF_PATH);
-            const text = generateTagModules()[EXIF_PATH];
+        it('should write no default import and no reference to the tag-names-common.js default object', () => {
+            const modules = generateTagModules();
 
-            expect(module.XResolution.description === TagNamesCommon.XResolution).to.equal(true);
-            expect(text).to.include('import TagNamesCommon, {FocalLengthIn35mmFilm as FocalLengthIn35mmFilmDescription} from \'../../tag-names-common.js\';');
-            expect(text).to.include('description: TagNamesCommon.XResolution, reader: exifBlockReader};');
-            expect(text).to.include('description: FocalLengthIn35mmFilmDescription, reader: exifBlockReader};');
+            for (const relativePath of [EXIF_PATH, IPTC_PATH, MPF_PATH]) {
+                expect(modules[relativePath], relativePath).to.not.match(/^import \w+[ ,]/m);
+            }
+            expect(modules[EXIF_PATH]).to.not.include('TagNamesCommon');
         });
 
         it('should write a single import on one line and several one per line', () => {
@@ -293,7 +292,7 @@ describe('generate-tag-modules', () => {
                 0xfe4e: {name: 'WhiteBalance', description: TagNamesCommon.WhiteBalance}
             }));
 
-            expect(generateTagModules()[EXIF_PATH]).to.include('export const WhiteBalance = {name: \'WhiteBalance\', ids: [0xa403, 0xfe4e], group: \'exif\', dictionary: \'exif\', description: TagNamesCommon.WhiteBalance, describedIds: [0xfe4e], reader: exifBlockReader};\n');
+            expect(generateTagModules()[EXIF_PATH]).to.include('export const WhiteBalance = {name: \'WhiteBalance\', ids: [0xa403, 0xfe4e], group: \'exif\', dictionary: \'exif\', description: getWhiteBalanceDescription, describedIds: [0xfe4e], reader: exifBlockReader};\n');
         });
 
         it('should quote a name with a quote or a backslash', () => {
@@ -321,15 +320,9 @@ describe('generate-tag-modules', () => {
         });
 
         it('should throw for a name declared twice in one module', () => {
-            restores.push(swapProperties(TagNamesExifIfd, {[UNUSED_EXIF_ID]: 'FocalLengthIn35mmFilmDescription'}));
+            restores.push(swapProperties(TagNamesExifIfd, {[UNUSED_EXIF_ID]: 'Exif-IFD-Pointer'}));
 
-            expect(() => generateTagModules()).to.throw(/FocalLengthIn35mmFilmDescription is declared twice in src\/composable\/tags\/exif\.js/);
-        });
-
-        it('should throw for a tag named as the default import', () => {
-            restores.push(swapProperties(TagNamesExifIfd, {[UNUSED_EXIF_ID]: 'TagNamesCommon'}));
-
-            expect(() => generateTagModules()).to.throw(/TagNamesCommon is declared twice in src\/composable\/tags\/exif\.js/);
+            expect(() => generateTagModules()).to.throw(/ExifIFDPointer is declared twice in src\/composable\/tags\/exif\.js/);
         });
 
         it('should bind a tag named as the reader import under a capitalized name, apart from the import', () => {

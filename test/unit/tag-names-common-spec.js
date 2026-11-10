@@ -3,9 +3,19 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import TagNamesCommon from '../../src/tag-names-common.js';
+import TagNamesCommon, * as TagNamesCommonExports from '../../src/tag-names-common.js';
 
 describe('tag-names-common', () => {
+    it('should export every default object member as its named description function', () => {
+        const namedExports = Object.keys(TagNamesCommonExports).filter((name) => name !== 'default');
+
+        expect(namedExports.sort()).to.deep.equal(Object.keys(TagNamesCommon).map(getExportName).sort());
+        for (const name of Object.keys(TagNamesCommon)) {
+            expect(TagNamesCommon[name], name).to.be.a('function');
+            expect(TagNamesCommonExports[getExportName(name)] === TagNamesCommon[name], name).to.equal(true);
+        }
+    });
+
     it('should report correct values for LightSource', () => {
         expect(TagNamesCommon['LightSource'](1)).to.equal('Daylight');
         expect(TagNamesCommon['LightSource'](2)).to.equal('Fluorescent');
@@ -54,3 +64,7 @@ describe('tag-names-common', () => {
         });
     });
 });
+
+function getExportName(member) {
+    return 'get' + member + 'Description';
+}
