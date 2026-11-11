@@ -1,0 +1,24 @@
+{
+    "gzip": "gzip -9 -n (the gzip command), bytes",
+    "dist": {"version": "4.54.0", "raw": 156197, "gzip": 46919, "maxRatio": 1.04},
+    "consumers": {
+        "webpack": {
+            "composable-jpeg-datetime": 15104,
+            "composable-jpeg-datetime-filter": 16851,
+            "composable-jpeg-exif": 21240,
+            "composable-jpeg-floor": 12267,
+            "composable-tiff-floor": 9589,
+            "composable-tiff-gps": 13099,
+            "legacy-stock": 47389
+        },
+        "esbuild": {
+            "composable-jpeg-datetime": 15458,
+            "composable-jpeg-datetime-filter": 17294,
+            "composable-jpeg-exif": 21358,
+            "composable-jpeg-floor": 12736,
+            "composable-tiff-floor": 10444,
+            "composable-tiff-gps": 13393,
+            "legacy-stock": 48640
+        }
+    }
+}

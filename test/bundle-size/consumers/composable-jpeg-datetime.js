@@ -3,8 +3,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 // One Exif tag from JPEG, as createReader ships it.
-import {createReader} from '../../../src/composable/core.js';
-import {jpeg} from '../../../src/composable/formats.js';
-import {DateTime} from '../../../src/composable/tags/exif.js';
+import {createReader} from 'exifreader/core';
+import {jpeg} from 'exifreader/formats';
+import {DateTime} from 'exifreader/tags/exif';
 
 export const reader = createReader({formats: [jpeg], tags: [DateTime]});

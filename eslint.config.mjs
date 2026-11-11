@@ -3,6 +3,8 @@ import js from '@eslint/js';
 import globals from 'globals';
 import pluginCypress from 'eslint-plugin-cypress';
 
+const PROCESS_GLOBAL = {name: 'process', message: 'Reach process through globalThis.process.'};
+
 export default defineConfig([
     {
         ignores: ['**/dist/', '**/gh-pages/', 'coverage/', '.claude/'],
@@ -73,7 +75,18 @@ export default defineConfig([
         files: ['src/**/*.js'],
         rules: {
             // A free reference makes Parcel 2 and webpack 4 bundle a process polyfill into browser builds.
-            'no-restricted-globals': ['error', 'event', {name: 'process', message: 'Reach process through globalThis.process.'}],
+            // The same goes for Buffer on esm.sh and jsDelivr, which serve src/ one file at a time.
+            'no-restricted-globals': ['error', 'event', PROCESS_GLOBAL, {
+                name: 'Buffer',
+                message: 'A free Buffer makes esm.sh and jsDelivr add a buffer polyfill. Only the default-entry modules base64-image.js, file-loaders.js and load-auto.js may name it.',
+            }],
+        },
+    },
+    {
+        files: ['src/base64-image.js', 'src/file-loaders.js', 'src/load-auto.js'],
+        rules: {
+            // A later flat-config object replaces the rule's options, so these three are back to event and process only.
+            'no-restricted-globals': ['error', 'event', PROCESS_GLOBAL],
         },
     },
     {

@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 // No groups and no tags: the smallest TIFF reader createReader builds.
-import {createReader} from '../../../src/composable/core.js';
-import {tiff} from '../../../src/composable/formats.js';
+import {createReader} from 'exifreader/core';
+import {tiff} from 'exifreader/formats';
 
 export const reader = createReader({formats: [tiff]});

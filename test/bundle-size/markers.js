@@ -33,8 +33,8 @@ const MODULE_MARKERS = {
     'loadview-pipeline.js': 'mpfImage',
     'engine.js': 'The group emission graph has a cycle through ',
     'tag-filter-config.js': 'relatedimage',
-    // Quoted, since the data URI regex in file-loaders.js also holds the bare text.
-    'utils.js': '\';base64\'',
+    // getDataViewFromBytes's TypeError, which every build reaches through load.
+    'utils.js': 'Passed data type is unsupported.',
     'file-tags.js': 'Subsampling',
     'jfif-tags.js': 'JFIF Version',
     'png-file-tags.js': 'Grayscale with Alpha',
@@ -297,6 +297,7 @@ module.exports = {
     assertProbeTableIsConsistent,
     getModulesPresentIn,
     getUnaccountedModules,
+    bundleContains,
     checkBundle
 };
 

@@ -12,6 +12,7 @@ import {fileURLToPath} from 'node:url';
 import {expect} from 'chai';
 import {
     concatBuffers,
+    dataUriToBuffer,
     fetchRange,
     loadFile,
     loadFileObject,
@@ -1304,4 +1305,261 @@ describe('file-loaders', () => {
         };
         return {file, sliceCalls};
     }
+
+    describe('dataUriToBuffer', () => {
+        const ALL_BYTES = Array.from({length: 256}, (_, i) => i);
+        const ALL_BYTES_BASE64 = Buffer.from(ALL_BYTES).toString('base64');
+        const ALL_BYTES_ESCAPED = ALL_BYTES.map((byte) => `%${byte.toString(16).toUpperCase().padStart(2, '0')}`).join('');
+
+        function decodeWithAndWithoutBuffer(dataUri) {
+            const withBuffer = dataUriToBuffer(dataUri);
+            const restore = swapProperties(globalThis, {Buffer: undefined});
+            let withoutBuffer;
+            try {
+                withoutBuffer = dataUriToBuffer(dataUri);
+            } finally {
+                restore();
+            }
+            expect(withBuffer).to.be.an.instanceof(ArrayBuffer);
+            expect(withoutBuffer).to.be.an.instanceof(ArrayBuffer);
+            return [Array.from(new Uint8Array(withBuffer)), Array.from(new Uint8Array(withoutBuffer))];
+        }
+
+        function expectBothWays(dataUri, bytes) {
+            const [withBuffer, withoutBuffer] = decodeWithAndWithoutBuffer(dataUri);
+            expect(withBuffer, 'with Buffer').to.deep.equal(bytes);
+            expect(withoutBuffer, 'without Buffer').to.deep.equal(bytes);
+        }
+
+        function charCodes(string) {
+            return Array.from(string, (char) => char.charCodeAt(0));
+        }
+
+        it('should decode the payload as base64 when the header says so', () => {
+            const buffer = dataUriToBuffer('data:image/jpeg;base64,YWJj');
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal([0x61, 0x62, 0x63]);
+        });
+
+        it('should URL-decode a payload that contains ";base64" after the header', () => {
+            const buffer = dataUriToBuffer('data:,foo;base64,bar');
+
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(Array.from('foo;base64,bar', (char) => char.charCodeAt(0)));
+        });
+
+        it('should decode a base64 payload without a per-byte Uint8Array.from callback', () => {
+            const restore = swapProperties(Uint8Array, {
+                from() {
+                    throw new Error('Uint8Array.from');
+                }
+            });
+
+            let buffer;
+            try {
+                buffer = dataUriToBuffer(`data:image/jpeg;base64,${ALL_BYTES_BASE64}`);
+            } finally {
+                restore();
+            }
+            expect(buffer).to.be.an.instanceof(ArrayBuffer);
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal(ALL_BYTES);
+        });
+
+        it('should URL-decode a payload without Buffer or a per-byte Uint8Array.from callback', () => {
+            const restore = swapProperties(globalThis, {
+                Buffer: undefined
+            });
+            const restoreFrom = swapProperties(Uint8Array, {
+                from() {
+                    throw new Error('Uint8Array.from');
+                }
+            });
+
+            let utf8Buffer;
+            let allBytesBuffer;
+            try {
+                utf8Buffer = dataUriToBuffer('data:,a%20b%E2%82%AC');
+                allBytesBuffer = dataUriToBuffer(`data:,${ALL_BYTES_ESCAPED}`);
+            } finally {
+                restoreFrom();
+                restore();
+            }
+            expect(utf8Buffer).to.be.an.instanceof(ArrayBuffer);
+            expect(Array.from(new Uint8Array(utf8Buffer))).to.deep.equal([0x61, 0x20, 0x62, 0xe2, 0x82, 0xac]);
+            expect(allBytesBuffer).to.be.an.instanceof(ArrayBuffer);
+            expect(Array.from(new Uint8Array(allBytesBuffer))).to.deep.equal(ALL_BYTES);
+        });
+
+        it('should throw InvalidCharacterError for an invalid base64 payload', () => {
+            expect(() => dataUriToBuffer('data:image/jpeg;base64,!!!!')).to.throw().with.property('name', 'InvalidCharacterError');
+        });
+
+        it('should decode a percent escape of every byte value in upper and lower case', () => {
+            expectBothWays(`data:,${ALL_BYTES_ESCAPED}`, ALL_BYTES);
+            expectBothWays(`data:,${ALL_BYTES_ESCAPED.toLowerCase()}`, ALL_BYTES);
+        });
+
+        it('should keep a malformed percent escape as text', () => {
+            expectBothWays('data:,%', [0x25]);
+            expectBothWays('data:,a%2', [0x61, 0x25, 0x32]);
+            expectBothWays('data:,%%41', [0x25, 0x41]);
+            expectBothWays('data:,%G1', [0x25, 0x47, 0x31]);
+        });
+
+        it('should keep a percent sign followed by a sign, a space or a non-hex digit as text', () => {
+            expectBothWays('data:,%+1%-1% 1%4G', charCodes('%+1%-1% 1%4G'));
+        });
+
+        it('should decode a percent escape that ends the payload', () => {
+            expectBothWays('data:,a%41', [0x61, 0x41]);
+        });
+
+        it('should decode an empty payload to an empty ArrayBuffer', () => {
+            expectBothWays('data:,', []);
+        });
+
+        it('should UTF-8 encode literal non-ASCII characters in the payload', () => {
+            expectBothWays('data:,é', [0xc3, 0xa9]);
+            expectBothWays('data:,\u{1F600}', [0xf0, 0x9f, 0x98, 0x80]);
+            expectBothWays('data:,a%FFé\u{1F600}', [0x61, 0xff, 0xc3, 0xa9, 0xf0, 0x9f, 0x98, 0x80]);
+            expectBothWays('data:,\u0080', [0xc2, 0x80]);
+            expectBothWays('data:,\uffff', [0xef, 0xbf, 0xbf]);
+        });
+
+        it('should throw URIError for a lone surrogate in the payload', () => {
+            expect(() => dataUriToBuffer('data:,\ud800')).to.throw(URIError);
+        });
+
+        it('should not UTF-8 encode an ASCII payload', () => {
+            const restore = swapProperties(globalThis, {
+                encodeURIComponent() {
+                    throw new Error('encodeURIComponent');
+                }
+            });
+
+            let buffer;
+            try {
+                buffer = dataUriToBuffer('data:,a%20b');
+            } finally {
+                restore();
+            }
+            expect(Array.from(new Uint8Array(buffer))).to.deep.equal([0x61, 0x20, 0x62]);
+        });
+
+        describe('with a percent-encoded base64 payload', () => {
+            const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+            const PNG_SIGNATURE_URI = 'data:image/png;base64,iVBORw0KGgo%3D';
+            const RealBuffer = globalThis.Buffer;
+
+            function decodeWithBufferFrom(dataUri) {
+                const restore = swapProperties(globalThis, {atob: undefined});
+                try {
+                    return dataUriToBuffer(dataUri);
+                } finally {
+                    restore();
+                }
+            }
+
+            function decodeWithLegacyBuffer(dataUri) {
+                function LegacyBuffer(data, encoding) {
+                    return RealBuffer.from(data, encoding);
+                }
+                const restore = swapProperties(globalThis, {atob: undefined, Buffer: LegacyBuffer});
+                try {
+                    return dataUriToBuffer(dataUri);
+                } finally {
+                    restore();
+                }
+            }
+
+            it('should percent-decode the payload before decoding it as base64', () => {
+                const buffer = dataUriToBuffer(PNG_SIGNATURE_URI);
+
+                expect(buffer).to.be.an.instanceof(ArrayBuffer);
+                expect(Array.from(new Uint8Array(buffer))).to.deep.equal(PNG_SIGNATURE);
+            });
+
+            it('should percent-decode the payload without atob', () => {
+                const buffer = decodeWithBufferFrom(PNG_SIGNATURE_URI);
+
+                expect(RealBuffer.isBuffer(buffer)).to.equal(true);
+                expect(Array.from(buffer)).to.deep.equal(PNG_SIGNATURE);
+            });
+
+            it('should percent-decode the payload with a Buffer that has no Buffer.from', () => {
+                const buffer = decodeWithLegacyBuffer(PNG_SIGNATURE_URI);
+
+                expect(RealBuffer.isBuffer(buffer)).to.equal(true);
+                expect(Array.from(buffer)).to.deep.equal(PNG_SIGNATURE);
+            });
+
+            it('should prefer Buffer.from over the deprecated Buffer constructor', () => {
+                function BufferWithFrom() {
+                    throw new Error('new Buffer');
+                }
+                BufferWithFrom.from = (data, encoding) => RealBuffer.from(data, encoding);
+                const restore = swapProperties(globalThis, {atob: undefined, Buffer: BufferWithFrom});
+                let buffer;
+                try {
+                    buffer = dataUriToBuffer(PNG_SIGNATURE_URI);
+                } finally {
+                    restore();
+                }
+
+                expect(Array.from(buffer)).to.deep.equal(PNG_SIGNATURE);
+            });
+
+            it('should decode escaped base64 symbols in upper and lower case', () => {
+                const upperCaseUri = `data:image/jpeg;base64,${ALL_BYTES_BASE64.replace(/\+/g, '%2B').replace(/\//g, '%2F').replace(/=/g, '%3D')}`;
+                const lowerCaseUri = upperCaseUri.replace(/%2B/g, '%2b').replace(/%2F/g, '%2f').replace(/%3D/g, '%3d');
+
+                expect(Array.from(new Uint8Array(dataUriToBuffer(upperCaseUri)))).to.deep.equal(ALL_BYTES);
+                expect(Array.from(new Uint8Array(dataUriToBuffer(lowerCaseUri)))).to.deep.equal(ALL_BYTES);
+                expect(Array.from(decodeWithBufferFrom(upperCaseUri))).to.deep.equal(ALL_BYTES);
+                expect(Array.from(decodeWithLegacyBuffer(lowerCaseUri))).to.deep.equal(ALL_BYTES);
+            });
+
+            it('should decode a payload where every character is escaped', () => {
+                const buffer = dataUriToBuffer('data:image/jpeg;base64,%59%57%4A%6A');
+
+                expect(Array.from(new Uint8Array(buffer))).to.deep.equal([0x61, 0x62, 0x63]);
+            });
+
+            it('should throw InvalidCharacterError when the percent-decoded payload is not base64', () => {
+                expect(() => dataUriToBuffer('data:image/jpeg;base64,YWJj%FF')).to.throw().with.property('name', 'InvalidCharacterError');
+                expect(() => dataUriToBuffer('data:image/jpeg;base64,YWJj%')).to.throw().with.property('name', 'InvalidCharacterError');
+                expect(() => dataUriToBuffer('data:image/jpeg;base64,YW%G1')).to.throw().with.property('name', 'InvalidCharacterError');
+            });
+
+            it('should throw InvalidCharacterError, not URIError, for a payload with a percent sign and a lone surrogate', () => {
+                expect(() => dataUriToBuffer('data:image/png;base64,YWJj%3D\ud800')).to.throw().with.property('name', 'InvalidCharacterError');
+            });
+
+            it('should return undefined without atob and Buffer for a payload with a percent sign and a lone surrogate', () => {
+                const restore = swapProperties(globalThis, {atob: undefined, Buffer: undefined});
+                let result = null;
+                try {
+                    result = dataUriToBuffer('data:image/png;base64,YWJj%3D\ud800');
+                } finally {
+                    restore();
+                }
+                expect(result).to.equal(undefined);
+            });
+
+            it('should not percent-decode a payload without a percent sign', () => {
+                const restore = swapProperties(String, {
+                    fromCharCode() {
+                        throw new Error('String.fromCharCode');
+                    }
+                });
+
+                let buffer;
+                try {
+                    buffer = dataUriToBuffer(`data:image/jpeg;base64,${ALL_BYTES_BASE64}`);
+                } finally {
+                    restore();
+                }
+                expect(Array.from(new Uint8Array(buffer))).to.deep.equal(ALL_BYTES);
+            });
+        });
+    });
 });
