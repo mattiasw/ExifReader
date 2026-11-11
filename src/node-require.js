@@ -35,16 +35,29 @@ function optionalPackage(name) {
 // A loader throws where its mechanism is missing (no process, no
 // getBuiltinModule, no mainModule), which moves on to the next one. process is
 // never named as a free variable: Parcel 2 and webpack 4 would then bundle a
-// process polyfill into browser builds of the source.
+// process polyfill into browser builds of the source. The empty object a
+// bundler gives for a module the browser field maps to false also moves on.
 function firstLoaded(name, loaders) {
     for (let i = 0; i < loaders.length; i++) {
         try {
-            return loaders[i](name);
+            const loaded = loaders[i](name);
+            if (!isEmptyStub(loaded)) {
+                return loaded;
+            }
         } catch (error) {
             // Try the next loader.
         }
     }
     return undefined;
+}
+
+// Not typeof 'object': Babel would inline its _typeof helper into this module for that.
+function isEmptyStub(loaded) {
+    if (Object(loaded) !== loaded) {
+        return false;
+    }
+    const prototype = Object.getPrototypeOf(loaded);
+    return (prototype === Object.prototype || prototype === null) && Object.keys(loaded).length === 0;
 }
 
 // Literal names make webpack emit require('fs') and so on, which bundlers and

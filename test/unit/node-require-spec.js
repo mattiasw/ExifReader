@@ -76,6 +76,40 @@ describe('node-require', () => {
             expect(result).to.equal(undefined);
         });
 
+        it('falls through to process.getBuiltinModule when __non_webpack_require__ gives a bundler\'s empty stub', () => {
+            swapWebpackRequire(() => ({}));
+            swap(process, {getBuiltinModule: (name) => (name === 'fs' ? SENTINEL : undefined)});
+
+            expect(NodeRequire.builtin('fs')).to.equal(SENTINEL);
+        });
+
+        it('returns undefined for a bundler\'s empty stub when there is no process', () => {
+            const result = callWithoutProcess(() => NodeRequire.builtin('fs'), () => ({}));
+
+            expect(result).to.equal(undefined);
+        });
+
+        it('falls through when __non_webpack_require__ gives an empty object without a prototype', () => {
+            swapWebpackRequire(() => Object.create(null));
+            swap(process, {getBuiltinModule: (name) => (name === 'fs' ? SENTINEL : undefined)});
+
+            expect(NodeRequire.builtin('fs')).to.equal(SENTINEL);
+        });
+
+        it('returns a module whose functions sit on its prototype', () => {
+            const moduleWithPrototype = Object.create({open: () => SENTINEL});
+            swapWebpackRequire(() => moduleWithPrototype);
+
+            expect(NodeRequire.builtin('fs')).to.equal(moduleWithPrototype);
+        });
+
+        it('returns undefined from __non_webpack_require__ without trying the next loader', () => {
+            swapWebpackRequire(() => undefined);
+            swap(process, {getBuiltinModule: () => SENTINEL});
+
+            expect(NodeRequire.builtin('fs')).to.equal(undefined);
+        });
+
         function createFakeMainModule() {
             const mainModule = {
                 require(name) {
@@ -126,8 +160,8 @@ describe('node-require', () => {
 });
 
 // Mocha itself needs process, so it is restored before anything else runs.
-function callWithoutProcess(callback) {
-    const restoreWebpackRequire = swapProperties(globalThis, {__non_webpack_require__: undefined});
+function callWithoutProcess(callback, webpackRequire) {
+    const restoreWebpackRequire = swapProperties(globalThis, {__non_webpack_require__: webpackRequire});
     const restoreProcess = swapProperties(globalThis, {process: undefined});
     try {
         return callback();
