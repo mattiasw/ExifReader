@@ -82,8 +82,6 @@ const DIST_NODE_MODULES = ['fs', 'http', 'https', '@xmldom/xmldom', '@xmldom/xml
 const OPTIONAL_PACKAGE = '@xmldom/xmldom';
 const BUNDLE_SPECIFIERS = ['exifreader', 'exifreader/dist/exif-reader.js'];
 const WEB_BUNDLE_SPECIFIER = 'exifreader/dist/exif-reader.js';
-// As in 4.49.0, the dist requires http and https with no try, so a web build stubs them.
-const WEB_FALLBACKS = {http: false, https: false};
 
 const TYPE_CONSUMERS_PATH = path.join(ROOT_PATH, 'test', 'types', 'packed');
 const TYPE_CONSUMER_FILES = ['consumer.ts', 'consumer.mts', 'composable.mts'];
@@ -138,6 +136,11 @@ describe('packaging', function () {
     it('declares src as side-effect-free ES modules and nothing else', () => {
         const content = JSON.parse(fs.readFileSync(path.join(ROOT_PATH, 'src', 'package.json'), 'utf8'));
         expect(content).to.deep.equal({type: 'module', sideEffects: false});
+    });
+
+    it('maps only fs, http and https to false for browser builds', () => {
+        const manifest = JSON.parse(fs.readFileSync(path.join(installedDir, 'package.json'), 'utf8'));
+        expect(manifest.browser).to.deep.equal({fs: false, http: false, https: false});
     });
 
     describe('under require', () => {
@@ -404,7 +407,7 @@ describe('packaging', function () {
             });
         });
 
-        it(`builds an import of ${WEB_BUNDLE_SPECIFIER} for the web without errors when only http and https are stubbed`, async () => {
+        it(`builds an import of ${WEB_BUNDLE_SPECIFIER} for the web without stubs and with no resolve problem for fs, http or https`, async () => {
             const entry = path.join(bundleDir, 'entry-web.js');
             fs.writeFileSync(entry, `import ExifReader from '${WEB_BUNDLE_SPECIFIER}';\nexport default ExifReader.load;\n`);
 
@@ -412,12 +415,16 @@ describe('packaging', function () {
                 context: bundleDir,
                 target: 'web',
                 entry,
-                outputPath: path.join(bundleDir, 'out-web'),
-                resolveOptions: {fallback: WEB_FALLBACKS}
+                outputPath: path.join(bundleDir, 'out-web')
             });
 
-            const errors = stats.toJson({all: false, errors: true}).errors.map((error) => error.message);
-            expect(errors, errors.join('\n')).to.deep.equal([]);
+            const {errors, warnings} = stats.toJson({all: false, errors: true, warnings: true});
+            const errorMessages = errors.map((error) => error.message);
+            expect(errorMessages, errorMessages.join('\n')).to.deep.equal([]);
+            const nodeModuleWarnings = warnings
+                .map((warning) => warning.message)
+                .filter((message) => /Can't resolve '(fs|http|https)'/.test(message));
+            expect(nodeModuleWarnings, nodeModuleWarnings.join('\n')).to.deep.equal([]);
         });
     });
 
@@ -653,15 +660,14 @@ function toForwardSlashes(filePath) {
     return filePath.replace(/\\/g, '/');
 }
 
-function bundleWithWebpack({context, target, entry, outputPath, resolveOptions = {}}) {
+function bundleWithWebpack({context, target, entry, outputPath}) {
     const compiler = webpack({
         context,
         mode: 'production',
         target,
         entry,
         output: {path: outputPath},
-        optimization: {minimize: false},
-        resolve: resolveOptions
+        optimization: {minimize: false}
     });
     return new Promise((resolve, reject) => {
         compiler.run((runError, stats) => {

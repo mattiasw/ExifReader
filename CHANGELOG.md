@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the Babel tag filter (`bin/TagFilterPlugin.js`). `npx exifreader build`
   now prints a pointer to the composable API.
 
+### Fixed
+
+- Bundling `exifreader/dist/exif-reader.js` for the browser with webpack 5 no
+  longer fails on `http` and `https`: `package.json` now maps `fs`, `http` and
+  `https` to `false` for browser builds.
+
 ## [4.54.0] - 2026-11-03
 
 ### Changed

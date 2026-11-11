@@ -1167,6 +1167,19 @@ not the source code. That means it's not possible to use the ES module (from the
 `src` folder) or any tree shaking to get the benefit of a custom build. Tree
 shaking has close to no effect on a custom build, so don't rely on it.
 
+Which file a plain `import ExifReader from 'exifreader'` or
+`require('exifreader')` resolves to depends on the tool:
+
+- `dist/exif-reader.js`, which picks up a custom build: Node, Bun, Deno, React
+  Native's Metro (native platforms), webpack with `target: 'node'` and esbuild
+  with `platform: 'node'`.
+- `src/exif-reader.js`, which never picks up a custom build: webpack 5, Vite,
+  Parcel 2 and Metro when they build for the web, Rollup with
+  `@rollup/plugin-node-resolve` and esbuild with `platform: 'browser'`.
+
+If you bundle for the browser and use a custom build, import the built file
+directly: `import ExifReader from 'exifreader/dist/exif-reader';`.
+
 This is for npm and yarn users that use the built file. To specify what
 functionality you want you can either use include pattern (start with an empty
 set and include) or exclude pattern (start with full functionality and exclude).
