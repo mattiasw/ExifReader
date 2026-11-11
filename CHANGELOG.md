@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `exifreader/dist/exif-reader.js`, the import the README gives for a
   custom build in a browser bundle. A `strict` project failed on it with
   TS7016.
+- TypeScript now finds the type definitions for `exifreader/src/exif-reader`,
+  `exifreader/src/exif-reader.js` and the
+  `./node_modules/exifreader/src/exif-reader.js` import the README gives for
+  React Native. A `strict` project failed on them with TS7016.
 
 ## [4.54.0] - 2026-11-03
 

@@ -84,8 +84,9 @@ const BUNDLE_SPECIFIERS = ['exifreader', 'exifreader/dist/exif-reader.js'];
 const WEB_BUNDLE_SPECIFIER = 'exifreader/dist/exif-reader.js';
 
 const TYPE_CONSUMERS_PATH = path.join(ROOT_PATH, 'test', 'types', 'packed');
-const TYPE_CONSUMER_FILES = ['consumer.ts', 'consumer.mts', 'composable.mts', 'dist.ts'];
+const TYPE_CONSUMER_FILES = ['consumer.ts', 'consumer.mts', 'composable.mts', 'dist.ts', 'src-entry.mts'];
 const NO_NODE_TYPES_CONSUMER_FILE = 'no-node-types.mts';
+const SRC_ENTRY_TYPE_FILE = 'src/exif-reader.d.ts';
 const TSC_PATH = path.join(ROOT_PATH, 'node_modules', 'typescript', 'bin', 'tsc');
 const TYPE_MODES = [
     {moduleResolution: 'bundler', module: 'esnext'},
@@ -119,6 +120,10 @@ describe('packaging', function () {
 
     it('ships the type definitions and the generated tag modules of the subpaths', () => {
         expect(packedFiles).to.include.members([...SUBPATH_TYPE_FILES, ...TAG_MODULE_FILES]);
+    });
+
+    it('ships the type definitions of the src entry', () => {
+        expect(packedFiles).to.include(SRC_ENTRY_TYPE_FILE);
     });
 
     it('ships a dist without webpack\'s __non_webpack_require__', () => {
@@ -333,7 +338,7 @@ describe('packaging', function () {
         });
 
         TYPE_MODES.forEach(({moduleResolution, module}) => {
-            it(`type-checks every consumer against exif-reader.d.ts, the dist entry and the subpath type definitions under moduleResolution ${moduleResolution}`, () => {
+            it(`type-checks every consumer against exif-reader.d.ts, the dist entry, the src entry and the subpath type definitions under moduleResolution ${moduleResolution}`, () => {
                 const tsconfigPath = writeTsconfig(consumerDir, moduleResolution, {
                     module,
                     moduleResolution,
@@ -344,6 +349,7 @@ describe('packaging', function () {
                 const listedFiles = runTsc(consumerDir, tsconfigPath);
 
                 expect(listedFiles).to.include(toForwardSlashes(path.join(installedDir, 'exif-reader.d.ts')));
+                expect(listedFiles).to.include(toForwardSlashes(path.join(installedDir, SRC_ENTRY_TYPE_FILE)));
                 expect(listedFiles).to.include.members(SUBPATH_TYPE_FILES.map((file) => toForwardSlashes(path.join(installedDir, file))));
             });
         });
