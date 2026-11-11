@@ -49,6 +49,7 @@ export function readView(composition, dataView, options, environment) {
     const blocks = async ? allBlocks : allBlocks.filter((block) => !composition.isHiddenInSyncMode(block));
 
     const tagFilter = environment.createTagFilter({includeTags, excludeTags, includeTagsIsLimit: environment.includeTagsIsLimit});
+    const tagFilterIsReadCap = Boolean(environment.includeTagsIsLimit) && !excludeTags;
     const context = createContext({
         dataView,
         options: {expanded, async, computed, includeUnknown, includeOffsets, domParser, includeTags, excludeTags},
@@ -73,6 +74,7 @@ export function readView(composition, dataView, options, environment) {
             parsedGroups: Object.create(null),
             expanded,
             tagFilter,
+            tagFilterIsReadCap,
             dataView,
             fileType,
             pngTextBlocks,

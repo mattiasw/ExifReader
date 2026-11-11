@@ -64,13 +64,16 @@ import {
     rational,
     short,
     getPng,
+    getTextChunk,
     getZtxtChunk,
     getIccpChunk,
     deflate,
     getExifChunk,
     getExifRawProfile,
+    getXmpChunk,
     getJxl,
     getBrobBox,
+    getXmlBox,
     getJxlcBox,
 } from '../loadview-inventory-images.js';
 
@@ -80,6 +83,8 @@ const WHITE_BALANCE_ID = 0xa403;
 const WHITE_BALANCE_ALIAS_ID = 0xfe4e;
 const TAG_DATE_TIME = 0x0132;
 const TAG_DATE_TIME_ORIGINAL = 0x9003;
+const TAG_PIXEL_X_DIMENSION = 0xa002;
+const TAG_PIXEL_Y_DIMENSION = 0xa003;
 const THUMBNAIL_IMAGE = '\xff\xd8thumb\xff\xd9';
 const JPEG = getJpeg(
     getSof0Segment(),
@@ -94,6 +99,7 @@ const JPEG = getJpeg(
 );
 const XMP_SIDECAR = '<?xpacket begin=""?>' + getXmpPacket({Title: 'xmp'}) + '<?xpacket end="w"?>';
 const NOISE = '-'.repeat(32);
+const COMPOSITE_TAG_NAMES = ['FocalLength35efl', 'ScaleFactorTo35mmEquivalent', 'FieldOfView'];
 const GROUPS_MESSAGE = 'the groups are exif, iptc, xmp, icc, photoshop, makerNotes, mpf, file, jfif, png, riff, gif, gps, composite and thumbnail';
 const DOM_PARSER_OPTION_MESSAGE = 'reader.load: the domParser option is not supported: pass domParser to createReader';
 const DECOMPRESS_OPTION_MESSAGE = 'reader.load: the decompress option is not supported: pass decompress to createReader';
@@ -1073,6 +1079,98 @@ describe('composable/core', () => {
             }
         });
 
+        describe('composite in a reader that caps what it reads', () => {
+            const domParser = new XmldomParser();
+            const focalPlaneTags = [
+                rational(TAG_FOCAL_PLANE_X_RESOLUTION, 1000, 1),
+                rational(TAG_FOCAL_PLANE_Y_RESOLUTION, 1000, 1),
+                short(TAG_FOCAL_PLANE_RESOLUTION_UNIT, 4),
+            ];
+            const withoutExifFocalLength = getFocalJpeg(focalPlaneTags);
+            const withExifFocalLength = getFocalJpeg([rational(TAG_FOCAL_LENGTH, 50, 1)].concat(focalPlaneTags));
+            const images = {withoutExifFocalLength, withExifFocalLength};
+            const cappedGroups = {
+                'xmp and composite': [xmp, composite],
+                'every group but exif and iptc': allGroups.filter((group) => group !== exif && group !== iptc),
+            };
+
+            it('should give the flat composite tags of the default entry', async () => {
+                for (const [imageName, bytes] of Object.entries(images)) {
+                    const expected = getCompositeTags(await ExifReader.load(getDataView(bytes), {async: true, domParser}));
+                    expect(Object.keys(expected), imageName).to.deep.equal(COMPOSITE_TAG_NAMES);
+
+                    for (const [readerName, groups] of Object.entries(cappedGroups)) {
+                        const tags = await createReader({formats: [jpeg], groups, domParser}).load(getDataView(bytes), {expanded: false});
+
+                        expect(getCompositeTags(tags), `${imageName} ${readerName}`).to.deep.equal(expected);
+                    }
+                }
+            });
+
+            it('should give the flat composite tags of the default entry when its Exif merges after XMP', async () => {
+                const exifTiff = getTiff({exifIfd: [rational(TAG_FOCAL_LENGTH, 50, 1)].concat(focalPlaneTags, [
+                    short(TAG_PIXEL_X_DIMENSION, 4000),
+                    short(TAG_PIXEL_Y_DIMENSION, 3000),
+                ])});
+                const xmpPacket = getXmpPacket({FocalLength: '35/1'});
+                const exifAfterXmpImages = {
+                    'png text chunk': getPng(getTextChunk('Raw profile type exif', getExifRawProfile(exifTiff)), getXmpChunk(xmpPacket)),
+                    'png compressed text chunk': getPng(getZtxtChunk('Raw profile type exif', getExifRawProfile(exifTiff)), getXmpChunk(xmpPacket)),
+                    'jxl brob box': getJxl(getBrobBox('Exif', '\x00\x00\x00\x00' + exifTiff), getXmlBox(xmpPacket), getJxlcBox()),
+                };
+
+                for (const [imageName, bytes] of Object.entries(exifAfterXmpImages)) {
+                    const expected = getCompositeTags(await ExifReader.load(getDataView(bytes), {async: true, domParser}));
+                    expect(Object.keys(expected), imageName).to.deep.equal(COMPOSITE_TAG_NAMES);
+
+                    for (const [readerName, groups] of Object.entries(cappedGroups)) {
+                        const tags = await createReader({formats: [png, jxl], groups, domParser}).load(getDataView(bytes), {expanded: false});
+
+                        expect(getCompositeTags(tags), `${imageName} ${readerName}`).to.deep.equal(expected);
+                    }
+                }
+            });
+
+            it('should leave the expanded composite group as the default entry gives it', async () => {
+                for (const [imageName, bytes] of Object.entries(images)) {
+                    const expected = (await ExifReader.load(getDataView(bytes), {async: true, domParser, expanded: true})).composite;
+                    if (bytes === withExifFocalLength) {
+                        expect(Object.keys(expected), imageName).to.deep.equal(COMPOSITE_TAG_NAMES);
+                    } else {
+                        expect(expected, imageName).to.equal(undefined);
+                    }
+
+                    for (const [readerName, groups] of Object.entries(cappedGroups)) {
+                        const tags = await createReader({formats: [jpeg], groups, domParser}).load(getDataView(bytes), {expanded: true});
+
+                        expect(tags.composite, `${imageName} ${readerName}`).to.deep.equal(expected);
+                    }
+                }
+            });
+
+            it('should read the parsed Exif as the default entry does when the caller gives excludeTags', async () => {
+                const excludeTags = {xmp: ['Rating']};
+                const expected = getCompositeTags(await ExifReader.load(getDataView(withExifFocalLength), {async: true, domParser, excludeTags}));
+                const withoutExcludeTags = getCompositeTags(await ExifReader.load(getDataView(withExifFocalLength), {async: true, domParser}));
+                expect(Object.keys(expected)).to.deep.equal(COMPOSITE_TAG_NAMES);
+                expect(expected).to.not.deep.equal(withoutExcludeTags);
+
+                for (const [readerName, groups] of Object.entries(cappedGroups)) {
+                    const tags = await createReader({formats: [jpeg], groups, tagFilter, domParser}).load(getDataView(withExifFocalLength), {expanded: false, excludeTags});
+
+                    expect(getCompositeTags(tags), readerName).to.deep.equal(expected);
+                }
+            });
+
+            function getFocalJpeg(exifIfd) {
+                return getJpeg(
+                    getSof0Segment({width: 4000, height: 3000}),
+                    getExifSegment(getTiff({exifIfd})),
+                    getXmpSegment(getXmpPacket({FocalLength: '35/1'}))
+                );
+            }
+        });
+
         describe('includeTags', () => {
             const exifOnlyReader = createReader({formats: [jpeg], groups: [exif]});
 
@@ -1867,6 +1965,10 @@ describe('composable/core', () => {
         });
     });
 });
+
+function getCompositeTags(tags) {
+    return Object.fromEntries(COMPOSITE_TAG_NAMES.filter((name) => name in tags).map((name) => [name, tags[name]]));
+}
 
 function getGroup(kind, emits) {
     return {

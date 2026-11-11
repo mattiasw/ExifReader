@@ -11,9 +11,10 @@
 //   other one finds no maker notes.
 // - A reader that reads Exif without returning it (gps or composite alone,
 //   for example) filters as the default entry does under its includeTags
-//   mapping, so its flat tags are compared against that. Flat Composite then
-//   comes from the parsed exif and file groups, as in expanded mode, and lacks
-//   the tags the unfiltered default entry derives from PNG image dimensions.
+//   mapping, so its flat tags are compared against that. Its flat Composite
+//   reads every tag block it parses, Exif included, in flat merge order, so
+//   it is compared with Composite computed from the unfiltered expanded file
+//   and exif groups under the expected flat tags.
 // - A composed reader returns a repeatable IPTC dataset as an array also when
 //   it is read once, so a single one from the default entry is compared
 //   wrapped in an array.
@@ -32,6 +33,7 @@ const {createReader, tagFilter} = require('../../src/composable/core.js');
 const Formats = require('../../src/composable/formats.js');
 const Groups = require('../../src/composable/groups.js');
 const {DateTimeOriginal} = require('../../src/composable/tags/exif.js');
+const Composite = require('../../src/composite.js').default;
 const IptcTagNames = require('../../src/iptc-tag-names.js').default;
 
 const IMAGES_PATH = path.join(__dirname, '..', 'fixtures', 'images');
@@ -63,6 +65,7 @@ const FORMAT_READER_KEYS = {
     xml: [],
 };
 const GROUP_OUTPUT_KEYS = {thumbnail: 'Thumbnail'};
+const COMPOSITE_TAG_NAMES = ['FocalLength35efl', 'ScaleFactorTo35mmEquivalent', 'FieldOfView'];
 const REPEATABLE_IPTC_IDS = getRepeatableIptcIds();
 
 const ALL_GROUPS_OPTION_SETS = [
@@ -92,6 +95,10 @@ describe('composable reader against the default entry', function () {
     const allReader = createReader({formats: Formats.allFormats, groups: Groups.allGroups, domParser});
     const filteredAllReader = createReader({formats: Formats.allFormats, groups: Groups.allGroups, tagFilter, domParser});
     const tagReader = createReader({formats: ALL_FORMATS_BUT_XML, tags: [DateTimeOriginal], domParser});
+    const cappedXmpReaders = {
+        'every group but exif': createReader({formats: Formats.allFormats, groups: Groups.allGroups.filter((group) => group !== Groups.exif), domParser}),
+        'xmp and composite': createReader({formats: Formats.allFormats, groups: [Groups.xmp, Groups.composite], domParser}),
+    };
     const readerWithMakerNotesOf = {
         canon: createReader({formats: ALL_FORMATS_BUT_XML, groups: [Groups.canon], domParser}),
         pentax: createReader({formats: ALL_FORMATS_BUT_XML, groups: [Groups.pentax], domParser}),
@@ -178,8 +185,19 @@ describe('composable reader against the default entry', function () {
                         expectUnsupportedFormat(actual, composition.name, composition.formats);
                         continue;
                     }
-                    const expected = withRepeatableIptcArrays(await getOutcome(() => ExifReader.load(bytes, Object.assign({async: true, domParser}, BASE, {includeTags: getMapping(composition)}))), false);
+                    let expected = withRepeatableIptcArrays(await getOutcome(() => ExifReader.load(bytes, Object.assign({async: true, domParser}, BASE, {includeTags: getMapping(composition)}))), false);
+                    if (readsCompositeWithoutExif(composition)) {
+                        expected = withCappedComposite(expected, await getReference(Object.assign({}, BASE, {expanded: true})));
+                    }
                     expect(withoutUnsupportedFormatMessage(actual), composition.name).to.deep.equal(withoutUnsupportedFormatMessage(expected));
+                }
+            });
+
+            it('gives the default entry\'s flat composite tags in a capped reader that composes xmp', async () => {
+                const expected = getCompositeOutcome(await getReference(BASE));
+                for (const [name, reader] of Object.entries(cappedXmpReaders)) {
+                    const actual = getCompositeOutcome(await getOutcome(() => reader.load(bytes, Object.assign({}, BASE, {expanded: false}))));
+                    expect(withoutUnsupportedFormatMessage(actual), name).to.deep.equal(withoutUnsupportedFormatMessage(expected));
                 }
             });
 
@@ -249,6 +267,36 @@ function withReader(composition) {
         reader: createReader({formats: composition.formats, groups: composition.groups, domParser}),
         filteredReader: createReader({formats: composition.formats, groups: composition.groups, tagFilter, domParser}),
     });
+}
+
+function readsCompositeWithoutExif(composition) {
+    return composition.groups.includes(Groups.composite) && !composition.groups.includes(Groups.exif);
+}
+
+function withCappedComposite(outcome, unfilteredExpandedOutcome) {
+    if (!outcome.tags) {
+        return outcome;
+    }
+    const tags = Object.assign({}, outcome.tags);
+    for (const name of COMPOSITE_TAG_NAMES) {
+        delete tags[name];
+    }
+    const unfilteredExpanded = unfilteredExpandedOutcome.tags;
+    const composite = Composite.get(Object.assign({}, unfilteredExpanded.file, unfilteredExpanded.exif, tags), false);
+    return {tags: Object.assign(tags, normalize(composite))};
+}
+
+function getCompositeOutcome(outcome) {
+    if (!outcome.tags) {
+        return outcome;
+    }
+    const tags = {};
+    for (const name of COMPOSITE_TAG_NAMES) {
+        if (outcome.tags[name] !== undefined) {
+            tags[name] = outcome.tags[name];
+        }
+    }
+    return {tags};
 }
 
 function hasFormat(composition, fileType) {

@@ -57,6 +57,10 @@ const MERGE_MODES = {
  * The top level merges in place, so a PNG with thousands of text chunk blocks
  * stays linear.
  *
+ * `tagFilterIsReadCap` says the tag filter is active only because includeTags
+ * caps what is read; flat Composite then reads every parsed tag block, returned
+ * or not, merged in flat order as an unfiltered load merges them.
+ *
  * @returns {object} The tags.
  */
 export function buildTagsFromMergeBlocks({
@@ -64,6 +68,7 @@ export function buildTagsFromMergeBlocks({
     parsedGroups,
     expanded,
     tagFilter,
+    tagFilterIsReadCap,
     dataView,
     fileType,
     pngTextBlocks,
@@ -74,6 +79,7 @@ export function buildTagsFromMergeBlocks({
         parsedGroups,
         expanded,
         tagFilter,
+        compositeInput: tagFilterIsReadCap && !expanded && tagFilter.shouldReturnGroup('composite') ? {} : undefined,
         dataView,
         fileType,
         thumbnails: [],
@@ -168,12 +174,19 @@ export function mergeBlock({
 // and metadataRange read them, whether or not the group is returned.
 function assignGroupTags(tags, block, context) {
     context.parsedGroups[block.group] = block.tags;
+    addToCompositeInput(block.tags, context);
     if (!context.tagFilter.shouldReturnGroup(block.group)) {
         return tags;
     }
     const returnedTags = context.deps.filterTagsForReturn(block.group, block.tags, context.tagFilter);
 
     return mergeAssignGroup(tags, block.group, returnedTags, context.expanded, context.deps);
+}
+
+function addToCompositeInput(blockTags, context) {
+    if (context.compositeInput) {
+        context.deps.objectAssign(context.compositeInput, blockTags);
+    }
 }
 
 export function mergeAssignGroup(tags, groupKey, returnedTags, expanded, deps) {
@@ -199,6 +212,7 @@ function getTagsForFlat(groupKey, returnedTags, deps) {
 
 function mergeGroupTags(tags, block, context) {
     context.merge.group(context.parsedGroups, block.group, block.tags);
+    addToCompositeInput(block.tags, context);
     if (!context.tagFilter.shouldReturnGroup(block.group)) {
         return tags;
     }
@@ -234,6 +248,7 @@ function mergePngFileTags(tags, block, context) {
         return tags;
     }
     context.parsedGroups.pngFile = block.tags;
+    addToCompositeInput(block.tags, context);
     if (!context.tagFilter.shouldReturnGroup('png')) {
         return tags;
     }
@@ -268,7 +283,11 @@ function mergeEmbeddedBlocks(tags, blocks, context) {
 // pngText holds the text tags only when there are any; otherwise
 // addPngTextCopyOfPng may fill it with a copy of png.
 function mergePngTextTags(tags, block, context) {
-    if (!Constants.USE_PNG || !context.tagFilter.shouldReturnGroup('png')) {
+    if (!Constants.USE_PNG) {
+        return tags;
+    }
+    addToCompositeInput(block.tags, context);
+    if (!context.tagFilter.shouldReturnGroup('png')) {
         return tags;
     }
     const returnedTags = context.deps.filterTagsForReturn('png', block.tags, context.tagFilter);
@@ -308,7 +327,7 @@ function addGpsGroup(tags, block, context) {
 }
 
 // Composite reads the merged tags, or with an active tag filter the parsed exif
-// and file groups.
+// and file groups, or in a flat load under a read cap every parsed tag block.
 function addCompositeGroup(tags, block, context) {
     if (!(Constants.USE_EXIF || Constants.USE_XMP) || !context.tagFilter.shouldReturnGroup('composite')) {
         return tags;
@@ -316,7 +335,9 @@ function addCompositeGroup(tags, block, context) {
 
     let compositeInput = tags;
     let compositeInputExpanded = context.expanded;
-    if (context.tagFilter.isActive) {
+    if (context.compositeInput) {
+        compositeInput = context.compositeInput;
+    } else if (context.tagFilter.isActive) {
         compositeInput = {exif: context.parsedGroups.exif, file: context.parsedGroups.file};
         compositeInputExpanded = true;
     }

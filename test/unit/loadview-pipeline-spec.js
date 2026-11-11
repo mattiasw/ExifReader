@@ -1443,6 +1443,51 @@ describe('loadView pipeline module', function () {
             });
         }
 
+        it('should give Composite every parsed tag block in flat merge order when the filter only caps reading', function () {
+            const parsedGroups = {};
+            const fileTags = {FileSize: {value: 'file'}, Model: {value: 'file'}};
+            const blocks = [
+                {slot: 'composite', mode: 'composite'},
+                {slot: 'pngText', mode: 'pngTextTags', tags: {Comment: {value: 'png text'}}},
+                {slot: 'pngFile', mode: 'pngFile', tags: {'Image Width': {value: 'png'}}},
+                {slot: 'brobExif', mode: 'nested', blocks: [{slot: 'exif', group: 'exif', mode: 'merge', tags: {Make: {value: 'brob exif'}}}]},
+                {slot: 'xmp', group: 'xmp', mode: 'assign', tags: {FocalLength: {value: 'xmp'}, Make: {value: 'xmp'}, Rating: {value: 5}}},
+                {slot: 'exif', group: 'exif', mode: 'assign', tags: {Model: {value: 'exif'}, FocalLength: {value: 'exif'}, Make: {value: 'exif'}}},
+                {slot: 'file', group: 'file', mode: 'assign', tags: fileTags},
+            ];
+
+            const {compositeArguments, compositeInputWhenCalled, tags} = buildCompositeTags({
+                expanded: false,
+                isActive: true,
+                tagFilterIsReadCap: true,
+                parsedGroups,
+                blocks,
+                tagFilter: createTagFilter({returnGroups: {exif: false}}),
+            });
+
+            expect(compositeInputWhenCalled).to.deep.equal({
+                FileSize: {value: 'file'},
+                Model: {value: 'exif'},
+                FocalLength: {value: 'xmp'},
+                Make: {value: 'brob exif'},
+                Rating: {value: 5},
+                'Image Width': {value: 'png'},
+                Comment: {value: 'png text'},
+            });
+            expect(compositeArguments[1]).to.equal(false);
+            expect(fileTags).to.deep.equal({FileSize: {value: 'file'}, Model: {value: 'file'}});
+            expect(tags.Model).to.deep.equal({value: 'file'});
+        });
+
+        it('should give Composite the parsed exif and file groups, expanded, when the filter only caps reading in expanded mode', function () {
+            const parsedGroups = {exif: {Model: {value: 'parsed'}}, file: {FileSize: {value: 'parsed'}}};
+
+            const {compositeArguments} = buildCompositeTags({expanded: true, isActive: true, tagFilterIsReadCap: true, parsedGroups});
+
+            expect(compositeArguments[0]).to.deep.equal({exif: parsedGroups.exif, file: parsedGroups.file});
+            expect(compositeArguments[1]).to.equal(true);
+        });
+
         it('should not add a composite group when it is not returned', function () {
             const {compositeArguments, tags} = buildCompositeTags({
                 expanded: true,
@@ -1454,7 +1499,14 @@ describe('loadView pipeline module', function () {
             expect(tags).to.not.have.property('composite');
         });
 
-        function buildCompositeTags({expanded, isActive, parsedGroups = {}, tagFilter = createTagFilter({})}) {
+        function buildCompositeTags({
+            expanded,
+            isActive,
+            tagFilterIsReadCap,
+            parsedGroups = {},
+            blocks = [{slot: 'composite', mode: 'composite'}, {slot: 'exif', group: 'exif', mode: 'assign', tags: {Model: {value: 'model'}}}],
+            tagFilter = createTagFilter({}),
+        }) {
             const deps = createPipelineDeps();
             let compositeArguments;
             let compositeInputWhenCalled;
@@ -1468,10 +1520,11 @@ describe('loadView pipeline module', function () {
             tagFilter.isActive = isActive;
 
             const tags = buildBlockTags({
-                blocks: [{slot: 'composite', mode: 'composite'}, {slot: 'exif', group: 'exif', mode: 'assign', tags: {Model: {value: 'model'}}}],
+                blocks,
                 expanded,
                 parsedGroups,
                 tagFilter,
+                tagFilterIsReadCap,
                 deps,
             });
             return {compositeArguments, compositeInputWhenCalled, tags};
@@ -1483,6 +1536,7 @@ describe('loadView pipeline module', function () {
         expanded,
         parsedGroups = {},
         tagFilter = createTagFilter({}),
+        tagFilterIsReadCap = false,
         deps = createPipelineDeps(),
         pngTextBlocks = [],
         pngTextIsAsync = false,
@@ -1492,6 +1546,7 @@ describe('loadView pipeline module', function () {
             parsedGroups,
             expanded,
             tagFilter,
+            tagFilterIsReadCap,
             dataView: {},
             fileType: undefined,
             pngTextBlocks,

@@ -10,7 +10,8 @@ import Errors from '../../../src/errors.js';
 import {allFormats} from '../../../src/composable/formats.js';
 import {allGroups, exif, iptc} from '../../../src/composable/groups.js';
 import {createTagFilter, NOOP_TAG_FILTER} from '../../../src/tag-filter.js';
-import {getDataView} from '../test-utils.js';
+import Composite from '../../../src/composite.js';
+import {getDataView, swapProperties} from '../test-utils.js';
 import {
     ascii,
     getTiff,
@@ -34,6 +35,14 @@ const JPEG = getJpeg(
 );
 
 describe('composable/read-view', () => {
+    const restores = [];
+
+    afterEach(() => {
+        while (restores.length > 0) {
+            restores.pop()();
+        }
+    });
+
     it('should read only the window of a DataView into a larger buffer', () => {
         const image = getDataView(JPEG);
         const buffer = new ArrayBuffer(image.byteLength + 20);
@@ -100,6 +109,27 @@ describe('composable/read-view', () => {
 
         expect(readView(ALL, getDataView(JPEG), options, getEnvironment()).exif.Make.description).to.equal('Make');
         expect(readView(ALL, getDataView(JPEG), options, getEnvironment({includeTagsIsLimit: true})).exif.Make).to.equal(undefined);
+    });
+
+    it('should have flat Composite read the merged tags only when includeTags caps reading and no excludeTags is given', () => {
+        const calls = [];
+        restores.push(swapProperties(Composite, {get: (...args) => {
+            calls.push(args);
+            return undefined;
+        }}));
+        const includeTags = {exif: true, composite: true, file: true};
+        const load = (excludeTags, environment) => {
+            readView(ALL, getDataView(JPEG), {includeTags, excludeTags}, environment);
+            return calls.pop();
+        };
+
+        for (const excludeTags of [undefined, null, '']) {
+            const [compositeInput, compositeInputExpanded] = load(excludeTags, getEnvironment({includeTagsIsLimit: true}));
+            expect(compositeInputExpanded, String(excludeTags)).to.equal(false);
+            expect(compositeInput.Make.description, String(excludeTags)).to.equal('Make');
+        }
+        expect(load({xmp: ['Label']}, getEnvironment({includeTagsIsLimit: true}))[1]).to.equal(true);
+        expect(load(undefined, getEnvironment())[1]).to.equal(true);
     });
 
     it('should build its filter with the environment\'s factory', () => {
