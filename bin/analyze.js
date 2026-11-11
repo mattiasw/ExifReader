@@ -28,6 +28,20 @@ const GROUP_MODULES = {
     photoshop: 'photoshop',
     makerNotes: 'maker_notes'
 };
+const COMPOSABLE_FORMATS = ['tiff', 'jpeg', 'png', 'heic', 'avif', 'jxl', 'webp', 'gif', 'xml'];
+const COMPOSABLE_GROUP_MODULES = {
+    iptc: 'iptc',
+    xmp: 'xmp',
+    icc: 'icc',
+    photoshop: 'photoshop',
+    mpf: 'mpf',
+    maker_notes: 'makerNotes',
+    thumbnail: 'thumbnail'
+};
+const COMPOSABLE_RESULT_GROUPS = ['gps', 'composite'];
+const COMPOSABLE_GROUPS = ['iptc', 'xmp', 'icc', 'photoshop', 'mpf', 'makerNotes', 'gps', 'composite', 'thumbnail'];
+const DOM_PARSER_COMMENT = '// Outside browsers, xmp needs a domParser in createReader, for example '
+    + 'new DOMParser({onError: onErrorStopParsing}) from @xmldom/xmldom.';
 const THUMBNAIL_NON_TAG_KEYS = ['image', 'base64', 'type'];
 const GPS_POINTER = 'GPS Info IFD Pointer';
 const INTEROPERABILITY_POINTER = 'Interoperability IFD Pointer';
@@ -35,9 +49,11 @@ const INTEROPERABILITY_POINTER = 'Interoperability IFD Pointer';
 module.exports = {
     collectImagePaths,
     loadFullParser,
+    loadTagBindingName,
     resolveDomParser,
     analyzeImages,
     deriveConfig,
+    deriveImports,
     writeConfigToPackageJson
 };
 
@@ -109,6 +125,17 @@ function loadFullParser() {
 }
 
 /**
+ * Load the function that names the exports of exifreader/tags/*, from the
+ * ES module source.
+ *
+ * @returns {Promise<function(string): string>} Resolves to getTagBindingName.
+ */
+function loadTagBindingName() {
+    const sourceUrl = url.pathToFileURL(path.join(EXIFREADER_ROOT_DIR, 'src', 'composable', 'tag-binding-name.js')).href;
+    return import(sourceUrl).then((sourceModule) => sourceModule.getTagBindingName);
+}
+
+/**
  * Create the xmldom DOM parser the way src/dom-parser.js does, resolving the
  * package from the exifreader directory first and then from cwd.
  *
@@ -158,9 +185,10 @@ async function analyzeImages(paths, deps) {
  * the given parse results.
  *
  * @param {Object[]} results Expanded ExifReader results.
+ * @param {string} [product] What the warnings call the result: 'build' or 'reader'.
  * @returns {{config: {include: Object}, fileTypes: string[], warnings: string[]}}
  */
-function deriveConfig(results) {
+function deriveConfig(results, product = 'build') {
     const found = {modules: new Set(), exifNames: new Set(), iptcNames: new Set(), fileTypes: new Set(), exifArray: false};
     for (const tags of results) {
         observeResult(tags, found);
@@ -185,7 +213,7 @@ function deriveConfig(results) {
     return {
         config: {include},
         fileTypes: Array.from(found.fileTypes).sort(),
-        warnings: warningsFor(found.modules)
+        warnings: warningsFor(found.modules, product)
     };
 }
 
@@ -209,13 +237,17 @@ function observeResult(tags, found) {
     }
     if ('exif' in tags) {
         found.exifArray = true;
-        addNames(found.exifNames, Object.keys(tags.exif).filter((name) => name !== 'Thumbnail'));
+        addNames(found.exifNames, exifGroupNames(tags));
     }
     observeThumbnail(tags.Thumbnail, found);
     observeThumbnail(tags.exif && tags.exif.Thumbnail, found);
     if ('makerNotes' in tags || 'photoshop' in tags || (fileType === 'tiff' && ['iptc', 'xmp', 'icc'].some((group) => group in tags))) {
         found.exifArray = true;
     }
+}
+
+function exifGroupNames(tags) {
+    return Object.keys(tags.exif).filter((name) => name !== 'Thumbnail');
 }
 
 function addNames(names, newNames) {
@@ -266,23 +298,77 @@ function withoutInjectedNames(names, modules) {
     return names.filter((name) => !injected.includes(name));
 }
 
-function warningsFor(modules) {
+function warningsFor(modules, product) {
     const warnings = [];
     const missingFormats = FORMATS.filter((format) => !modules.has(format)).map((format) => FORMAT_NAMES[format]);
     if (missingFormats.length > 0) {
-        warnings.push(missingFormatsWarning(missingFormats));
+        warnings.push(missingFormatsWarning(missingFormats, product));
     }
-    warnings.push('Tags and metadata groups that do not appear in these images are left out of the build, so pass a '
+    warnings.push(`Tags and metadata groups that do not appear in these images are left out of the ${product}, so pass a `
         + 'sample of every kind of image your app reads, all in one run.');
     return warnings;
 }
 
-function missingFormatsWarning(names) {
+function missingFormatsWarning(names, product) {
     if (names.length === 1) {
-        return `No ${names[0]} images were found, so the build will not read that format.`;
+        return `No ${names[0]} images were found, so the ${product} will not read that format.`;
     }
-    return `No ${names.slice(0, -1).join(', ')} or ${names[names.length - 1]} images were found, so the build `
+    return `No ${names.slice(0, -1).join(', ')} or ${names[names.length - 1]} images were found, so the ${product} `
         + 'will not read those formats.';
+}
+
+/**
+ * Derive the createReader imports of the composable API that read everything
+ * found in the given parse results.
+ *
+ * @param {Object[]} results Expanded ExifReader results.
+ * @param {function(string): string} getTagBindingName The function
+ *   loadTagBindingName resolves to.
+ * @returns {string} JavaScript import lines and a createReader call.
+ */
+function deriveImports(results, getTagBindingName) {
+    const derived = deriveConfig(results);
+    const formats = COMPOSABLE_FORMATS.filter((name) => derived.fileTypes.includes(name));
+    const groups = composableGroups(derived.config.include, results, formats);
+    const tables = [
+        {key: 'formats', names: formats, specifier: 'exifreader/formats'},
+        {key: 'groups', names: groups, specifier: 'exifreader/groups'},
+        {key: 'tags', names: composableTags(results, getTagBindingName), specifier: 'exifreader/tags/exif'}
+    ].filter((table) => table.names.length > 0);
+
+    const lines = ['import {createReader} from \'exifreader/core\';']
+        .concat(tables.map((table) => `import {${table.names.join(', ')}} from '${table.specifier}';`), ['']);
+    if (groups.includes('xmp')) {
+        lines.push(DOM_PARSER_COMMENT);
+    }
+    const entries = tables.map((table) => `${table.key}: [${table.names.join(', ')}]`);
+    lines.push(`const reader = createReader({${entries.join(', ')}});`);
+    return lines.join('\n');
+}
+
+// An XMP sidecar is read only with xmp composed, and the gps and composite
+// groups have no custom build module of their own.
+function composableGroups(include, results, formats) {
+    const groups = new Set(Object.keys(include)
+        .filter((name) => name in COMPOSABLE_GROUP_MODULES)
+        .map((name) => COMPOSABLE_GROUP_MODULES[name]));
+    for (const group of COMPOSABLE_RESULT_GROUPS.filter((name) => results.some((tags) => name in tags))) {
+        groups.add(group);
+    }
+    if (formats.includes('xml')) {
+        groups.add('xmp');
+    }
+    return COMPOSABLE_GROUPS.filter((name) => groups.has(name));
+}
+
+// Every exif name, the ones a composed group reads included: a reader returns
+// those only when they are in its tags.
+function composableTags(results, getTagBindingName) {
+    const names = new Set();
+    for (const tags of results.filter((result) => 'exif' in result)) {
+        addNames(names, exifGroupNames(tags).map((name) => getTagBindingName(name)));
+    }
+    return Array.from(names).sort();
 }
 
 /**

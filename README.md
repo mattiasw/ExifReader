@@ -11,9 +11,10 @@ If you use the `length: 'auto'` option, ExifReader reads only the bytes
 that contain metadata, **well under 1 ms per file** for typical phone JPEGs
 and **over 95% less bandwidth**.
 
-ExifReader is highly and easily configurable and the resulting bundle can be as
-small as **~9 KiB** (Brotli-compressed) if you're only interested in a few tags
-(e.g. date and/or GPS values).
+You can compose a reader from only the formats, groups and tags you read. A
+reader of the date and the GPS position of JPEG files bundles to
+**about 14 KiB** (esbuild, minified, Brotli). See [the composable
+API](#composable-api).
 
 ExifReader supports module formats ESM, AMD, CommonJS, and globals and can
 therefore easily be used from Webpack, RequireJS, Browserify, Node etc.
@@ -65,7 +66,9 @@ Table of Contents
 1. [Support](#support)
 2. [Installation](#installation)
 3. [Usage](#usage)
-4. [Configure a Custom Build](#configure-a-custom-build)
+    - [Composable API](#composable-api)
+    - [Migrating to the composable API](#migrating-to-the-composable-api)
+4. [Configure a Custom Build (deprecated)](#configure-a-custom-build)
 5. [Notes](#notes)
 6. [Client/Browser Support](#clientbrowser-support)
 7. [Examples](#examples)
@@ -114,7 +117,15 @@ After that, the transpiled, concatenated and minified ES5 file will be in the
 
 ### Type definitions
 
-Type definitions for TypeScript are included in the package.
+Type definitions for TypeScript are included in the package. Each subpath of the
+[composable API](#composable-api) (`exifreader/core`, `exifreader/formats`,
+`exifreader/groups`, `exifreader/tags/exif`, `exifreader/tags/iptc` and
+`exifreader/tags/mpf`) ships its own definitions next to its module, which
+TypeScript finds with `moduleResolution` set to `bundler`, `node16` or
+`nodenext`. A CommonJS file can import them only with `module` set to `nodenext`
+or `node20` (see Toolchains in [the composable API](#composable-api)).
+`exifreader/core` also exports the types of the arguments to `load`, `LoadInput`
+and `LoadOptions`, and of its result, `Tags` and `ExpandedTags`.
 
 Usage
 -----
@@ -155,6 +166,24 @@ requirejs(['/path/to/exif-reader.js'], function (ExifReader) {
 ```html
 <script src="/path/to/exif-reader.js"></script>
 ```
+
+> **In a browser app?** If you only need a few tags, compose a reader with only
+> what you read. This one reads the date and the GPS position of JPEG files:
+>
+> ```javascript
+> import {createReader} from 'exifreader/core';
+> import {jpeg} from 'exifreader/formats';
+> import {gps} from 'exifreader/groups';
+> import {DateTimeOriginal} from 'exifreader/tags/exif';
+>
+> const reader = createReader({formats: [jpeg], groups: [gps], tags: [DateTimeOriginal]});
+> const tags = await reader.load(file);
+> // tags.exif.DateTimeOriginal, tags.gps.Latitude, tags.gps.Longitude
+> ```
+>
+> It bundles to about 14 KiB, against about 42 KiB for the default entry
+> (esbuild, minified, Brotli). See [the composable API](#composable-api) for the
+> rest. For everything else, start with the default entry as shown above.
 
 ### Loading tags
 
@@ -752,7 +781,22 @@ npm override, a Yarn resolution or a pnpm override pins `@xmldom/xmldom` below
 
 #### Using React Native
 
-Import ExifReader like this:
+React Native 0.79 and later (Metro 0.82 and later) resolve the subpaths of the
+[composable API](#composable-api), so you can import `exifreader/core` and the
+other subpaths directly and pass the same buffer as below to
+`await reader.load(fileBuffer)`. React Native has no `DOMParser`, so a reader
+with `xmp` needs a parser passed to `createReader` in its `domParser` key (see
+[Parsing XMP tags when not in a DOM
+environment](#parsing-xmp-tags-when-not-in-a-dom-environment)).
+
+Metro does not tree shake, so it loads every format and group the imported
+subpaths reference. Under Metro 0.88, a reader of JPEG files with `gps` and two
+tags is about 233 KiB raw and 61 KiB gzip. That is still smaller than the
+default entry under Metro (about 252 KiB and 78 KiB), but esbuild bundles the
+one-tag `Single tags` example of the [composable API](#composable-api) to about
+46 KiB and 15 KiB.
+
+With the default entry, or an older Metro, import ExifReader like this:
 
 ```javascript
 import ExifReader from './node_modules/exifreader/src/exif-reader.js';
@@ -820,11 +864,284 @@ details.
 
 ### Optimizing build size
 
-The most important step will be to [use a custom
-build](#configure-a-custom-build) so please do that.
+#### Composable API
 
-If you are using Webpack 4 or lower and are only targeting web browsers, make
-sure to add this to your Webpack config (probably the `webpack.config.js` file):
+Import only the formats, groups and tags you read, and your bundler leaves out
+the rest.
+
+**Whole groups.** This reader reads the Exif and XMP tags of JPEG and HEIC
+files:
+
+```javascript
+import {createReader} from 'exifreader/core';
+import {jpeg, heic} from 'exifreader/formats';
+import {exif, xmp} from 'exifreader/groups';
+
+const reader = createReader({formats: [jpeg, heic], groups: [exif, xmp]});
+const tags = await reader.load(file);
+```
+
+**Single tags.** This one reads only the date and the GPS position of JPEG
+files:
+
+```javascript
+import {createReader} from 'exifreader/core';
+import {jpeg} from 'exifreader/formats';
+import {gps} from 'exifreader/groups';
+import {DateTimeOriginal} from 'exifreader/tags/exif';
+
+const reader = createReader({formats: [jpeg], groups: [gps], tags: [DateTimeOriginal]});
+const tags = await reader.load(file);
+// tags.exif.DateTimeOriginal, tags.gps.Latitude, tags.gps.Longitude
+```
+
+The output is grouped, since a reader is built from groups. `expanded: false`
+gives flat output, for code that moves over from `ExifReader.load` (see
+[Migrating to the composable API](#migrating-to-the-composable-api) for what
+differs). `tags.gps` (`Latitude`, `Longitude` and `Altitude`) is only in the
+grouped output. In a flat load, `gps` therefore adds no GPS values at all: a
+reader composed with `gps` alone returns only the `file` and `jfif` tags for a
+JPEG file. For GPS values in flat output, import `GPSLatitude`,
+`GPSLatitudeRef`, `GPSLongitude`, `GPSLongitudeRef`, `GPSAltitude` and
+`GPSAltitudeRef` from `exifreader/tags/exif` and pass them in `tags`. A flat
+load then has `GPSLatitude` with its unsigned decimal description, and the `Ref`
+tags carry the hemisphere and whether the altitude is below sea level (see
+[Notes](#notes) and the [GPS section](#gps)).
+
+A group or tag the file does not hold is absent from the result, so
+`tags.exif?.DateTimeOriginal?.description` covers every case.
+
+**What a group brings.** Each group reads the Exif tags it needs: `gps` the six
+GPS tags its values come from, `xmp` `ApplicationNotes`, `iptc` `IPTC-NAA`,
+`icc` `ICC_Profile`, `photoshop` `ImageSourceData` and `PhotoshopSettings`,
+`makerNotes`, `canon` and `pentax` `MakerNote` and `Make`, `thumbnail`
+`JPEGInterchangeFormat` and `JPEGInterchangeFormatLength`, and `composite` the
+focal length and pixel dimension tags it computes its values from. The reader
+reads those tags but returns them only when they are also in `tags` or the
+whole `exif` group is composed: with `makerNotes`, for example, add `Make` to
+`tags` to get `exif.Make`. A format brings its own tags: every format gives
+`file` (`FileType`, and the image details where the format has them), and
+`jpeg` adds `jfif`, `png` adds `png`, `webp` adds `riff` and `gif` adds `gif`.
+The grouped output of a composed reader has `png` alone, which holds every tag
+of `pngFile` and `pngText`, not those two groups.
+
+**Tags.** `tags` takes Exif tags only, imported from `exifreader/tags/exif`. For
+IPTC or MPF tags, compose the whole `iptc` or `mpf` group.
+
+**Subpaths.**
+
+| Subpath | Exports |
+|---|---|
+| `exifreader/core` | `createReader`, `errors` (`UnsupportedFormatError`), `tagFilter` |
+| `exifreader/formats` | `tiff`, `jpeg`, `png`, `heic`, `avif`, `jxl`, `webp`, `gif`, `xml` (XMP sidecar files; returns only `FileType` without `xmp` in `groups`), `allFormats` |
+| `exifreader/groups` | `exif`, `iptc`, `xmp`, `icc`, `photoshop`, `mpf`, `makerNotes`, `canon`, `pentax`, `gps`, `composite`, `thumbnail`, `allGroups` |
+| `exifreader/tags/exif`, `exifreader/tags/iptc`, `exifreader/tags/mpf` | One export per tag, named after the tag with every character that cannot be in a JavaScript name removed and the letter after it upper-cased (`By-line` becomes `ByLine`, `GPS Info IFD Pointer` becomes `GPSInfoIFDPointer`) |
+
+`makerNotes` holds every maker note decoder and grows with new releases.
+`canon` and `pentax` hold one each.
+
+Pass these values as they are imported. A copy or an altered copy of a format,
+group or tag is not supported.
+
+**Everything.** `createReader({formats: allFormats, groups: allGroups})` reads
+everything (`allGroups` has `makerNotes`, not `canon` or `pentax`). Filtering
+these arrays skips parsing but does not shrink the bundle, since the bundler
+cannot see which entries you keep. Import by name instead. Composing `heic`
+without `avif` saves little (under 0.1 KiB).
+
+**Loading.** `reader.load` takes the image bytes or a `Blob` or `File`:
+
+| You have | Call |
+|---|---|
+| A `File` from `<input type="file">` | `reader.load(file)`; for the first n bytes, `reader.load(file.slice(0, n))` |
+| A path in Node | `reader.load(await readFile(path))` (`readFile` from `node:fs/promises`) |
+| A path in Node, the first n bytes only | `reader.load((await openAsBlob(path)).slice(0, n))` (`openAsBlob` from `node:fs`) |
+| A path in Bun | `reader.load(Bun.file(path))` |
+| A URL | `reader.load(await (await fetch(url)).arrayBuffer())` |
+| A `Response` | `reader.load(await response.arrayBuffer())` |
+| A `ReadableStream` | `reader.load(await new Response(stream).arrayBuffer())` |
+| Bytes: an `ArrayBuffer`, `SharedArrayBuffer`, `DataView`, typed array such as `Uint8Array`, or Node `Buffer` | `reader.load(bytes)` |
+
+`reader.load` always returns a Promise and never throws: every failure is a
+rejection. It does not take strings or URLs, and it has no `length` or `async`
+option (both reject). Passing `domParser` or `decompress` to `reader.load`
+rejects too, as both go to `createReader`. The options it takes are `expanded`,
+`includeUnknown`, `computed`, `includeOffsets`, `includeTags` and `excludeTags`;
+the first four take only `true`, `false` or `undefined`, and any other value
+rejects.
+`expanded: false` gives the flat output, and `includeOffsets` needs no
+`expanded` (it does nothing with `expanded: false`).
+
+**Errors.** Input that no composed format recognizes rejects with
+`UnsupportedFormatError`, so a reader of JPEG files only rejects a PNG file
+that way. The message names the formats of the reader in detection order: the
+JPEG-only reader below rejects with `reader.load: none of this reader's formats
+(jpeg) recognizes the input: it is in another format or is not an image`. Check
+for it with `error instanceof errors.UnsupportedFormatError`,
+using the `errors` of the entry the reader came from (`exifreader/core` for
+`createReader`, `ExifReader.errors` for the default entry, which under Node is
+the bundled `dist` file with its own copy of the class), or with
+`error.name === 'UnsupportedFormatError'`:
+
+```javascript
+import {createReader, errors} from 'exifreader/core';
+import {jpeg} from 'exifreader/formats';
+import {exif} from 'exifreader/groups';
+
+const reader = createReader({formats: [jpeg], groups: [exif]});
+try {
+    const tags = await reader.load(file);
+} catch (error) {
+    if (error instanceof errors.UnsupportedFormatError) {
+        // Not a JPEG file.
+    }
+}
+```
+
+**XMP outside browsers.** Node, Bun, Deno, web workers and React Native have no
+`DOMParser`. With `xmp` composed, pass one to `createReader` in its `domParser`
+key (see [Parsing XMP tags when not in a DOM
+environment](#parsing-xmp-tags-when-not-in-a-dom-environment)):
+
+```javascript
+import {createReader} from 'exifreader/core';
+import {jpeg} from 'exifreader/formats';
+import {xmp} from 'exifreader/groups';
+import {DOMParser, onErrorStopParsing} from '@xmldom/xmldom';
+
+const reader = createReader({formats: [jpeg], groups: [xmp], domParser: new DOMParser({onError: onErrorStopParsing})});
+const tags = await reader.load(data);
+```
+
+Without one, `reader.load` rejects with a message naming `domParser`. The check
+runs at load, so creating the reader where there is no `DOMParser`, such as
+during server rendering, does not throw. A composed reader never loads
+`@xmldom/xmldom` by itself.
+
+**Decompression.** Custom Brotli or deflate functions and `maxDecompressedSize`
+go to `createReader` in its `decompress` key, the object that [Custom
+decompression](#custom-decompression) and [Limiting decompressed metadata
+size](#limiting-decompressed-metadata-size) describe for `ExifReader.load`. The
+limit applies to each `reader.load` call on its own:
+
+```javascript
+import zlib from 'node:zlib';
+import {createReader} from 'exifreader/core';
+import {jxl} from 'exifreader/formats';
+import {exif} from 'exifreader/groups';
+
+const reader = createReader({
+    formats: [jxl],
+    groups: [exif],
+    decompress: {
+        brotli: (data, {maxOutputLength}) => zlib.brotliDecompressSync(data, {maxOutputLength}),
+        maxDecompressedSize: 16 * 1024 * 1024
+    }
+});
+```
+
+**Filtering.** `includeTags` and `excludeTags` need `tagFilter`, imported from
+`exifreader/core`, in `createReader`. Without it, `reader.load` rejects with a
+message naming the option. With it, `reader.load` also rejects an option that
+is not an object keyed by group, a key that is not a group (a misspelt one such
+as `exiff`), and a group value other than `true`, `false` or an array of tag
+names or ids. A group the reader does not compose is not an error: it is absent
+from the result. The options narrow what the reader composes and never
+add to it. See [Filtering tags](#filtering-tags-includetags--excludetags) for
+their shapes.
+
+```javascript
+import {createReader, tagFilter} from 'exifreader/core';
+import {jpeg} from 'exifreader/formats';
+import {exif, mpf} from 'exifreader/groups';
+
+const reader = createReader({formats: [jpeg], groups: [exif, mpf], tagFilter});
+const tags = await reader.load(file, {excludeTags: {mpf: true}});
+```
+
+**Types.** In TypeScript, the grouped result of `reader.load` has only the
+groups and tags the reader composes, so `tags.gps` does not compile on a reader
+without `gps`. Each group has only its own tag names, so `tags.exif?.Headline`,
+an IPTC name, does not compile either. `includeTags` and `excludeTags` compile
+only on a reader created with `tagFilter` (type options built before the call
+as `LoadOptions<false>` for a reader without it). A table whose contents
+TypeScript cannot see, such as `allFormats`, `allGroups` or an array typed
+`Format[]` or `Group[]`, gives every group instead, typed as the `ExpandedTags`
+of `exifreader/core`. The flat output is typed `Tags` on every reader.
+
+**Runtime.** The subpaths are published as source, not transpiled. The code is
+ES2015, and the `composite` group also uses the ES2016 `**` operator. A reader
+uses these platform APIs when it needs them: `Promise` for every load;
+`TextDecoder` for text in IPTC, XMP and decompressed data and for the Windows XP
+tags; `DecompressionStream` for compressed metadata in PNG and JPEG XL files,
+unless `decompress` gives the functions; `DOMParser` for `xmp`, unless
+`domParser` is given; `btoa` for the `base64` of a thumbnail or an MPF image;
+and `Blob` only when one is passed to `reader.load`.
+
+**Toolchains.** The subpaths are ES modules only, resolved through the
+package's `exports` map. They work with webpack 5, Vite, Rollup with
+`@rollup/plugin-node-resolve`, esbuild, Parcel 2 with `packageExports` enabled,
+Bun, Deno, Metro 0.82 (React Native 0.79), TypeScript with `moduleResolution`
+set to `bundler`, `node16` or `nodenext`, and Node with `import` (`require()`
+needs Node 20.19 or later on Node 20, or 22.12 or later). Some toolchains need
+extra setup or have limits:
+
+- **TypeScript.** A CommonJS importer (a `.cts` file, or a `.ts` file in a
+  package without `"type": "module"`) gets TS1479 on the subpath imports with
+  `module` set to `node16` or `node18`. It needs `module` set to `nodenext`
+  (TypeScript 5.8 or later) or `node20` (TypeScript 5.9 or later). An ES module
+  importer works with all of them.
+- **Jest.** Jest 28 to 30 fail with their default configuration, since Jest
+  does not transform `node_modules`. They work with a Babel transform plus
+  `transformIgnorePatterns: ['/node_modules/(?!exifreader/)']`, or with
+  `--experimental-vm-modules` when the test files are ES modules themselves.
+- **eslint-plugin-import.** With its default resolver it reports
+  `import/no-unresolved` on the subpaths, since that resolver does not read
+  `exports`.
+- **Parcel.** Parcel 2.16.4 resolves the subpaths with `packageExports` enabled
+  but leaves unreferenced code in the bundle: the `Single tags` example is
+  about 20 KiB gzip there against 15 KiB with esbuild.
+- **CommonJS-compiled consumers.** A consumer compiled to CommonJS before
+  bundling (`require('exifreader/core')`) loses tree shaking under esbuild and
+  Vite 8 (a JPEG reader with `DateTimeOriginal`: about 121 KiB raw against
+  44 KiB). webpack 5, Rspack and `bun build` keep it.
+- **No tree shaking.** Without a tree-shaking bundler (Metro, unbundled Node,
+  Deno or Bun), every format and group the imported subpaths reference is
+  loaded.
+
+#### Migrating to the composable API
+
+A reader from `createReader` reads the same tags as `ExifReader.load` and
+describes them the same way. What differs when you move over from
+`ExifReader.load` or from a custom build:
+
+| | `ExifReader.load` | A reader from `createReader` |
+|---|---|---|
+| Output | Flat by default, grouped with `expanded: true` | Grouped by default, flat with `expanded: false` |
+| Return value | The tags, or a Promise when it loads the file or with `async: true` | Always a Promise |
+| Input | Bytes, a `File`, a path or a URL | Bytes, a `Blob` or a `File` (see **Loading** for a path or a URL) |
+| Part of a file | The `length` option | Slice it first: `reader.load(file.slice(0, n))` |
+| `domParser` and `decompress` | Options of `load` | Passed to `createReader` |
+| XMP outside browsers | Looks for `@xmldom/xmldom` when no `domParser` is given | Needs `domParser`; nothing is looked up |
+| `includeTags` and `excludeTags` | Always available | Need `tagFilter` from `exifreader/core` in `createReader` |
+| Options | An unknown option is ignored, and any truthy value turns an option on | An unknown option rejects, and so does a value other than `true`, `false` or `undefined` |
+| PNG groups | `png`, `pngFile` and `pngText` | `png` |
+| A repeatable IPTC dataset such as `Keywords` | A tag when the file holds it once, an array when it holds several | Always an array |
+| A group with no tags | `{}` | Absent |
+| `base64` of the thumbnail and MPF images | From `Buffer` or `btoa` | From `btoa`; `undefined` where there is none |
+| Errors | `ExifReader.errors` | `errors` from `exifreader/core` |
+| Published code | A UMD `dist` file, transpiled to ES5 | ES modules, not transpiled (see **Runtime**) |
+| Custom build | The `exifreader` key in `package.json` and `npx exifreader build` | Imports; `npx exifreader analyze --imports <images>` prints them |
+
+#### Default entry
+
+The [custom build](#configure-a-custom-build) was the previous way to a smaller
+bundle. It still works in v4, but it is deprecated and will be removed in v5, so
+use the composable API above instead.
+
+If you use the default entry (`import ExifReader from 'exifreader'`) with
+Webpack 4 or lower and are only targeting web browsers, make sure to add this to
+your Webpack config (probably the `webpack.config.js` file):
 
 ```javascript
     node: {
@@ -841,13 +1158,14 @@ Configure a Custom Build
 
 Configuring a custom build can reduce the bundle size significantly.
 
-**NOTE 1:** This functionality is in beta but should work fine. Please file an
-issue if you're having problems or ideas on how to make it better.
+**NOTE 1:** The custom build was the previous way to a small bundle. It is still
+supported in v4, but it is deprecated and will be removed in v5. The
+[composable API](#composable-api) replaces it.
 
 **NOTE 2:** This only changes the built file (`exifreader/dist/exif-reader.js`),
 not the source code. That means it's not possible to use the ES module (from the
 `src` folder) or any tree shaking to get the benefit of a custom build. Tree
-shaking will actually have close to no effect at all here so don't rely on it.
+shaking has close to no effect on a custom build, so don't rely on it.
 
 This is for npm and yarn users that use the built file. To specify what
 functionality you want you can either use include pattern (start with an empty
@@ -873,7 +1191,7 @@ almost half the size of the full one (non-gzipped)):
 ```
 
 **Example 2:** Only include TIFF files, and the Exif `DateTime` tag and the GPS
-tags (resulting bundle will be ~19 % of a gzipped full build):
+tags (resulting bundle will be about a third of a gzipped full build):
 
 ```javascript
 "exifreader": {
@@ -931,7 +1249,9 @@ It reads the images with the full library and prints the smallest `include`
 configuration that reads everything found in them: the file formats, the Exif
 and IPTC tags, and the XMP, ICC, Photoshop, maker note, MPF and thumbnail
 groups. Add `--write` to put it in your `package.json`, replacing any
-`include` or `exclude` section there, then run `npx exifreader build`. To
+`include` or `exclude` section there, then run `npx exifreader build`. Add
+`--imports` instead to print the equivalent `createReader` imports of the
+[composable API](#composable-api) in place of the configuration. To
 analyze and build in one step, and then check the result:
 
 ```bash
@@ -1086,7 +1406,11 @@ Tips
     will load a lot of files and storing the tags. It can be really large for
     some manufacturers. See the
     [examples site](https://mattiasw.github.io/ExifReader/) to see how you can
-    do that.
+    do that. On a reader from the [composable API](#composable-api), leaving
+    `makerNotes` out of `groups` skips decoding the maker notes, but a whole
+    `exif` group still returns the raw `MakerNote` tag. Compose the Exif tags
+    you need by name instead, or drop it with
+    `excludeTags: {exif: ['MakerNote']}` on a reader composed with `tagFilter`.
 -   In some cases it can make sense to only load the beginning of the image
     file since that is where the metadata is located. It's unfortunately not
     possible to know how big the metadata will be in an image, but if you limit
@@ -1101,7 +1425,9 @@ Tips
     especially impactful when combined with `length: 'auto'` (multi-x
     speedup, see that section), but it also lets a numeric `length`
     boundary land well before the sub-image. Regular Exif/XMP/ICC tags are
-    unaffected.
+    unaffected. On a reader from the [composable API](#composable-api), leave
+    `mpf` out of `groups`, or pass `excludeTags: {mpf: true}` to a reader
+    composed with `mpf` and `tagFilter`.
 
 Known Limitations
 -----------------

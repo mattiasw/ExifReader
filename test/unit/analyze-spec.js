@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
+import {execFileSync} from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -10,11 +11,18 @@ import {fileURLToPath} from 'url';
 import {
     collectImagePaths,
     loadFullParser,
+    loadTagBindingName,
     resolveDomParser,
     analyzeImages,
     deriveConfig,
+    deriveImports,
     writeConfigToPackageJson
 } from '../../bin/analyze.js';
+import * as Core from '../../src/composable/core.js';
+import * as Formats from '../../src/composable/formats.js';
+import * as Groups from '../../src/composable/groups.js';
+import * as ExifTags from '../../src/composable/tags/exif.js';
+import {getTagBindingName} from '../../src/composable/tag-binding-name.js';
 import {getConsoleWarnSpy} from './test-utils.js';
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'fixtures', 'images');
@@ -242,13 +250,180 @@ describe('analyze', () => {
         function include(results) {
             return deriveConfig(results).config.include;
         }
+    });
 
-        function image(fileType, groups) {
-            return Object.assign({file: fileGroup(fileType)}, groups);
-        }
+    describe('deriveImports', () => {
+        const CORE_IMPORT = 'import {createReader} from \'exifreader/core\';';
+        const DOM_PARSER_COMMENT = '// Outside browsers, xmp needs a domParser in createReader, for example '
+            + 'new DOMParser({onError: onErrorStopParsing}) from @xmldom/xmldom.';
 
-        function fileGroup(fileType, tags) {
-            return Object.assign({}, tags, {FileType: {value: fileType, description: fileType.toUpperCase()}});
+        it('imports the xml format and the xmp group for an XMP sidecar file, even without an xmp key', () => {
+            expect(snippetOf([image('xml')])).to.equal([
+                CORE_IMPORT,
+                'import {xml} from \'exifreader/formats\';',
+                'import {xmp} from \'exifreader/groups\';',
+                '',
+                DOM_PARSER_COMMENT,
+                'const reader = createReader({formats: [xml], groups: [xmp]});'
+            ].join('\n'));
+        });
+
+        it('orders the formats like allFormats, whatever the input order', () => {
+            const results = ['xml', 'gif', 'webp', 'jxl', 'avif', 'heic', 'png', 'jpeg', 'tiff'].map((fileType) => image(fileType));
+            const expected = 'formats: [tiff, jpeg, png, heic, avif, jxl, webp, gif, xml]';
+            expect(snippetOf(results)).to.contain(expected);
+            expect(snippetOf(results.slice().reverse())).to.contain(expected);
+        });
+
+        it('imports nothing for SOF tags, jfif and pngFile', () => {
+            const results = [
+                image('jpeg', {file: fileGroup('jpeg', {'Image Width': {}}), jfif: {}}),
+                image('png', {pngFile: {}})
+            ];
+            expect(snippetOf(results)).to.equal([
+                CORE_IMPORT,
+                'import {jpeg, png} from \'exifreader/formats\';',
+                '',
+                'const reader = createReader({formats: [jpeg, png]});'
+            ].join('\n'));
+        });
+
+        it('imports the exif tag names as tags, as JavaScript names, distinct and sorted, leaving out a nested Thumbnail', () => {
+            const results = [
+                image('jpeg', {exif: {'IPTC-NAA': {}, 'DateTime': {}, 'Thumbnail': {Compression: {}}}}),
+                image('jpeg', {exif: {'GPS Info IFD Pointer': {}, 'DateTime': {}}})
+            ];
+            expect(snippetOf(results)).to.equal([
+                CORE_IMPORT,
+                'import {jpeg} from \'exifreader/formats\';',
+                'import {thumbnail} from \'exifreader/groups\';',
+                'import {DateTime, GPSInfoIFDPointer, IPTCNAA} from \'exifreader/tags/exif\';',
+                '',
+                'const reader = createReader({formats: [jpeg], groups: [thumbnail], tags: [DateTime, GPSInfoIFDPointer, IPTCNAA]});'
+            ].join('\n'));
+        });
+
+        it('keeps the tags a group reads in tags, since the reader returns them only then', () => {
+            const results = [image('jpeg', {exif: {Make: {}, MakerNote: {}, DateTime: {}}, makerNotes: {}})];
+            expect(snippetOf(results)).to.contain('tags: [DateTime, Make, MakerNote]');
+        });
+
+        [
+            ['iptc', {iptc: {'By-line': {}}}, 'iptc'],
+            ['xmp', {xmp: {}}, 'xmp'],
+            ['icc', {icc: {}}, 'icc'],
+            ['photoshop', {photoshop: {}}, 'photoshop'],
+            ['mpf', {mpf: {}}, 'mpf'],
+            ['makerNotes', {makerNotes: {}}, 'makerNotes'],
+            ['gps', {gps: {Latitude: 1}}, 'gps'],
+            ['composite', {composite: {}}, 'composite'],
+            ['Thumbnail', {Thumbnail: {Compression: {}}}, 'thumbnail']
+        ].forEach(([key, groups, group]) => {
+            it(`imports the ${group} group for a ${key} key`, () => {
+                const snippet = snippetOf([image('jpeg', groups)]);
+                expect(snippet).to.contain(`import {${group}} from 'exifreader/groups';`);
+                expect(snippet).to.contain(`groups: [${group}]`);
+                expect(snippet).to.not.contain('exifreader/tags/');
+            });
+        });
+
+        it('orders the groups like allGroups, whatever the input order', () => {
+            const results = [
+                image('jpeg', {Thumbnail: {}, composite: {}, gps: {}}),
+                image('tiff', {makerNotes: {}, mpf: {}, photoshop: {}, icc: {}, xmp: {}, iptc: {}})
+            ];
+            const expected = 'groups: [iptc, xmp, icc, photoshop, mpf, makerNotes, gps, composite, thumbnail]';
+            expect(snippetOf(results)).to.contain(expected);
+            expect(snippetOf(results.slice().reverse())).to.contain(expected);
+        });
+
+        it('imports xmp once for an XMP sidecar and an image with XMP', () => {
+            expect(snippetOf([image('xml', {xmp: {}}), image('jpeg', {xmp: {}})])).to.contain('groups: [xmp]');
+        });
+
+        it('says that xmp needs a domParser outside browsers only when xmp is composed', () => {
+            expect(snippetOf([image('jpeg', {xmp: {}})]).split('\n')).to.include(DOM_PARSER_COMMENT);
+            expect(snippetOf([image('jpeg', {icc: {}})])).to.not.contain('domParser');
+        });
+
+        describe('every printed import', () => {
+            const MODULES = {
+                'exifreader/core': Core,
+                'exifreader/formats': Formats,
+                'exifreader/groups': Groups,
+                'exifreader/tags/exif': ExifTags
+            };
+            const RESULTS = [
+                image('tiff', {
+                    exif: {
+                        'DateTime': {},
+                        'Make': {},
+                        'MakerNote': {},
+                        'IPTC-NAA': {},
+                        'GPS Info IFD Pointer': {},
+                        'Interoperability IFD Pointer': {},
+                        'Thumbnail': {Compression: {}}
+                    },
+                    iptc: {'By-line': {}},
+                    makerNotes: {},
+                    photoshop: {},
+                    icc: {},
+                    gps: {Latitude: 1},
+                    composite: {}
+                }),
+                image('jpeg', {file: fileGroup('jpeg', {'Image Width': {}}), jfif: {}, mpf: {}, xmp: {}}),
+                image('png', {pngFile: {}}),
+                image('heic'),
+                image('avif'),
+                image('jxl'),
+                image('webp'),
+                image('gif'),
+                image('xml', {xmp: {}})
+            ];
+            let directory;
+
+            beforeEach(() => {
+                directory = fs.mkdtempSync(path.join(os.tmpdir(), 'exifreader-imports-'));
+            });
+
+            afterEach(() => {
+                fs.rmSync(directory, {recursive: true, force: true});
+            });
+
+            it('is an export of the module it is imported from, and createReader accepts them', () => {
+                const snippet = snippetOf(RESULTS);
+                const bindings = {};
+                for (const [, names, specifier] of snippet.matchAll(/^import \{([^}]+)\} from '([^']+)';$/gm)) {
+                    expect(MODULES, specifier).to.have.own.property(specifier);
+                    for (const name of names.split(', ')) {
+                        expect(Object.keys(MODULES[specifier]), `${name} from ${specifier}`).to.include(name);
+                        bindings[name] = MODULES[specifier][name];
+                    }
+                }
+                expect(Object.keys(bindings)).to.include.members(['createReader', 'xml', 'xmp', 'GPSInfoIFDPointer']);
+
+                const call = /^const reader = createReader\(\{(.+)\}\);$/m.exec(snippet)[1];
+                const tables = {};
+                for (const [, key, names] of call.matchAll(/(\w+): \[([^\]]*)\]/g)) {
+                    tables[key] = names.split(', ').map((name) => {
+                        expect(bindings, name).to.have.own.property(name);
+                        return bindings[name];
+                    });
+                }
+                expect(Object.keys(tables)).to.deep.equal(['formats', 'groups', 'tags']);
+                expect(tables.formats).to.deep.equal(Formats.allFormats);
+                expect(() => Core.createReader(tables)).to.not.throw();
+            });
+
+            it('is valid JavaScript', () => {
+                const file = path.join(directory, 'snippet.mjs');
+                fs.writeFileSync(file, snippetOf(RESULTS));
+                expect(() => execFileSync(process.execPath, ['--check', file], {stdio: 'pipe'})).to.not.throw();
+            });
+        });
+
+        function snippetOf(results) {
+            return deriveImports(results, getTagBindingName);
         }
     });
 
@@ -345,6 +520,12 @@ describe('analyze', () => {
             const parser = await loadFullParser();
             expect(parser.load).to.be.a('function');
             expect(parser.errors).to.have.property('MetadataMissingError');
+        });
+    });
+
+    describe('loadTagBindingName', () => {
+        it('loads the tag binding name function of the composable source', async () => {
+            expect(await loadTagBindingName()).to.equal(getTagBindingName);
         });
     });
 
@@ -569,4 +750,12 @@ describe('analyze', () => {
             expect(fs.readFileSync(filePath, 'utf8')).to.equal('{name');
         });
     });
+
+    function image(fileType, groups) {
+        return Object.assign({file: fileGroup(fileType)}, groups);
+    }
+
+    function fileGroup(fileType, tags) {
+        return Object.assign({}, tags, {FileType: {value: fileType, description: fileType.toUpperCase()}});
+    }
 });

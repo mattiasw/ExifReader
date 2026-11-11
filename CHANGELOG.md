@@ -16,7 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `exifreader/formats`, `exifreader/groups` and `exifreader/tags/*` (`exif`,
   `iptc`, `mpf`) subpaths, ES modules only, with their TypeScript definitions.
   Their modules name no `Buffer`. The TypeScript type of the grouped result of
-  `reader.load` has only the groups and tags the reader composes.
+  `reader.load` has only the groups and tags the reader composes. See [the
+  composable API](https://github.com/mattiasw/ExifReader#composable-api).
+- `npx exifreader analyze --imports`, which prints the `createReader` imports
+  that read everything found in the given images, in place of the custom build
+  configuration.
 
 ### Changed
 
@@ -24,6 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `errors.UnsupportedFormatError`. It is still an `Error` with the message
   `Invalid image format`, but its `name` is now `UnsupportedFormatError`, so
   `String(error)` changes to `UnsupportedFormatError: Invalid image format`.
+
+### Deprecated
+
+- The custom build is deprecated and will be removed in v5. The composable
+  subpaths (`exifreader/core` and the others) replace it;
+  [Migrating to the composable API](https://github.com/mattiasw/ExifReader#migrating-to-the-composable-api)
+  lists what differs. Removed in v5: the
+  `exifreader` key in `package.json`, `npx exifreader build`, the `postinstall`
+  rebuild (already deprecated), the string-replace pass in `webpack.config.js`
+  and the Babel tag filter (`bin/TagFilterPlugin.js`). `npx exifreader build`
+  now prints a pointer to the composable API.
 
 ## [4.54.0] - 2026-11-03
 

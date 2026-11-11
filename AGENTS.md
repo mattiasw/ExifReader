@@ -24,6 +24,7 @@ Users can configure custom builds (via `package.json` `"exifreader"` key) to inc
 3. Read the new flag only in `src/exif-reader.js` or `src/loadview-pipeline.js`, the files the string-replace regex in `webpack.config.js` covers (so `Constants.USE_*` gets replaced). A new module never reads `Constants` itself; it takes its gating from the orchestrator as an argument
 4. Add test entries in `test/build/custom-builds.json`
 5. Document the module in the README custom build table
+6. For the composable API: add the module under `src/composable/formats/` or `src/composable/groups/`, export it from `src/composable/formats.js` or `groups.js` and its `.d.ts`, place it in the order lists in `src/composable/composition.js`, list it behind its flag in `getDefaultTables()` in `src/exif-reader.js`, and add it to the README subpath table; a new tag module under `src/composable/tags/` also needs its own entry in `exports` and in `typesVersions` in `package.json`
 
 ## Commands
 

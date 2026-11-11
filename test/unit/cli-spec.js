@@ -6,13 +6,18 @@ import {expect} from 'chai';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import {fileURLToPath} from 'url';
 import {parseArgs, run, checkLocalInstall, readConfigFile} from '../../bin/cli.js';
 import {configHash} from '../../bin/custom-build-marker.js';
+import {getTagBindingName} from '../../src/composable/tag-binding-name.js';
 import {getConsoleWarnSpy} from './test-utils.js';
 
 const PROJECT_DIR = path.resolve('/proj');
 const DIST_DIR = path.join(PROJECT_DIR, 'node_modules', 'exifreader', 'dist');
 const DIST_PATH = path.join(DIST_DIR, 'exif-reader.js');
+const README_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'README.md');
+const BUILD_POINTER = 'The custom build is deprecated and will be removed in exifreader v5. For a small bundle, '
+    + 'compose a reader with createReader from exifreader/core instead: https://github.com/mattiasw/ExifReader#composable-api';
 
 describe('cli', () => {
     describe('parseArgs', () => {
@@ -89,6 +94,11 @@ describe('cli', () => {
             expect(parseArgs(['node', 'cli', 'build'])).to.deep.include({write: false, auto: false, verify: false, paths: []});
         });
 
+        it('recognizes --imports', () => {
+            expect(parseArgs(['node', 'cli', 'analyze']).imports).to.equal(false);
+            expect(parseArgs(['node', 'cli', 'analyze', '--imports']).imports).to.equal(true);
+        });
+
         it('recognizes --write, --auto and --verify', () => {
             expect(parseArgs(['node', 'cli', 'analyze', '--write'])).to.include({write: true, auto: false, verify: false});
             expect(parseArgs(['node', 'cli', 'build', '--auto'])).to.include({write: false, auto: true, verify: false});
@@ -116,7 +126,7 @@ describe('cli', () => {
             const {deps, calls} = makeDeps({resolveConfig: () => ({include: {}})});
             run(['node', 'cli', 'build'], deps);
             expect(calls.log).to.deep.equal([`Building a custom exifreader bundle at ${DIST_PATH}`]);
-            expect(calls.error).to.deep.equal([]);
+            expect(calls.error).to.deep.equal([BUILD_POINTER]);
         });
 
         it('builds with a preset EXIFREADER_CUSTOM_BUILD env var without resolving', () => {
@@ -395,16 +405,44 @@ describe('cli', () => {
                     checkLocalInstall: () => ({ok: true, distPath: DIST_PATH, shared: true})
                 });
                 run(['node', 'cli', 'build'], deps);
-                expect(calls.error).to.have.lengthOf(1);
+                expect(calls.error).to.have.lengthOf(2);
                 expect(calls.error[0]).to.contain(DIST_PATH);
                 expect(calls.error[0]).to.contain('last build wins');
-                expect(calls.output.map((entry) => entry.stream)).to.deep.equal(['error', 'log', 'build']);
+                expect(calls.error[1]).to.equal(BUILD_POINTER);
+                expect(calls.output.map((entry) => entry.stream)).to.deep.equal(['error', 'log', 'error', 'build']);
             });
 
             it('does not warn when the install is not shared', () => {
                 const {deps, calls} = makeDeps({resolveConfig: () => ({include: {}})});
                 run(['node', 'cli', 'build'], deps);
-                expect(calls.error).to.deep.equal([]);
+                expect(calls.error).to.deep.equal([BUILD_POINTER]);
+            });
+        });
+
+        describe('composable API pointer', () => {
+            const config = {include: {jpeg: true}};
+
+            it('says it before an --if-needed build of a stale bundle', () => {
+                const {deps, calls} = makeDeps({
+                    resolveConfig: () => config,
+                    readMarker: () => ({configHash: configHash(config), version: '1.2.2'})
+                });
+                run(['node', 'cli', 'build', '--if-needed'], deps);
+                expect(calls.output.slice(-2)).to.deep.equal([{stream: 'error', value: BUILD_POINTER}, {stream: 'build', value: {config}}]);
+            });
+
+            it('does not say it on --check of a stale bundle', () => {
+                const {deps, calls} = makeDeps({
+                    resolveConfig: () => config,
+                    readMarker: () => ({configHash: configHash(config), version: '1.2.2'})
+                });
+                run(['node', 'cli', 'build', '--check'], deps);
+                expect(calls.error.join('\n')).to.not.contain('deprecated');
+                expect(calls.log.join('\n')).to.not.contain('deprecated');
+            });
+
+            it('links a heading of the README', () => {
+                expect(readmeAnchors()).to.include(urlFragment(BUILD_POINTER));
             });
         });
 
@@ -429,6 +467,20 @@ describe('cli', () => {
             run(['node', 'cli', '--help'], deps);
             expect(calls.exit).to.deep.equal([0]);
             expect(calls.log.join('')).to.contain('build');
+        });
+
+        it('marks the build command as deprecated', () => {
+            const {deps, calls} = makeDeps();
+            run(['node', 'cli', '--help'], deps);
+            const buildCommand = calls.log.join('').split('  build ')[1].split('  analyze ')[0];
+            expect(buildCommand).to.contain('Deprecated');
+        });
+
+        it('lists --imports under the options for analyze', () => {
+            const {deps, calls} = makeDeps();
+            run(['node', 'cli', '--help'], deps);
+            const analyzeOptions = calls.log.join('').split('Options for analyze:\n')[1].split('\n\n')[0];
+            expect(analyzeOptions).to.contain('  --imports          Print the createReader imports');
         });
 
         it('prints help and exits 1 for no args', () => {
@@ -495,10 +547,73 @@ describe('cli', () => {
                         + 'sample of every kind of image your app reads, all in one run.',
                     'To use it, set it as the "exifreader" section of your package.json and run "npx exifreader build", '
                         + 'or save it to a file and run "npx exifreader build --config <file>". Run this command again '
-                        + 'with --write to update package.json for you.'
+                        + 'with --write to update package.json for you. Or run it with --imports to print the createReader '
+                        + 'imports of the composable API, which replaces the custom build.'
                 ]);
                 expect(calls.exit).to.deep.equal([]);
                 expect(calls.build).to.deep.equal([]);
+            });
+
+            describe('--imports', () => {
+                const IMPORTS_HINT = 'To use it, put it in place of "import ExifReader from \'exifreader\'" and pass '
+                    + 'reader.load the image as bytes or a Blob or File: it takes no path, URL, length, async, domParser or decompress '
+                    + 'option (domParser and decompress go to createReader), and always returns a Promise. It returns the tags grouped (tags.exif, tags.gps, ...); '
+                    + 'pass expanded: false for flat tags. See https://github.com/mattiasw/ExifReader#migrating-to-the-composable-api for what differs from '
+                    + 'ExifReader.load and https://github.com/mattiasw/ExifReader#composable-api for how to load each kind of input.';
+
+                it('links headings of the README in the hint', () => {
+                    const fragments = Array.from(IMPORTS_HINT.matchAll(/https:\/\/github\.com\/mattiasw\/ExifReader#([a-z0-9-]+)/g), ([, fragment]) => fragment);
+
+                    expect(fragments).to.deep.equal(['migrating-to-the-composable-api', 'composable-api']);
+                    expect(readmeAnchors()).to.include.members(fragments);
+                });
+
+                it('prints only the createReader imports on stdout and the summary, warnings and hint on stderr', async () => {
+                    const {deps, calls} = imageDeps({loadTagBindingName: () => Promise.resolve(getTagBindingName)});
+                    await run(['node', 'cli', 'analyze', 'samples', '--imports'], deps);
+                    expect(calls.log).to.deep.equal([[
+                        'import {createReader} from \'exifreader/core\';',
+                        'import {jpeg, png} from \'exifreader/formats\';',
+                        'import {xmp} from \'exifreader/groups\';',
+                        'import {DateTime} from \'exifreader/tags/exif\';',
+                        '',
+                        '// Outside browsers, xmp needs a domParser in createReader, for example new DOMParser({onError: onErrorStopParsing}) '
+                            + 'from @xmldom/xmldom.',
+                        'const reader = createReader({formats: [jpeg, png], groups: [xmp], tags: [DateTime]});'
+                    ].join('\n')]);
+                    expect(calls.error).to.deep.equal([
+                        'Analyzed 2 images (jpeg, png).',
+                        'No TIFF, HEIC, AVIF, JPEG XL, WebP or GIF images were found, so the reader will not read those formats.',
+                        'Tags and metadata groups that do not appear in these images are left out of the reader, so pass a '
+                            + 'sample of every kind of image your app reads, all in one run.',
+                        IMPORTS_HINT
+                    ]);
+                    expect(calls.exit).to.deep.equal([]);
+                    expect(calls.build).to.deep.equal([]);
+                });
+
+                it('errors when the tag binding name function cannot be loaded, printing nothing on stdout', async () => {
+                    const {deps, calls, parsed} = imageDeps({loadTagBindingName: () => Promise.reject(new Error('Cannot find module'))});
+                    await run(['node', 'cli', 'analyze', 'samples', '--imports'], deps);
+                    expect(calls.error).to.deep.equal(['Cannot find module']);
+                    expect(calls.exit).to.deep.equal([1]);
+                    expect(calls.log).to.deep.equal([]);
+                    expect(parsed).to.deep.equal([]);
+                });
+
+                it('errors with --write before reading any image or package.json', async () => {
+                    const packageJsonPath = path.join(directory, 'package.json');
+                    fs.writeFileSync(packageJsonPath, '{"name": "app"}');
+                    const {deps, calls, parsed} = imageDeps({loadTagBindingName: () => Promise.resolve(getTagBindingName)});
+                    await run(['node', 'cli', 'analyze', 'samples', '--imports', '--write'], deps);
+                    expect(calls.error).to.deep.equal(['--imports and --write cannot be used together. --write saves a '
+                        + 'custom build configuration to package.json, and --imports prints createReader imports instead '
+                        + 'of that configuration.']);
+                    expect(calls.exit).to.deep.equal([1]);
+                    expect(calls.log).to.deep.equal([]);
+                    expect(parsed).to.deep.equal([]);
+                    expect(fs.readFileSync(packageJsonPath, 'utf8')).to.equal('{"name": "app"}');
+                });
             });
 
             it('says "1 image" for a single image', async () => {
@@ -596,7 +711,7 @@ describe('cli', () => {
                     const {deps, calls} = imageDeps({resolveDomParser: () => undefined});
                     await run(['node', 'cli', 'analyze', 'samples'], deps);
                     expect(calls.error[0]).to.equal('@xmldom/xmldom was not found, so the XMP content of the images was not read. '
-                        + 'XMP is still included in the configuration when an image has it.');
+                        + 'XMP is still included when an image has it, unless it is Brotli-compressed in a JPEG XL file.');
                     expect(calls.log).to.deep.equal([CONFIG_JSON]);
                     expect(warnSpy.hasWarned).to.equal(false);
                     expect(console.warn).to.equal(warnSpy);
@@ -701,6 +816,7 @@ describe('cli', () => {
                 expect(calls.build).to.deep.equal([{config: CONFIG}]);
                 expect(calls.log).to.deep.equal([CONFIG_JSON, `Building a custom exifreader bundle at ${DIST_PATH}`]);
                 expect(calls.error[0]).to.equal('Analyzed 2 images (jpeg, png).');
+                expect(calls.output.slice(-2)).to.deep.equal([{stream: 'error', value: BUILD_POINTER}, {stream: 'build', value: {config: CONFIG}}]);
                 expect(calls.error.join('\n')).to.not.contain('--write');
                 expect(calls.exit).to.deep.equal([]);
             });
@@ -783,7 +899,9 @@ describe('cli', () => {
                 [['samples', 'more'], 'Unexpected argument: samples more. Image paths are only read with --auto or --verify, '
                     + 'for example "npx exifreader build --auto ./samples".'],
                 [['--auto', 'samples', '--write'], '--write is an option of analyze, not build. To save the configuration, '
-                    + 'run "npx exifreader analyze <paths...> --write", then "npx exifreader build".']
+                    + 'run "npx exifreader analyze <paths...> --write", then "npx exifreader build".'],
+                [['--auto', 'samples', '--imports'], '--imports is an option of analyze, not build. To print the '
+                    + 'createReader imports for your images, run "npx exifreader analyze <paths...> --imports".']
             ].forEach(([flags, message]) => {
                 it(`errors for build ${flags.join(' ')} without reading or building anything`, () => {
                     const {deps, calls, parsed} = imageDeps({resolveConfig: () => ({include: {jpeg: true}}), readConfigFile: () => ({include: {jpeg: true}})});
@@ -806,10 +924,10 @@ describe('cli', () => {
                     `Building a custom exifreader bundle at ${DIST_PATH}`,
                     'All 2 images gave the same result with the custom build as with the full parser.'
                 ]);
-                expect(calls.error).to.deep.equal([]);
+                expect(calls.error).to.deep.equal([BUILD_POINTER]);
                 expect(calls.exit).to.deep.equal([]);
                 expect(calls.loadCustomParser).to.deep.equal([DIST_PATH]);
-                expect(calls.output.map((entry) => entry.stream)).to.deep.equal(['log', 'build', 'loadCustomParser', 'log']);
+                expect(calls.output.map((entry) => entry.stream)).to.deep.equal(['log', 'error', 'build', 'loadCustomParser', 'log']);
             });
 
             it('says "The image" for a single image', async () => {
@@ -840,6 +958,7 @@ describe('cli', () => {
                 });
                 await run(['node', 'cli', 'build', '--verify', 'samples'], deps);
                 expect(calls.error).to.deep.equal([
+                    BUILD_POINTER,
                     path.join(directory, 'samples', 'a.jpg'),
                     '  exif.DateTime: missing from the custom build',
                     '1 of 2 images gave a different result with the custom build than with the full parser.'
@@ -852,6 +971,7 @@ describe('cli', () => {
                 const {deps, calls} = imageDeps({resolveConfig: () => CONFIG, customResults: {jpeg: undefined}});
                 await run(['node', 'cli', 'build', '--verify', 'samples/a.jpg'], deps);
                 expect(calls.error).to.deep.equal([
+                    BUILD_POINTER,
                     path.join(directory, 'samples', 'a.jpg'),
                     '  the custom build failed: Invalid image format',
                     '1 of 1 image gave a different result with the custom build than with the full parser.'
@@ -947,6 +1067,7 @@ describe('cli', () => {
                 const {deps, calls} = imageDeps({resolveConfig: () => CONFIG});
                 await run(['node', 'cli', 'build', '--verify', 'notes.txt'], deps);
                 expect(calls.error).to.deep.equal([
+                    BUILD_POINTER,
                     `Skipped ${path.join(directory, 'notes.txt')}: Invalid image format`,
                     'None of the given files could be read as an image, so nothing was verified.'
                 ]);
@@ -959,7 +1080,7 @@ describe('cli', () => {
                 try {
                     const {deps, calls} = imageDeps({resolveConfig: () => CONFIG, resolveDomParser: () => undefined});
                     await run(['node', 'cli', 'build', '--verify', 'samples'], deps);
-                    expect(calls.error).to.deep.equal(['@xmldom/xmldom was not found, so XMP was compared at group level only.']);
+                    expect(calls.error).to.deep.equal([BUILD_POINTER, '@xmldom/xmldom was not found, so XMP was compared at group level only.']);
                     expect(warnSpy.hasWarned).to.equal(false);
                     expect(console.warn).to.equal(warnSpy);
                 } finally {
@@ -1300,6 +1421,7 @@ describe('cli', () => {
             build: (options) => record('build', options),
             fs,
             loadFullParser: () => Promise.reject(new Error('loadFullParser not stubbed')),
+            loadTagBindingName: () => Promise.reject(new Error('loadTagBindingName not stubbed')),
             loadCustomParser: () => {
                 throw new Error('loadCustomParser not stubbed');
             },
@@ -1314,5 +1436,17 @@ describe('cli', () => {
             calls[stream].push(value);
             calls.output.push({stream, value});
         }
+    }
+
+    function urlFragment(message) {
+        return /https:\/\/github\.com\/mattiasw\/ExifReader#([a-z0-9-]+)/.exec(message)[1];
+    }
+
+    // The anchors GitHub gives the README's ATX headings.
+    function readmeAnchors() {
+        return Array.from(fs.readFileSync(README_PATH, 'utf8').matchAll(/^#{1,6} (.+)$/gm), ([, heading]) => heading
+            .toLowerCase()
+            .replace(/[^a-z0-9 -]/g, '')
+            .replace(/ /g, '-'));
     }
 });

@@ -10,10 +10,21 @@ const path = require('path');
 const fs = require('fs');
 const {createRequire} = require('module');
 const {readMarker, markerMatches} = require('./custom-build-marker');
-const {collectImagePaths, loadFullParser, resolveDomParser, analyzeImages, deriveConfig, writeConfigToPackageJson} = require('./analyze');
+const {
+    collectImagePaths,
+    loadFullParser,
+    loadTagBindingName,
+    resolveDomParser,
+    analyzeImages,
+    deriveConfig,
+    deriveImports,
+    writeConfigToPackageJson
+} = require('./analyze');
 const {verifyImages, loadCustomParser} = require('./verify-build');
 
 const EXIFREADER_ROOT_DIR = path.join(__dirname, '..');
+const COMPOSABLE_API_URL = 'https://github.com/mattiasw/ExifReader#composable-api';
+const MIGRATION_URL = 'https://github.com/mattiasw/ExifReader#migrating-to-the-composable-api';
 
 module.exports = {parseArgs, run, checkLocalInstall, readConfigFile};
 
@@ -31,6 +42,7 @@ if (require.main === module) {
         build: (options) => require('./build').runBuild(options),
         fs,
         loadFullParser,
+        loadTagBindingName,
         loadCustomParser,
         resolveDomParser,
         log: console.log,
@@ -79,6 +91,7 @@ function parseArgs(argv) {
         ifNeeded: args.includes('--if-needed'),
         config: configPath(args),
         write: args.includes('--write'),
+        imports: args.includes('--imports'),
         auto: args.includes('--auto'),
         verify: args.includes('--verify'),
         paths: positionals(args).slice(1)
@@ -109,6 +122,8 @@ function helpText() {
         + '  build              Rebuild dist/exif-reader.js using the "exifreader" custom build\n'
         + '                     configuration (include/exclude) from --config, the\n'
         + '                     EXIFREADER_CUSTOM_BUILD env var, or your project\'s package.json.\n'
+        + '                     Deprecated: the custom build is removed in v5. Compose a reader\n'
+        + '                     with createReader from exifreader/core instead.\n'
         + '  analyze <paths...> Read the given image files and directories with the full parser\n'
         + '                     and print the include configuration that reads everything found\n'
         + '                     in them.\n'
@@ -128,6 +143,8 @@ function helpText() {
         + 'Options for analyze:\n'
         + '  --write            Put the configuration in your project\'s package.json, replacing\n'
         + '                     its include or exclude section.\n'
+        + '  --imports          Print the createReader imports of the composable API that read\n'
+        + '                     everything found, instead of the configuration.\n'
         + '\n'
         + 'Options:\n'
         + '  -h, --help         Show this help.\n'
@@ -204,6 +221,10 @@ function sampleOptionError(args) {
         return '--write is an option of analyze, not build. To save the configuration, run '
             + '"npx exifreader analyze <paths...> --write", then "npx exifreader build".';
     }
+    if (args.imports) {
+        return '--imports is an option of analyze, not build. To print the createReader imports for your '
+            + 'images, run "npx exifreader analyze <paths...> --imports".';
+    }
     if (args.auto && args.config !== undefined) {
         return '--auto and --config cannot be used together. --auto builds the configuration it derives '
             + 'from the images, so leave out --config.';
@@ -251,7 +272,7 @@ function reportSkipped(skipped, deps) {
 }
 
 function runAutoBuild(args, cwd, imagePaths, install, deps) {
-    return failOnRejection(analyzeSample(imagePaths, cwd, deps).then((analysis) => {
+    return failOnRejection(analyzeSample(imagePaths, cwd, deps, renderConfig).then((analysis) => {
         if (!analysis) {
             return undefined;
         }
@@ -260,18 +281,23 @@ function runAutoBuild(args, cwd, imagePaths, install, deps) {
     }), deps);
 }
 
+function renderConfig(derived) {
+    return JSON.stringify(derived.config, null, 2);
+}
+
 function failOnRejection(promise, deps) {
     return promise.catch((error) => fail(deps, error.message));
 }
 
-// Prints the derived configuration on stdout and the summary on stderr, and
-// resolves to the configuration and the images it was derived from. Resolves
-// to undefined after failing when no image could be read.
-async function analyzeSample(imagePaths, cwd, deps) {
+// Prints what render returns for the derived configuration and the expanded
+// results on stdout and the summary on stderr, and resolves to the
+// configuration and the images it was derived from. Resolves to undefined
+// after failing when no image could be read.
+async function analyzeSample(imagePaths, cwd, deps, render, product) {
     const domParser = deps.resolveDomParser(cwd);
     if (!domParser) {
         deps.error('@xmldom/xmldom was not found, so the XMP content of the images was not read. '
-            + 'XMP is still included in the configuration when an image has it.');
+            + 'XMP is still included when an image has it, unless it is Brotli-compressed in a JPEG XL file.');
     }
     const parser = await deps.loadFullParser();
     const {results, skipped} = await withoutConsoleWarnings(!domParser, () => analyzeImages(imagePaths, {fs: deps.fs, parser, domParser}));
@@ -281,8 +307,9 @@ async function analyzeSample(imagePaths, cwd, deps) {
         return undefined;
     }
 
-    const derived = deriveConfig(results.map((result) => result.tags));
-    deps.log(JSON.stringify(derived.config, null, 2));
+    const expandedResults = results.map((result) => result.tags);
+    const derived = deriveConfig(expandedResults, product);
+    deps.log(render(derived, expandedResults));
     deps.error(`Analyzed ${countOf(results.length, 'image')} (${derived.fileTypes.join(', ')}).`);
     for (const warning of derived.warnings) {
         deps.error(warning);
@@ -323,7 +350,13 @@ function buildUnlessUpToDate(config, args, install, deps) {
         deps.error(sharedInstallMessage(install.distPath));
     }
     deps.log(`Building a custom exifreader bundle at ${install.distPath}`);
+    deps.error(customBuildDeprecationMessage());
     deps.build({config});
+}
+
+function customBuildDeprecationMessage() {
+    return 'The custom build is deprecated and will be removed in exifreader v5. For a small bundle, compose a '
+        + `reader with createReader from exifreader/core instead: ${COMPOSABLE_API_URL}`;
 }
 
 async function verifyBuild(imagePaths, cwd, install, deps) {
@@ -360,6 +393,12 @@ async function verifyBuild(imagePaths, cwd, install, deps) {
 }
 
 function runAnalyzeCommand(args, deps) {
+    if (args.imports && args.write) {
+        fail(deps, '--imports and --write cannot be used together. --write saves a custom build configuration '
+            + 'to package.json, and --imports prints createReader imports instead of that configuration.');
+        return undefined;
+    }
+
     const cwd = deps.cwd();
     if (args.paths.length === 0) {
         fail(deps, 'analyze needs the image files or directories to read, for example '
@@ -382,7 +421,7 @@ function runAnalyzeCommand(args, deps) {
         return undefined;
     }
 
-    return failOnRejection(analyzeSample(imagePaths, cwd, deps).then((analysis) => {
+    return failOnRejection(analyzeForCommand(args, imagePaths, cwd, deps).then((analysis) => {
         if (!analysis) {
             return;
         }
@@ -390,10 +429,36 @@ function runAnalyzeCommand(args, deps) {
             writeToPackageJson(path.join(packageDir, 'package.json'), analysis.config.include, deps);
             return;
         }
-        deps.error('To use it, set it as the "exifreader" section of your package.json and run '
-            + '"npx exifreader build", or save it to a file and run "npx exifreader build --config <file>". '
-            + 'Run this command again with --write to update package.json for you.');
+        deps.error(args.imports ? importsHint() : configHint());
     }), deps);
+}
+
+function analyzeForCommand(args, imagePaths, cwd, deps) {
+    if (!args.imports) {
+        return analyzeSample(imagePaths, cwd, deps, renderConfig);
+    }
+    return deps.loadTagBindingName().then((getTagBindingName) => analyzeSample(
+        imagePaths,
+        cwd,
+        deps,
+        (derived, results) => deriveImports(results, getTagBindingName),
+        'reader'
+    ));
+}
+
+function importsHint() {
+    return 'To use it, put it in place of "import ExifReader from \'exifreader\'" and pass reader.load the image '
+        + 'as bytes or a Blob or File: it takes no path, URL, length, async, domParser or decompress option (domParser and decompress go to createReader), '
+        + 'and always returns a Promise. It returns the tags grouped (tags.exif, tags.gps, ...); '
+        + 'pass expanded: false for flat tags. '
+        + `See ${MIGRATION_URL} for what differs from ExifReader.load and ${COMPOSABLE_API_URL} for how to load each kind of input.`;
+}
+
+function configHint() {
+    return 'To use it, set it as the "exifreader" section of your package.json and run '
+        + '"npx exifreader build", or save it to a file and run "npx exifreader build --config <file>". '
+        + 'Run this command again with --write to update package.json for you. Or run it with --imports to '
+        + 'print the createReader imports of the composable API, which replaces the custom build.';
 }
 
 function writeToPackageJson(filePath, include, deps) {
