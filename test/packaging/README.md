@@ -1,7 +1,7 @@
 # Resolver matrix
 
 `resolver-matrix.mjs` packs the working tree, extracts it into a temporary
-consumer project and resolves eleven specifiers with the real tools:
+consumer project and resolves twelve specifiers with the real tools:
 
 - `exifreader`
 - `exifreader/package.json`
@@ -15,6 +15,8 @@ consumer project and resolves eleven specifiers with the real tools:
 - `exifreader/formats`
 - `exifreader/groups`
 - `exifreader/tags/exif`
+- `exifreader/tags/mpf` (must fail; a tag subpath the exports map does not
+  list)
 
 The legs are webpack 5 (esm and commonjs, plus `target: 'node'` with
 module-first and main-first `mainFields`), esbuild (browser and node, import

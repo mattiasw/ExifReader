@@ -45,6 +45,7 @@ const FORMAT_NAMES = Object.keys(Formats).filter((name) => !ALL_TABLES.includes(
 const GROUP_NAMES = Object.keys(Groups).filter((name) => !ALL_TABLES.includes(name));
 const METADATA_RANGE = 'metadataRange';
 const OPTION_SETS = [{}, {includeOffsets: true}];
+const DESCRIPTOR_OPTION_SETS = [{}, {includeUnknown: true}];
 // No input carries a Pentax maker note: the test images have no builder for one.
 const UNRETURNED_KEYS = {pentax: ['makerNotes']};
 const DESCRIPTOR_MODULES = [
@@ -102,6 +103,71 @@ describe('composable/composition keys', () => {
             }
         });
 
+        it('should return only the declared group and name of each descriptor alone', async () => {
+            const mismatches = [];
+            const returnedNames = new Set();
+            for (const {descriptors, declarations} of descriptorModules) {
+                for (const binding of Object.keys(declarations)) {
+                    const declaration = declarations[binding];
+                    for (const formatName of FORMAT_NAMES) {
+                        const reader = createReader({formats: [Formats[formatName]], tags: [descriptors[binding]]});
+                        const allowedKeys = declaredKeys.formats[formatName].concat(declaration.group);
+                        for (const {name, data} of inputs) {
+                            for (const options of DESCRIPTOR_OPTION_SETS) {
+                                const tags = await loadSupported(reader, data, options);
+                                if (tags === undefined) {
+                                    continue;
+                                }
+                                const run = `${formatName} with ${binding} on ${name} ${JSON.stringify(options)}`;
+                                mismatches.push(...getExtraKeys(tags, allowedKeys).map((key) => `${run}: ${key}`));
+                                const namedTags = tags[declaration.group];
+                                mismatches.push(...getExtraKeys(namedTags, [declaration.name]).map((key) => `${run}: ${declaration.group}.${key}`));
+                                if (namedTags && declaration.name in namedTags) {
+                                    returnedNames.add(declaration.name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            expect(mismatches).to.deep.equal([]);
+            expect(returnedNames).to.include('Exif IFD Pointer');
+            expect(returnedNames).to.include('Sub-location');
+        }).timeout(60000);
+
+        it('should add no dependency names of the other descriptor group', async () => {
+            const mismatches = [];
+            for (const [{group, descriptors, declarations}, otherGroup] of [[descriptorModules[0], 'iptc'], [descriptorModules[1], 'exif']]) {
+                for (const binding of Object.keys(declarations)) {
+                    const tables = getTables(FORMAT_NAMES, [otherGroup]);
+                    tables.tags = [descriptors[binding]];
+                    mismatches.push(...await getNestedMismatches(createReader(tables), inputs, {[group]: [declarations[binding].name]}));
+                }
+            }
+            expect(mismatches).to.deep.equal([]);
+        }).timeout(60000);
+
+        it('should add no dependency names of the groups composed beside the descriptors', async () => {
+            const [exifModule, iptcModule] = descriptorModules;
+            const allowedNames = {
+                exif: [exifModule.declarations.DateTimeOriginal.name, exifModule.declarations.ExifIFDPointer.name],
+                iptc: [iptcModule.declarations.SubLocation.name],
+            };
+            const mismatches = [];
+            for (const groupName of GROUP_NAMES.filter((name) => name !== 'exif' && name !== 'iptc')) {
+                const tables = getTables(['jpeg'], [groupName]);
+                tables.tags = [ExifDescriptors.DateTimeOriginal, ExifDescriptors.ExifIFDPointer, IptcDescriptors.SubLocation];
+                mismatches.push(...await getNestedMismatches(createReader(tables), inputs, allowedNames));
+            }
+            expect(mismatches).to.deep.equal([]);
+        });
+
+        it('should declare in core.d.ts exactly the iptc names that have no descriptor', () => {
+            const descriptorNames = getDeclaredNames(descriptorModules[1]);
+            const groupOnlyNames = getDictionaryNames(IptcTagNames.iptc).filter((name) => !descriptorNames.includes(name));
+            expect(getIptcGroupOnlyNames().sort()).to.deep.equal(groupOnlyNames.sort());
+        });
+
         it('should declare in core.d.ts exactly the iptc names of the repeatable datasets', () => {
             const repeatableNames = Object.values(IptcTagNames.iptc).filter((entry) => entry.repeatable === true).map((entry) => entry.name);
             expect(getRepeatableIptcNames().sort()).to.deep.equal(repeatableNames.sort());
@@ -120,7 +186,7 @@ describe('composable/composition keys', () => {
         it('should return only declared names from the whole exif and iptc groups', async () => {
             const allowedNames = {
                 exif: getDeclaredNames(descriptorModules[0]),
-                iptc: getDeclaredNames(descriptorModules[1]),
+                iptc: getDeclaredNames(descriptorModules[1]).concat(getIptcGroupOnlyNames()),
             };
             const reader = createReader(getTables(FORMAT_NAMES, ['exif', 'iptc']));
             const extraNames = [];
@@ -284,8 +350,46 @@ function getExtraKeys(object, allowedKeys) {
     return Object.keys(object || {}).filter((key) => !allowedKeys.includes(key));
 }
 
+async function getNestedMismatches(reader, inputs, allowedNames) {
+    const mismatches = [];
+    for (const {name, data} of inputs) {
+        for (const options of DESCRIPTOR_OPTION_SETS) {
+            const tags = await loadSupported(reader, data, options);
+            if (tags === undefined) {
+                continue;
+            }
+            for (const group of Object.keys(allowedNames)) {
+                mismatches.push(...getExtraKeys(tags[group], allowedNames[group]).map((key) => `${name} ${JSON.stringify(options)}: ${group}.${key}`));
+            }
+        }
+    }
+    return mismatches;
+}
+
 function getDeclaredNames(descriptorModule) {
     return Object.values(descriptorModule.declarations).map(({name}) => name);
+}
+
+// A name function gets a two-byte and a one-byte value, the lengths it tells apart.
+function getDictionaryNames(dictionary) {
+    const names = new Set();
+    for (const entry of Object.values(dictionary)) {
+        if (typeof entry === 'string') {
+            names.add(entry);
+        } else if (typeof entry.name === 'function') {
+            names.add(entry.name([0, 0]));
+            names.add(entry.name([0]));
+        } else {
+            names.add(entry.name);
+        }
+    }
+    return [...names];
+}
+
+function getIptcGroupOnlyNames() {
+    const union = readText('src/composable/core.d.ts').match(/^type IptcGroupOnlyName = ('[^']*'(?: \| '[^']*')*);$/m);
+    expect(union, 'type IptcGroupOnlyName in src/composable/core.d.ts').to.not.equal(null);
+    return union[1].split(' | ').map((literal) => literal.slice(1, -1));
 }
 
 function getRepeatableIptcNames() {

@@ -29,26 +29,24 @@ const SUBPATH_SPECIFIERS = [
     {specifier: 'exifreader/formats', file: 'src/composable/formats.js', shape: {jpeg: 'object', allFormats: 'object'}},
     {specifier: 'exifreader/groups', file: 'src/composable/groups.js', shape: {exif: 'object', allGroups: 'object'}},
     {specifier: 'exifreader/tags/exif', file: 'src/composable/tags/exif.js', shape: {DateTimeOriginal: 'object'}},
-    {specifier: 'exifreader/tags/iptc', file: 'src/composable/tags/iptc.js', shape: {ModelVersion: 'object'}},
-    {specifier: 'exifreader/tags/mpf', file: 'src/composable/tags/mpf.js', shape: {MPFVersion: 'object'}}
+    {specifier: 'exifreader/tags/iptc', file: 'src/composable/tags/iptc.js', shape: {ModelVersion: 'object'}}
 ];
 const SUBPATH_TYPE_FILES = [
     'src/composable/core.d.ts',
     'src/composable/formats.d.ts',
     'src/composable/groups.d.ts',
     'src/composable/tags/exif.d.ts',
-    'src/composable/tags/iptc.d.ts',
-    'src/composable/tags/mpf.d.ts'
+    'src/composable/tags/iptc.d.ts'
 ];
 const TAG_MODULE_FILES = [
     'src/composable/tags/exif.js',
-    'src/composable/tags/iptc.js',
-    'src/composable/tags/mpf.js'
+    'src/composable/tags/iptc.js'
 ];
 const BLOCKED_SPECIFIERS = [
     'exifreader/bin/cli.js',
     'exifreader/src/composable/core.js',
     'exifreader/src/composable/internal.js',
+    'exifreader/tags/mpf',
     'exifreader/tags/exiff'
 ];
 const NOT_EXPORTED_CODE = 'ERR_PACKAGE_PATH_NOT_EXPORTED';

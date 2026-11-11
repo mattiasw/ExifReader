@@ -16,6 +16,8 @@ import TagNames0thIfd from '../../../src/tag-names-0th-ifd.js';
 import TagNamesExifIfd from '../../../src/tag-names-exif-ifd.js';
 import TagNamesGpsIfd from '../../../src/tag-names-gps-ifd.js';
 import TagNamesInteroperabilityIfd from '../../../src/tag-names-interoperability-ifd.js';
+import IptcTagNames from '../../../src/iptc-tag-names.js';
+import {IPTCNAA} from '../../../src/composable/tags/exif.js';
 
 const {iptc, mpf, makerNotes, gps, composite, thumbnail} = Groups;
 const FORMAT_KEY_SETS = [['file'], ['file', 'jfif'], ['file', 'png'], ['file', 'riff'], ['file', 'gif'], ['file', 'jfif', 'png', 'riff', 'gif']];
@@ -32,6 +34,7 @@ const DESCRIPTOR_NAME_LISTS = [
     ['gpsaltitude'],
     ['DateTime', 'GPSLatitude', 'RelatedImageWidth', 'InteroperabilityIndex', 'Make'],
 ];
+const IPTC_NAME_LISTS = [['By-line'], ['by-line', 'Headline'], ['Coded Character Set', 'Keywords']];
 const PROTOTYPE_NAMES = ['constructor', '__proto__'];
 const GROUP_KEYS = Object.keys(FILTER_GROUPS).concat(['pngText'], PROTOTYPE_NAMES);
 const NAMES = getNameCorpus();
@@ -55,6 +58,57 @@ describe('composable/composition-tag-filter', () => {
                 }
             });
         }
+    });
+
+    describe('with IPTC tag descriptors', () => {
+        const groupSets = [[], [gps], [composite, thumbnail], EXIF_NEEDING_GROUPS.filter((group) => group !== iptc), [mpf]];
+
+        it('should give the verdicts of the full filter with includeTags as a limit', () => {
+            for (const groups of groupSets) {
+                for (const exifValue of DESCRIPTOR_NAME_LISTS.concat([true])) {
+                    for (const iptcNames of IPTC_NAME_LISTS) {
+                        const config = Object.assign(getConfig(['file', 'jfif'], groups, exifValue), {iptc: iptcNames});
+                        const disagreement = findDisagreement(config, getExifDependencies(groups).concat([IPTCNAA.name]));
+                        expect(disagreement, disagreement).to.equal(undefined);
+                    }
+                }
+            }
+        });
+
+        it('should parse and return only the named IPTC tags, whatever their case', () => {
+            const filter = createCompositionTagFilter({file: true, iptc: ['By-line', 'headline']}, [IPTCNAA.name]);
+
+            for (const check of ['shouldParseTag', 'shouldReturnTag']) {
+                expect(filter[check]('iptc', 'By-line', 0x0250), check).to.equal(true);
+                expect(filter[check]('iptc', 'Headline', 0x0269), check).to.equal(true);
+                expect(filter[check]('iptc', 'BY-LINE', 0x0250), check).to.equal(true);
+                expect(filter[check]('iptc', 'Keywords', 0x0219), check).to.equal(false);
+                expect(filter[check]('iptc', 'undefined-240', 0x02f0), check).to.equal(false);
+                expect(filter[check]('iptc', undefined, 0x0250), check).to.equal(false);
+            }
+            expect(filter.shouldParseGroup('iptc')).to.equal(true);
+            expect(filter.shouldReturnGroup('iptc')).to.equal(true);
+        });
+
+        it('should keep the verdicts of a group set to true and of an absent group', () => {
+            const filter = createCompositionTagFilter({file: true, iptc: true}, [IPTCNAA.name]);
+            const exifOnlyFilter = createCompositionTagFilter({file: true, exif: ['DateTime']}, []);
+
+            expect(filter.shouldParseTag('iptc', 'undefined-240', 0x02f0)).to.equal(true);
+            expect(filter.shouldReturnTag('iptc', 'Keywords', 0x0219)).to.equal(true);
+            expect(exifOnlyFilter.shouldParseTag('iptc', 'By-line', 0x0250)).to.equal(false);
+            expect(exifOnlyFilter.shouldReturnTag('iptc', 'By-line', 0x0250)).to.equal(false);
+            expect(exifOnlyFilter.shouldParseTag('xmp', 'Title')).to.equal(false);
+        });
+
+        it('should parse the IPTC-NAA Exif tag but not return it', () => {
+            const filter = createCompositionTagFilter({file: true, iptc: ['By-line']}, [IPTCNAA.name]);
+
+            expect(filter.shouldParseGroup('exif')).to.equal(true);
+            expect(filter.shouldParseTag('exif', 'IPTC-NAA', 0x83bb)).to.equal(true);
+            expect(filter.shouldParseTag('exif', 'DateTime', 0x0132)).to.equal(false);
+            expect(filter.shouldReturnTag('exif', 'IPTC-NAA', 0x83bb)).to.equal(false);
+        });
     });
 });
 
@@ -133,6 +187,12 @@ function getNameCorpus() {
         for (const id of Object.keys(dictionary)) {
             const entry = dictionary[id];
             names.push([typeof entry === 'string' ? entry : entry.name, Number(id)]);
+        }
+    }
+    for (const id of Object.keys(IptcTagNames.iptc)) {
+        const entry = IptcTagNames.iptc[id];
+        if (typeof entry.name === 'string') {
+            names.push([entry.name, Number(id)]);
         }
     }
     const dependencyNames = [].concat(...Object.keys(EXIF_DEPENDENCY_TAGS).map((key) => EXIF_DEPENDENCY_TAGS[key]), COMPOSITE_DEPENDENCY_TAGS.file, COMPOSITE_DEPENDENCY_TAGS.exif);

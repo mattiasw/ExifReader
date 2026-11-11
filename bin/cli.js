@@ -14,6 +14,7 @@ const {
     collectImagePaths,
     loadFullParser,
     loadTagBindingName,
+    loadIptcTagExportNames,
     resolveDomParser,
     analyzeImages,
     deriveConfig,
@@ -43,6 +44,7 @@ if (require.main === module) {
         fs,
         loadFullParser,
         loadTagBindingName,
+        loadIptcTagExportNames,
         loadCustomParser,
         resolveDomParser,
         log: console.log,
@@ -437,13 +439,14 @@ function analyzeForCommand(args, imagePaths, cwd, deps) {
     if (!args.imports) {
         return analyzeSample(imagePaths, cwd, deps, renderConfig);
     }
-    return deps.loadTagBindingName().then((getTagBindingName) => analyzeSample(
-        imagePaths,
-        cwd,
-        deps,
-        (derived, results) => deriveImports(results, getTagBindingName),
-        'reader'
-    ));
+    return Promise.all([deps.loadTagBindingName(), deps.loadIptcTagExportNames()])
+        .then(([getTagBindingName, iptcTagExportNames]) => analyzeSample(
+            imagePaths,
+            cwd,
+            deps,
+            (derived, results) => deriveImports(results, getTagBindingName, iptcTagExportNames),
+            'reader'
+        ));
 }
 
 function importsHint() {

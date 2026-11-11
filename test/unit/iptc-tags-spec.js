@@ -11,7 +11,7 @@ import {TextDecoder as UtilTextDecoder} from 'node:util';
 import {expect} from 'chai';
 import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils.js';
 import {getCharacterArray} from '../../src/utils.js';
-import IptcTags from '../../src/iptc-tags.js';
+import IptcTags, {readIptcTags} from '../../src/iptc-tags.js';
 import IptcTagNames from '../../src/iptc-tag-names.js';
 import {createTagFilter} from '../../src/tag-filter.js';
 import TagDecoder from '../../src/tag-decoder.js';
@@ -522,15 +522,6 @@ describe('iptc-tags', function () {
                 expect(tags['Coded Character Set']).to.be.undefined;
             });
 
-            it('should decode with it when the tag names lack it', () => {
-                restores.push(swapProperties(IptcTagNames.iptc, {0x015a: undefined}));
-
-                const tags = IptcTags.read(dataView, 0);
-
-                expect(tags['Headline'].description).to.equal('Я могу');
-                expect(tags['Coded Character Set']).to.be.undefined;
-            });
-
             it('should decode with it when the tag names lack it and unknown tags are included', () => {
                 restores.push(swapProperties(IptcTagNames.iptc, {0x015a: undefined}));
 
@@ -564,15 +555,6 @@ describe('iptc-tags', function () {
         function getTagsSize(tagsData) {
             const size = [tagsData.length >> 8, tagsData.length % 256];
             return String.fromCharCode(size[0]) + String.fromCharCode(size[1]);
-        }
-
-        function encodingIsSupported(encoding) {
-            try {
-                new global.TextDecoder(encoding);
-                return true;
-            } catch (error) {
-                return false;
-            }
         }
     });
 
@@ -693,7 +675,84 @@ describe('iptc-tags', function () {
         }
     });
 
+    describe('readIptcTags', () => {
+        const CODED_CHARACTER_SET_ISO_8859_5 = '\x1c\x01\x5a\x00\x03\x1b\x2f\x40';
+        const HEADLINE = '\x1c\x02\x69\x00\x06\xcf\x20\xdc\xde\xd3\xe3';
+        const BY_LINE = '\x1c\x02\x50\x00\x02AB';
+        const SECOND_BY_LINE = '\x1c\x02\x50\x00\x02CD';
+
+        it('should return only the datasets in the given tag names', () => {
+            const tagNames = {0x0250: {name: 'By-line'}};
+            const dataView = getNaaBlockDataView(HEADLINE + BY_LINE + '\x1c\x47\x11\x00\x02BC');
+
+            const tags = readIptcTags(dataView, 0, tagNames, false);
+
+            expect(tags).to.deep.equal({'By-line': {id: 0x0250, value: getCharacterArray('AB'), description: 'AB'}});
+        });
+
+        it('should name an unknown dataset when unknown tags are included', () => {
+            const tags = readIptcTags(getNaaBlockDataView(HEADLINE), 0, {}, true);
+
+            expect(Object.keys(tags)).to.deep.equal(['undefined-617']);
+        });
+
+        it('should repeat a dataset that is repeatable in the given tag names', () => {
+            restores.push(swapProperties(IptcTagNames.iptc, {0x0250: {name: 'By-line'}}));
+            const tagNames = {0x0250: {name: 'By-line', repeatable: true}};
+
+            const tags = readIptcTags(getNaaBlockDataView(BY_LINE + SECOND_BY_LINE), 0, tagNames, false);
+
+            expect(tags['By-line'].map((tag) => tag.description)).to.deep.equal(['AB', 'CD']);
+        });
+
+        it('should not repeat a dataset that is not repeatable in the given tag names', () => {
+            const tagNames = {0x0250: {name: 'By-line'}};
+
+            const tags = readIptcTags(getNaaBlockDataView(BY_LINE + SECOND_BY_LINE), 0, tagNames, false);
+
+            expect(IptcTagNames.iptc[0x0250].repeatable).to.equal(true);
+            expect(tags['By-line'].description).to.equal('CD');
+        });
+
+        it('should describe a dataset with the description in the given tag names', () => {
+            const tagNames = {0x0250: {name: 'By-line', description: (value) => 'described ' + value.length}};
+
+            const tags = readIptcTags(getNaaBlockDataView(BY_LINE), 0, tagNames, false);
+
+            expect(tags['By-line'].description).to.equal('described 2');
+        });
+
+        it('should decode with a Coded Character Set the given tag names lack and not return it', function () {
+            if (!encodingIsSupported('ISO-8859-5')) {
+                this.skip();
+            }
+            const tagNames = {0x0269: {name: 'Headline'}};
+
+            const tags = readIptcTags(getNaaBlockDataView(CODED_CHARACTER_SET_ISO_8859_5 + HEADLINE), 0, tagNames, false);
+
+            expect(tags).to.deep.equal({Headline: {id: 0x0269, value: getCharacterArray('\xcf\x20\xdc\xde\xd3\xe3'), description: 'Я могу'}});
+        });
+
+        it('should draw from the budget for the datasets the given tag names lack', () => {
+            const budget = {iptcDatasetsRemaining: 1};
+
+            const tags = readIptcTags(getNaaBlockDataView(HEADLINE + BY_LINE), 0, {0x0250: {name: 'By-line'}}, false, undefined, budget);
+
+            expect(tags).to.deep.equal({});
+            expect(budget.iptcDatasetsRemaining).to.equal(0);
+        });
+    });
+
     function getNaaBlockDataView(tagsData) {
         return getDataView('8BIM\x04\x04\x00\x00' + getByteStringFromNumber(tagsData.length, 4) + tagsData);
+    }
+
+    function encodingIsSupported(encoding) {
+        try {
+            new global.TextDecoder(encoding);
+            return true;
+        } catch (error) {
+            return false;
+        }
     }
 });

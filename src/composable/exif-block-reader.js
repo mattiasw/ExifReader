@@ -18,7 +18,7 @@ const EXIF_DICTIONARIES = [IFD_TYPE_0TH, IFD_TYPE_EXIF, IFD_TYPE_GPS, IFD_TYPE_I
 
 // The generated Exif tag descriptors link to this, so a createReader bundle
 // carries Exif parsing only when it composes one.
-export const exifBlockReader = {createParseOnlyGroup};
+export const exifBlockReader = {createParseOnlyGroup, isDescriptor};
 
 /**
  * An Exif group that reads with dictionaries of the given descriptors only.
@@ -81,6 +81,10 @@ function addEntries(dictionary, descriptor) {
             dictionary[id] = descriptor.name;
         }
     }
+}
+
+function isDescriptor(tag) {
+    return tag.group === 'exif' && EXIF_DICTIONARIES.indexOf(tag.dictionary) !== -1;
 }
 
 /**

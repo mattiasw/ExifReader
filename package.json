@@ -43,9 +43,6 @@
       "tags/iptc": [
         "./src/composable/tags/iptc.d.ts"
       ],
-      "tags/mpf": [
-        "./src/composable/tags/mpf.d.ts"
-      ],
       "dist/exif-reader": [
         "./exif-reader.d.ts"
       ],
@@ -83,10 +80,6 @@
     "./tags/iptc": {
       "types": "./src/composable/tags/iptc.d.ts",
       "default": "./src/composable/tags/iptc.js"
-    },
-    "./tags/mpf": {
-      "types": "./src/composable/tags/mpf.d.ts",
-      "default": "./src/composable/tags/mpf.js"
     },
     "./package.json": "./package.json",
     "./src/exif-reader": "./src/exif-reader.js",

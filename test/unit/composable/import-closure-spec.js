@@ -38,12 +38,12 @@ describe('composable import closure', () => {
         expect(missing).to.deep.equal([]);
     });
 
-    it('walks from core.js into utils.js', () => {
-        expect(getImportClosure([fromRoot('src/composable/core.js')])).to.include(fromRoot('src/utils.js'));
-    });
+    it('keeps the generated tag modules and the IPTC block reader out of the default entry', () => {
+        const closure = Array.from(getImportClosure([fromRoot('src/exif-reader.js')]));
 
-    it('walks from the default entry into file-loaders.js', () => {
-        expect(getImportClosure([fromRoot('src/exif-reader.js')])).to.include(fromRoot('src/file-loaders.js'));
+        expect(closure).to.include(fromRoot('src/composable/groups/iptc.js'));
+        expect(closure.filter((filePath) => filePath.startsWith(fromRoot('src/composable/tags') + path.sep))).to.deep.equal([]);
+        expect(closure).to.not.include(fromRoot('src/composable/iptc-block-reader.js'));
     });
 
     it('reports code references to Buffer', () => {

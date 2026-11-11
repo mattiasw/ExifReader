@@ -22,17 +22,23 @@ export default {
     read
 };
 
+function read(dataView, dataOffset, includeUnknown, tagFilter, valueBudget) {
+    return readIptcTags(dataView, dataOffset, IptcTagNames['iptc'], includeUnknown, tagFilter, valueBudget);
+}
+
 /**
  * Reads the IPTC datasets of an NAA resource block, or of a naked IPTC block
  * given as an array of bytes.
  *
+ * @param {Object<number, (string|object)>} tagNames The datasets to read,
+ *     keyed by dataset id, in the shape of the iptc dictionary.
  * @param {{iptcDatasetsRemaining: number}} [valueBudget] - The per-load budget
  * from getValueBudget. Each dataset header read draws from its
  * iptcDatasetsRemaining, and reading stops when it runs out, returning the
  * tags read so far. Omitted, a budget is sized from the data read.
  * @returns {Object} The read tags, keyed by tag name.
  */
-function read(dataView, dataOffset, includeUnknown, tagFilter = NOOP_TAG_FILTER, valueBudget) {
+export function readIptcTags(dataView, dataOffset, tagNames, includeUnknown, tagFilter = NOOP_TAG_FILTER, valueBudget) {
     try {
         if (Array.isArray(dataView)) {
             const arrayDataView = new DataView(Uint8Array.from(dataView).buffer);
@@ -40,13 +46,14 @@ function read(dataView, dataOffset, includeUnknown, tagFilter = NOOP_TAG_FILTER,
                 arrayDataView,
                 {size: dataView.length},
                 0,
+                tagNames,
                 includeUnknown,
                 tagFilter,
                 valueBudget || getValueBudget(arrayDataView)
             );
         }
         const {naaBlock, dataOffset: newDataOffset} = getNaaResourceBlock(dataView, dataOffset);
-        return parseTags(dataView, naaBlock, newDataOffset, includeUnknown, tagFilter, valueBudget || getValueBudget(dataView));
+        return parseTags(dataView, naaBlock, newDataOffset, tagNames, includeUnknown, tagFilter, valueBudget || getValueBudget(dataView));
     } catch (error) {
         return {};
     }
@@ -90,7 +97,7 @@ function getBlockPadding(resourceBlock) {
     return 0;
 }
 
-function parseTags(dataView, naaBlock, dataOffset, includeUnknown, tagFilter, valueBudget) {
+function parseTags(dataView, naaBlock, dataOffset, tagNames, includeUnknown, tagFilter, valueBudget) {
     const tags = {};
     let encoding = undefined;
 
@@ -100,6 +107,7 @@ function parseTags(dataView, naaBlock, dataOffset, includeUnknown, tagFilter, va
         const {tag, tagSize, encoding: datasetEncoding} = readTag(
             dataView,
             dataOffset,
+            tagNames,
             tags,
             encoding,
             includeUnknown,
@@ -147,6 +155,7 @@ function parseTags(dataView, naaBlock, dataOffset, includeUnknown, tagFilter, va
 function readTag(
     dataView,
     dataOffset,
+    tagNames,
     tags = {},
     encoding = undefined,
     includeUnknown = false,
@@ -170,13 +179,14 @@ function readTag(
     // Read even when the tag itself is left out, since the text datasets after it depend on it.
     const datasetEncoding = getDatasetEncoding(dataView, dataOffset, tagCode, tagSize);
 
-    if (!includeUnknown && !IptcTagNames['iptc'][tagCode]) {
+    const tagEntry = tagNames[tagCode];
+    if (!includeUnknown && !tagEntry) {
         return {tag: undefined, tagSize, encoding: datasetEncoding};
     }
 
     if (!tagFilter.shouldParseTag(
         'iptc',
-        getIptcTagNameForFiltering(tagCode, includeUnknown),
+        getIptcTagNameForFiltering(tagEntry, tagCode, includeUnknown),
         tagCode
     )) {
         return {tag: undefined, tagSize, encoding: datasetEncoding};
@@ -186,11 +196,11 @@ function readTag(
 
     const tag = {
         id: tagCode,
-        name: getTagName(IptcTagNames['iptc'][tagCode], tagCode, tagValue),
+        name: getTagName(tagEntry, tagCode, tagValue),
         value: tagValue,
-        description: getTagDescription(IptcTagNames['iptc'][tagCode], tagValue, tags, encoding)
+        description: getTagDescription(tagEntry, tagValue, tags, encoding)
     };
-    if (tagIsRepeatable(tagCode)) {
+    if (tagIsRepeatable(tagEntry)) {
         tag['repeatable'] = true;
     }
 
@@ -213,8 +223,7 @@ function getDatasetEncoding(dataView, dataOffset, tagCode, tagSize) {
     return undefined;
 }
 
-function getIptcTagNameForFiltering(tagCode, includeUnknown) {
-    const tag = IptcTagNames['iptc'][tagCode];
+function getIptcTagNameForFiltering(tag, tagCode, includeUnknown) {
     if (!tag) {
         if (includeUnknown) {
             return `undefined-${tagCode}`;
@@ -300,6 +309,6 @@ function hasDescriptionProperty(tag) {
     return tag && tag['description'] !== undefined;
 }
 
-function tagIsRepeatable(tagCode) {
-    return IptcTagNames['iptc'][tagCode] && IptcTagNames['iptc'][tagCode]['repeatable'];
+function tagIsRepeatable(tag) {
+    return tag && tag['repeatable'];
 }

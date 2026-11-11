@@ -12,6 +12,7 @@ import {
     collectImagePaths,
     loadFullParser,
     loadTagBindingName,
+    loadIptcTagExportNames,
     resolveDomParser,
     analyzeImages,
     deriveConfig,
@@ -22,6 +23,8 @@ import * as Core from '../../src/composable/core.js';
 import * as Formats from '../../src/composable/formats.js';
 import * as Groups from '../../src/composable/groups.js';
 import * as ExifTags from '../../src/composable/tags/exif.js';
+import * as IptcTags from '../../src/composable/tags/iptc.js';
+import IptcTagNames from '../../src/iptc-tag-names.js';
 import {getTagBindingName} from '../../src/composable/tag-binding-name.js';
 import {getConsoleWarnSpy} from './test-utils.js';
 
@@ -256,6 +259,11 @@ describe('analyze', () => {
         const CORE_IMPORT = 'import {createReader} from \'exifreader/core\';';
         const DOM_PARSER_COMMENT = '// Outside browsers, xmp needs a domParser in createReader, for example '
             + 'new DOMParser({onError: onErrorStopParsing}) from @xmldom/xmldom.';
+        let iptcTagExportNames;
+
+        before(async () => {
+            iptcTagExportNames = await loadIptcTagExportNames();
+        });
 
         it('imports the xml format and the xmp group for an XMP sidecar file, even without an xmp key', () => {
             expect(snippetOf([image('xml')])).to.equal([
@@ -303,13 +311,86 @@ describe('analyze', () => {
             ].join('\n'));
         });
 
+        it('imports the IPTC names as tags after the exif ones, without the iptc group', () => {
+            const results = [
+                image('jpeg', {exif: {DateTime: {}}, iptc: {'By-line': {}, 'Keywords': {}}}),
+                image('jpeg', {iptc: {'Caption/Abstract': {}, 'By-line': {}}})
+            ];
+            expect(snippetOf(results)).to.equal([
+                CORE_IMPORT,
+                'import {jpeg} from \'exifreader/formats\';',
+                'import {DateTime} from \'exifreader/tags/exif\';',
+                'import {ByLine, CaptionAbstract, Keywords} from \'exifreader/tags/iptc\';',
+                '',
+                'const reader = createReader({formats: [jpeg], tags: [DateTime, ByLine, CaptionAbstract, Keywords]});'
+            ].join('\n'));
+        });
+
+        it('imports the IPTC names as tags next to other groups', () => {
+            const snippet = snippetOf([image('jpeg', {iptc: {'By-line': {}}, xmp: {}})]);
+
+            expect(snippet).to.contain('import {xmp} from \'exifreader/groups\';');
+            expect(snippet).to.contain('import {ByLine} from \'exifreader/tags/iptc\';');
+            expect(snippet).to.contain('groups: [xmp], tags: [ByLine]');
+        });
+
+        it('keeps the iptc group for a name that has no tag of its own', () => {
+            const snippet = snippetOf([image('jpeg', {iptc: {'By-line': {}}}), image('jpeg', {iptc: {'Record 2 destination': {}}})]);
+
+            expect(snippet).to.contain('import {iptc} from \'exifreader/groups\';');
+            expect(snippet).to.contain('groups: [iptc]');
+            expect(snippet).to.not.contain('exifreader/tags/iptc');
+            expect(snippet).to.not.contain('ByLine');
+        });
+
+        it('imports an IPTC name as a tag when the given export names hold its binding', () => {
+            const results = [image('jpeg', {iptc: {'Record 2 destination': {}}})];
+            const snippet = deriveImports(results, getTagBindingName, ['Record2Destination']);
+
+            expect(IptcTags).to.not.have.property('Record2Destination');
+            expect(snippet).to.contain('import {Record2Destination} from \'exifreader/tags/iptc\';');
+            expect(snippet).to.contain('tags: [Record2Destination]');
+            expect(snippet).to.not.contain('exifreader/groups');
+        });
+
+        it('keeps the iptc group for a name whose binding the given export names lack', () => {
+            const snippet = deriveImports([image('jpeg', {iptc: {'By-line': {}}})], getTagBindingName, ['Keywords']);
+
+            expect(IptcTags).to.have.property('ByLine');
+            expect(snippet).to.contain('import {iptc} from \'exifreader/groups\';');
+            expect(snippet).to.contain('groups: [iptc]');
+            expect(snippet).to.not.contain('exifreader/tags/iptc');
+        });
+
+        it('imports the IPTC names as tags exactly when exifreader/tags/iptc exports them', () => {
+            const names = [];
+            for (const id of Object.keys(IptcTagNames.iptc)) {
+                const entry = IptcTagNames.iptc[id];
+                if (typeof entry === 'string') {
+                    names.push(entry);
+                } else if (typeof entry.name === 'function') {
+                    names.push(entry.name([0, 0]), entry.name([0]));
+                } else {
+                    names.push(entry.name);
+                }
+            }
+            expect(names.length).to.be.above(Object.keys(IptcTags).length);
+            for (const name of names) {
+                const snippet = snippetOf([image('jpeg', {iptc: {[name]: {}}})]);
+                const isExported = Object.prototype.hasOwnProperty.call(IptcTags, getTagBindingName(name));
+
+                expect(snippet.includes(`import {${getTagBindingName(name)}} from 'exifreader/tags/iptc';`), name).to.equal(isExported);
+                expect(snippet.includes('groups: [iptc]'), name).to.equal(!isExported);
+            }
+        });
+
         it('keeps the tags a group reads in tags, since the reader returns them only then', () => {
             const results = [image('jpeg', {exif: {Make: {}, MakerNote: {}, DateTime: {}}, makerNotes: {}})];
             expect(snippetOf(results)).to.contain('tags: [DateTime, Make, MakerNote]');
         });
 
         [
-            ['iptc', {iptc: {'By-line': {}}}, 'iptc'],
+            ['iptc', {iptc: {'Record 2 destination': {}}}, 'iptc'],
             ['xmp', {xmp: {}}, 'xmp'],
             ['icc', {icc: {}}, 'icc'],
             ['photoshop', {photoshop: {}}, 'photoshop'],
@@ -351,7 +432,8 @@ describe('analyze', () => {
                 'exifreader/core': Core,
                 'exifreader/formats': Formats,
                 'exifreader/groups': Groups,
-                'exifreader/tags/exif': ExifTags
+                'exifreader/tags/exif': ExifTags,
+                'exifreader/tags/iptc': IptcTags
             };
             const RESULTS = [
                 image('tiff', {
@@ -400,7 +482,8 @@ describe('analyze', () => {
                         bindings[name] = MODULES[specifier][name];
                     }
                 }
-                expect(Object.keys(bindings)).to.include.members(['createReader', 'xml', 'xmp', 'GPSInfoIFDPointer']);
+                expect(Object.keys(bindings)).to.include.members(['createReader', 'xml', 'xmp', 'GPSInfoIFDPointer', 'ByLine']);
+                expect(Object.keys(bindings)).to.not.include('iptc');
 
                 const call = /^const reader = createReader\(\{(.+)\}\);$/m.exec(snippet)[1];
                 const tables = {};
@@ -423,7 +506,7 @@ describe('analyze', () => {
         });
 
         function snippetOf(results) {
-            return deriveImports(results, getTagBindingName);
+            return deriveImports(results, getTagBindingName, iptcTagExportNames);
         }
     });
 
@@ -526,6 +609,15 @@ describe('analyze', () => {
     describe('loadTagBindingName', () => {
         it('loads the tag binding name function of the composable source', async () => {
             expect(await loadTagBindingName()).to.equal(getTagBindingName);
+        });
+    });
+
+    describe('loadIptcTagExportNames', () => {
+        it('loads the names the composable iptc tag module exports', async () => {
+            const names = await loadIptcTagExportNames();
+
+            expect(names).to.include('ByLine');
+            expect(names).to.have.members(Object.keys(IptcTags));
         });
     });
 

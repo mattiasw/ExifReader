@@ -13,10 +13,9 @@ import {objectAssign, getDataViewFromBytes, getByteString, assertPromiseSupport}
 
 const FORMATS_IMPORT = '\'exifreader/formats\'';
 const GROUPS_IMPORT = '\'exifreader/groups\'';
-const TAGS_IMPORT = '\'exifreader/tags/exif\'';
+const TAGS_IMPORT = '\'exifreader/tags/exif\' or \'exifreader/tags/iptc\'';
 const CORE_IMPORT = '\'exifreader/core\'';
 const TABLE_KEYS = ['formats', 'groups', 'tags', 'tagFilter', 'domParser', 'decompress'];
-const EXIF_DICTIONARIES = ['0th', 'exif', 'gps', 'interoperability'];
 const DECOMPRESS_KEYS = ['brotli', 'deflate', 'maxDecompressedSize'];
 const BOOLEAN_OPTIONS = ['expanded', 'includeUnknown', 'computed', 'includeOffsets'];
 const SUPPORTED_OPTIONS = BOOLEAN_OPTIONS.concat(['includeTags', 'excludeTags']);
@@ -33,12 +32,13 @@ export const tagFilter = {brand: FILTER_BRAND, createTagFilter, narrowIncludeTag
  * Builds a reader of the given formats, groups and tags only.
  *
  * @param {{formats: Array<object>, groups: (Array<object>|undefined), tags: (Array<object>|undefined), tagFilter: (object|undefined), domParser: (object|undefined), decompress: (object|undefined)}} tables
- *     Values imported from 'exifreader/formats', 'exifreader/groups' and
- *     'exifreader/tags/exif', `tagFilter` from 'exifreader/core' to let load
- *     take includeTags and excludeTags, `domParser`, an object with a
- *     parseFromString method, for xmp where there is no global DOMParser, and
- *     `decompress`, {brotli, deflate, maxDecompressedSize} as ExifReader.load
- *     takes it, for every load (each load gets the whole limit).
+ *     Values imported from 'exifreader/formats', 'exifreader/groups',
+ *     'exifreader/tags/exif' and 'exifreader/tags/iptc', `tagFilter` from
+ *     'exifreader/core' to let load take includeTags and excludeTags,
+ *     `domParser`, an object with a parseFromString method, for xmp where there
+ *     is no global DOMParser, and `decompress`, {brotli, deflate,
+ *     maxDecompressedSize} as ExifReader.load takes it, for every load (each
+ *     load gets the whole limit).
  * @returns {{load: function}} `load(data, options)` always returns a Promise
  *     of the tags, grouped unless `expanded` is false.
  * @throws {TypeError} When a table is not an array or holds a value that was
@@ -60,12 +60,14 @@ export function createReader(tables) {
 
     const composition = compose(formats, groups);
     const unsupportedFormatMessage = getUnsupportedFormatMessage(composition.formats);
-    const exifDescriptors = tags.concat(getExifDependencies(groups));
-    const addsExif = needsExif(exifDescriptors) && composition.composed.groups.exif !== true;
-    const runComposition = addsExif ? compose(formats, groups.concat([getParseOnlyExifGroup(exifDescriptors, groups)])) : composition;
     const includeTagsMapping = getIncludeTagsMapping(composition, tags);
+    const readGroups = groups.concat(getParseOnlyGroups(includeTagsMapping));
+    const exifDescriptors = tags.filter((tag) => tag.group === 'exif').concat(getExifDependencies(readGroups));
+    const addsExif = needsExif(exifDescriptors) && composition.composed.groups.exif !== true;
+    const runGroups = addsExif ? readGroups.concat([getParseOnlyExifGroup(exifDescriptors, groups)]) : readGroups;
+    const runComposition = runGroups.length > groups.length ? compose(formats, runGroups) : composition;
     const hasXmp = composition.composed.groups.xmp === true;
-    const environments = getEnvironments(filter ? filter.createTagFilter : getCompositionTagFilterFactory(groups));
+    const environments = getEnvironments(filter ? filter.createTagFilter : getCompositionTagFilterFactory(readGroups));
 
     return {load};
 
@@ -113,7 +115,7 @@ function assertTables(formats, groups, tags) {
     assertArray(tags, 'tags', TAGS_IMPORT);
     assertElements(formats, 'formats', FORMATS_IMPORT, (format) => !!format && format.brand === FORMAT_BRAND);
     assertElements(groups, 'groups', GROUPS_IMPORT, (group) => !!group && group.brand === GROUP_BRAND);
-    assertElements(tags, 'tags', TAGS_IMPORT, isExifTagDescriptor);
+    assertElements(tags, 'tags', TAGS_IMPORT, isTagDescriptor);
 }
 
 function assertArray(table, name, importName) {
@@ -130,16 +132,17 @@ function assertElements(table, name, importName, isValid) {
     }
 }
 
-function isExifTagDescriptor(tag) {
+// The reader a descriptor links to checks its group and dictionary.
+function isTagDescriptor(tag) {
     return !!tag
         && typeof tag.name === 'string'
         && Array.isArray(tag.ids)
         && tag.ids.length > 0
         && tag.ids.every((id) => typeof id === 'number')
-        && tag.group === 'exif'
-        && EXIF_DICTIONARIES.indexOf(tag.dictionary) !== -1
         && !!tag.reader
-        && typeof tag.reader.createParseOnlyGroup === 'function';
+        && typeof tag.reader.createParseOnlyGroup === 'function'
+        && typeof tag.reader.isDescriptor === 'function'
+        && tag.reader.isDescriptor(tag);
 }
 
 function assertFilter(filter) {
@@ -205,6 +208,36 @@ function getUnsupportedFormatMessage(formats) {
     return 'reader.load: none of this reader\'s formats (' + names.join(', ') + ') recognizes the input: it is in another format or is not an image';
 }
 
+// The includeTags config this reader stands for: every composed group whole,
+// file for FileType, and the descriptors of a group composed by tags alone.
+function getIncludeTagsMapping(composition, tags) {
+    const mapping = Object.create(null);
+    mapping.file = true;
+    const groups = composition.groups.concat(composition.derived);
+    for (let i = 0; i < groups.length; i++) {
+        mapping[groups[i].key] = true;
+    }
+    for (let i = 0; i < tags.length; i++) {
+        const key = tags[i].group;
+        if (mapping[key] !== true) {
+            mapping[key] = (mapping[key] || []).concat([tags[i]]);
+        }
+    }
+    return mapping;
+}
+
+// Built by the reader the descriptors link to, for each group other than exif
+// composed by descriptors alone. Exif comes last, as these add to what it reads.
+function getParseOnlyGroups(mapping) {
+    const parseOnlyGroups = [];
+    for (const key in mapping) {
+        if (key !== 'exif' && mapping[key] !== true) {
+            parseOnlyGroups.push(mapping[key][0].reader.createParseOnlyGroup(mapping[key]));
+        }
+    }
+    return parseOnlyGroups;
+}
+
 // From the groups as given: composing merges the maker-note groups into one
 // that carries no exifDependencies.
 function getExifDependencies(groups) {
@@ -236,24 +269,6 @@ function getIfd1TagNames(groups) {
         }
     }
     return undefined;
-}
-
-// The includeTags config this reader stands for: every composed group whole,
-// file for FileType, and the descriptors of a group composed by tags alone.
-function getIncludeTagsMapping(composition, tags) {
-    const mapping = Object.create(null);
-    mapping.file = true;
-    const groups = composition.groups.concat(composition.derived);
-    for (let i = 0; i < groups.length; i++) {
-        mapping[groups[i].key] = true;
-    }
-    for (let i = 0; i < tags.length; i++) {
-        const key = tags[i].group;
-        if (mapping[key] !== true) {
-            mapping[key] = (mapping[key] || []).concat([tags[i]]);
-        }
-    }
-    return mapping;
 }
 
 function getEnvironments(createFilter) {

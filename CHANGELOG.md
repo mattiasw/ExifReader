@@ -11,13 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `errors.UnsupportedFormatError`, thrown when no supported format recognizes
   the input.
-- The `exifreader/core` (`createReader`, whose `reader.load` always returns a
-  Promise of the tags, grouped by default and flat with `expanded: false`),
-  `exifreader/formats`, `exifreader/groups` and `exifreader/tags/*` (`exif`,
-  `iptc`, `mpf`) subpaths, ES modules only, with their TypeScript definitions.
-  Their modules name no `Buffer`. The TypeScript type of the grouped result of
-  `reader.load` has only the groups and tags the reader composes. See [the
-  composable API](https://github.com/mattiasw/ExifReader#composable-api).
+- The `exifreader/core`, `exifreader/formats`, `exifreader/groups`,
+  `exifreader/tags/exif` and `exifreader/tags/iptc` subpaths, ES modules only,
+  with their TypeScript definitions. Their modules name no `Buffer`.
+  `createReader` from `exifreader/core` takes Exif and IPTC tags in `tags`, and
+  its `reader.load` always returns a Promise of the tags, grouped by default
+  and flat with `expanded: false`. Its TypeScript type of the grouped result
+  has only the groups and tags the reader composes. See
+  [the composable API](https://github.com/mattiasw/ExifReader#composable-api).
 - `npx exifreader analyze --imports`, which prints the `createReader` imports
   that read everything found in the given images, in place of the custom build
   configuration.

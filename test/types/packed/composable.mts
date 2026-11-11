@@ -15,7 +15,6 @@ import { DateTimeOriginal } from "exifreader/tags/exif";
 import { ModelVersion, Keywords, Headline } from "exifreader/tags/iptc";
 import type * as ExifTagModule from "exifreader/tags/exif";
 import type * as IptcTagModule from "exifreader/tags/iptc";
-import { MPFVersion } from "exifreader/tags/mpf";
 
 // Plain assignment cannot tell Promise<Tags> from Promise<ExpandedTags>: Tags is assignable to ExpandedTags.
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
@@ -23,13 +22,14 @@ type DescriptorNames<M> = { [K in keyof M]: M[K] extends TagDescriptor<string, i
 
 const reader: Reader = createReader({ formats: [jpeg, png], groups: [exif, xmp], tags: [DateTimeOriginal] });
 const filteredReader: Reader = createReader({ formats: allFormats, groups: allGroups, tagFilter });
+const iptcReader: Reader = createReader({ formats: [jpeg], tags: [ModelVersion] });
+const mixedReader: Reader = createReader({ formats: [jpeg], tags: [DateTimeOriginal, ModelVersion] });
 
 const formatValue: Format = jpeg;
 const groupValue: Group = exif;
-const descriptors: TagDescriptor<string>[] = [DateTimeOriginal, ModelVersion, MPFVersion];
+const descriptors: TagDescriptor[] = [DateTimeOriginal, ModelVersion];
 const filterValue: TagFilter = tagFilter;
-const acceptedDescriptors: TagDescriptor[] = [DateTimeOriginal];
-const descriptorReader: Reader = createReader({ formats: [jpeg], tags: acceptedDescriptors });
+const descriptorReader: Reader = createReader({ formats: [jpeg], tags: descriptors });
 
 const minimalDomParser = {
     parseFromString(xml: string, mimeType: string) {
@@ -157,9 +157,7 @@ createReader({ formats: [{}] });
 // @ts-expect-error
 createReader({ formats: [jpeg], groups: [DateTimeOriginal] });
 // @ts-expect-error
-createReader({ formats: [jpeg], tags: [ModelVersion] });
-// @ts-expect-error
-createReader({ formats: [jpeg], tags: [MPFVersion] });
+createReader({ formats: [jpeg], tags: [exif] });
 // @ts-expect-error
 const syncTags: Tags = reader.load(new ArrayBuffer(0));
 // @ts-expect-error
@@ -222,9 +220,23 @@ const dateTimeOriginalType: Equal<
 > = true;
 // @ts-expect-error
 dateTimeOriginal.exif?.Make;
+const modelVersion = await createReader({ formats: [jpeg], tags: [ModelVersion] }).load(new ArrayBuffer(0));
+const modelVersionNames: Equal<keyof NonNullable<typeof modelVersion.iptc>, "Model Version"> = true;
 // The whole group wins over its descriptors.
 const exifAndDescriptor = await createReader({ formats: [jpeg], groups: [exif], tags: [DateTimeOriginal] }).load(new ArrayBuffer(0));
 const exifAndDescriptorHasFullExif: Equal<typeof exifAndDescriptor.exif, CoreExpandedTags["exif"]> = true;
+const iptcAndDescriptors = await createReader({ formats: [jpeg], groups: [iptc], tags: [DateTimeOriginal, ModelVersion] })
+    .load(new ArrayBuffer(0));
+const iptcAndDescriptorsHasFullIptc: Equal<typeof iptcAndDescriptors.iptc, CoreExpandedTags["iptc"]> = true;
+// Every IPTC composition returns a repeatable dataset as an array.
+const iptcGroupKeywords: Equal<NonNullable<typeof iptcAndDescriptors.iptc>["Keywords"], NumberArrayTag[] | undefined> = true;
+const iptcGroupHeadline: Equal<NonNullable<typeof iptcAndDescriptors.iptc>["Headline"], NumberArrayTag | undefined> = true;
+const iptcDescriptors = await createReader({ formats: [jpeg], tags: [Keywords, Headline] }).load(new ArrayBuffer(0));
+const iptcDescriptorsNames: Equal<keyof NonNullable<typeof iptcDescriptors.iptc>, "Keywords" | "Headline"> = true;
+const iptcDescriptorsKeywords: Equal<NonNullable<typeof iptcDescriptors.iptc>["Keywords"], NumberArrayTag[] | undefined> = true;
+const iptcDescriptorsHeadline: Equal<NonNullable<typeof iptcDescriptors.iptc>["Headline"], NumberArrayTag | undefined> = true;
+const modelVersionType: Equal<NonNullable<typeof modelVersion.iptc>["Model Version"], NumberArrayTag | undefined> = true;
+const iptcAndDescriptorsExifNames: Equal<keyof NonNullable<typeof iptcAndDescriptors.exif>, "DateTimeOriginal"> = true;
 
 // Each maker-note group types makerNotes by its makes.
 const canonNotes = await createReader({ formats: [jpeg], groups: [canon] }).load(new ArrayBuffer(0));
@@ -293,6 +305,8 @@ const formatArrayReaderIsBroad: Equal<typeof formatArrayReader, BroadReader> = t
 const groupArray: Group[] = [exif];
 const groupArrayReader = createReader({ formats: [jpeg], groups: groupArray });
 const groupArrayReaderIsBroad: Equal<typeof groupArrayReader, BroadReader> = true;
+const descriptorArrayReader = createReader({ formats: [jpeg], tags: descriptors });
+const descriptorArrayReaderIsBroad: Equal<typeof descriptorArrayReader, BroadReader> = true;
 const spreadReader = createReader({ formats: [jpeg], groups: [exif, ...allGroups] });
 const spreadReaderIsBroad: Equal<typeof spreadReader, BroadReader> = true;
 const conditionalReader = createReader({ formats: [jpeg], groups: isExpanded ? [exif] : allGroups });
@@ -385,11 +399,12 @@ jpegExifReader.load(new ArrayBuffer(0), { madeUpOption: true });
 export {
     reader,
     filteredReader,
+    iptcReader,
+    mixedReader,
     formatValue,
     groupValue,
     descriptors,
     filterValue,
-    acceptedDescriptors,
     descriptorReader,
     domParserReader,
     noDomParserReader,

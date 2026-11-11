@@ -117,15 +117,15 @@ After that, the transpiled, concatenated and minified ES5 file will be in the
 
 ### Type definitions
 
-Type definitions for TypeScript are included in the package. Each subpath of the
-[composable API](#composable-api) (`exifreader/core`, `exifreader/formats`,
-`exifreader/groups`, `exifreader/tags/exif`, `exifreader/tags/iptc` and
-`exifreader/tags/mpf`) ships its own definitions next to its module, which
-TypeScript finds with `moduleResolution` set to `bundler`, `node16` or
-`nodenext`. A CommonJS file can import them only with `module` set to `nodenext`
-or `node20` (see Toolchains in [the composable API](#composable-api)).
-`exifreader/core` also exports the types of the arguments to `load`, `LoadInput`
-and `LoadOptions`, and of its result, `Tags` and `ExpandedTags`.
+Type definitions for TypeScript are included in the package. Each subpath of
+the [composable API](#composable-api) (`exifreader/core`, `exifreader/formats`,
+`exifreader/groups`, `exifreader/tags/exif` and `exifreader/tags/iptc`) ships
+its own definitions next to its module, which TypeScript finds with
+`moduleResolution` set to `bundler`, `node16` or `nodenext`. A CommonJS file
+can import them only with `module` set to `nodenext` or `node20` (see
+Toolchains in [the composable API](#composable-api)). `exifreader/core` also
+exports the types of the arguments to `load`, `LoadInput` and `LoadOptions`, and
+of its result, `Tags` and `ExpandedTags`.
 
 Usage
 -----
@@ -925,8 +925,21 @@ whole `exif` group is composed: with `makerNotes`, for example, add `Make` to
 The grouped output of a composed reader has `png` alone, which holds every tag
 of `pngFile` and `pngText`, not those two groups.
 
-**Tags.** `tags` takes Exif tags only, imported from `exifreader/tags/exif`. For
-IPTC or MPF tags, compose the whole `iptc` or `mpf` group.
+**Tags.** `tags` takes Exif and IPTC tags, imported from `exifreader/tags/exif`
+and `exifreader/tags/iptc`. With `iptc` not in `groups`, a reader composed with
+IPTC tags returns only those, and it reads the block's `Coded Character Set`
+for the text encoding even when that tag is not in `tags`. MPF tags come only
+with the whole `mpf` group. Three IPTC tags come only with the whole `iptc`
+group: `ObjectData Preview File Format` and `Record 2 destination` (dataset
+2:200), whose name depends on the length of the value, so no import can select
+it, and `ObjectData Preview File Format Version` (2:201), whose description is
+read from dataset 2:200. A tag's import name differs from its key in the result
+when its name has characters a JavaScript name cannot hold, so `ByLine` is read
+as `tags.iptc['By-line']` and `SubLocation` as `tags.iptc['Sub-location']`.
+The keys in the result are the same as in `ExifReader.load`.
+On a composed reader, a repeatable IPTC dataset such as `Keywords` is always an
+array of tag objects, also when the file holds it once. In the flat output an
+XMP tag of the same name replaces it, as it does in `ExifReader.load`.
 
 **Subpaths.**
 
@@ -935,7 +948,7 @@ IPTC or MPF tags, compose the whole `iptc` or `mpf` group.
 | `exifreader/core` | `createReader`, `errors` (`UnsupportedFormatError`), `tagFilter` |
 | `exifreader/formats` | `tiff`, `jpeg`, `png`, `heic`, `avif`, `jxl`, `webp`, `gif`, `xml` (XMP sidecar files; returns only `FileType` without `xmp` in `groups`), `allFormats` |
 | `exifreader/groups` | `exif`, `iptc`, `xmp`, `icc`, `photoshop`, `mpf`, `makerNotes`, `canon`, `pentax`, `gps`, `composite`, `thumbnail`, `allGroups` |
-| `exifreader/tags/exif`, `exifreader/tags/iptc`, `exifreader/tags/mpf` | One export per tag, named after the tag with every character that cannot be in a JavaScript name removed and the letter after it upper-cased (`By-line` becomes `ByLine`, `GPS Info IFD Pointer` becomes `GPSInfoIFDPointer`) |
+| `exifreader/tags/exif`, `exifreader/tags/iptc` | One export per tag, named after the tag with every character that cannot be in a JavaScript name removed and the letter after it upper-cased (`By-line` becomes `ByLine`, `GPS Info IFD Pointer` becomes `GPSInfoIFDPointer`) |
 
 `makerNotes` holds every maker note decoder and grows with new releases.
 `canon` and `pentax` hold one each.

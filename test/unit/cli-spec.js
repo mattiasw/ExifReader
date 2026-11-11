@@ -569,7 +569,10 @@ describe('cli', () => {
                 });
 
                 it('prints only the createReader imports on stdout and the summary, warnings and hint on stderr', async () => {
-                    const {deps, calls} = imageDeps({loadTagBindingName: () => Promise.resolve(getTagBindingName)});
+                    const {deps, calls} = imageDeps({
+                        loadTagBindingName: () => Promise.resolve(getTagBindingName),
+                        loadIptcTagExportNames: () => Promise.resolve([])
+                    });
                     await run(['node', 'cli', 'analyze', 'samples', '--imports'], deps);
                     expect(calls.log).to.deep.equal([[
                         'import {createReader} from \'exifreader/core\';',
@@ -592,10 +595,43 @@ describe('cli', () => {
                     expect(calls.build).to.deep.equal([]);
                 });
 
+                it('prints an IPTC name as a tag import when the loaded export names hold its binding', async () => {
+                    const results = {jpeg: {file: {FileType: {value: 'jpeg'}}, iptc: {'Record 2 destination': {}}}};
+                    const {deps, calls} = imageDeps({
+                        loadFullParser: () => Promise.resolve(fakeParser(results, [])),
+                        loadTagBindingName: () => Promise.resolve(getTagBindingName),
+                        loadIptcTagExportNames: () => Promise.resolve(['Record2Destination'])
+                    });
+                    await run(['node', 'cli', 'analyze', 'samples/a.jpg', '--imports'], deps);
+                    expect(calls.log).to.deep.equal([[
+                        'import {createReader} from \'exifreader/core\';',
+                        'import {jpeg} from \'exifreader/formats\';',
+                        'import {Record2Destination} from \'exifreader/tags/iptc\';',
+                        '',
+                        'const reader = createReader({formats: [jpeg], tags: [Record2Destination]});'
+                    ].join('\n')]);
+                    expect(calls.exit).to.deep.equal([]);
+                });
+
                 it('errors when the tag binding name function cannot be loaded, printing nothing on stdout', async () => {
-                    const {deps, calls, parsed} = imageDeps({loadTagBindingName: () => Promise.reject(new Error('Cannot find module'))});
+                    const {deps, calls, parsed} = imageDeps({
+                        loadTagBindingName: () => Promise.reject(new Error('Cannot find module')),
+                        loadIptcTagExportNames: () => Promise.resolve([])
+                    });
                     await run(['node', 'cli', 'analyze', 'samples', '--imports'], deps);
                     expect(calls.error).to.deep.equal(['Cannot find module']);
+                    expect(calls.exit).to.deep.equal([1]);
+                    expect(calls.log).to.deep.equal([]);
+                    expect(parsed).to.deep.equal([]);
+                });
+
+                it('errors when the IPTC tag export names cannot be loaded, printing nothing on stdout', async () => {
+                    const {deps, calls, parsed} = imageDeps({
+                        loadTagBindingName: () => Promise.resolve(getTagBindingName),
+                        loadIptcTagExportNames: () => Promise.reject(new Error('Cannot find the iptc module'))
+                    });
+                    await run(['node', 'cli', 'analyze', 'samples', '--imports'], deps);
+                    expect(calls.error).to.deep.equal(['Cannot find the iptc module']);
                     expect(calls.exit).to.deep.equal([1]);
                     expect(calls.log).to.deep.equal([]);
                     expect(parsed).to.deep.equal([]);
@@ -1422,6 +1458,7 @@ describe('cli', () => {
             fs,
             loadFullParser: () => Promise.reject(new Error('loadFullParser not stubbed')),
             loadTagBindingName: () => Promise.reject(new Error('loadTagBindingName not stubbed')),
+            loadIptcTagExportNames: () => Promise.reject(new Error('loadIptcTagExportNames not stubbed')),
             loadCustomParser: () => {
                 throw new Error('loadCustomParser not stubbed');
             },

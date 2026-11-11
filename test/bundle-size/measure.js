@@ -57,8 +57,18 @@ const TAG_FILTER_MARKERS = [
     {marker: 'has no group', why: 'the tag filter, which this reader did not compose'}
 ];
 
+// Quoted names from the IPTC dictionary that a reader composing only By-line
+// must not carry.
+const IPTC_PER_TAG_PROOFS = [
+    {marker: '\'Headline\'', why: 'an unimported IPTC tag'},
+    {marker: '\'Caption/Abstract\'', why: 'an unimported IPTC tag'},
+    {marker: '\'Coded Character Set\'', why: 'the IPTC tag the reader reads the text encoding from, but did not import'},
+    {marker: '\'Keywords\'', why: 'an unimported repeatable IPTC tag'}
+];
+
 const ABSENCE_CHECKS = {
     'composable-jpeg-floor': PER_TAG_PROOFS.concat([DATETIME_DESCRIPTOR], TAG_FILTER_MARKERS),
+    'composable-jpeg-iptc-byline': PER_TAG_PROOFS.concat([DATETIME_DESCRIPTOR], TAG_FILTER_MARKERS, IPTC_PER_TAG_PROOFS),
     'composable-tiff-floor': PER_TAG_PROOFS.concat([DATETIME_DESCRIPTOR], TAG_FILTER_MARKERS),
     'composable-jpeg-datetime': PER_TAG_PROOFS.concat(TAG_FILTER_MARKERS),
     'composable-tiff-gps': [
@@ -104,6 +114,7 @@ const ALLOWED_MODULES = {
     'composable-jpeg-datetime': CORE.concat(JPEG),
     'composable-jpeg-datetime-filter': CORE.concat(JPEG),
     'composable-jpeg-exif': CORE.concat(JPEG, EXIF_GROUP),
+    'composable-jpeg-iptc-byline': CORE.concat(JPEG, ['iptc-tags.js']),
     'composable-tiff-gps': CORE
 };
 
@@ -112,7 +123,7 @@ const ALLOWED_MODULES = {
 const PRESENCE_CHECKS = {
     'composable-jpeg-exif': PER_TAG_PROOFS.map(getMarker).concat([DATETIME_DESCRIPTOR.marker, 'ExposureTime', 'GPSSatellites']),
     'composable-jpeg-datetime-filter': TAG_FILTER_MARKERS.map(getMarker),
-    'legacy-stock': ['Photoshop 3.0', BUFFER_CODE].concat(getModuleMarkersLeftOut())
+    'legacy-stock': ['Photoshop 3.0', BUFFER_CODE].concat(getModuleMarkersLeftOut(), IPTC_PER_TAG_PROOFS.map(getMarker))
 };
 
 // Tree-shaking that removes something load-bearing only shows when the emitted
@@ -136,6 +147,16 @@ const JPEG_WITH_DATE_AND_GPS =
     '\xff\xd8\xff\xe1\x00\x54Exif\x00\x00' + TIFF_WITH_DATE_AND_GPS + '\xff\xda\x00\x02';
 
 const DATETIME = '2026:08:28 12:34:56';
+
+// An APP13 IPTC block: Coded Character Set ISO-8859-5, By-line, then Headline.
+// Cyrillic text shows the charset was applied, which a Latin-1 fallback could not fake.
+const JPEG_WITH_IPTC =
+    '\xff\xd8\xff\xed\x00\x33Photoshop 3.0\x00'
+    + '8BIM\x04\x04\x00\x00\x00\x00\x00\x17'
+    + '\x1c\x01\x5a\x00\x03\x1b\x2f\x40'
+    + '\x1c\x02\x50\x00\x04\xb8\xd2\xd0\xdd'
+    + '\x1c\x02\x69\x00\x01H'
+    + '\xff\xda\x00\x02';
 
 // Each case lists the exact set of groups and tags the bundle returns.
 const CORRECTNESS_CHECKS = [
@@ -163,7 +184,8 @@ const CORRECTNESS_CHECKS = [
             file: {FileType: 'JPEG'}
         }
     },
-    {id: 'composable-tiff-gps', data: TIFF_WITH_DATE_AND_GPS, tags: {exif: {GPSLatitudeRef: 'North latitude'}, file: {FileType: 'TIFF'}}}
+    {id: 'composable-tiff-gps', data: TIFF_WITH_DATE_AND_GPS, tags: {exif: {GPSLatitudeRef: 'North latitude'}, file: {FileType: 'TIFF'}}},
+    {id: 'composable-jpeg-iptc-byline', data: JPEG_WITH_IPTC, tags: {iptc: {'By-line': ['\u0418\u0432\u0430\u043d']}, file: {FileType: 'JPEG'}}}
 ];
 
 // A real file too, since crafted bytes cannot show that a real segment layout
@@ -518,10 +540,9 @@ function compareTags(name, {tags, error}, expected, {exact = true} = {}) {
     }
     const failures = [];
     for (const tagName of Object.keys(expected)) {
-        // Descriptions are not always strings, so compare their text.
-        const description = tags[tagName] && String(tags[tagName].description);
-        if (description !== expected[tagName]) {
-            failures.push(`${name}: expected ${tagName} "${expected[tagName]}", got "${description}"`);
+        const description = getDescriptionText(tags[tagName]);
+        if (JSON.stringify(description) !== JSON.stringify(expected[tagName])) {
+            failures.push(`${name}: expected ${tagName} ${JSON.stringify(expected[tagName])}, got ${JSON.stringify(description)}`);
         }
     }
     const unexpected = Object.keys(tags).filter((tagName) => !(tagName in expected));
@@ -529,6 +550,15 @@ function compareTags(name, {tags, error}, expected, {exact = true} = {}) {
         failures.push(`${name}: also returned ${unexpected.join(', ')}`);
     }
     return failures;
+}
+
+// Descriptions are not always strings, so compare their text, and a tag
+// returned as an array as the list of its texts.
+function getDescriptionText(tag) {
+    if (Array.isArray(tag)) {
+        return tag.map(getDescriptionText);
+    }
+    return tag && String(tag.description);
 }
 
 function printFailures(failures) {

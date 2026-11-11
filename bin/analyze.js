@@ -50,6 +50,7 @@ module.exports = {
     collectImagePaths,
     loadFullParser,
     loadTagBindingName,
+    loadIptcTagExportNames,
     resolveDomParser,
     analyzeImages,
     deriveConfig,
@@ -133,6 +134,16 @@ function loadFullParser() {
 function loadTagBindingName() {
     const sourceUrl = url.pathToFileURL(path.join(EXIFREADER_ROOT_DIR, 'src', 'composable', 'tag-binding-name.js')).href;
     return import(sourceUrl).then((sourceModule) => sourceModule.getTagBindingName);
+}
+
+/**
+ * Load the names exifreader/tags/iptc exports, from the ES module source.
+ *
+ * @returns {Promise<string[]>}
+ */
+function loadIptcTagExportNames() {
+    const sourceUrl = url.pathToFileURL(path.join(EXIFREADER_ROOT_DIR, 'src', 'composable', 'tags', 'iptc.js')).href;
+    return import(sourceUrl).then((sourceModule) => Object.keys(sourceModule));
 }
 
 /**
@@ -324,16 +335,21 @@ function missingFormatsWarning(names, product) {
  * @param {Object[]} results Expanded ExifReader results.
  * @param {function(string): string} getTagBindingName The function
  *   loadTagBindingName resolves to.
+ * @param {string[]} iptcTagExportNames The names loadIptcTagExportNames
+ *   resolves to.
  * @returns {string} JavaScript import lines and a createReader call.
  */
-function deriveImports(results, getTagBindingName) {
+function deriveImports(results, getTagBindingName, iptcTagExportNames) {
     const derived = deriveConfig(results);
     const formats = COMPOSABLE_FORMATS.filter((name) => derived.fileTypes.includes(name));
-    const groups = composableGroups(derived.config.include, results, formats);
+    const iptcTags = composableIptcTags(results, getTagBindingName, iptcTagExportNames);
+    const groups = composableGroups(derived.config.include, results, formats)
+        .filter((name) => name !== 'iptc' || iptcTags.length === 0);
     const tables = [
         {key: 'formats', names: formats, specifier: 'exifreader/formats'},
         {key: 'groups', names: groups, specifier: 'exifreader/groups'},
-        {key: 'tags', names: composableTags(results, getTagBindingName), specifier: 'exifreader/tags/exif'}
+        {key: 'tags', names: composableTags(results, getTagBindingName), specifier: 'exifreader/tags/exif'},
+        {key: 'tags', names: iptcTags, specifier: 'exifreader/tags/iptc'}
     ].filter((table) => table.names.length > 0);
 
     const lines = ['import {createReader} from \'exifreader/core\';']
@@ -341,9 +357,23 @@ function deriveImports(results, getTagBindingName) {
     if (groups.includes('xmp')) {
         lines.push(DOM_PARSER_COMMENT);
     }
-    const entries = tables.map((table) => `${table.key}: [${table.names.join(', ')}]`);
+    const entries = getEntries(tables).map((entry) => `${entry.key}: [${entry.names.join(', ')}]`);
     lines.push(`const reader = createReader({${entries.join(', ')}});`);
     return lines.join('\n');
+}
+
+// Every iptc name as a tag, or none when exifreader/tags/iptc has no export
+// for a name, as the iptc group then has to read it.
+function composableIptcTags(results, getTagBindingName, iptcTagExportNames) {
+    const names = new Set();
+    for (const tags of results.filter((result) => 'iptc' in result)) {
+        addNames(names, Object.keys(tags.iptc));
+    }
+    const bindingNames = Array.from(names).map((name) => getTagBindingName(name));
+    if (bindingNames.some((bindingName) => !iptcTagExportNames.includes(bindingName))) {
+        return [];
+    }
+    return bindingNames.sort();
 }
 
 // An XMP sidecar is read only with xmp composed, and the gps and composite
@@ -369,6 +399,20 @@ function composableTags(results, getTagBindingName) {
         addNames(names, exifGroupNames(tags).map((name) => getTagBindingName(name)));
     }
     return Array.from(names).sort();
+}
+
+// One entry per key, so the exif and iptc tag tables make one tags entry.
+function getEntries(tables) {
+    const entries = [];
+    for (const table of tables) {
+        const entry = entries.find(({key}) => key === table.key);
+        if (entry) {
+            entry.names = entry.names.concat(table.names);
+        } else {
+            entries.push({key: table.key, names: table.names});
+        }
+    }
+    return entries;
 }
 
 /**

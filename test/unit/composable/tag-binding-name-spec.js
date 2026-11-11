@@ -8,7 +8,6 @@ import TagNames0thIfd from '../../../src/tag-names-0th-ifd.js';
 import TagNamesExifIfd from '../../../src/tag-names-exif-ifd.js';
 import TagNamesGpsIfd from '../../../src/tag-names-gps-ifd.js';
 import TagNamesInteroperabilityIfd from '../../../src/tag-names-interoperability-ifd.js';
-import TagNamesMpfIfd from '../../../src/tag-names-mpf-ifd.js';
 import IptcTagNames from '../../../src/iptc-tag-names.js';
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -23,8 +22,7 @@ const RESERVED_WORDS = [
 ];
 const OUTPUT_FILES = {
     exif: [TagNames0thIfd, TagNamesExifIfd, TagNamesGpsIfd, TagNamesInteroperabilityIfd],
-    iptc: [IptcTagNames.iptc],
-    mpf: [TagNamesMpfIfd]
+    iptc: [IptcTagNames.iptc]
 };
 
 describe('composable/tag-binding-name', () => {
@@ -69,9 +67,8 @@ describe('composable/tag-binding-name', () => {
         });
     }
 
-    it('should change only these Exif and MPF names', () => {
+    it('should change only these Exif names', () => {
         expect(getChangedNames(OUTPUT_FILES.exif)).to.deep.equal(['IPTC-NAA', 'Exif IFD Pointer', 'GPS Info IFD Pointer', 'Interoperability IFD Pointer']);
-        expect(getChangedNames(OUTPUT_FILES.mpf)).to.deep.equal([]);
     });
 });
 

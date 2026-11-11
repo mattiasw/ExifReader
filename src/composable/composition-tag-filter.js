@@ -12,8 +12,8 @@ import {FILTER_GROUPS, EXIF_POINTER_TAGS, addExifTagNamePointers} from '../tag-f
  * name-based selection of the caller's includeTags and excludeTags.
  *
  * @param {object|undefined} includeTags `file` and the composed format
- *     readers' and groups' keys set to true, and `exif` set to true or to the
- *     tag descriptors' names.
+ *     readers' and groups' keys set to true, and a group composed by tag
+ *     descriptors alone set to their names.
  * @param {Array<string>} exifDependencies The Exif tag names the composed
  *     groups read their data from.
  * @returns {object} The filter, NOOP_TAG_FILTER without includeTags.
@@ -23,8 +23,8 @@ export function createCompositionTagFilter(includeTags, exifDependencies) {
         return NOOP_TAG_FILTER;
     }
 
+    const returnNames = getReturnNames(includeTags);
     const exifNames = Array.isArray(includeTags.exif) ? includeTags.exif : [];
-    const exifReturnNames = getLowercasedNames(exifNames);
     const exifParseNames = getLowercasedNames(exifNames.concat(exifDependencies, getExifPointerNames(includeTags, exifNames)));
 
     return {
@@ -47,18 +47,26 @@ export function createCompositionTagFilter(includeTags, exifDependencies) {
         if (!FILTER_GROUPS[groupKey]) {
             return true;
         }
-        return shouldReturnGroup(groupKey) && matchesNames(includeTags[groupKey], exifReturnNames, tagName);
+        return shouldReturnGroup(groupKey) && matchesNames(includeTags[groupKey], returnNames[groupKey], tagName);
     }
 
     function shouldParseTag(groupKey, tagName) {
         if (!FILTER_GROUPS[groupKey]) {
             return true;
         }
-        if (groupKey !== 'exif') {
-            return includeTags[groupKey] === true;
-        }
-        return shouldParseGroup(groupKey) && matchesNames(includeTags.exif, exifParseNames, tagName);
+        return shouldParseGroup(groupKey)
+            && matchesNames(includeTags[groupKey], groupKey === 'exif' ? exifParseNames : returnNames[groupKey], tagName);
     }
+}
+
+function getReturnNames(includeTags) {
+    const returnNames = Object.create(null);
+    for (const key in includeTags) {
+        if (Array.isArray(includeTags[key])) {
+            returnNames[key] = getLowercasedNames(includeTags[key]);
+        }
+    }
+    return returnNames;
 }
 
 function getLowercasedNames(names) {

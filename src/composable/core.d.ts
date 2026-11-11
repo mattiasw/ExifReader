@@ -15,15 +15,17 @@ declare const tagDescriptorBrand: unique symbol;
 declare const tagDescriptorName: unique symbol;
 declare const tagFilterBrand: unique symbol;
 
-type ReaderTagGroup = 'exif';
+type ReaderTagGroup = 'exif' | 'iptc';
 type RepeatableIptcName = 'Destination' | 'Subject Reference' | 'Supplemental Category' | 'Keywords' | 'Content Location Code'
     | 'Content Location Name' | 'Reference Service' | 'Reference Date' | 'Reference Number' | 'By-line' | 'By-line Title'
     | 'Contact' | 'Writer/Editor';
 type ExifDescriptorName = DescriptorNames<(typeof ExifDescriptors)[keyof typeof ExifDescriptors], 'exif'>;
 type IptcDescriptorName = DescriptorNames<(typeof IptcDescriptors)[keyof typeof IptcDescriptors], 'iptc'>;
+// The names of 2:200 and 2:201 have no descriptor: they come only with the whole iptc group.
+type IptcGroupOnlyName = 'ObjectData Preview File Format' | 'Record 2 destination' | 'ObjectData Preview File Format Version';
 type ComposedExifTags = Pick<ExifTags, Extract<ExifDescriptorName, keyof ExifTags>>;
 // A composed reader returns a repeatable IPTC dataset as an array, also when the file holds it once.
-type ComposedIptcTags = Pick<ExifTags, Exclude<IptcDescriptorName, RepeatableIptcName>> & {[Name in RepeatableIptcName]?: NumberArrayTag[]};
+type ComposedIptcTags = Pick<ExifTags, Exclude<IptcDescriptorName | IptcGroupOnlyName, RepeatableIptcName>> & {[Name in RepeatableIptcName]?: NumberArrayTag[]};
 type ComposedExpandedTags = Omit<ExpandedTags, 'exif' | 'iptc'> & {exif?: ComposedExifTags, iptc?: ComposedIptcTags};
 type MakerNoteTagsByMake = {canon: CanonTags, pentax: PentaxTags};
 type MakerNoteMake = keyof MakerNoteTagsByMake;
@@ -101,11 +103,11 @@ type ComposedReader<F, G, T, Filter> = Reader<
 /**
  * Builds a reader of the given formats, groups and tags only.
  *
- * @param tables Values from 'exifreader/formats', 'exifreader/groups' and
- *     'exifreader/tags/exif', `tagFilter` to let `load` take includeTags and
- *     excludeTags, `domParser` for xmp where there is no global DOMParser, and
- *     `decompress` for custom Brotli and deflate functions and
- *     maxDecompressedSize, for every load.
+ * @param tables Values from 'exifreader/formats', 'exifreader/groups',
+ *     'exifreader/tags/exif' and 'exifreader/tags/iptc', `tagFilter` to let
+ *     `load` take includeTags and excludeTags, `domParser` for xmp where
+ *     there is no global DOMParser, and `decompress` for custom Brotli and
+ *     deflate functions and maxDecompressedSize, for every load.
  * @returns A reader whose `load` always returns a Promise, of the grouped
  *     tags unless `expanded` is false. The grouped result has only the groups
  *     and tags the tables compose; a table whose contents are not known

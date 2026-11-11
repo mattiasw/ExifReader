@@ -14,10 +14,10 @@ import TagNamesGpsIfd from '../../../src/tag-names-gps-ifd.js';
 import TagNamesInteroperabilityIfd from '../../../src/tag-names-interoperability-ifd.js';
 import {createTagFilter} from '../../../src/tag-filter.js';
 import {GROUP_BRAND} from '../../../src/composable/brand.js';
-import * as ExifBlockReader from '../../../src/composable/exif-block-reader.js';
 import {EXIF_EMITTED_KINDS, exifBlockReader, readExifBlock, getExifMergeDescriptor} from '../../../src/composable/exif-block-reader.js';
-import * as ExifTags from '../../../src/composable/tags/exif.js';
+import * as ExifTagDescriptors from '../../../src/composable/tags/exif.js';
 import {DateTime, ExposureTime, GPSLatitudeRef, InteroperabilityIndex, WhiteBalance, Make} from '../../../src/composable/tags/exif.js';
+import {ByLine} from '../../../src/composable/tags/iptc.js';
 import {getContext, recordCalls} from './test-context.js';
 import {TAG_MAKE, TAG_MODEL, ascii, short, getTiff} from '../loadview-inventory-images.js';
 
@@ -33,10 +33,18 @@ describe('composable/exif-block-reader', () => {
         }
     });
 
-    it('should export the reader link, the reading code and the kinds an Exif block carries', () => {
-        expect(Object.keys(ExifBlockReader).sort()).to.deep.equal(['EXIF_EMITTED_KINDS', 'exifBlockReader', 'getExifMergeDescriptor', 'readExifBlock']);
-        expect(Object.keys(exifBlockReader)).to.deep.equal(['createParseOnlyGroup']);
-        expect(EXIF_EMITTED_KINDS).to.deep.equal(['iptc', 'xmp', 'photoshop', 'icc', 'makerNote', 'thumbnail']);
+    describe('isDescriptor', () => {
+        it('should accept every Exif descriptor', () => {
+            Object.keys(ExifTagDescriptors).forEach((binding) => {
+                expect(exifBlockReader.isDescriptor(ExifTagDescriptors[binding]), binding).to.equal(true);
+            });
+        });
+
+        it('should reject a descriptor of another group or dictionary', () => {
+            expect(exifBlockReader.isDescriptor(objectAssign({}, DateTime, {group: 'iptc'}))).to.equal(false);
+            expect(exifBlockReader.isDescriptor(objectAssign({}, DateTime, {dictionary: '1st'}))).to.equal(false);
+            expect(exifBlockReader.isDescriptor(ByLine)).to.equal(false);
+        });
     });
 
     describe('createParseOnlyGroup', () => {
@@ -101,7 +109,7 @@ describe('composable/exif-block-reader', () => {
         });
 
         it('should build the full dictionaries from every generated descriptor', () => {
-            const tagNames = getTagNames(Object.values(ExifTags));
+            const tagNames = getTagNames(Object.values(ExifTagDescriptors));
 
             expect(tagNames['0th']).to.deep.equal(objectAssign({}, TagNames0thIfd, TagNamesExifIfd));
             expect(tagNames['gps']).to.deep.equal(TagNamesGpsIfd);

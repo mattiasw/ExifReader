@@ -11,6 +11,7 @@ import {DOMParser as XmldomParser} from '@xmldom/xmldom';
 import * as Core from '../../../src/composable/core.js';
 import {createReader, errors, tagFilter} from '../../../src/composable/core.js';
 import {GROUP_BRAND, FORMAT_BRAND} from '../../../src/composable/brand.js';
+import Composition from '../../../src/composable/composition.js';
 import * as ExifReader from '../../../src/exif-reader.js';
 import Errors from '../../../src/errors.js';
 import ImageHeader from '../../../src/image-header.js';
@@ -20,6 +21,9 @@ import {
     allGroups, exif, iptc, xmp, icc, photoshop, mpf, canon, pentax, makerNotes, gps, composite, thumbnail,
 } from '../../../src/composable/groups.js';
 import {DateTime, DateTimeOriginal, GPSLatitude, WhiteBalance, InteroperabilityIndex, Make as MakeTag} from '../../../src/composable/tags/exif.js';
+import {ByLine, Headline, CodedCharacterSet, Keywords} from '../../../src/composable/tags/iptc.js';
+import {exifBlockReader} from '../../../src/composable/exif-block-reader.js';
+import {iptcBlockReader} from '../../../src/composable/iptc-block-reader.js';
 import {createTagFilter} from '../../../src/tag-filter.js';
 import {getDataView, swapProperties} from '../test-utils.js';
 import {
@@ -28,6 +32,9 @@ import {
     bytes as byteValues,
     undefinedBytes,
     getIptcDatasets,
+    getNaaBlock,
+    getIptcSegment,
+    getIptcRawProfile,
     headline,
     getPhotoshopResource,
     getIccProfile,
@@ -138,7 +145,7 @@ describe('composable/core', () => {
         });
 
         it('should need tags to be an array when given', () => {
-            const message = 'createReader: tags must be an array of values imported from \'exifreader/tags/exif\'';
+            const message = 'createReader: tags must be an array of values imported from \'exifreader/tags/exif\' or \'exifreader/tags/iptc\'';
             expect(() => createReader({formats: [jpeg], tags: DateTime})).to.throw(TypeError, message);
             expect(() => createReader({formats: [jpeg], tags: null})).to.throw(TypeError, message);
         });
@@ -253,14 +260,14 @@ describe('composable/core', () => {
             expect(() => createReader({formats: [{}], tagFilter: null}))
                 .to.throw(TypeError, 'createReader: formats[0] is not a value imported from \'exifreader/formats\'');
             expect(() => createReader({formats: [jpeg], tags: [{}], tagFilter: null}))
-                .to.throw(TypeError, 'createReader: tags[0] is not a value imported from \'exifreader/tags/exif\'');
+                .to.throw(TypeError, 'createReader: tags[0] is not a value imported from \'exifreader/tags/exif\' or \'exifreader/tags/iptc\'');
         });
 
         it('should check the arrays before their elements', () => {
             expect(() => createReader({formats: [{}], groups: exif}))
                 .to.throw(TypeError, 'createReader: groups must be an array of values imported from \'exifreader/groups\'');
             expect(() => createReader({formats: [jpeg], groups: [{}], tags: DateTime}))
-                .to.throw(TypeError, 'createReader: tags must be an array of values imported from \'exifreader/tags/exif\'');
+                .to.throw(TypeError, 'createReader: tags must be an array of values imported from \'exifreader/tags/exif\' or \'exifreader/tags/iptc\'');
         });
 
         it('should name the first format that was not imported from the formats', () => {
@@ -287,11 +294,13 @@ describe('composable/core', () => {
                 .to.throw(TypeError, 'createReader: groups[0] is not a value imported from \'exifreader/groups\'');
         });
 
-        it('should accept the generated Exif tag descriptors', () => {
+        it('should accept the generated Exif and IPTC tag descriptors', () => {
             expect(() => createReader({formats: [jpeg], tags: [DateTime, WhiteBalance, GPSLatitude, InteroperabilityIndex]})).to.not.throw();
+            expect(() => createReader({formats: [jpeg], tags: [ByLine, Headline]})).to.not.throw();
+            expect(() => createReader({formats: [jpeg], groups: [iptc], tags: [DateTime, ByLine]})).to.not.throw();
         });
 
-        it('should name the first tag that is not an Exif tag descriptor', () => {
+        it('should name the first tag that is not an Exif or IPTC tag descriptor', () => {
             const invalidTags = [
                 null,
                 'DateTime',
@@ -310,10 +319,17 @@ describe('composable/core', () => {
                 {...DateTime, dictionary: '1st'},
                 {...DateTime, reader: undefined},
                 {...DateTime, reader: {}},
+                {...DateTime, reader: {createParseOnlyGroup: () => ({})}},
+                {...DateTime, reader: {isDescriptor: () => true}},
+                {...DateTime, reader: iptcBlockReader},
+                {...ByLine, group: 'exif'},
+                {...ByLine, group: 'mpf'},
+                {...ByLine, dictionary: '0th'},
+                {...ByLine, reader: exifBlockReader},
             ];
             for (const tag of invalidTags) {
                 expect(() => createReader({formats: [jpeg], tags: [DateTime, tag]}), JSON.stringify(tag))
-                    .to.throw(TypeError, 'createReader: tags[1] is not a value imported from \'exifreader/tags/exif\'');
+                    .to.throw(TypeError, 'createReader: tags[1] is not a value imported from \'exifreader/tags/exif\' or \'exifreader/tags/iptc\'');
             }
         });
 
@@ -323,16 +339,27 @@ describe('composable/core', () => {
             expect(() => createReader({formats: [jpeg], groups})).to.throw(Error, /^createReader: The group emission graph has a cycle through a$/);
         });
 
-        it('should reject an emission graph deeper than three blocks', () => {
-            const groups = [getGroup('a', ['b']), getGroup('b', ['c']), getGroup('c', ['d']), getGroup('d', [])];
+        it('should compose a second time only when tags or groups add a parse-only group', () => {
+            const createComposition = Composition.createComposition;
+            const compositions = [];
+            restores.push(swapProperties(Composition, {createComposition: (tables) => {
+                compositions.push(tables.groups.map((group) => group.key));
+                return createComposition(tables);
+            }}));
 
-            expect(() => createReader({formats: [jpeg], groups})).to.throw(Error, /^createReader: The group emission graph is deeper than 3 blocks through a$/);
-        });
+            createReader({formats: [jpeg], groups: [exif]});
+            createReader({formats: [jpeg], groups: [exif, iptc], tags: [DateTime, ByLine]});
+            createReader({formats: [jpeg], tags: [ByLine]});
+            createReader({formats: [jpeg], groups: [exif], tags: [ByLine]});
 
-        it('should accept an emission graph exactly three blocks deep', () => {
-            const groups = [getGroup('a', ['b']), getGroup('b', ['c']), getGroup('c', [])];
-
-            expect(() => createReader({formats: [jpeg], groups})).to.not.throw();
+            expect(compositions).to.deep.equal([
+                ['exif'],
+                ['exif', 'iptc'],
+                [],
+                ['iptc', 'exif'],
+                ['exif'],
+                ['exif', 'iptc'],
+            ]);
         });
     });
 
@@ -1204,6 +1231,240 @@ describe('composable/core', () => {
             });
         });
 
+        describe('IPTC tag descriptors', () => {
+            const BY_LINE_ID = 0x0250;
+            // ISO-8859-5, so a Latin-1 fallback could not pass for the charset.
+            const CODED_CHARACTER_SET_ISO_8859_5 = {record: 1, dataset: 0x5a, value: '\x1b/@'};
+            const UNKNOWN_DATASET = {record: 2, dataset: 0xf0, value: 'U'};
+            const IPTC_JPEG = getJpeg(getSof0Segment(), getIptcSegment(getNaaBlock([
+                CODED_CHARACTER_SET_ISO_8859_5,
+                byLine('\xcf AB'),
+                headline('H'),
+                UNKNOWN_DATASET,
+            ])));
+
+            it('should return only the chosen datasets, decoded with the Coded Character Set, as the default entry reads them', async () => {
+                for (const filter of [undefined, tagFilter]) {
+                    const reader = createReader({formats: [jpeg], tags: [ByLine], tagFilter: filter});
+                    for (const includeUnknown of [false, true]) {
+                        const label = `${filter ? 'filtered' : ''} ${includeUnknown}`;
+                        const expanded = await reader.load(getDataView(IPTC_JPEG), {expanded: true, includeUnknown});
+                        const flat = await reader.load(getDataView(IPTC_JPEG), {expanded: false, includeUnknown});
+
+                        expect(expanded, label).to.deep.equal(await getDefaultEntryTags(IPTC_JPEG, ['file'], ['By-line'], true));
+                        expect(flat, label).to.deep.equal(await getDefaultEntryTags(IPTC_JPEG, ['file'], ['By-line'], false));
+                        expect(expanded.iptc['By-line'][0].description, label).to.equal('\u042f AB');
+                    }
+                }
+            });
+
+            it('should return the Coded Character Set when it is chosen', async () => {
+                const tags = await createReader({formats: [jpeg], tags: [ByLine, CodedCharacterSet]}).load(getDataView(IPTC_JPEG), {expanded: true});
+
+                expect(Object.keys(tags.iptc)).to.deep.equal(['Coded Character Set', 'By-line']);
+                expect(tags.iptc['Coded Character Set'].description).to.equal('ISO-8859-5');
+            });
+
+            it('should return no unknown dataset next to exif whole when unknown tags are included', async () => {
+                for (const filter of [undefined, tagFilter]) {
+                    const reader = createReader({formats: [jpeg], groups: [exif], tags: [ByLine], tagFilter: filter});
+
+                    const tags = await reader.load(getDataView(IPTC_JPEG), {expanded: true, includeUnknown: true});
+
+                    expect(Object.keys(tags.iptc), String(!!filter)).to.deep.equal(['By-line']);
+                }
+            });
+
+            it('should add nothing to iptc whole', async () => {
+                for (const filter of [undefined, tagFilter]) {
+                    for (const includeUnknown of [false, true]) {
+                        const label = `${filter ? 'filtered' : ''} ${includeUnknown}`;
+                        const expected = await createReader({formats: [jpeg], groups: [iptc], tagFilter: filter}).load(getDataView(IPTC_JPEG), {expanded: true, includeUnknown});
+
+                        const tags = await createReader({formats: [jpeg], groups: [iptc], tags: [ByLine], tagFilter: filter}).load(getDataView(IPTC_JPEG), {expanded: true, includeUnknown});
+
+                        expect(tags, label).to.deep.equal(expected);
+                        expect(Object.keys(tags.iptc).length, label).to.be.above(1);
+                    }
+                }
+            });
+
+            it('should read the IPTC-NAA of a TIFF without returning Exif', async () => {
+                const tiffBytes = getTiff({ifd0: [ascii(TAG_MAKE, 'Canon'), undefinedBytes(TAG_IPTC_NAA, getIptcDatasets([byLine('naa'), headline('H')]))]});
+                for (const filter of [undefined, tagFilter]) {
+                    const reader = createReader({formats: [tiff], tags: [ByLine], tagFilter: filter});
+                    for (const expanded of [false, true]) {
+                        const label = `${filter ? 'filtered' : ''} ${expanded}`;
+
+                        const tags = await reader.load(getDataView(tiffBytes), {expanded});
+
+                        expect(tags, label).to.deep.equal(await getDefaultEntryTags(tiffBytes, ['file'], ['By-line'], expanded));
+                        expect(expanded ? tags.iptc['By-line'][0].description : tags['By-line'][0].description, label).to.equal('naa');
+                    }
+                }
+            });
+
+            it('should let the main block\'s IPTC-NAA give way to an IPTC segment, as iptc whole does', async () => {
+                const bytes = getJpeg(
+                    getSof0Segment(),
+                    getExifSegment(getTiff({ifd0: [undefinedBytes(TAG_IPTC_NAA, getIptcDatasets([byLine('naa'), headline('naa')]))]})),
+                    getIptcSegment(getNaaBlock([byLine('segment')]))
+                );
+                for (const filter of [undefined, tagFilter]) {
+                    const expected = await createReader({formats: [jpeg], groups: [iptc], tagFilter: filter}).load(getDataView(bytes), {expanded: true});
+
+                    const tags = await createReader({formats: [jpeg], tags: [ByLine], tagFilter: filter}).load(getDataView(bytes), {expanded: true});
+
+                    expect(tags.iptc, String(!!filter)).to.deep.equal({'By-line': expected.iptc['By-line']});
+                    expect(tags.iptc['By-line'][0].description, String(!!filter)).to.equal('segment');
+                }
+            });
+
+            it('should read a PNG raw IPTC profile', async () => {
+                const pngBytes = getPng(getZtxtChunk('Raw profile type iptc', getIptcRawProfile(getNaaBlock([byLine('raw'), headline('H')]))));
+                for (const filter of [undefined, tagFilter]) {
+                    const reader = createReader({formats: [png], tags: [ByLine], tagFilter: filter});
+
+                    const tags = await reader.load(getDataView(pngBytes), {expanded: true});
+
+                    expect(tags.iptc, String(!!filter)).to.deep.equal({'By-line': [].concat((await ExifReader.load(getDataView(pngBytes), {async: true, expanded: true})).iptc['By-line'])});
+                    expect(tags.iptc['By-line'][0].description, String(!!filter)).to.equal('raw');
+                }
+            });
+
+            it('should leave what the other groups return as it is', async () => {
+                const domParser = new XmldomParser();
+                const groups = allGroups.filter((group) => group !== iptc);
+                const bytes = getJpeg(
+                    getSof0Segment(),
+                    getJfifSegment(),
+                    getExifSegment(getTiff({
+                        ifd0: [ascii(TAG_MAKE, 'Canon')],
+                        exifIfd: [
+                            rational(TAG_FOCAL_LENGTH, 50, 1),
+                            rational(TAG_FOCAL_PLANE_X_RESOLUTION, 100, 1),
+                            rational(TAG_FOCAL_PLANE_Y_RESOLUTION, 100, 1),
+                            short(TAG_FOCAL_PLANE_RESOLUTION_UNIT, 4),
+                        ],
+                    })),
+                    getXmpSegment(getXmpPacket({FocalLength: '35/1'})),
+                    getIptcSegment(getNaaBlock([byLine('segment'), headline('H')]))
+                );
+                for (const filter of [undefined, tagFilter]) {
+                    for (const expanded of [false, true]) {
+                        const label = `${filter ? 'filtered' : ''} ${expanded}`;
+                        const others = await createReader({formats: [jpeg], groups, tagFilter: filter, domParser}).load(getDataView(bytes), {expanded});
+
+                        const tags = await createReader({formats: [jpeg], groups, tags: [ByLine], tagFilter: filter, domParser}).load(getDataView(bytes), {expanded});
+
+                        const byLineTag = {id: BY_LINE_ID, value: Array.from('segment', (character) => character.charCodeAt(0)), description: 'segment'};
+                        expect(getPlainTags(tags), label).to.deep.equal(getPlainTags(Object.assign(others, expanded ? {iptc: {'By-line': [byLineTag]}} : {'By-line': [byLineTag]})));
+                        expect(others.FocalLength35efl || others.composite.FocalLength35efl, label).to.not.equal(undefined);
+                    }
+                }
+            });
+
+            it('should be narrowed by includeTags by name or id, and never widened', async () => {
+                const reader = createReader({formats: [jpeg], tags: [ByLine, Keywords], tagFilter});
+                const load = (includeTags) => reader.load(getDataView(IPTC_JPEG), {expanded: true, includeUnknown: true, includeTags});
+
+                expect(Object.keys((await load({iptc: ['By-line']})).iptc)).to.deep.equal(['By-line']);
+                expect(Object.keys((await load({iptc: ['by-line', 'Headline']})).iptc)).to.deep.equal(['By-line']);
+                expect(Object.keys((await load({iptc: [BY_LINE_ID]})).iptc)).to.deep.equal(['By-line']);
+                expect(await load({iptc: ['Headline']})).to.deep.equal({});
+                expect(await load({iptc: [0x0269]})).to.deep.equal({});
+                expect(Object.keys((await load({iptc: true})).iptc)).to.deep.equal(['By-line']);
+                expect((await load({iptc: ['By-line']})).iptc['By-line'][0].description).to.equal('\u042f AB');
+            });
+
+            // A composed reader returns a repeatable dataset the default entry reads once as an array.
+            async function getDefaultEntryTags(bytes, groupKeys, repeatableIptcNames, expanded) {
+                const tags = await ExifReader.load(getDataView(bytes), {async: true, expanded: true});
+                const cut = {};
+                groupKeys.forEach((key) => {
+                    cut[key] = tags[key];
+                });
+                cut.iptc = {};
+                repeatableIptcNames.forEach((name) => {
+                    cut.iptc[name] = [].concat(tags.iptc[name]);
+                });
+                if (expanded) {
+                    return cut;
+                }
+                return Object.assign({}, ...groupKeys.map((key) => cut[key]), cut.iptc);
+            }
+
+            function byLine(value) {
+                return {record: 2, dataset: 0x50, value};
+            }
+        });
+
+        describe('repeatable IPTC datasets', () => {
+            const KEYWORDS_ID = 0x0219;
+            const CARRIERS = [
+                {name: 'JPEG APP13', format: jpeg, getBytes: (datasets) => getJpeg(getSof0Segment(), getIptcSegment(getNaaBlock(datasets)))},
+                {name: 'TIFF IPTC-NAA', format: tiff, getBytes: (datasets) => getTiff({ifd0: [undefinedBytes(TAG_IPTC_NAA, getIptcDatasets(datasets))]})},
+                {name: 'PNG raw profile', format: png, getBytes: (datasets) => getPng(getZtxtChunk('Raw profile type iptc', getIptcRawProfile(getNaaBlock(datasets))))},
+            ];
+            const COMPOSITIONS = [
+                {name: 'iptc group', getOptions: (format) => ({formats: [format], groups: [iptc]})},
+                {name: 'descriptors', getOptions: (format) => ({formats: [format], tags: [Keywords, Headline]})},
+            ];
+
+            it('should return one repeatable dataset as an array and a dataset that is not repeatable as an object', async () => {
+                for (const carrier of CARRIERS) {
+                    const bytes = carrier.getBytes([keywords('k'), headline('h')]);
+                    for (const composition of COMPOSITIONS) {
+                        const reader = createReader(composition.getOptions(carrier.format));
+                        for (const expanded of [true, false]) {
+                            const label = `${carrier.name} ${composition.name} ${expanded}`;
+
+                            const tags = await reader.load(getDataView(bytes), {expanded});
+
+                            const iptcTags = expanded ? tags.iptc : tags;
+                            expect(iptcTags.Keywords, label).to.deep.equal([{id: KEYWORDS_ID, value: [0x6b], description: 'k'}]);
+                            expect(iptcTags.Headline, label).to.deep.equal({id: 0x0269, value: [0x68], description: 'h'});
+                        }
+                    }
+                }
+            });
+
+            it('should return the same array whether the dataset is composed by descriptor or with the group', async () => {
+                for (const carrier of CARRIERS) {
+                    const bytes = carrier.getBytes([keywords('k'), headline('h')]);
+
+                    const [byGroup, byDescriptor] = await Promise.all(COMPOSITIONS.map((composition) => createReader(composition.getOptions(carrier.format)).load(getDataView(bytes), {expanded: true})));
+
+                    expect(byDescriptor.iptc.Keywords, carrier.name).to.deep.equal(byGroup.iptc.Keywords);
+                }
+            });
+
+            it('should return a repeatable dataset read twice as an array of both', async () => {
+                const bytes = CARRIERS[0].getBytes([keywords('k'), headline('h'), keywords('l')]);
+                for (const composition of COMPOSITIONS) {
+                    const tags = await createReader(composition.getOptions(jpeg)).load(getDataView(bytes), {expanded: true});
+
+                    expect(tags.iptc.Keywords.map((tag) => tag.description), composition.name).to.deep.equal(['k', 'l']);
+                }
+            });
+
+            it('should leave the default entry returning one repeatable dataset as an object', async () => {
+                for (const carrier of CARRIERS) {
+                    const bytes = carrier.getBytes([keywords('k'), headline('h')]);
+
+                    const expanded = await ExifReader.load(getDataView(bytes), {async: true, expanded: true});
+                    const flat = await ExifReader.load(getDataView(bytes), {async: true});
+
+                    expect(expanded.iptc.Keywords, carrier.name).to.deep.equal({id: KEYWORDS_ID, value: [0x6b], description: 'k'});
+                    expect(flat.Keywords, carrier.name).to.deep.equal({id: KEYWORDS_ID, value: [0x6b], description: 'k'});
+                }
+            });
+
+            function keywords(value) {
+                return {record: 2, dataset: 0x19, value};
+            }
+        });
+
         describe('a group that needs Exif without exif composed', () => {
             it('should not add exif for a group that needs no Exif', async () => {
                 const tags = await createReader({formats: [jpeg], groups: [mpf]}).load(getDataView(JPEG), {expanded: true, includeOffsets: true});
@@ -1328,8 +1589,8 @@ describe('composable/core', () => {
                             const caseLabel = `${label} ${filter ? 'filtered' : ''} ${includeUnknown}`;
                             const flatTags = await reader.load(getDataView(JPEG_WITH_EVERY_IFD), {includeUnknown, expanded: false});
                             const expandedTags = await reader.load(getDataView(JPEG_WITH_EVERY_IFD), {includeUnknown, expanded: true});
-                            expect(getPlain(flatTags), caseLabel).to.deep.equal(Object.assign({}, FILE_TAGS, JFIF_TAGS, flat));
-                            expect(getPlain(expandedTags), caseLabel).to.deep.equal(Object.assign({file: FILE_TAGS, jfif: JFIF_TAGS}, expanded));
+                            expect(getPlainTags(flatTags), caseLabel).to.deep.equal(Object.assign({}, FILE_TAGS, JFIF_TAGS, flat));
+                            expect(getPlainTags(expandedTags), caseLabel).to.deep.equal(Object.assign({file: FILE_TAGS, jfif: JFIF_TAGS}, expanded));
                         }
                     }
                 });
@@ -1347,10 +1608,6 @@ describe('composable/core', () => {
                     expect((await reader.load(bytes, {expanded: true})).exif.WhiteBalance, expected.description).to.deep.equal(expected);
                 }
             });
-
-            function getPlain(tags) {
-                return JSON.parse(JSON.stringify(tags, (key, value) => (value instanceof ArrayBuffer ? Array.from(new Uint8Array(value)) : value)));
-            }
         });
 
         describe('excludeTags', () => {
@@ -1576,6 +1833,8 @@ describe('composable/core', () => {
                 {formats: allFormats, groups: allGroupsButExif},
                 {formats: FORMATS_BUT_XML, tags: [DateTime]},
                 {formats: FORMATS_BUT_XML, tags: [GPSLatitude]},
+                {formats: FORMATS_BUT_XML, tags: [ByLine, Headline]},
+                {formats: FORMATS_BUT_XML, groups: [exif], tags: [ByLine]},
             ].concat([exif, iptc, xmp, icc, photoshop, mpf, canon, pentax, makerNotes, gps, composite, thumbnail].map((group) => ({formats: FORMATS_BUT_XML, groups: [group]})));
             const images = [['Canon maker note', getBytes(JPEG)]].concat(['test.jpg', 'test-iptc.jpg', 'test.png', 'test.tiff', 'test.heic', 'test.avif', 'test.jxl', 'test.gif']
                 .map((fileName) => [fileName, fs.readFileSync(path.join(IMAGES_PATH, fileName))]));
@@ -1672,4 +1931,8 @@ async function expectRejection(promise, message, label) {
     const error = await getRejection(promise);
     expect(error, label).to.be.an.instanceof(TypeError);
     expect(error.message, label).to.equal(message);
+}
+
+function getPlainTags(tags) {
+    return JSON.parse(JSON.stringify(tags, (key, value) => (value instanceof ArrayBuffer ? Array.from(new Uint8Array(value)) : value)));
 }

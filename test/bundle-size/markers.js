@@ -250,8 +250,8 @@ const UNPROBEABLE_REASONS = {
     'exif-reader.js': 'the entry point, in every build; the format and group modules it gates are probed through the modules they import',
     'exif-tag-table.js': WRITER_MODULE,
     // Under src/composable/. Its xml.js, thumbnail.js and composite.js share a
-    // basename with a module above, which accounts for them, as exif.js,
-    // iptc.js and mpf.js below account for the generated tags/ modules.
+    // basename with a module above, which accounts for them, as exif.js and
+    // iptc.js below account for the generated tags/ modules.
     'avif.js': COMPOSABLE_TABLE_MODULE,
     'brand.js': 'imported by every format and group module, so in every build, and it holds no string literal',
     'canon.js': COMPOSABLE_TABLE_MODULE,
@@ -268,6 +268,7 @@ const UNPROBEABLE_REASONS = {
     'heic.js': COMPOSABLE_TABLE_MODULE,
     'icc.js': COMPOSABLE_TABLE_MODULE,
     'iptc.js': COMPOSABLE_TABLE_MODULE,
+    'iptc-block-reader.js': NO_UNIQUE_LITERAL,
     'iso-bmff-file-reader.js': COMPOSABLE_TABLE_MODULE,
     'jpeg.js': COMPOSABLE_TABLE_MODULE,
     'jxl.js': COMPOSABLE_TABLE_MODULE,
