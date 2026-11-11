@@ -56,7 +56,8 @@ const SPECIFIERS = [
 // that honours exports, to null where exports is ignored (parcel without
 // packageExports, metro exports off), as there are no root shim files, and,
 // under tsc 5 node10, to their d.ts through typesVersions, which leaves the
-// root on exif-reader.d.ts. See README.md to refresh it.
+// root on exif-reader.d.ts. Under tsc 5 node10 the two dist specifiers reach
+// exif-reader.d.ts through typesVersions too. See README.md to refresh it.
 const EXPECTED = {
     'webpack esm': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
     'webpack commonjs': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
@@ -75,7 +76,7 @@ const EXPECTED = {
     'metro exports on require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
     'metro exports off': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, null, null, null, null],
     'metro web': ['src/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
-    'tsc 5 node10': ['exif-reader.d.ts', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.d.ts', 'src/composable/formats.d.ts', 'src/composable/groups.d.ts', 'src/composable/tags/exif.d.ts'],
+    'tsc 5 node10': ['exif-reader.d.ts', 'package.json', 'src/exif-reader.js', 'exif-reader.d.ts', 'src/exif-reader.js', 'exif-reader.d.ts', null, 'src/composable/core.d.ts', 'src/composable/formats.d.ts', 'src/composable/groups.d.ts', 'src/composable/tags/exif.d.ts'],
     'node import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
     'node require': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],
     'bun import': ['dist/exif-reader.js', 'package.json', 'src/exif-reader.js', 'dist/exif-reader.js', 'src/exif-reader.js', 'dist/exif-reader.js', null, 'src/composable/core.js', 'src/composable/formats.js', 'src/composable/groups.js', 'src/composable/tags/exif.js'],

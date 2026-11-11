@@ -45,6 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bundling `exifreader/dist/exif-reader.js` for the browser with webpack 5 no
   longer fails on `http` and `https`: `package.json` now maps `fs`, `http` and
   `https` to `false` for browser builds.
+- TypeScript now finds the type definitions for `exifreader/dist/exif-reader`
+  and `exifreader/dist/exif-reader.js`, the import the README gives for a
+  custom build in a browser bundle. A `strict` project failed on it with
+  TS7016.
 
 ## [4.54.0] - 2026-11-03
 

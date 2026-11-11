@@ -84,7 +84,7 @@ const BUNDLE_SPECIFIERS = ['exifreader', 'exifreader/dist/exif-reader.js'];
 const WEB_BUNDLE_SPECIFIER = 'exifreader/dist/exif-reader.js';
 
 const TYPE_CONSUMERS_PATH = path.join(ROOT_PATH, 'test', 'types', 'packed');
-const TYPE_CONSUMER_FILES = ['consumer.ts', 'consumer.mts', 'composable.mts'];
+const TYPE_CONSUMER_FILES = ['consumer.ts', 'consumer.mts', 'composable.mts', 'dist.ts'];
 const NO_NODE_TYPES_CONSUMER_FILE = 'no-node-types.mts';
 const TSC_PATH = path.join(ROOT_PATH, 'node_modules', 'typescript', 'bin', 'tsc');
 const TYPE_MODES = [
@@ -333,7 +333,7 @@ describe('packaging', function () {
         });
 
         TYPE_MODES.forEach(({moduleResolution, module}) => {
-            it(`type-checks every consumer against exif-reader.d.ts and the subpath type definitions under moduleResolution ${moduleResolution}`, () => {
+            it(`type-checks every consumer against exif-reader.d.ts, the dist entry and the subpath type definitions under moduleResolution ${moduleResolution}`, () => {
                 const tsconfigPath = writeTsconfig(consumerDir, moduleResolution, {
                     module,
                     moduleResolution,

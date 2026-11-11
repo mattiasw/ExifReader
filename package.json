@@ -45,6 +45,12 @@
       ],
       "tags/mpf": [
         "./src/composable/tags/mpf.d.ts"
+      ],
+      "dist/exif-reader": [
+        "./exif-reader.d.ts"
+      ],
+      "dist/exif-reader.js": [
+        "./exif-reader.d.ts"
       ]
     }
   },
@@ -84,7 +90,14 @@
     },
     "./package.json": "./package.json",
     "./src/exif-reader": "./src/exif-reader.js",
-    "./dist/exif-reader": "./dist/exif-reader.js",
+    "./dist/exif-reader": {
+      "types": "./exif-reader.d.ts",
+      "default": "./dist/exif-reader.js"
+    },
+    "./dist/exif-reader.js": {
+      "types": "./exif-reader.d.ts",
+      "default": "./dist/exif-reader.js"
+    },
     "./src/composable/*": null,
     "./src/*": "./src/*",
     "./dist/*": "./dist/*"
