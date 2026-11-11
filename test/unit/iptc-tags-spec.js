@@ -13,6 +13,7 @@ import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils
 import {getCharacterArray} from '../../src/utils.js';
 import IptcTags from '../../src/iptc-tags.js';
 import IptcTagNames from '../../src/iptc-tag-names.js';
+import {createTagFilter} from '../../src/tag-filter.js';
 import TagDecoder from '../../src/tag-decoder.js';
 
 describe('iptc-tags', function () {
@@ -225,6 +226,15 @@ describe('iptc-tags', function () {
         expect(tags['MyIptcTag1'].description).to.equal('BC');
     });
 
+    it('should keep the tags before a truncated Coded Character Set that the filter leaves out', () => {
+        const dataView = getNaaBlockDataView('\x1c\x02\x69\x00\x02BC' + '\x1c\x01\x5a\x00\x03\x1b');
+
+        const tags = IptcTags.read(dataView, 0, false, createTagFilter({includeTags: {iptc: ['Headline']}}));
+
+        expect(Object.keys(tags)).to.deep.equal(['Headline']);
+        expect(tags['Headline'].description).to.equal('BC');
+    });
+
     it('should read an empty last tag whose header ends at the end of the data', () => {
         restores.push(swapProperties(IptcTagNames.iptc, {
             0x4711: 'MyIptcTag1',
@@ -282,17 +292,11 @@ describe('iptc-tags', function () {
             }
         }));
         restores.push(swapProperties(IptcTagNames.iptc, {
-            0x4711: {
-                name: 'MyIptcEncodingTag',
-                encoding_name() {
-                    return 'UTF-8';
-                }
-            },
             0x4712: {
                 name: 'MyIptcTag'
             }
         }));
-        const dataView = getDataView('8BIM\x04\x04\x00\x00\x00\x00\x00\x0e' + '\x1c\x47\x11\x00\x00' + '\x1c\x47\x12\x00\x02BC');
+        const dataView = getNaaBlockDataView('\x1c\x01\x5a\x00\x03\x1b%G' + '\x1c\x47\x12\x00\x02BC');
 
         IptcTags.read(dataView, 0);
 
@@ -491,6 +495,50 @@ describe('iptc-tags', function () {
             expect(tags['Caption/Abstract'].description).to.equal(
                 'ÄÖÜÜÖÄ AOUUOA\n– — ? ° \' " " \' …\nCa. 35.45°–35.51° O, 33.09°–33.13° N.\n'
             );
+        });
+
+        describe('when the Coded Character Set tag is left out', function () {
+            const tagsData = '\x1c\x01\x5a\x00\x03\x1b\x2f\x40'
+                + '\x1c\x02\x69\x00\x06\xcf\x20\xdc\xde\xd3\xe3';
+            const dataView = getDataView('8BIM\x04\x04\x00\x00\x00\x00' + getTagsSize(tagsData) + tagsData);
+
+            beforeEach(function () {
+                if (!encodingIsSupported('ISO-8859-5')) {
+                    this.skip();
+                }
+            });
+
+            it('should decode with it when includeTags leaves it out', () => {
+                const tags = IptcTags.read(dataView, 0, false, createTagFilter({includeTags: {iptc: ['Headline']}}));
+
+                expect(tags['Headline'].description).to.equal('Я могу');
+                expect(tags['Coded Character Set']).to.be.undefined;
+            });
+
+            it('should decode with it when excludeTags leaves it out', () => {
+                const tags = IptcTags.read(dataView, 0, false, createTagFilter({excludeTags: {iptc: ['Coded Character Set']}}));
+
+                expect(tags['Headline'].description).to.equal('Я могу');
+                expect(tags['Coded Character Set']).to.be.undefined;
+            });
+
+            it('should decode with it when the tag names lack it', () => {
+                restores.push(swapProperties(IptcTagNames.iptc, {0x015a: undefined}));
+
+                const tags = IptcTags.read(dataView, 0);
+
+                expect(tags['Headline'].description).to.equal('Я могу');
+                expect(tags['Coded Character Set']).to.be.undefined;
+            });
+
+            it('should decode with it when the tag names lack it and unknown tags are included', () => {
+                restores.push(swapProperties(IptcTagNames.iptc, {0x015a: undefined}));
+
+                const tags = IptcTags.read(dataView, 0, true);
+
+                expect(tags['Headline'].description).to.equal('Я могу');
+                expect(tags['undefined-346'].id).to.equal(0x015a);
+            });
         });
 
         function testReadingAndDecodingEncodedTag(tagsData, expectedEncoding, expectedDestination, expectedLangId, expectedHeadline, expectedCaption) {

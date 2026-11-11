@@ -53,6 +53,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `exifreader/src/exif-reader.js` and the
   `./node_modules/exifreader/src/exif-reader.js` import the README gives for
   React Native. A `strict` project failed on them with TS7016.
+- IPTC text is now decoded with the block's `Coded Character Set` also when
+  that tag is left out by `includeTags` or `excludeTags` (in `ExifReader.load`
+  or in `reader.load` on a reader composed with `tagFilter`) or by a custom
+  build. Before, ISO-8859 text such as a Cyrillic `Headline` came out as the
+  wrong characters.
 
 ## [4.54.0] - 2026-11-03
 

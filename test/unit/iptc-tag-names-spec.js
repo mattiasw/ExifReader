@@ -71,20 +71,6 @@ describe('iptc-tag-names', () => {
         expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/G'))).to.equal('ISO-8859-6');
         expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/F'))).to.equal('ISO-8859-7');
         expect(IptcTagNames[0x015a].description(getCharacterArray('\x1B/H'))).to.equal('ISO-8859-8');
-
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1b%G'))).to.equal('UTF-8');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1b%5'))).to.equal('Windows-1252');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1b%/G'))).to.equal('UTF-8 Level 1');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1b%/H'))).to.equal('UTF-8 Level 2');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1b%/I'))).to.equal('UTF-8 Level 3');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/A'))).to.equal('ISO-8859-1');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/B'))).to.equal('ISO-8859-2');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/C'))).to.equal('ISO-8859-3');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/D'))).to.equal('ISO-8859-4');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/@'))).to.equal('ISO-8859-5');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/G'))).to.equal('ISO-8859-6');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/F'))).to.equal('ISO-8859-7');
-        expect(IptcTagNames[0x015a].encoding_name(getCharacterArray('\x1B/H'))).to.equal('ISO-8859-8');
     });
 
     it('should have tag UNO', () => {

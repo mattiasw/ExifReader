@@ -62,8 +62,7 @@ export default {
         },
         0x015a: {
             'name': 'Coded Character Set',
-            'description': getEncodingName,
-            'encoding_name': getEncodingName,
+            'description': getEncodingName
         },
         0x0164: 'UNO',
         0x0178: {
