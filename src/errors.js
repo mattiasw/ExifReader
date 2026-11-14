@@ -10,10 +10,13 @@
 function MetadataMissingError(message) {
     this.name = 'MetadataMissingError';
     this.message = message || 'No Exif data';
-    this.stack = (new Error()).stack;
+    // Defined, not assigned, to keep stack out of the enumerable keys.
+    Object.defineProperty(this, 'stack', {value: (new Error()).stack, writable: true, configurable: true});
 }
 
-MetadataMissingError.prototype = new Error;
+MetadataMissingError.prototype = Object.create(Error.prototype, {
+    constructor: {value: MetadataMissingError, writable: true, configurable: true}
+});
 
 /**
  * Thrown when no supported image format recognizes the input.
@@ -23,10 +26,12 @@ MetadataMissingError.prototype = new Error;
 function UnsupportedFormatError(message) {
     this.name = 'UnsupportedFormatError';
     this.message = message;
-    this.stack = (new Error(message)).stack;
+    Object.defineProperty(this, 'stack', {value: (new Error(message)).stack, writable: true, configurable: true});
 }
 
-UnsupportedFormatError.prototype = new Error;
+UnsupportedFormatError.prototype = Object.create(Error.prototype, {
+    constructor: {value: UnsupportedFormatError, writable: true, configurable: true}
+});
 
 export default {
     MetadataMissingError,
