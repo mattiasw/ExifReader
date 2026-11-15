@@ -62,6 +62,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `includeTags`: a group set to `false` is now left out. Before,
   `includeTags: {exif: true, gps: false}` still returned `gps`.
 
+### Security
+
+- `ExifReader.load` and `loadView` now treat a `decompress.maxDecompressedSize`
+  of `NaN` as the default limit of 128 MiB. Before, `NaN` removed the limit:
+  compressed metadata was decompressed with no bound on its total size, and a
+  custom `brotli` or `deflate` function was given a `maxOutputLength` of `NaN`,
+  which Node's zlib reads as no limit.
+
 ## [4.54.0] - 2026-11-03
 
 ### Changed

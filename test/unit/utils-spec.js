@@ -980,6 +980,153 @@ describe('utils', () => {
                 expect(result.budget.remaining).to.equal(Utils.DEFAULT_MAX_DECOMPRESSED_SIZE);
             });
 
+            it('should use the default limit when the configured limit is NaN', () => {
+                const result = Utils.withDecompressBudget({maxDecompressedSize: NaN});
+
+                expect(result.budget.remaining).to.equal(Utils.DEFAULT_MAX_DECOMPRESSED_SIZE);
+                expect(result.maxDecompressedSize).to.be.NaN;
+            });
+
+            it('should use the default limit when the configured limit is not a number', () => {
+                for (const maxDecompressedSize of ['1000', 'Infinity', null]) {
+                    const result = Utils.withDecompressBudget({maxDecompressedSize});
+
+                    expect(result.budget.remaining, String(maxDecompressedSize)).to.equal(Utils.DEFAULT_MAX_DECOMPRESSED_SIZE);
+                }
+            });
+
+            it('should bound a streamed block by the default limit when the configured limit is NaN', async () => {
+                const config = Utils.withDecompressBudget({maxDecompressedSize: NaN});
+                const compressed = await compressDeflate(new Uint8Array(16));
+
+                const result = await decompressDeflate(compressed, config);
+
+                expect(result.byteLength).to.equal(16);
+                expect(config.budget.remaining).to.equal(Utils.DEFAULT_MAX_DECOMPRESSED_SIZE - 16);
+            });
+
+            it('should name the default limit when a NaN limit is exceeded', async () => {
+                const config = Utils.withDecompressBudget({maxDecompressedSize: NaN});
+                config.budget.remaining = -1;
+
+                const error = await getRejection(decompressDeflate(new ArrayBuffer(1), config));
+
+                expect(error).to.match(/total size of 134217728 bytes/);
+                expect(warnSpy.hasWarned).to.equal(true);
+            });
+
+            it('should pass the default limit to a custom function when the configured limit is NaN', async () => {
+                const options = [];
+                const config = Utils.withDecompressBudget({
+                    deflate: (data, dataOptions) => {
+                        options.push(dataOptions);
+                        return inflateSync(data, dataOptions);
+                    },
+                    maxDecompressedSize: NaN
+                });
+                const compressed = await compressDeflate(new Uint8Array(16));
+
+                const result = await decompressDeflate(compressed, config);
+
+                expect(result.byteLength).to.equal(16);
+                expect(options).to.deep.equal([{maxOutputLength: Utils.DEFAULT_MAX_DECOMPRESSED_SIZE + 1}]);
+            });
+
+            it('should keep a negative limit and skip every compressed block', async () => {
+                let calls = 0;
+                const config = Utils.withDecompressBudget({
+                    deflate: (data, dataOptions) => {
+                        calls++;
+                        return inflateSync(data, dataOptions);
+                    },
+                    maxDecompressedSize: -1
+                });
+                const compressed = await compressDeflate(new Uint8Array(16));
+
+                expect(config.budget.remaining).to.equal(-1);
+                const error = await getRejection(decompressDeflate(compressed, config));
+
+                expect(error).to.match(/total size of -1 bytes/);
+                expect(warnSpy.hasWarned).to.equal(true);
+                expect(calls).to.equal(0);
+            });
+
+            it('should read the configured limit once', async () => {
+                let reads = 0;
+                const config = Utils.withDecompressBudget({
+                    get maxDecompressedSize() {
+                        reads++;
+                        return reads === 1 ? 10 : NaN;
+                    }
+                });
+                const compressed = await compressDeflate(new Uint8Array(16));
+
+                const error = await getRejection(decompressDeflate(compressed, config));
+
+                expect(reads).to.equal(1);
+                expect(error).to.match(/total size of 10 bytes/);
+            });
+
+            it('should skip every later block once a custom function reports a NaN or negative byte length', async () => {
+                const compressed = await compressDeflate(new Uint8Array(4 * 1024));
+
+                for (const byteLength of [NaN, -1, -Infinity]) {
+                    const config = Utils.withDecompressBudget({
+                        brotli: () => ({byteLength, byteOffset: 0, buffer: new ArrayBuffer(0)}),
+                        maxDecompressedSize: 1024
+                    });
+
+                    const brotliError = await getRejection(decompressBrotli(new ArrayBuffer(1), config));
+                    const deflateError = await getRejection(decompressDeflate(compressed, config));
+
+                    expect(brotliError, String(byteLength)).to.match(/total size of 1024 bytes/);
+                    expect(deflateError, String(byteLength)).to.match(/total size of 1024 bytes/);
+                }
+                expect(warnSpy.hasWarned).to.equal(true);
+            });
+
+            it('should skip every later block once a custom function reports a NaN byte length under an Infinity limit', async () => {
+                const config = Utils.withDecompressBudget({
+                    brotli: () => ({byteLength: NaN, byteOffset: 0, buffer: new ArrayBuffer(0)}),
+                    maxDecompressedSize: Infinity
+                });
+                const compressed = await compressDeflate(new Uint8Array(16));
+
+                const brotliError = await getRejection(decompressBrotli(new ArrayBuffer(1), config));
+                const deflateError = await getRejection(decompressDeflate(compressed, config));
+
+                expect(brotliError).to.match(/total size of Infinity bytes/);
+                expect(deflateError).to.match(/total size of Infinity bytes/);
+            });
+
+            it('should charge a custom function\'s result by its byte length as read once', async () => {
+                let reads = 0;
+                const config = Utils.withDecompressBudget({
+                    brotli: () => ({
+                        get byteLength() {
+                            reads++;
+                            return reads === 1 ? 1 : -Infinity;
+                        },
+                        byteOffset: 0,
+                        buffer: new ArrayBuffer(1)
+                    }),
+                    maxDecompressedSize: 1024
+                });
+
+                await decompressBrotli(new ArrayBuffer(1), config);
+
+                expect(config.budget.remaining).to.equal(1023);
+            });
+
+            it('should charge nothing for a custom function\'s missing result', async () => {
+                const config = Utils.withDecompressBudget({deflate: () => undefined, maxDecompressedSize: 1024});
+
+                const text = await Utils.decompress(new DataView(new ArrayBuffer(1)), Utils.COMPRESSION_METHOD_DEFLATE, 'latin1', 'string', config);
+
+                expect(text).to.equal('');
+                expect(config.budget.remaining).to.equal(1024);
+            });
+
             it('should reject a streamed block once the shared total is exceeded', async () => {
                 const config = Utils.withDecompressBudget({maxDecompressedSize: 6 * 1024});
                 const compressed = await compressDeflate(new Uint8Array(4 * 1024));
@@ -1576,6 +1723,16 @@ describe('utils', () => {
                 return Utils.decompress(
                     new DataView(buffer),
                     Utils.COMPRESSION_METHOD_DEFLATE,
+                    'latin1',
+                    'dataview',
+                    config
+                );
+            }
+
+            function decompressBrotli(buffer, config) {
+                return Utils.decompress(
+                    new DataView(buffer),
+                    Utils.COMPRESSION_METHOD_BROTLI,
                     'latin1',
                     'dataview',
                     config
