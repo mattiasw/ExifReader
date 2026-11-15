@@ -453,6 +453,9 @@ function isTagSelector(selector) {
 function narrowIncludeTags(includeTags, mapping) {
     const narrowed = {};
     Object.keys(includeTags).forEach((key) => {
+        if (!includeTags[key]) {
+            return;
+        }
         if (mapping[key] === true) {
             narrowed[key] = includeTags[key];
         } else if (mapping[key] !== undefined) {

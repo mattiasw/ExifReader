@@ -16,6 +16,14 @@ load("", { includeTags: { exif: true } });
 load("", { includeTags: { png: true } });
 load("", { includeTags: { thumbnail: true } });
 load("", { includeTags: { exif: true }, excludeTags: { png: true } });
+load("", { includeTags: { exif: true, gps: false } });
+declare const includeXmp: boolean;
+load("", { includeTags: { exif: true, xmp: includeXmp } });
+load("", { excludeTags: { gps: false } });
+// @ts-expect-error
+load("", { includeTags: { gps: "all" } });
+// @ts-expect-error
+load("", { includeTags: { gps: 1 } });
 // @ts-expect-error
 load("", { excludeTags: ["DateTimeOriginal"] });
 // @ts-expect-error

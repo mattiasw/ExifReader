@@ -61,7 +61,9 @@ export function createTagFilter({includeTags, excludeTags, includeTagsIsLimit} =
 
     for (const groupKey in FILTER_GROUPS) {
         const hasIncludeEntry =
-            hasIncludeTags && Object.prototype.hasOwnProperty.call(includeTags, groupKey);
+            hasIncludeTags
+            && Object.prototype.hasOwnProperty.call(includeTags, groupKey)
+            && !!includeTags[groupKey];
         const hasExcludeEntry =
             hasExcludeTags && Object.prototype.hasOwnProperty.call(excludeTags, groupKey);
 

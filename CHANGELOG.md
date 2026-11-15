@@ -59,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or in `reader.load` on a reader composed with `tagFilter`) or by a custom
   build. Before, ISO-8859 text such as a Cyrillic `Headline` came out as the
   wrong characters.
+- `includeTags`: a group set to `false` is now left out. Before,
+  `includeTags: {exif: true, gps: false}` still returned `gps`.
 
 ## [4.54.0] - 2026-11-03
 

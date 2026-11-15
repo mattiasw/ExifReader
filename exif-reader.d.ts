@@ -392,8 +392,8 @@ interface XmlDomParser {
 type TagSelectorWithId = string | number;
 type TagSelectorNameOnly = string;
 
-type TagFilterGroupWithId = true | TagSelectorWithId[];
-type TagFilterGroupNameOnly = true | TagSelectorNameOnly[];
+type TagFilterGroupWithId = boolean | TagSelectorWithId[];
+type TagFilterGroupNameOnly = boolean | TagSelectorNameOnly[];
 
 export type IncludeTagsOptions = {
     exif?: TagFilterGroupWithId,

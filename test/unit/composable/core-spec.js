@@ -1184,6 +1184,17 @@ describe('composable/core', () => {
                 }
             });
 
+            it('should leave gps out of includeTags when its value is false', async () => {
+                const reader = createReader({formats: [jpeg], groups: [exif, gps], tagFilter});
+
+                const left = await reader.load(getDataView(JPEG), {expanded: true, includeTags: {exif: true, gps: false}});
+                const kept = await reader.load(getDataView(JPEG), {expanded: true, includeTags: {exif: true, gps: true}});
+
+                expect(left.exif.Make.description).to.equal('Canon');
+                expect(left.gps).to.equal(undefined);
+                expect(kept.gps.Latitude).to.not.equal(undefined);
+            });
+
             it('should treat a falsy value as no includeTags on a reader without the tag filter', async () => {
                 const expected = await exifOnlyReader.load(getDataView(JPEG), {expanded: true});
                 for (const includeTags of [false, 0, '', null, undefined]) {
@@ -1837,8 +1848,8 @@ describe('composable/core', () => {
             it('should accept false and undefined as a group value', async () => {
                 const expected = await load({expanded: true});
 
-                expect(await load({expanded: true, includeTags: {exif: false}})).to.be.an('object');
-                expect(await load({expanded: true, includeTags: {exif: undefined}})).to.be.an('object');
+                expect(await load({expanded: true, includeTags: {exif: false}})).to.deep.equal({});
+                expect(await load({expanded: true, includeTags: {exif: undefined}})).to.deep.equal({});
                 expect(await load({expanded: true, excludeTags: {exif: false}})).to.deep.equal(expected);
                 expect(await load({expanded: true, excludeTags: {exif: undefined}})).to.deep.equal(expected);
             });

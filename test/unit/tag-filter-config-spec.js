@@ -77,6 +77,12 @@ describe('tag-filter-config', function () {
                 expect(requiredTags[EXIF_POINTER_TAGS.gpsInfoIfdPointer], name).to.equal(undefined);
             }
         });
+
+        it('should add no dependency for a group whose value is false or null', function () {
+            for (const includeTags of [{gps: false}, {gps: null}, {exif: false}]) {
+                expect(getExifTagDependenciesForInclude(includeTags), JSON.stringify(includeTags)).to.deep.equal({});
+            }
+        });
     });
 
     describe('addExifTagNamePointers', function () {

@@ -284,6 +284,9 @@ You can filter which tags are returned by using `includeTags` and/or
 - An empty selector array (e.g. `includeTags: { xmp: [] }`) is treated as
   excluding that group. The group will not be returned and ExifReader will skip
   parsing it.
+- A group's value can be `true`, an array of selectors, or `false` to leave the
+  group out. That is useful with a boolean variable, e.g.
+  `includeTags: { exif: true, xmp: includeXmp }`.
 
 **Examples**
 

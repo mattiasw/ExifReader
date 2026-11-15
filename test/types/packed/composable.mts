@@ -104,6 +104,11 @@ const withOptions: Promise<ExpandedTags> = filteredReader.load(new ArrayBuffer(0
     excludeTags: { xmp: true }
 });
 
+declare const includeXmp: boolean;
+const withGroupSwitch: Promise<ExpandedTags> = filteredReader.load(new ArrayBuffer(0), {
+    includeTags: { exif: true, xmp: includeXmp }
+});
+
 const unsupported: Error = new errors.UnsupportedFormatError();
 
 declare const anyGroupDescriptor: TagDescriptor<string>;
@@ -436,6 +441,7 @@ export {
     fromDataView,
     fromBuffer,
     withOptions,
+    withGroupSwitch,
     unsupported,
     syncTags,
     withDomParser,

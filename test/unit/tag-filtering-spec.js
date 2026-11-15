@@ -610,6 +610,31 @@ describe('tag filtering options', function () {
         expect(tags.gps.Longitude).to.equal(undefined);
     });
 
+    it('includeTags.gps: false should leave the gps group out next to includeTags.exif: true', function () {
+        fakeImageHeader({
+            fileType: 'jpeg',
+            blocks: [{kind: 'exif', tiffHeaderOffset: 1}],
+        });
+        fakeTagsRead({
+            Make: {id: 0x010f, value: ['Canon']},
+            GPSLatitude: {id: 0x0002, value: [[1, 1], [2, 1], [3, 1]]},
+            GPSLatitudeRef: {id: 0x0001, value: ['N']},
+            GPSLongitude: {id: 0x0004, value: [[1, 1], [2, 1], [3, 1]]},
+            GPSLongitudeRef: {id: 0x0003, value: ['E']},
+        });
+
+        const tags = ExifReader.loadView({}, {
+            expanded: true,
+            includeTags: {
+                exif: true,
+                gps: false,
+            },
+        });
+
+        expect(tags.exif.Make).to.not.equal(undefined);
+        expect(tags.gps).to.equal(undefined);
+    });
+
     it('includeTags.iptc should include a repeated tag by id', function () {
         const image = getIptcJpeg([
             {dataset: 0x19, text: 'alpha'},
@@ -735,6 +760,94 @@ describe('createTagFilter includeTagsIsLimit', () => {
         expect(filter.shouldReturnTag('xmp', 'Rating')).to.equal(false);
         expect(filter.shouldParseTag('xmp', 'Rating')).to.equal(false);
         expect(filter.shouldReturnGroup('exif')).to.equal(true);
+    });
+});
+
+describe('createTagFilter with a falsy includeTags group value', () => {
+    it('should leave a false group out next to a requested group', () => {
+        const filter = createTagFilter({includeTags: {exif: true, gps: false}});
+
+        expect(filter.shouldReturnGroup('gps')).to.equal(false);
+        expect(filter.shouldParseGroup('gps')).to.equal(false);
+        expect(filter.shouldReturnTag('gps', 'GPSLatitude', 0x0002)).to.equal(false);
+        expect(filter.shouldParseTag('gps', 'GPSLatitude', 0x0002)).to.equal(false);
+        expect(filter.shouldReturnGroup('exif')).to.equal(true);
+        expect(filter.shouldParseGroup('exif')).to.equal(true);
+    });
+
+    it('should return and parse no group for the only group set to false', () => {
+        const filter = createTagFilter({includeTags: {exif: false}});
+        const emptyFilter = createTagFilter({includeTags: {}});
+
+        ['exif', 'gps', 'iptc', 'xmp', 'icc', 'file', 'composite'].forEach((groupKey) => {
+            expect(filter.shouldReturnGroup(groupKey), groupKey).to.equal(emptyFilter.shouldReturnGroup(groupKey));
+            expect(filter.shouldParseGroup(groupKey), groupKey).to.equal(emptyFilter.shouldParseGroup(groupKey));
+        });
+        expect(filter.shouldReturnGroup('exif')).to.equal(false);
+        expect(filter.shouldParseGroup('exif')).to.equal(false);
+    });
+
+    it('should treat null, undefined, 0 and an empty string as false', () => {
+        for (const value of [null, undefined, 0, '']) {
+            const filter = createTagFilter({includeTags: {exif: true, gps: value}});
+
+            expect(filter.shouldReturnGroup('gps'), String(value)).to.equal(false);
+            expect(filter.shouldParseGroup('gps'), String(value)).to.equal(false);
+            expect(filter.shouldReturnGroup('exif'), String(value)).to.equal(true);
+        }
+    });
+
+    it('should not parse the dependency tags of a group set to false', () => {
+        const filter = createTagFilter({includeTags: {exif: ['Make'], gps: false}});
+        const withoutEntry = createTagFilter({includeTags: {exif: ['Make']}});
+
+        expect(filter.shouldParseTag('exif', 'GPS Info IFD Pointer', 0x8825))
+            .to.equal(withoutEntry.shouldParseTag('exif', 'GPS Info IFD Pointer', 0x8825));
+        expect(filter.shouldParseTag('exif', 'GPS Info IFD Pointer', 0x8825)).to.equal(false);
+        expect(filter.shouldParseTag('exif', 'Make', 0x010f)).to.equal(true);
+        expect(filter.shouldParseTag('exif', 'Model', 0x0110)).to.equal(false);
+    });
+
+    it('should give a group set to false the verdicts of an absent key', () => {
+        const filter = createTagFilter({includeTags: {exif: false, gps: true}});
+        const withoutEntry = createTagFilter({includeTags: {gps: true}});
+
+        ['exif', 'gps', 'iptc', 'xmp'].forEach((groupKey) => {
+            expect(filter.shouldReturnGroup(groupKey), groupKey).to.equal(withoutEntry.shouldReturnGroup(groupKey));
+            expect(filter.shouldParseGroup(groupKey), groupKey).to.equal(withoutEntry.shouldParseGroup(groupKey));
+        });
+        expect(filter.shouldReturnGroup('exif')).to.equal(false);
+        expect(filter.shouldParseGroup('exif')).to.equal(true);
+        expect(filter.shouldParseTag('exif', 'GPS Info IFD Pointer', 0x8825)).to.equal(true);
+        expect(filter.shouldReturnGroup('gps')).to.equal(true);
+    });
+
+    it('should not take a group from the prototype of includeTags', () => {
+        const filter = createTagFilter({includeTags: Object.create({gps: true})});
+
+        expect(filter.shouldReturnGroup('gps')).to.equal(false);
+        expect(filter.shouldParseGroup('gps')).to.equal(false);
+    });
+
+    it('should keep the verdicts for true, a non-empty array and an empty array', () => {
+        const filter = createTagFilter({includeTags: {exif: true, gps: ['Latitude'], xmp: []}});
+
+        expect(filter.shouldReturnGroup('exif')).to.equal(true);
+        expect(filter.shouldParseGroup('exif')).to.equal(true);
+        expect(filter.shouldReturnGroup('gps')).to.equal(true);
+        expect(filter.shouldReturnTag('gps', 'Latitude')).to.equal(true);
+        expect(filter.shouldReturnTag('gps', 'Longitude')).to.equal(false);
+        expect(filter.shouldReturnGroup('xmp')).to.equal(false);
+        expect(filter.shouldParseGroup('xmp')).to.equal(false);
+    });
+
+    it('should not exclude a group whose excludeTags value is false', () => {
+        const filter = createTagFilter({excludeTags: {gps: false}});
+
+        expect(filter.shouldReturnGroup('gps')).to.equal(true);
+        expect(filter.shouldParseGroup('gps')).to.equal(true);
+        expect(filter.shouldReturnTag('gps', 'GPSLatitude', 0x0002)).to.equal(true);
+        expect(filter.shouldParseTag('gps', 'GPSLatitude', 0x0002)).to.equal(true);
     });
 });
 
