@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+import {objectAssign} from '../utils.js';
 import {validateComposition} from '../engine.js';
 import {isPngTextChunkBlock} from './group-helpers.js';
 
@@ -27,23 +28,27 @@ export default {
  *
  * @param {{formats: Array<object>, groups: Array<object>}} tables The formats,
  *     each `{header, readers}`, and the groups, block-reading ones as engine
- *     groups and derived ones with `mergeDeps`.
+ *     groups and derived ones without `read`.
  * @returns {object} The engine composition (`groups`, `dispatchKind`, `rank`,
  *     `suppressions`) plus `formats` in detection order, the `derived` groups,
  *     the `composed` facts (`formats`, `groups` and `kinds` maps),
- *     `isHiddenInSyncMode(block)` and `decompression`, the pooled decompression
- *     the png and jxl formats bring, or undefined when neither is composed.
+ *     `isHiddenInSyncMode(block)`, `decompression` (the pooled decompression
+ *     the png and jxl formats bring, or undefined when neither is composed),
+ *     `mergeModes` (the merge modes the engine and derived groups bring) and
+ *     the engine groups' `prepareMergeBlocks` and `finishTags` steps in
+ *     dispatch order.
  * @throws {Error} When the groups' emission graph has a cycle.
  */
 function createComposition({formats, groups}) {
     const engineGroups = getEngineGroups(formats, groups);
+    const derived = sortByOrder(unique(groups.filter(isDerivedGroup)), DERIVED_ORDER, (group) => group.key);
     const composition = {
         groups: engineGroups,
         dispatchKind,
         rank,
         suppressions: getSuppressions(engineGroups),
         formats: sortByOrder(unique(formats), DETECTION_ORDER, (format) => format.header.fileType.value),
-        derived: sortByOrder(unique(groups.filter(isDerivedGroup)), DERIVED_ORDER, (group) => group.key),
+        derived,
         composed: {
             formats: getFlags(formats, (format) => [format.header.fileType.value]),
             groups: getFlags(groups, (group) => [group.key]),
@@ -51,6 +56,9 @@ function createComposition({formats, groups}) {
         },
         isHiddenInSyncMode: createIsHiddenInSyncMode(formats),
         decompression: getDecompression(formats),
+        mergeModes: getMergeModes(engineGroups.concat(derived)),
+        prepareMergeBlocks: getSteps(engineGroups, 'prepareMergeBlocks'),
+        finishTags: getSteps(engineGroups, 'finishTags'),
     };
 
     validateComposition(composition);
@@ -68,8 +76,9 @@ function getEngineGroups(formats, groups) {
     return sortByOrder(combineGroups(readers), DISPATCH_ORDER, (group) => group.consumes[0]);
 }
 
+// A derived group reads no block.
 function isDerivedGroup(group) {
-    return group.mergeDeps !== undefined;
+    return group.read === undefined;
 }
 
 function combineGroups(groups) {
@@ -152,4 +161,22 @@ function getDecompression(formats) {
         }
     }
     return undefined;
+}
+
+function getMergeModes(groups) {
+    const modes = Object.create(null);
+    for (let i = 0; i < groups.length; i++) {
+        objectAssign(modes, groups[i].mergeModes);
+    }
+    return modes;
+}
+
+function getSteps(groups, name) {
+    const steps = [];
+    for (let i = 0; i < groups.length; i++) {
+        if (groups[i][name] !== undefined) {
+            steps.push(groups[i][name]);
+        }
+    }
+    return steps;
 }

@@ -4,9 +4,10 @@
 
 import {expect} from 'chai';
 import {getDataView} from '../../test-utils.js';
-import {COMPRESSION_METHOD_BROTLI} from '../../../../src/utils.js';
+import {COMPRESSION_METHOD_BROTLI, objectAssign} from '../../../../src/utils.js';
 import XmpTags from '../../../../src/xmp-tags.js';
-import {createTagFilter} from '../../../../src/tag-filter.js';
+import {createTagFilter, filterTagsForReturn} from '../../../../src/tag-filter.js';
+import {buildTagsFromMergeBlocks} from '../../../../src/loadview-pipeline.js';
 import {xmp} from '../../../../src/composable/groups/xmp.js';
 import {getContext, recordCalls} from '../test-context.js';
 
@@ -235,6 +236,81 @@ describe('composable/groups/xmp', () => {
 
         function isSuppressed(block, finderBlocks) {
             return xmp.suppressions[0].isSuppressed(block, finderBlocks, getContext());
+        }
+    });
+
+    describe('the brobXmp mode', () => {
+        const EARLIER_XMP = {Title: {value: 'earlier'}, Keep: {value: 'earlier'}, _raw: '<earlier/>'};
+
+        it('should replace a non-empty earlier xmp group in expanded output', () => {
+            const tags = buildBrobXmpTags({brobTags: {Title: {value: 'brob'}, _raw: '<brob/>'}, expanded: true});
+
+            expect(tags.xmp).to.deep.equal({Title: {value: 'brob'}, _raw: '<brob/>'});
+        });
+
+        it('should merge into the earlier XMP tags key by key, without _raw, in flat output', () => {
+            const tags = buildBrobXmpTags({brobTags: {Title: {value: 'brob'}, _raw: '<brob/>'}, expanded: false});
+
+            expect(tags).to.deep.equal({Title: {value: 'brob'}, Keep: {value: 'earlier'}});
+        });
+
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
+
+            for (const [description, brobTags] of [['an empty', {}], ['a failed', undefined]]) {
+                it(`should leave the earlier xmp group and the parsed xmp group alone for ${description} brob XMP in ${mode} mode`, () => {
+                    const parsedGroups = {xmp: EARLIER_XMP};
+
+                    const tags = buildBrobXmpTags({brobTags, expanded, parsedGroups});
+
+                    expect(parsedGroups.xmp).to.equal(EARLIER_XMP);
+                    if (expanded) {
+                        expect(tags.xmp).to.deep.equal(EARLIER_XMP);
+                    } else {
+                        expect(tags).to.deep.equal({Title: {value: 'earlier'}, Keep: {value: 'earlier'}});
+                    }
+                });
+            }
+
+            it(`should write the parsed xmp group even when the xmp group is not returned in ${mode} mode`, () => {
+                const parsedGroups = {xmp: EARLIER_XMP};
+                const brobTags = {Title: {value: 'brob'}};
+
+                const tags = buildTags({
+                    blocks: [getBrobXmpBlock(brobTags)],
+                    expanded,
+                    parsedGroups,
+                    tagFilter: createTagFilter({includeTags: {exif: true}}),
+                });
+
+                expect(tags).to.deep.equal({});
+                expect(parsedGroups.xmp).to.equal(brobTags);
+            });
+        }
+
+        function buildBrobXmpTags({brobTags, expanded, parsedGroups = {}}) {
+            return buildTags({
+                blocks: [getBrobXmpBlock(brobTags), {slot: 'xmp', group: 'xmp', mode: 'assign', tags: EARLIER_XMP}],
+                expanded,
+                parsedGroups,
+            });
+        }
+
+        function getBrobXmpBlock(tags) {
+            return objectAssign({group: 'xmp', tags}, xmp.merge({compression: 'brotli'}));
+        }
+
+        function buildTags({blocks, expanded, parsedGroups, tagFilter = createTagFilter()}) {
+            return buildTagsFromMergeBlocks({
+                mergeBlocks: blocks,
+                parsedGroups,
+                expanded,
+                tagFilter,
+                dataView: {},
+                fileType: undefined,
+                modes: xmp.mergeModes,
+                deps: {objectAssign, filterTagsForReturn},
+            });
         }
     });
 

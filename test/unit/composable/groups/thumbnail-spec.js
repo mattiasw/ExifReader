@@ -4,8 +4,10 @@
 
 import {expect} from 'chai';
 import {getDataView} from '../../test-utils.js';
+import {objectAssign} from '../../../../src/utils.js';
 import Thumbnail from '../../../../src/thumbnail.js';
-import {createTagFilter} from '../../../../src/tag-filter.js';
+import {createTagFilter, filterTagsForReturn} from '../../../../src/tag-filter.js';
+import {buildTagsFromMergeBlocks, mergeBlock} from '../../../../src/loadview-pipeline.js';
 import {thumbnail} from '../../../../src/composable/groups/thumbnail.js';
 import {getContext, recordCalls} from '../test-context.js';
 
@@ -153,6 +155,140 @@ describe('composable/groups/thumbnail', () => {
             expect(thumbnail.read(getBlock({rank: 'embedded', decompressed: true, length: bound}), getContext())).to.not.equal(undefined);
             expect(thumbnail.read(getBlock({rank: 'embedded', decompressed: true, length: bound}), getContext())).to.not.equal(undefined);
         });
+    });
+
+    describe('the merge modes', () => {
+        const MAIN_WITH_IMAGE = {type: 'image/jpeg', image: 'main'};
+        const MAIN_WITHOUT_IMAGE = {Compression: {value: 1}};
+
+        it('should remove an existing Thumbnail tag when there is no candidate', () => {
+            const tags = buildThumbnailTags({candidates: [], tags: {Thumbnail: {value: 'existing'}}});
+
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should keep a main thumbnail without an image', () => {
+            const tags = buildThumbnailTags({candidates: [getCandidate('main', MAIN_WITHOUT_IMAGE)]});
+
+            expect(tags.Thumbnail).to.equal(MAIN_WITHOUT_IMAGE);
+        });
+
+        for (const expanded of [false, true]) {
+            const mode = expanded ? 'expanded' : 'flat';
+
+            it(`should return an embedded thumbnail top level when there is no main one in ${mode} mode`, () => {
+                const embedded = getEmbeddedThumbnail('raw');
+
+                const tags = buildThumbnailTags({
+                    candidates: [{slot: 'exif', mode: 'nested', blocks: [
+                        {slot: 'exif', group: 'exif', mode: 'merge', tags: {Model: {value: 'model'}}},
+                        getCandidate('embedded', embedded),
+                    ]}],
+                    expanded,
+                });
+
+                expect(tags.Thumbnail).to.equal(embedded);
+                expect(expanded ? tags.exif : tags).to.have.property('Model');
+                if (expanded) {
+                    expect(tags.exif).to.not.have.property('Thumbnail');
+                }
+            });
+        }
+
+        it('should return the main thumbnail when it has an image, over an embedded one', () => {
+            const tags = buildThumbnailTags({candidates: [getCandidate('embedded', getEmbeddedThumbnail('raw')), getCandidate('main', MAIN_WITH_IMAGE)]});
+
+            expect(tags.Thumbnail).to.equal(MAIN_WITH_IMAGE);
+        });
+
+        it('should return an embedded thumbnail with an image over a main one without', () => {
+            const embedded = getEmbeddedThumbnail('raw');
+
+            const tags = buildThumbnailTags({candidates: [getCandidate('main', MAIN_WITHOUT_IMAGE), getCandidate('embedded', embedded)]});
+
+            expect(tags.Thumbnail).to.equal(embedded);
+        });
+
+        it('should return the main thumbnail without an image when no embedded one has an image', () => {
+            const tags = buildThumbnailTags({candidates: [
+                getCandidate('main', MAIN_WITHOUT_IMAGE),
+                getCandidate('embedded', {type: 'image/jpeg'}),
+                getCandidate('embedded', {Compression: {value: 6}}),
+            ]});
+
+            expect(tags.Thumbnail).to.equal(MAIN_WITHOUT_IMAGE);
+        });
+
+        it('should never return an embedded thumbnail without an image', () => {
+            const tags = buildThumbnailTags({candidates: [getCandidate('embedded', {type: 'image/jpeg'}), getCandidate('embedded', {Compression: {value: 6}})]});
+
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        it('should return the first embedded thumbnail with an image in merge order', () => {
+            const firstWithImage = getEmbeddedThumbnail('first');
+
+            const tags = buildThumbnailTags({candidates: [
+                {slot: 'deferredPngText', mode: 'nested', blocks: [getCandidate('embedded', getEmbeddedThumbnail('deferred'))]},
+                getCandidate('embedded', {type: 'image/jpeg'}),
+                {slot: 'pngText', mode: 'nested', blocks: [getCandidate('embedded', firstWithImage), getCandidate('embedded', getEmbeddedThumbnail('second'))]},
+            ]});
+
+            expect(tags.Thumbnail).to.equal(firstWithImage);
+        });
+
+        for (const [description, tagFilter] of [
+            ['the thumbnail group is filtered out', createTagFilter({includeTags: {file: true}})],
+            ['the Thumbnail tag is filtered out', createTagFilter({excludeTags: {thumbnail: ['Thumbnail']}})],
+        ]) {
+            it(`should return no thumbnail, and still remove an existing Thumbnail tag, when ${description}`, () => {
+                const tags = buildThumbnailTags({
+                    candidates: [getCandidate('main', MAIN_WITH_IMAGE)],
+                    tagFilter,
+                    tags: {Thumbnail: {value: 'existing'}},
+                });
+
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+        }
+
+        it('should take the candidates given to mergeBlock', () => {
+            const thumbnails = [{rank: 'embedded', thumbnail: getEmbeddedThumbnail('raw')}];
+
+            const tags = mergeBlock({
+                block: {slot: 'thumbnail', mode: 'thumbnail'},
+                parsedGroups: {},
+                expanded: false,
+                tagFilter: createTagFilter(),
+                thumbnails,
+                tags: {},
+                modes: thumbnail.mergeModes,
+                deps: {objectAssign, filterTagsForReturn},
+            });
+
+            expect(tags.Thumbnail).to.equal(thumbnails[0].thumbnail);
+        });
+
+        function getEmbeddedThumbnail(image) {
+            return {type: 'image/jpeg', image};
+        }
+
+        function getCandidate(rank, thumbnailTags) {
+            return objectAssign({group: 'thumbnail', tags: thumbnailTags}, thumbnail.merge({rank}));
+        }
+
+        function buildThumbnailTags({candidates, expanded = false, tagFilter = createTagFilter(), tags = {}}) {
+            return buildTagsFromMergeBlocks({
+                mergeBlocks: candidates.concat([{slot: 'thumbnail', mode: 'thumbnail'}, {slot: 'file', group: 'file', mode: 'assign', tags}]),
+                parsedGroups: {},
+                expanded,
+                tagFilter,
+                dataView: {},
+                fileType: undefined,
+                modes: thumbnail.mergeModes,
+                deps: {objectAssign, filterTagsForReturn},
+            });
+        }
     });
 
     function getBlock({rank, decompressed = false, length = 100, ifd1Tags = undefined}) {

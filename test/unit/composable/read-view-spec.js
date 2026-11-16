@@ -85,6 +85,47 @@ describe('composable/read-view', () => {
         expect(names.indexOf('Comment')).to.be.above(names.indexOf('Model'));
     });
 
+    for (const async of [false, true]) {
+        it(`should run the composition's steps on the engine's merge blocks and on the tags with the blocks it reads (async: ${async})`, async () => {
+            const composition = Composition.createComposition({formats: [pngFormat], groups: []});
+            const prepared = [];
+            const finished = [];
+            composition.prepareMergeBlocks = [
+                (mergeBlocks) => {
+                    prepared.push(mergeBlocks.map((block) => block.slot));
+                    return mergeBlocks.filter((block) => block.slot !== 'pngText');
+                },
+                (mergeBlocks) => {
+                    prepared.push(mergeBlocks.map((block) => block.slot));
+                    return mergeBlocks;
+                },
+            ];
+            composition.finishTags = [
+                (tags, load) => {
+                    finished.push({keys: Object.keys(tags), load});
+                    return {first: tags};
+                },
+                (tags) => Object.assign({second: true}, tags),
+            ];
+            const tagFilter = createTagFilter();
+            const environment = getEnvironment();
+            environment.createTagFilter = () => tagFilter;
+            const png = getPng(getTextChunk('Comment', 'Text'), getZtxtChunk('Title', 'compressed'));
+
+            const tags = await readView(composition, getDataView(png), {expanded: true, async}, environment);
+
+            const pngTextSlots = async ? ['pngText', 'deferredPngText'] : ['pngText'];
+            expect(prepared).to.deep.equal([['pngFile'].concat(pngTextSlots), ['pngFile'].concat(pngTextSlots.slice(1))]);
+            expect(finished).to.have.lengthOf(1);
+            expect(finished[0].keys).to.deep.equal(async ? ['png', 'pngFile', 'pngText', 'file'] : ['png', 'pngFile', 'file']);
+            expect(finished[0].load.expanded).to.equal(true);
+            expect(finished[0].load.async).to.equal(async);
+            expect(finished[0].load.tagFilter).to.equal(tagFilter);
+            expect(finished[0].load.blocks.map((block) => block.kind)).to.deep.equal(async ? ['pngFile', 'pngText', 'pngText'] : ['pngFile', 'pngText']);
+            expect(Object.keys(tags)).to.deep.equal(['second', 'first']);
+        });
+    }
+
     it('should take the DOM parser and the thumbnail base64 from the environment', () => {
         const calls = [];
         const domParser = new DOMParser();

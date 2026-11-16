@@ -7,8 +7,10 @@ import Png, {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../../../src/image-header
 import PngFileTags from '../../../../src/png-file-tags.js';
 import PngTextTags from '../../../../src/png-text-tags.js';
 import PngTags from '../../../../src/png-tags.js';
-import {createTagFilter} from '../../../../src/tag-filter.js';
-import {png, pngHeader, pngFile, pngText, pngChunk} from '../../../../src/composable/formats/png.js';
+import {objectAssign} from '../../../../src/utils.js';
+import {createTagFilter, filterTagsForReturn} from '../../../../src/tag-filter.js';
+import {buildTagsFromMergeBlocks} from '../../../../src/loadview-pipeline.js';
+import {pngHeader, pngFile, pngText, pngChunk} from '../../../../src/composable/formats/png.js';
 import {decompression} from '../../../../src/decompression.js';
 import {getContext, recordCalls} from '../test-context.js';
 
@@ -45,14 +47,6 @@ describe('composable/formats/png', () => {
         expect(finds.calls[0]).to.have.lengthOf(2);
         expect(finds.calls[0][0]).to.equal(dataView);
         expect(finds.calls[0][1]).to.equal(ranges);
-    });
-
-    it('should bring its header and the file, text and chunk readers', () => {
-        expect(png.header).to.equal(pngHeader);
-        expect(png.readers).to.have.lengthOf(3);
-        expect(png.readers[0]).to.equal(pngFile);
-        expect(png.readers[1]).to.equal(pngText);
-        expect(png.readers[2]).to.equal(pngChunk);
     });
 
     describe('isHiddenInSyncMode', () => {
@@ -150,6 +144,261 @@ describe('composable/formats/png', () => {
                 return pngText.suppressions[0].isSuppressed(block, finderBlocks, ctx);
             }
         });
+    });
+
+    describe('the merge', () => {
+        const FILE_TAGS = {Width: {value: 'file'}, Shared: {value: 'file'}};
+        const TEXT_TAGS = {Comment: {value: 'text'}, Shared: {value: 'text'}};
+        const CHUNK_TAGS = {PixelsPerUnitX: {value: 'chunk'}, Shared: {value: 'chunk'}};
+        const PNG_NOT_RETURNED = createTagFilter({includeTags: {exif: true}});
+
+        describe('the pngFile and pngTextTags modes', () => {
+            it('should gather the file, text and chunk tags into png in that order whatever the push order', () => {
+                const tags = buildPngTags({blocks: getPngBlocks().reverse()});
+
+                expect(Object.keys(tags.png)).to.deep.equal(['Width', 'Shared', 'Comment', 'PixelsPerUnitX']);
+                expect(tags.png.Shared.value).to.equal('chunk');
+            });
+
+            it('should keep the file tags alone in pngFile and the text tags in pngText', () => {
+                const tags = buildPngTags({blocks: getPngBlocks()});
+
+                expect(Object.keys(tags)).to.deep.equal(['png', 'pngFile', 'pngText']);
+                expect(tags.pngFile).to.deep.equal(FILE_TAGS);
+                expect(tags.pngText).to.deep.equal(TEXT_TAGS);
+            });
+
+            it('should let the text tags win over the file tags, and the chunk tags over the text tags, in flat output', () => {
+                const tags = buildPngTags({blocks: getPngBlocks().reverse(), expanded: false});
+
+                expect(Object.keys(tags)).to.deep.equal(['Width', 'Shared', 'Comment', 'PixelsPerUnitX']);
+                expect(tags.Shared.value).to.equal('chunk');
+            });
+
+            it('should add no pngText group for a text block without text tags', () => {
+                const tags = buildPngTags({blocks: [getFileBlock(), getTextBlock({})]});
+
+                expect(Object.keys(tags)).to.deep.equal(['png', 'pngFile']);
+            });
+
+            it('should not mutate an earlier png group when merging text tags into it', () => {
+                const fileTags = structuredClone(FILE_TAGS);
+
+                const tags = buildPngTags({blocks: [getFileBlock(fileTags), getTextBlock(TEXT_TAGS)]});
+
+                expect(fileTags).to.deep.equal(FILE_TAGS);
+                expect(tags.pngFile).to.equal(fileTags);
+            });
+
+            it('should not mutate the tags of a text block', () => {
+                const textTags = {k: {value: 'first'}};
+
+                const tags = buildPngTags({blocks: [getTextBlock(textTags), getTextBlock({k: {value: 'second'}})]});
+
+                expect(textTags).to.deep.equal({k: {value: 'first'}});
+                expect(tags.png.k.value).to.equal('second');
+            });
+
+            it('should merge the text tags of several blocks at the top level in flat output', () => {
+                const tags = buildPngTags({
+                    blocks: [getTextBlock({A: {value: 1}}), getTextBlock({B: {value: 2}})],
+                    expanded: false,
+                });
+
+                expect(tags).to.deep.equal({A: {value: 1}, B: {value: 2}});
+            });
+
+            it('should merge the returned text tags only', () => {
+                const tags = buildPngTags({blocks: [getTextBlock(TEXT_TAGS)], tagFilter: createTagFilter({includeTags: {png: ['Comment']}})});
+
+                expect(tags.png).to.deep.equal({Comment: {value: 'text'}});
+                expect(tags.pngText).to.deep.equal({Comment: {value: 'text'}});
+            });
+
+            it('should merge the returned file tags only', () => {
+                const tags = buildPngTags({blocks: [getFileBlock()], tagFilter: createTagFilter({includeTags: {png: ['Width']}})});
+
+                expect(tags.png).to.deep.equal({Width: {value: 'file'}});
+                expect(tags.pngFile).to.deep.equal({Width: {value: 'file'}});
+            });
+
+            for (const expanded of [false, true]) {
+                const mode = expanded ? 'expanded' : 'flat';
+
+                it(`should write the parsed pngFile group, also when png is not returned, in ${mode} mode`, () => {
+                    const parsedGroups = {};
+
+                    const tags = buildPngTags({blocks: [getFileBlock()], expanded, parsedGroups, tagFilter: PNG_NOT_RETURNED});
+
+                    expect(tags).to.deep.equal({});
+                    expect(parsedGroups.pngFile).to.equal(FILE_TAGS);
+                });
+
+                it(`should return no text tags when png is not returned in ${mode} mode`, () => {
+                    const parsedGroups = {};
+
+                    const tags = buildPngTags({blocks: [getTextBlock(TEXT_TAGS)], expanded, parsedGroups, tagFilter: PNG_NOT_RETURNED});
+
+                    expect(tags).to.deep.equal({});
+                    expect(parsedGroups).to.deep.equal({});
+                });
+
+                it(`should let a later duplicate keyword win in ${mode} mode`, () => {
+                    const tags = buildPngTags({blocks: [getTextBlock({k: {value: 'first'}}), getTextBlock({k: {value: 'second'}})], expanded});
+
+                    expect((expanded ? tags.png : tags).k.value).to.equal('second');
+                });
+
+                it(`should add the file and text tags to the flat Composite input in ${mode} mode`, () => {
+                    const tags = buildPngTags({
+                        blocks: [{slot: 'composite', mode: 'composite'}, getFileBlock(), getTextBlock({Comment: {value: 'text'}})],
+                        expanded,
+                        tagFilterIsReadCap: true,
+                        tagFilter: createTagFilter({includeTags: {composite: true}}),
+                        modes: {composite: (compositeTags, block, context) => objectAssign({}, compositeTags, {input: context.compositeInput})},
+                    });
+
+                    expect(tags.input).to.deep.equal(expanded ? undefined : {Width: {value: 'file'}, Shared: {value: 'file'}, Comment: {value: 'text'}});
+                });
+            }
+        });
+
+        describe('prepareMergeBlocks', () => {
+            const combine = pngText.prepareMergeBlocks;
+
+            it('should put every uncompressed text block into one nested tier at the first one\'s place', () => {
+                const first = getTextBlock({A: {value: 1}});
+                const second = getTextBlock({B: {value: 2}});
+                const fileBlock = getFileBlock();
+                const chunkBlock = {slot: 'pngChunk', group: 'png', mode: 'merge', tags: CHUNK_TAGS};
+
+                expect(combine([fileBlock, first, chunkBlock, second])).to.deep.equal([
+                    fileBlock,
+                    {slot: 'pngText', mode: 'nested', blocks: [first, second]},
+                    chunkBlock,
+                ]);
+            });
+
+            it('should flatten a nested raw-profile container into its leaves', () => {
+                const exifBlock = {slot: 'exif', group: 'exif', mode: 'merge', tags: {}};
+                const carriedBlock = {slot: 'carriedIptc', group: 'iptc', mode: 'merge', tags: {}};
+                const textBlock = getTextBlock({});
+
+                const combined = combine([
+                    {slot: 'pngText', mode: 'nested', blocks: [exifBlock, {slot: 'exif', mode: 'nested', blocks: [carriedBlock]}]},
+                    textBlock,
+                ]);
+
+                expect(combined).to.deep.equal([{slot: 'pngText', mode: 'nested', blocks: [exifBlock, carriedBlock, textBlock]}]);
+            });
+
+            it('should leave a compressed text block as its own tier', () => {
+                const deferred = objectAssign({group: 'png', tags: {}}, pngText.merge({text: {}, compression: 'deflate'}));
+
+                expect(combine([deferred])).to.deep.equal([deferred]);
+            });
+
+            it('should add no tier without uncompressed text blocks', () => {
+                const fileBlock = getFileBlock();
+
+                expect(combine([fileBlock])).to.deep.equal([fileBlock]);
+                expect(combine([])).to.deep.equal([]);
+            });
+        });
+
+        describe('finishTags', () => {
+            const COMPRESSED_TEXT_CHUNK = {kind: 'pngText', compression: 'deflate', text: {name: 'Comment'}};
+            const UNCOMPRESSED_TEXT_CHUNK = {kind: 'pngText', text: {name: 'Comment'}};
+
+            it('should copy png into pngText when a named text chunk is read asynchronously', () => {
+                const tags = finish({tags: {png: FILE_TAGS, pngText: TEXT_TAGS}, async: true, blocks: [COMPRESSED_TEXT_CHUNK]});
+
+                expect(tags.pngText).to.deep.equal(FILE_TAGS);
+                expect(tags.pngText).to.not.equal(tags.png);
+            });
+
+            it('should keep the text tags for a compressed chunk without a name, or one read synchronously', () => {
+                const nameless = {kind: 'exif', compression: 'deflate', text: {}};
+
+                expect(finish({tags: {png: FILE_TAGS, pngText: TEXT_TAGS}, async: true, blocks: [nameless]}).pngText).to.equal(TEXT_TAGS);
+                expect(finish({tags: {png: FILE_TAGS, pngText: TEXT_TAGS}, async: false, blocks: [COMPRESSED_TEXT_CHUNK]}).pngText).to.equal(TEXT_TAGS);
+            });
+
+            it('should copy png into pngText when there are text chunks but no text tags', () => {
+                const rawProfile = {kind: 'exif', text: {name: 'Raw profile type exif'}};
+
+                const tags = finish({tags: {png: FILE_TAGS}, blocks: [rawProfile]});
+
+                expect(tags.pngText).to.deep.equal(FILE_TAGS);
+                expect(tags.pngText).to.not.equal(tags.png);
+            });
+
+            it('should keep an existing pngText when the text chunks are read synchronously', () => {
+                const tags = finish({tags: {png: FILE_TAGS, pngText: TEXT_TAGS}, blocks: [UNCOMPRESSED_TEXT_CHUNK]});
+
+                expect(tags.pngText).to.equal(TEXT_TAGS);
+            });
+
+            it('should add no pngText without text chunks', () => {
+                expect(finish({tags: {png: FILE_TAGS}, blocks: [{kind: 'pngFile'}]})).to.not.have.property('pngText');
+                expect(finish({tags: {png: FILE_TAGS}, async: true, blocks: []})).to.not.have.property('pngText');
+            });
+
+            for (const [description, options] of [
+                ['in flat output', {expanded: false, tags: {Width: {value: 'file'}}}],
+                ['without a png group', {tags: {exif: {}}}],
+                ['when png is not returned', {tagFilter: PNG_NOT_RETURNED}],
+            ]) {
+                for (const blocks of [[COMPRESSED_TEXT_CHUNK], [UNCOMPRESSED_TEXT_CHUNK]]) {
+                    it(`should not copy png into pngText ${description} for ${blocks[0].compression ? 'an asynchronous' : 'a'} text chunk`, () => {
+                        const tags = finish(objectAssign({tags: {png: FILE_TAGS}, async: true, blocks}, options));
+
+                        expect(tags).to.not.have.property('pngText');
+                    });
+                }
+            }
+
+            function finish({tags, expanded = true, async = false, tagFilter = createTagFilter(), blocks}) {
+                return pngText.finishTags(tags, {expanded, async, tagFilter, blocks});
+            }
+        });
+
+        function getPngBlocks() {
+            return [
+                getFileBlock(),
+                getTextBlock(TEXT_TAGS),
+                {slot: 'pngChunk', group: 'png', mode: 'merge', tags: CHUNK_TAGS},
+            ];
+        }
+
+        function getFileBlock(fileTags = FILE_TAGS) {
+            return objectAssign({group: 'png', tags: fileTags}, pngFile.merge({}));
+        }
+
+        function getTextBlock(textTags) {
+            return objectAssign({group: 'png', tags: textTags}, pngText.merge({text: {}}));
+        }
+
+        function buildPngTags({
+            blocks,
+            expanded = true,
+            parsedGroups = {},
+            tagFilter = createTagFilter(),
+            tagFilterIsReadCap = false,
+            modes = {},
+        }) {
+            return buildTagsFromMergeBlocks({
+                mergeBlocks: blocks,
+                parsedGroups,
+                expanded,
+                tagFilter,
+                tagFilterIsReadCap,
+                dataView: {},
+                fileType: undefined,
+                modes: objectAssign({}, pngFile.mergeModes, pngText.mergeModes, modes),
+                deps: {objectAssign, filterTagsForReturn},
+            });
+        }
     });
 
     describe('the chunk reader', () => {

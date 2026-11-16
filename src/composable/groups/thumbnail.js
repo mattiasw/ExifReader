@@ -6,6 +6,7 @@ import Thumbnail from '../../thumbnail.js';
 import {filterTagsForParse} from '../../tag-filter.js';
 import {getInputSizeBound} from '../group-helpers.js';
 import {GROUP_BRAND} from '../brand.js';
+import {removeThumbnailTag} from '../../loadview-pipeline.js';
 
 // An embedded thumbnail is sliced from a decoded or decompressed view that can be
 // far larger than the file. A real JPEG thumbnail shrinks only a little when
@@ -20,6 +21,7 @@ export const thumbnail = {
     emits: [],
     read: readThumbnailBlock,
     merge: (block) => ({slot: 'thumbnail', mode: 'thumbnailCandidate', rank: block.rank}),
+    mergeModes: {thumbnailCandidate: addThumbnailCandidate, thumbnail: addThumbnail},
     brand: GROUP_BRAND,
 };
 
@@ -57,4 +59,45 @@ function readThumbnailBlock(block, ctx) {
 
 function isNonNegativeInteger(value) {
     return (typeof value === 'number') && (value >= 0) && (value % 1 === 0);
+}
+
+function addThumbnailCandidate(tags, block, context) {
+    context.thumbnails.push({rank: block.rank, thumbnail: block.tags});
+    return tags;
+}
+
+// The main thumbnail when it has an image, else the first embedded Exif
+// thumbnail with one, else the main thumbnail without an image.
+function addThumbnail(tags, block, context) {
+    removeThumbnailTag(tags);
+
+    if (
+        !context.tagFilter.shouldReturnGroup('thumbnail')
+        || !context.tagFilter.shouldReturnTag('thumbnail', 'Thumbnail')
+    ) {
+        return tags;
+    }
+
+    const selected = selectThumbnail(context.thumbnails);
+    if (selected) {
+        tags.Thumbnail = selected;
+    }
+
+    return tags;
+}
+
+function selectThumbnail(candidates) {
+    const main = candidates.filter((candidate) => candidate.rank === 'main')[0];
+    if (main && hasImage(main.thumbnail)) {
+        return main.thumbnail;
+    }
+    const embedded = candidates.filter((candidate) => candidate.rank === 'embedded' && hasImage(candidate.thumbnail))[0];
+    if (embedded) {
+        return embedded.thumbnail;
+    }
+    return main ? main.thumbnail : undefined;
+}
+
+function hasImage(thumbnailTags) {
+    return !!thumbnailTags && !!thumbnailTags.image;
 }

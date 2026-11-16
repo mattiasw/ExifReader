@@ -10,10 +10,18 @@ import PentaxTags from '../../../src/pentax-tags.js';
 import {run} from '../../../src/engine.js';
 import Composition from '../../../src/composable/composition.js';
 import {allFormats, tiff, jpeg, png, heic, avif, jxl, webp, gif, xml} from '../../../src/composable/formats.js';
+import * as Groups from '../../../src/composable/groups.js';
 import {allGroups, exif, iptc, xmp, icc, canon, pentax, makerNotes, gps, composite, thumbnail} from '../../../src/composable/groups.js';
 import {canonDecoder} from '../../../src/composable/groups/canon.js';
 import {pentaxDecoder} from '../../../src/composable/groups/pentax.js';
-import {pngText, pngHeader} from '../../../src/composable/formats/png.js';
+import {pngFile, pngText, pngHeader} from '../../../src/composable/formats/png.js';
+import {xmp as xmpModule} from '../../../src/composable/groups/xmp.js';
+import {thumbnail as thumbnailModule} from '../../../src/composable/groups/thumbnail.js';
+import {gps as gpsModule} from '../../../src/composable/groups/gps.js';
+import {composite as compositeModule} from '../../../src/composable/groups/composite.js';
+import {exifBlockReader} from '../../../src/composable/exif-block-reader.js';
+import {iptcBlockReader} from '../../../src/composable/iptc-block-reader.js';
+import {CORE_MERGE_MODES} from '../../../src/loadview-pipeline.js';
 import {jxlHeader} from '../../../src/composable/formats/jxl.js';
 import {decompression} from '../../../src/decompression.js';
 import {getContext, recordCalls} from './test-context.js';
@@ -200,6 +208,150 @@ describe('composable/composition', () => {
             expect(composition.derived).to.deep.equal([gps, composite]);
             expect(composition.groups).to.deep.equal([exif]);
         });
+
+        it('should be the groups that read no block', () => {
+            const derivedStandIn = {key: 'derived', consumes: [], emits: [], merge: () => ({})};
+            const reading = getStandInGroup('reading', 'xmp');
+
+            const composition = createComposition({groups: [derivedStandIn, reading]});
+
+            expect(composition.derived).to.deep.equal([derivedStandIn]);
+            expect(composition.groups).to.deep.equal([reading]);
+        });
+
+        it('should leave every exported reader and block-reading group an engine group', () => {
+            const readingGroups = getExportedGroups().filter((group) => group !== gps && group !== composite);
+
+            const composition = createComposition({formats: allFormats, groups: readingGroups});
+
+            expect(composition.derived).to.deep.equal([]);
+            for (const group of readingGroups) {
+                expect(group.read, group.key).to.be.a('function');
+            }
+        });
+    });
+
+    describe('the merge modes', () => {
+        it('should collect the modes of the engine and the derived groups into a table without a prototype', () => {
+            const composition = createComposition({formats: [png], groups: [xmp, thumbnail, gps, composite]});
+
+            expect(Object.getPrototypeOf(composition.mergeModes)).to.equal(null);
+            expect(Object.assign({}, composition.mergeModes)).to.deep.equal({
+                brobXmp: xmp.mergeModes.brobXmp,
+                pngFile: pngFile.mergeModes.pngFile,
+                pngTextTags: pngText.mergeModes.pngTextTags,
+                thumbnailCandidate: thumbnail.mergeModes.thumbnailCandidate,
+                thumbnail: thumbnail.mergeModes.thumbnail,
+                gps: gps.mergeModes.gps,
+                composite: composite.mergeModes.composite,
+            });
+        });
+
+        it('should collect none from groups without modes, the merged maker note group included', () => {
+            const composition = createComposition({formats: [jpeg, tiff], groups: [exif, iptc, canon, pentax, makerNotes]});
+
+            expect(Object.keys(composition.mergeModes)).to.deep.equal([]);
+        });
+
+        it('should collect the steps of a format listed twice once', () => {
+            const composition = createComposition({formats: [png, png]});
+
+            expect(composition.prepareMergeBlocks).to.deep.equal([pngText.prepareMergeBlocks]);
+            expect(composition.finishTags).to.deep.equal([pngText.finishTags]);
+        });
+
+        it('should collect the png text reader\'s steps around the merge, and none without png', () => {
+            const withPng = createComposition({formats: [jpeg, png], groups: allGroups});
+            const withoutPng = createComposition({formats: [jpeg, tiff], groups: allGroups});
+
+            expect(withPng.prepareMergeBlocks).to.deep.equal([pngText.prepareMergeBlocks]);
+            expect(withPng.finishTags).to.deep.equal([pngText.finishTags]);
+            expect(withoutPng.prepareMergeBlocks).to.deep.equal([]);
+            expect(withoutPng.finishTags).to.deep.equal([]);
+        });
+
+        it('should collect the steps of the engine groups in dispatch order', () => {
+            const first = Object.assign(getStandInGroup('first', 'xmp'), {prepareMergeBlocks: () => [], finishTags: () => ({})});
+            const second = Object.assign(getStandInGroup('second', 'exif'), {prepareMergeBlocks: () => []});
+
+            const composition = createComposition({groups: [first, second]});
+
+            expect(composition.prepareMergeBlocks).to.deep.equal([second.prepareMergeBlocks, first.prepareMergeBlocks]);
+            expect(composition.finishTags).to.deep.equal([first.finishTags]);
+        });
+
+        describe('the guarantee', () => {
+            // Every branch of every merge: the fields the merges read.
+            const FINDER_BLOCKS = getCrossProduct({
+                compression: [undefined, 'brob'],
+                carried: [undefined, 'main', 'rawProfile'],
+                origin: [undefined, 'x'],
+                rank: ['main', 'embedded'],
+                text: [undefined, {}],
+            });
+            // The blocks the engine, the png text step and read-view add.
+            const ADDED_BLOCKS = [
+                {slot: 'exif', mode: 'nested', blocks: []},
+                {slot: 'pngText', mode: 'nested', blocks: []},
+                {slot: 'thumbnail', mode: 'thumbnail'},
+                {slot: 'fileType', mode: 'fileType'},
+                {slot: 'metadataRange', mode: 'metadataRange'},
+            ];
+
+            it('should resolve every mode a reader or group composed alone returns', () => {
+                const compositions = allFormats.map((format) => createComposition({formats: [format]}))
+                    .concat(getExportedGroups().map((group) => createComposition({groups: [group]})))
+                    .concat([
+                        createComposition({groups: [exifBlockReader.createParseOnlyGroup([], undefined)]}),
+                        createComposition({groups: [iptcBlockReader.createParseOnlyGroup([])]}),
+                    ]);
+                let checked = 0;
+
+                for (const composition of compositions) {
+                    const blocks = composition.groups.concat(composition.derived)
+                        .reduce((modeBlocks, group) => modeBlocks.concat(FINDER_BLOCKS.map((block) => group.merge(block))), [])
+                        .concat(ADDED_BLOCKS);
+                    for (const block of blocks) {
+                        const resolves = Object.hasOwn(CORE_MERGE_MODES, block.mode) || Object.hasOwn(composition.mergeModes, block.mode);
+                        expect(resolves, `${block.mode} in ${getGroupKeys(composition)}`).to.equal(true);
+                        checked++;
+                    }
+                }
+                expect(checked).to.be.above(compositions.length * FINDER_BLOCKS.length);
+            });
+
+            it('should shadow only the core thumbnail mode, with the thumbnail group\'s, and bring each mode from one reader or group', () => {
+                const groups = getExportedGroups();
+                const composition = createComposition({formats: allFormats, groups});
+                const sources = allFormats.reduce((readers, format) => readers.concat(format.readers), [])
+                    .concat(groups)
+                    .filter((group) => group.mergeModes !== undefined)
+                    .map((group) => group.mergeModes)
+                    .filter((modes, index, all) => all.indexOf(modes) === index);
+                const names = sources.reduce((allNames, modes) => allNames.concat(Object.keys(modes)), []);
+
+                expect(Object.keys(composition.mergeModes).filter((name) => Object.hasOwn(CORE_MERGE_MODES, name))).to.deep.equal(['thumbnail']);
+                expect(composition.mergeModes.thumbnail).to.equal(thumbnailModule.mergeModes.thumbnail);
+                expect(names.filter((name, index) => names.indexOf(name) !== index)).to.deep.equal([]);
+                expect(sources).to.include.members([pngFile.mergeModes, pngText.mergeModes, xmpModule.mergeModes, thumbnailModule.mergeModes, gpsModule.mergeModes, compositeModule.mergeModes]);
+            });
+
+            function getCrossProduct(values) {
+                return Object.keys(values).reduce((blocks, field) => {
+                    const product = [];
+                    for (const block of blocks) {
+                        for (const value of values[field]) {
+                            product.push(Object.assign({}, block, value === undefined ? {} : {[field]: value}));
+                        }
+                    }
+                    return product;
+                }, [{}]);
+            }
+
+            function getGroupKeys(composition) {
+                return composition.groups.concat(composition.derived).map((group) => group.key).join();
+            }
+        });
     });
 
     describe('the composed facts', () => {
@@ -298,4 +450,8 @@ function getStandInGroup(key, kind, combine) {
 
 function createComposition({formats = [], groups = []}) {
     return Composition.createComposition({formats, groups});
+}
+
+function getExportedGroups() {
+    return Object.keys(Groups).filter((name) => !Array.isArray(Groups[name])).map((name) => Groups[name]);
 }

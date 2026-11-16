@@ -11,9 +11,25 @@ export const gps = {
     consumes: [],
     emits: [],
     merge: () => ({slot: 'gps', mode: 'gps'}),
-    mergeDeps: {getGpsGroupFromExifTags},
+    mergeModes: {gps: addGpsGroup},
     brand: GROUP_BRAND,
 };
+
+// Expanded output only, derived from the parsed Exif group.
+function addGpsGroup(tags, block, context) {
+    if (
+        context.expanded
+        && context.tagFilter.shouldReturnGroup('gps')
+        && context.parsedGroups.exif
+    ) {
+        const gpsGroup = getGpsGroupFromExifTags(context.parsedGroups.exif);
+        if (gpsGroup) {
+            tags.gps = context.deps.filterTagsForReturn('gps', gpsGroup, context.tagFilter);
+        }
+    }
+
+    return tags;
+}
 
 function getGpsGroupFromExifTags(exifTags) {
     let gpsGroup = undefined;

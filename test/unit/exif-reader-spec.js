@@ -5472,7 +5472,7 @@ function swapThumbnail(thumbnailTags) {
 function swapForCustomBuild(appMarkersValue, useFlags) {
     swapImageHeader(appMarkersValue);
     // Constants is a shared module object, so swapping properties on it
-    // reaches every importer, including loadview-pipeline.
+    // reaches exif-reader, which recomposes the default reader from the flags.
     swap(Constants, useFlags);
 }
 

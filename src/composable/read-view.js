@@ -60,28 +60,29 @@ export function readView(composition, dataView, options, environment) {
         composed: composition.composed,
         decompression: composition.decompression,
     });
-    // The pipeline copies png into pngText only when png is returned, so the
-    // filter needs no check here.
-    const pngTextBlocks = blocks.filter(isPngTextChunkBlock);
-    const pngTextIsAsync = async && composition.composed.formats.png === true && pngTextBlocks.some(isNamedCompressedPngTextChunk);
-
     const result = run(composition, blocks, context);
 
     return async ? result.then(finish) : finish(result);
 
     function finish({mergeBlocks}) {
-        return buildTagsFromMergeBlocks({
-            mergeBlocks: combineUncompressedPngTextBlocks(mergeBlocks).concat(getDerivedBlocks(composition, {expanded, includeOffsets, async, ranges, truncated})),
+        for (let i = 0; i < composition.prepareMergeBlocks.length; i++) {
+            mergeBlocks = composition.prepareMergeBlocks[i](mergeBlocks);
+        }
+        let tags = buildTagsFromMergeBlocks({
+            mergeBlocks: mergeBlocks.concat(getDerivedBlocks(composition, {expanded, includeOffsets, async, ranges, truncated})),
             parsedGroups: Object.create(null),
             expanded,
             tagFilter,
             tagFilterIsReadCap,
             dataView,
             fileType,
-            pngTextBlocks,
-            pngTextIsAsync,
-            deps: getMergeDeps(composition.derived),
+            modes: composition.mergeModes,
+            deps: {objectAssign, filterTagsForReturn},
         });
+        for (let i = 0; i < composition.finishTags.length; i++) {
+            tags = composition.finishTags[i](tags, {expanded, async, tagFilter, blocks});
+        }
+        return tags;
     }
 }
 
@@ -109,46 +110,6 @@ function isDataViewLike(dataView) {
         && (typeof dataView.byteLength === 'number')
         && !!dataView.buffer
         && (typeof dataView.buffer.slice === 'function');
-}
-
-function isNamedCompressedPngTextChunk(block) {
-    return block.compression !== undefined && block.text.name !== undefined;
-}
-
-// Every uncompressed text chunk of a PNG merges as one tier, so that the text
-// tags sort after an uncompressed raw-profile Exif whatever the chunk order and
-// two raw profiles merge group by group. A compressed chunk stays its own tier.
-function combineUncompressedPngTextBlocks(mergeBlocks) {
-    const combined = [];
-    const leaves = [];
-    let tierIndex = -1;
-
-    for (let i = 0; i < mergeBlocks.length; i++) {
-        if (mergeBlocks[i].slot !== 'pngText') {
-            combined.push(mergeBlocks[i]);
-            continue;
-        }
-        if (tierIndex === -1) {
-            tierIndex = combined.length;
-            combined.push(undefined);
-        }
-        collectLeafBlocks(mergeBlocks[i], leaves);
-    }
-
-    if (tierIndex !== -1) {
-        combined[tierIndex] = {slot: 'pngText', mode: 'nested', blocks: leaves};
-    }
-    return combined;
-}
-
-function collectLeafBlocks(block, leaves) {
-    if (block.mode !== 'nested') {
-        leaves.push(block);
-        return;
-    }
-    for (let i = 0; i < block.blocks.length; i++) {
-        collectLeafBlocks(block.blocks[i], leaves);
-    }
 }
 
 function getDerivedBlocks(composition, {expanded, includeOffsets, async, ranges, truncated}) {
@@ -200,23 +161,4 @@ function getRangeType(block) {
         return 'file';
     }
     return block.kind;
-}
-
-// The derived groups' dependencies replace the undefined placeholders.
-function getMergeDeps(derivedGroups) {
-    const deps = {
-        objectAssign,
-        hasPngTextData,
-        filterTagsForReturn,
-        getGpsGroupFromExifTags: undefined,
-        Composite: undefined,
-    };
-    for (let i = 0; i < derivedGroups.length; i++) {
-        objectAssign(deps, derivedGroups[i].mergeDeps);
-    }
-    return deps;
-}
-
-function hasPngTextData(pngTextBlocks) {
-    return Array.isArray(pngTextBlocks) && pngTextBlocks.length > 0;
 }

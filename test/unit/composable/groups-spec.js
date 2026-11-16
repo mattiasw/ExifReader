@@ -77,7 +77,7 @@ describe('composable/groups', () => {
     it('should carry Exif dependencies exactly on the groups that consume a kind an Exif block carries or are derived', () => {
         for (const name of GROUP_NAMES) {
             const group = Groups[name];
-            const readsThroughExif = group.consumes.some((kind) => EXIF_EMITTED_KINDS.indexOf(kind) !== -1) || group.mergeDeps !== undefined;
+            const readsThroughExif = group.consumes.some((kind) => EXIF_EMITTED_KINDS.indexOf(kind) !== -1) || group.read === undefined;
             const hasDependencies = Array.isArray(group.exifDependencies) && group.exifDependencies.length > 0;
             expect(hasDependencies, name).to.equal(readsThroughExif);
         }
