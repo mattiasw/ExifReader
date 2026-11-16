@@ -19,6 +19,8 @@ import * as ExifTagDescriptors from '../../../src/composable/tags/exif.js';
 import {DateTime, ExposureTime, GPSLatitudeRef, InteroperabilityIndex, WhiteBalance, Make} from '../../../src/composable/tags/exif.js';
 import {ByLine} from '../../../src/composable/tags/iptc.js';
 import {getSharedValueBudget} from '../../../src/composable/value-budget.js';
+import Composition from '../../../src/composable/composition.js';
+import {iptc, xmp, photoshop, icc, makerNotes, thumbnail} from '../../../src/composable/groups.js';
 import {getContext, recordCalls} from './test-context.js';
 import {TAG_MAKE, TAG_MODEL, ascii, short, getTiff} from '../loadview-inventory-images.js';
 
@@ -249,79 +251,86 @@ describe('composable/exif-block-reader', () => {
     });
 
     describe('the blocks it emits', () => {
-        it('should emit the carried blocks in emission order and keep the thumbnail IFD out of its tags', () => {
-            const ifd1Tags = {JPEGInterchangeFormat: {value: 10}};
-            const makerNoteBytes = [1, 2, 3];
+        const VIEW = getDataView('\x00'.repeat(16));
+
+        it('should emit the carried blocks in emission order whatever order the groups are listed in, and keep the thumbnail IFD out of its tags', () => {
             swapTagsRead({
                 'IPTC-NAA': {value: 'iptc view'},
                 ApplicationNotes: {value: [60, 120]},
                 ImageSourceData: {value: [1]},
                 PhotoshopSettings: {value: [2]},
                 ICC_Profile: {value: [3, 4]},
-                MakerNote: {value: makerNoteBytes},
+                MakerNote: {value: [1, 2, 3]},
                 Make: {value: ['Canon']},
-                Thumbnail: ifd1Tags,
+                Thumbnail: {JPEGInterchangeFormat: {value: 10}},
             }, {makerNoteOffset: 100, byteOrder: ByteOrder.LITTLE_ENDIAN});
-            const view = getDataView('\x00'.repeat(16));
+            const groups = [thumbnail, makerNotes, icc, photoshop, xmp, iptc];
+            const ctx = getContext({composed: Composition.createComposition({formats: [], groups}).composed});
 
-            const {tags, blocks} = readExifBlock({kind: 'exif', tiffHeaderOffset: 6, dataView: view}, getContext(), TAG_NAMES);
+            const {tags, blocks} = readExifBlock({kind: 'exif', tiffHeaderOffset: 6, dataView: VIEW}, ctx, TAG_NAMES);
 
             expect(tags).to.not.have.property('Thumbnail');
             expect(blocks.map((block) => block.kind)).to.deep.equal(['iptc', 'xmp', 'photoshop', 'icc', 'makerNote', 'thumbnail']);
-            expect(blocks[0]).to.deep.equal({kind: 'iptc', dataView: 'iptc view', dataOffset: 0, carried: 'main'});
-            expect(blocks[1]).to.include({kind: 'xmp', carried: 'main', decompressed: false, byteLength: 2});
-            expect(blocks[1].getDataView()).to.equal('<x');
-            expect(blocks[2]).to.deep.equal({kind: 'photoshop', value: [2], carried: 'main'});
-            expect(blocks[3]).to.deep.equal({kind: 'icc', dataView: [3, 4], chunks: [{offset: 0, length: 2, chunkNumber: 1, chunksTotal: 1}], carried: 'main'});
-            expect(blocks[4]).to.deep.equal({
-                kind: 'makerNote',
-                tiffView: view,
+        });
+
+        it('should hand each composed extractor the filtered tags and the facts of a main block', () => {
+            const ifd1Tags = {JPEGInterchangeFormat: {value: 10}};
+            swapTagsRead({Make: {value: ['Canon']}, Model: {value: ['Model']}, Thumbnail: ifd1Tags}, {makerNoteOffset: 100, byteOrder: ByteOrder.LITTLE_ENDIAN});
+            const {calls, ctx} = getRecordingContext();
+
+            const {tags, blocks} = readExifBlock({kind: 'exif', tiffHeaderOffset: 6, dataView: VIEW}, ctx, TAG_NAMES);
+
+            expect(calls).to.have.lengthOf(1);
+            expect(calls[0][0]).to.equal(tags);
+            expect(calls[0][0]).to.not.have.property('Make');
+            expect(calls[0][0]).to.have.property('Model');
+            expect(calls[0][1]).to.deep.equal({
+                view: VIEW,
                 tiffHeaderOffset: 6,
-                makerNoteOffset: 100,
                 byteOrder: ByteOrder.LITTLE_ENDIAN,
-                make: ['Canon'],
-                bytes: makerNoteBytes,
+                makerNoteOffset: 100,
+                thumbnailIfdTags: ifd1Tags,
                 carried: 'main',
+                decompressed: false,
             });
-            expect(blocks[5]).to.deep.equal({kind: 'thumbnail', dataView: view, tiffHeaderOffset: 6, ifd1Tags, decompressed: false, rank: 'main'});
+            expect(blocks).to.deep.equal([]);
         });
 
-        it('should mark the blocks an embedded Exif block carries with its origin', () => {
-            swapTagsRead({'IPTC-NAA': {value: 'iptc view'}, Thumbnail: {}});
+        it('should hand each composed extractor the facts of an embedded decompressed block', () => {
+            swapTagsRead({Model: {value: ['Model']}});
+            const {calls, ctx} = getRecordingContext();
 
-            const {blocks} = readExifBlock({kind: 'exif', tiffHeaderOffset: 0, origin: 'rawProfile', decompressed: true}, getContext(), TAG_NAMES);
+            readExifBlock({kind: 'exif', tiffHeaderOffset: 6, dataView: VIEW, origin: 'rawProfile', decompressed: true}, ctx, TAG_NAMES);
 
-            expect(blocks[0].carried).to.equal('rawProfile');
-            expect(blocks[1]).to.include({kind: 'thumbnail', decompressed: true, rank: 'embedded'});
+            expect(calls[0][1]).to.deep.equal({
+                view: VIEW,
+                tiffHeaderOffset: 6,
+                byteOrder: ByteOrder.BIG_ENDIAN,
+                makerNoteOffset: undefined,
+                thumbnailIfdTags: undefined,
+                carried: 'rawProfile',
+                decompressed: true,
+            });
         });
 
-        it('should emit no XMP block for ApplicationNotes that are not a number array', () => {
-            swapTagsRead({ApplicationNotes: {value: ['<', 'x']}});
+        it('should emit nothing for a kind whose group is not composed', () => {
+            swapTagsRead({'IPTC-NAA': {value: 'iptc view'}, ICC_Profile: {value: [3, 4]}});
+            const ctx = getContext({composed: Composition.createComposition({formats: [], groups: [icc]}).composed});
 
-            expect(readExifBlock({kind: 'exif', tiffHeaderOffset: 0}, getContext(), TAG_NAMES).blocks).to.deep.equal([]);
+            const {blocks} = readExifBlock({kind: 'exif', tiffHeaderOffset: 0}, ctx, TAG_NAMES);
+
+            expect(blocks.map((block) => block.kind)).to.deep.equal(['icc']);
         });
 
-        it('should emit no Photoshop block without both tags or with non-array settings', () => {
-            for (const tags of [
-                {ImageSourceData: {value: [1]}},
-                {PhotoshopSettings: {value: [2]}},
-                {ImageSourceData: {value: [1]}, PhotoshopSettings: {value: 'settings'}},
-            ]) {
-                swapTagsRead(tags);
-
-                expect(readExifBlock({kind: 'exif', tiffHeaderOffset: 0}, getContext(), TAG_NAMES).blocks, JSON.stringify(tags)).to.deep.equal([]);
-            }
-        });
-
-        it('should emit no maker note block without the maker note offset, and one without a Make', () => {
-            swapTagsRead({MakerNote: {value: [1]}});
-            expect(readExifBlock({kind: 'exif', tiffHeaderOffset: 0}, getContext(), TAG_NAMES).blocks).to.deep.equal([]);
-
-            swapTagsRead({MakerNote: {value: [1]}}, {makerNoteOffset: 0});
-            const {blocks} = readExifBlock({kind: 'exif', tiffHeaderOffset: 0}, getContext(), TAG_NAMES);
-            expect(blocks).to.have.lengthOf(1);
-            expect(blocks[0].make).to.equal(undefined);
-        });
+        function getRecordingContext() {
+            const calls = [];
+            const tagFilter = createTagFilter({excludeTags: {exif: ['Make']}});
+            const fromExif = {icc: (...args) => {
+                calls.push(args);
+                return undefined;
+            }};
+            return {calls, ctx: getContext({tagFilter, composed: {fromExif}})};
+        }
     });
 
     describe('reading a brob block', () => {
@@ -367,7 +376,8 @@ describe('composable/exif-block-reader', () => {
         it('should give no tags of its own for a brob block that parsed to none', async () => {
             swapTagsRead({'IPTC-NAA': {value: 'iptc view'}});
             const tagFilter = createTagFilter({excludeTags: {exif: ['IPTC-NAA']}});
-            const ctx = getContext({tagFilter, composed: {formats: {jxl: true}}});
+            const {fromExif} = Composition.createComposition({formats: [], groups: [iptc]}).composed;
+            const ctx = getContext({tagFilter, composed: {formats: {jxl: true}, fromExif}});
             recordDecompressions(ctx, getDataView(getByteStringFromNumber(0, 4) + '\x00'.repeat(8)));
 
             const result = await readExifBlock(BROB_BLOCK, ctx, TAG_NAMES);

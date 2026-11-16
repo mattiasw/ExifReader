@@ -12,5 +12,7 @@ export const photoshop = {
     emits: [],
     read: (block, ctx) => parsedTags('photoshop', PhotoshopTags.read(block.value, ctx.options.includeUnknown, ctx.tagFilter), ctx),
     merge: (block) => getEmbeddableMergeDescriptor(block, 'photoshop', 'carriedPhotoshop'),
+    fromExif: (parsed, exif) => parsed['ImageSourceData'] && parsed['PhotoshopSettings'] && Array.isArray(parsed['PhotoshopSettings'].value)
+        && {kind: 'photoshop', value: parsed['PhotoshopSettings'].value, carried: exif.carried},
     brand: GROUP_BRAND,
 };

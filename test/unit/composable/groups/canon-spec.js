@@ -6,6 +6,7 @@ import {expect} from 'chai';
 import CanonTags from '../../../../src/canon-tags.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {canon, canonDecoder} from '../../../../src/composable/groups/canon.js';
+import {getMakerNoteBlockFromExif} from '../../../../src/composable/group-helpers.js';
 import {getContext, recordCalls} from '../test-context.js';
 import {getMakerNoteBlock} from './maker-note-test-data.js';
 
@@ -16,6 +17,10 @@ describe('composable/groups/canon', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
+    });
+
+    it('should build its block from the Exif tags with the shared maker note extractor', () => {
+        expect(canon.fromExif).to.equal(getMakerNoteBlockFromExif);
     });
 
     it('should bring the Canon decoder alone', () => {

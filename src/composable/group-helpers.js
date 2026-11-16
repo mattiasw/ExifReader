@@ -78,6 +78,7 @@ export function mergeMakerNoteGroups(groups) {
         decoders,
         read: (block, ctx) => readMakerNoteWithDecoders(block, ctx, decoders),
         merge: makerNoteGroups[0].merge,
+        fromExif: getMakerNoteBlockFromExif,
     };
     return groups.filter((group) => !consumesMakerNote(group)).concat([merged]);
 }
@@ -103,4 +104,26 @@ export function readMakerNoteWithDecoders(block, ctx, decoders) {
         }
     }
     return undefined;
+}
+
+/**
+ * Builds the makerNote block an Exif block carries.
+ *
+ * @param {Object<string, object>} parsed The Exif block's filtered tags.
+ * @param {object} exif The Exif block's facts: `view`, `tiffHeaderOffset`,
+ *     `byteOrder`, `makerNoteOffset` and `carried`.
+ * @returns {(object|false|undefined)} The makerNote block, or a falsy value
+ *     when there is no MakerNote tag or no maker note offset.
+ */
+export function getMakerNoteBlockFromExif(parsed, exif) {
+    return parsed['MakerNote'] && exif.makerNoteOffset !== undefined && {
+        kind: 'makerNote',
+        tiffView: exif.view,
+        tiffHeaderOffset: exif.tiffHeaderOffset,
+        makerNoteOffset: exif.makerNoteOffset,
+        byteOrder: exif.byteOrder,
+        make: parsed['Make'] && parsed['Make'].value,
+        bytes: parsed['MakerNote'].value,
+        carried: exif.carried,
+    };
 }

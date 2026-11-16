@@ -39,6 +39,13 @@ describe('composable/iptc-block-reader', () => {
             });
         });
 
+        it('should build its block from the Exif tags as the whole iptc group does', () => {
+            const group = iptcBlockReader.createParseOnlyGroup([ByLine]);
+
+            expect(group.fromExif).to.be.a('function');
+            expect(group.fromExif).to.equal(iptcGroup.fromExif);
+        });
+
         it('should depend on the Exif tags the whole iptc group depends on', () => {
             const group = iptcBlockReader.createParseOnlyGroup([ByLine]);
 

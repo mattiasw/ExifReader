@@ -6,6 +6,7 @@ import {expect} from 'chai';
 import PentaxTags from '../../../../src/pentax-tags.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {pentax, pentaxDecoder} from '../../../../src/composable/groups/pentax.js';
+import {getMakerNoteBlockFromExif} from '../../../../src/composable/group-helpers.js';
 import {getContext, recordCalls} from '../test-context.js';
 import {getMakerNoteBlock, getPentaxType1Bytes} from './maker-note-test-data.js';
 
@@ -16,6 +17,10 @@ describe('composable/groups/pentax', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
+    });
+
+    it('should build its block from the Exif tags with the shared maker note extractor', () => {
+        expect(pentax.fromExif).to.equal(getMakerNoteBlockFromExif);
     });
 
     it('should bring the Pentax decoder alone', () => {

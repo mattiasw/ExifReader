@@ -7,6 +7,7 @@ import {getDataView} from '../test-utils.js';
 import CanonTags from '../../../src/canon-tags.js';
 import PentaxTags from '../../../src/pentax-tags.js';
 import {createTagFilter} from '../../../src/tag-filter.js';
+import ByteOrder from '../../../src/byte-order.js';
 import {
     parsedTags,
     getBlockDataView,
@@ -16,6 +17,7 @@ import {
     isPngTextChunkBlock,
     mergeMakerNoteGroups,
     readMakerNoteWithDecoders,
+    getMakerNoteBlockFromExif,
 } from '../../../src/composable/group-helpers.js';
 import {canon, canonDecoder} from '../../../src/composable/groups/canon.js';
 import {pentax, pentaxDecoder} from '../../../src/composable/groups/pentax.js';
@@ -149,6 +151,12 @@ describe('composable/group-helpers', () => {
             expect(merged[2].decoders).to.deep.equal([canonDecoder, pentaxDecoder]);
         });
 
+        it('should give the merged group the shared maker note extractor', () => {
+            const [merged] = mergeMakerNoteGroups([pentax, canon]);
+
+            expect(merged.fromExif).to.equal(getMakerNoteBlockFromExif);
+        });
+
         it('should read with the merged decoders, Canon by Make before Pentax by prefix', () => {
             const [merged] = mergeMakerNoteGroups([pentax, canon]);
             const canonReads = recordCalls(CanonTags, 'read', {Canon: {value: 1}});
@@ -164,6 +172,46 @@ describe('composable/group-helpers', () => {
 
         function getOtherGroup(key) {
             return {key, consumes: ['exif'], emits: [], read: () => undefined, merge: () => ({})};
+        }
+    });
+
+    describe('getMakerNoteBlockFromExif', () => {
+        const VIEW = getDataView('\x00'.repeat(16));
+        const MAKER_NOTE_BYTES = [1, 2, 3];
+
+        it('should build the maker note block from MakerNote, Make and the Exif facts', () => {
+            const parsed = {MakerNote: {value: MAKER_NOTE_BYTES}, Make: {value: ['Canon']}};
+
+            expect(getMakerNoteBlockFromExif(parsed, getExif({carried: 'rawProfile'}))).to.deep.equal({
+                kind: 'makerNote',
+                tiffView: VIEW,
+                tiffHeaderOffset: 6,
+                makerNoteOffset: 100,
+                byteOrder: ByteOrder.LITTLE_ENDIAN,
+                make: ['Canon'],
+                bytes: MAKER_NOTE_BYTES,
+                carried: 'rawProfile',
+            });
+        });
+
+        it('should leave make undefined without a Make', () => {
+            const block = getMakerNoteBlockFromExif({MakerNote: {value: MAKER_NOTE_BYTES}}, getExif());
+
+            expect(block).to.have.property('make', undefined);
+            expect(block.bytes).to.equal(MAKER_NOTE_BYTES);
+        });
+
+        it('should build a block for a maker note offset of 0', () => {
+            expect(getMakerNoteBlockFromExif({MakerNote: {value: MAKER_NOTE_BYTES}}, getExif({makerNoteOffset: 0}))).to.include({kind: 'makerNote', makerNoteOffset: 0});
+        });
+
+        it('should build no block without a maker note offset or without MakerNote', () => {
+            expect(getMakerNoteBlockFromExif({MakerNote: {value: MAKER_NOTE_BYTES}}, getExif({makerNoteOffset: undefined}))).to.not.be.ok;
+            expect(getMakerNoteBlockFromExif({Make: {value: ['Canon']}}, getExif())).to.not.be.ok;
+        });
+
+        function getExif(overrides = {}) {
+            return Object.assign({view: VIEW, tiffHeaderOffset: 6, byteOrder: ByteOrder.LITTLE_ENDIAN, makerNoteOffset: 100, thumbnailIfdTags: undefined, carried: 'main', decompressed: false}, overrides);
         }
     });
 

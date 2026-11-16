@@ -6,6 +6,7 @@ import {expect} from 'chai';
 import CanonTags from '../../../../src/canon-tags.js';
 import PentaxTags from '../../../../src/pentax-tags.js';
 import {makerNotes} from '../../../../src/composable/groups/maker-notes.js';
+import {getMakerNoteBlockFromExif} from '../../../../src/composable/group-helpers.js';
 import {getContext, recordCalls} from '../test-context.js';
 import {getMakerNoteBlock, getPentaxType1Bytes} from './maker-note-test-data.js';
 
@@ -16,6 +17,10 @@ describe('composable/groups/maker-notes', () => {
         while (restores.length > 0) {
             restores.pop()();
         }
+    });
+
+    it('should build its block from the Exif tags with the shared maker note extractor', () => {
+        expect(makerNotes.fromExif).to.equal(getMakerNoteBlockFromExif);
     });
 
     it('should read a Pentax type-1 maker note with the Pentax decoder', () => {

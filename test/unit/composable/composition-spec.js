@@ -20,6 +20,7 @@ import {exifBlockReader} from '../../../src/composable/exif-block-reader.js';
 import {iptcBlockReader} from '../../../src/composable/iptc-block-reader.js';
 import {CORE_MERGE_MODES} from '../../../src/loadview-pipeline.js';
 import {jxlHeader} from '../../../src/composable/formats/jxl.js';
+import {getMakerNoteBlockFromExif} from '../../../src/composable/group-helpers.js';
 import {decompression} from '../../../src/decompression.js';
 import {getContext, recordCalls} from './test-context.js';
 import {getMakerNoteBlock} from './groups/maker-note-test-data.js';
@@ -347,6 +348,31 @@ describe('composable/composition', () => {
 
             expect(Object.getPrototypeOf(kinds)).to.equal(null);
             expect(Object.assign({}, kinds)).to.deep.equal({icc: true, pngFile: true, pngText: true, pngChunk: true});
+        });
+
+        describe('fromExif', () => {
+            it('should key the extractor of each composed group by the kind it consumes, in a table without a prototype', () => {
+                const {fromExif} = createComposition({formats: [], groups: [icc, thumbnail]}).composed;
+
+                expect(Object.getPrototypeOf(fromExif)).to.equal(null);
+                expect(Object.keys(fromExif).sort()).to.deep.equal(['icc', 'thumbnail']);
+                expect(fromExif.icc).to.be.a('function');
+                expect(fromExif.icc).to.equal(icc.fromExif);
+                expect(fromExif.thumbnail).to.be.a('function');
+                expect(fromExif.thumbnail).to.equal(thumbnail.fromExif);
+            });
+
+            it('should give the merged maker note group\'s extractor', () => {
+                const {fromExif} = createComposition({formats: [], groups: [canon, pentax]}).composed;
+
+                expect(fromExif.makerNote).to.equal(getMakerNoteBlockFromExif);
+            });
+
+            it('should add no key for an engine group without an extractor', () => {
+                const {fromExif} = createComposition({formats: [jpeg], groups: [exif, icc]}).composed;
+
+                expect(Object.keys(fromExif)).to.deep.equal(['icc']);
+            });
         });
     });
 

@@ -30,7 +30,9 @@ export default {
  *     groups and derived ones without `read`.
  * @returns {object} The engine composition (`groups`, `dispatchKind`, `rank`,
  *     `suppressions`) plus `formats` in detection order, the `derived` groups,
- *     the `composed` facts (`formats`, `groups` and `kinds` maps),
+ *     the `composed` facts (the `formats`, `groups` and `kinds` maps, and
+ *     `fromExif`, the extractor of each composed group that builds its block
+ *     from the Exif tags, keyed by the kind it consumes),
  *     `decompression` (the pooled decompression the png and jxl formats
  *     bring, or undefined when neither is composed), `mergeModes` (the merge
  *     modes the engine and derived groups bring) and the engine groups'
@@ -50,6 +52,7 @@ function createComposition({formats, groups}) {
             formats: getFlags(formats, (format) => [format.header.fileType.value]),
             groups: getFlags(groups, (group) => [group.key]),
             kinds: getFlags(engineGroups, (group) => group.consumes),
+            fromExif: getFromExif(engineGroups),
         },
         decompression: getDecompression(formats),
         mergeModes: getMergeModes(engineGroups.concat(derived)),
@@ -127,6 +130,16 @@ function getFlags(items, getNames) {
         }
     }
     return flags;
+}
+
+function getFromExif(groups) {
+    const fromExif = Object.create(null);
+    for (let i = 0; i < groups.length; i++) {
+        if (groups[i].fromExif !== undefined) {
+            fromExif[groups[i].consumes[0]] = groups[i].fromExif;
+        }
+    }
+    return fromExif;
 }
 
 function getDecompression(formats) {

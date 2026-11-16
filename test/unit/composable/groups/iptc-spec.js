@@ -66,6 +66,17 @@ describe('composable/groups/iptc', () => {
         expect(iptc.merge({carried: 'rawProfile'})).to.deep.equal({slot: 'carriedIptc', mode: 'merge'});
     });
 
+    describe('building its block from the Exif tags', () => {
+        it('should build the block from IPTC-NAA, carried as the Exif block says', () => {
+            expect(iptc.fromExif({'IPTC-NAA': {value: 'iptc view'}}, {carried: 'main'})).to.deep.equal({kind: 'iptc', dataView: 'iptc view', dataOffset: 0, carried: 'main'});
+            expect(iptc.fromExif({'IPTC-NAA': {value: 'iptc view'}}, {carried: 'rawProfile'})).to.deep.equal({kind: 'iptc', dataView: 'iptc view', dataOffset: 0, carried: 'rawProfile'});
+        });
+
+        it('should build no block without IPTC-NAA', () => {
+            expect(iptc.fromExif({}, {carried: 'main'})).to.not.be.ok;
+        });
+    });
+
     describe('the main block\'s IPTC-NAA suppression', () => {
         it('should suppress the main block\'s IPTC-NAA when there is an IPTC segment', () => {
             expect(isSuppressed({carried: 'main'}, [{kind: 'exif'}, {kind: 'iptc'}])).to.equal(true);

@@ -27,6 +27,7 @@ export function createIptcGroup(readTags) {
         read: (block, ctx) => readIptcBlock(block, ctx, readTags),
         merge: getIptcMergeDescriptor,
         suppressions: [{kind: 'iptc', isSuppressed: isMainIptcSuppressed}],
+        fromExif: getIptcBlockFromExif,
         brand: GROUP_BRAND,
     };
 }
@@ -78,4 +79,8 @@ function getIptcMergeDescriptor(block) {
 function isMainIptcSuppressed(block, finderBlocks) {
     return block.carried === 'main'
         && finderBlocks.some((finderBlock) => finderBlock.kind === 'iptc' && !isPngTextChunkBlock(finderBlock));
+}
+
+function getIptcBlockFromExif(parsed, exif) {
+    return parsed['IPTC-NAA'] && {kind: 'iptc', dataView: parsed['IPTC-NAA'].value, dataOffset: 0, carried: exif.carried};
 }

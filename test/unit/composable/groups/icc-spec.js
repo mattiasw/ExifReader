@@ -64,6 +64,24 @@ describe('composable/groups/icc', () => {
         expect(icc.merge({carried: 'brob'})).to.deep.equal({slot: 'carriedIcc', mode: 'merge'});
     });
 
+    describe('building its block from the Exif tags', () => {
+        it('should build the block from ICC_Profile as one chunk of the whole profile', () => {
+            const profile = [3, 4];
+
+            expect(icc.fromExif({ICC_Profile: {value: profile}}, {carried: 'main'})).to.deep.equal({
+                kind: 'icc',
+                dataView: profile,
+                chunks: [{offset: 0, length: 2, chunkNumber: 1, chunksTotal: 1}],
+                carried: 'main',
+            });
+            expect(icc.fromExif({ICC_Profile: {value: profile}}, {carried: 'rawProfile'}).carried).to.equal('rawProfile');
+        });
+
+        it('should build no block without ICC_Profile', () => {
+            expect(icc.fromExif({}, {carried: 'main'})).to.not.be.ok;
+        });
+    });
+
     describe('a compressed profile', () => {
         const COMPRESSED_PROFILE = deflateSync(Buffer.alloc(128));
         const COMPRESSED_BLOCK = {

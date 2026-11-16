@@ -22,6 +22,7 @@ export const thumbnail = {
     read: readThumbnailBlock,
     merge: (block) => ({slot: 'thumbnail', mode: 'thumbnailCandidate', rank: block.rank}),
     mergeModes: {thumbnailCandidate: addThumbnailCandidate, thumbnail: addThumbnail},
+    fromExif: getThumbnailBlockFromExif,
     brand: GROUP_BRAND,
 };
 
@@ -100,4 +101,15 @@ function selectThumbnail(candidates) {
 
 function hasImage(thumbnailTags) {
     return !!thumbnailTags && !!thumbnailTags.image;
+}
+
+function getThumbnailBlockFromExif(parsed, exif) {
+    return exif.thumbnailIfdTags && {
+        kind: 'thumbnail',
+        dataView: exif.view,
+        tiffHeaderOffset: exif.tiffHeaderOffset,
+        ifd1Tags: exif.thumbnailIfdTags,
+        decompressed: exif.decompressed,
+        rank: exif.carried === 'main' ? 'main' : 'embedded',
+    };
 }

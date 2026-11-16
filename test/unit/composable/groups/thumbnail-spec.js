@@ -26,6 +26,32 @@ describe('composable/groups/thumbnail', () => {
         expect(thumbnail.merge({rank: 'embedded'})).to.deep.equal({slot: 'thumbnail', mode: 'thumbnailCandidate', rank: 'embedded'});
     });
 
+    describe('building its block from the Exif tags', () => {
+        const VIEW = getDataView('\x00'.repeat(16));
+
+        it('should build a main block from the thumbnail IFD of the main Exif block', () => {
+            const exif = getExif({carried: 'main', decompressed: false});
+
+            expect(thumbnail.fromExif({}, exif)).to.deep.equal({kind: 'thumbnail', dataView: VIEW, tiffHeaderOffset: 6, ifd1Tags: IFD1_TAGS, decompressed: false, rank: 'main'});
+        });
+
+        it('should build an embedded block from the thumbnail IFD of any other Exif block', () => {
+            for (const carried of ['rawProfile', 'brob']) {
+                const exif = getExif({carried, decompressed: true});
+
+                expect(thumbnail.fromExif({}, exif), carried).to.deep.equal({kind: 'thumbnail', dataView: VIEW, tiffHeaderOffset: 6, ifd1Tags: IFD1_TAGS, decompressed: true, rank: 'embedded'});
+            }
+        });
+
+        it('should build no block without a thumbnail IFD', () => {
+            expect(thumbnail.fromExif({}, getExif({carried: 'main', decompressed: false, thumbnailIfdTags: undefined}))).to.not.be.ok;
+        });
+
+        function getExif(overrides) {
+            return objectAssign({view: VIEW, tiffHeaderOffset: 6, byteOrder: 'byte order', makerNoteOffset: undefined, thumbnailIfdTags: IFD1_TAGS}, overrides);
+        }
+    });
+
     it('should read the main block\'s thumbnail even without an image', () => {
         const getBase64Image = () => 'b64';
         const gets = swapThumbnailGet(() => ({type: 'tiff'}));

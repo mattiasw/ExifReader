@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import CanonTags from '../../canon-tags.js';
-import {getEmbeddableMergeDescriptor, mergeMakerNoteGroups, readMakerNoteWithDecoders} from '../group-helpers.js';
+import {getEmbeddableMergeDescriptor, mergeMakerNoteGroups, readMakerNoteWithDecoders, getMakerNoteBlockFromExif} from '../group-helpers.js';
 import {getSharedValueBudget} from '../value-budget.js';
 import {GROUP_BRAND} from '../brand.js';
 
@@ -21,5 +21,6 @@ export const canon = {
     read: (block, ctx) => readMakerNoteWithDecoders(block, ctx, canon.decoders),
     merge: (block) => getEmbeddableMergeDescriptor(block, 'makerNotes', 'carriedMakerNotes'),
     combine: mergeMakerNoteGroups,
+    fromExif: getMakerNoteBlockFromExif,
     brand: GROUP_BRAND,
 };

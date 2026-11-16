@@ -83,6 +83,14 @@ describe('composable/groups', () => {
         }
     });
 
+    it('should give exactly the groups that consume a kind an Exif block carries the extractor of its block', () => {
+        for (const name of GROUP_NAMES) {
+            const group = Groups[name];
+            const consumesEmittedKind = group.consumes.some((kind) => EXIF_EMITTED_KINDS.indexOf(kind) !== -1);
+            expect(typeof group.fromExif === 'function', name).to.equal(consumesEmittedKind);
+        }
+    });
+
     it('should carry an environment exactly on xmp, thumbnail and mpf and a check of it only on xmp', () => {
         for (const name of GROUP_NAMES) {
             expect(Groups[name].environment !== undefined, name + ' environment').to.equal(Object.hasOwn(ADDED_KEYS, name));

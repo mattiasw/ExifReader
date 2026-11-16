@@ -248,10 +248,10 @@ function getNodeMergeBlocks(node) {
  * it.
  *
  * @param {{dataView: DataView, options: object, tagFilter: object, decompressConfig: (object|undefined), getBase64Image: function, getDomParser: function, composed: object, decompression: (object|undefined)}} parts
- *     `composed` is the composition's `{formats, groups, kinds}` maps, which
- *     the readers consult instead of the build flags. `decompression` is the
- *     pooled decompression the png and jxl formats bring; without it
- *     `decompressConfig` is undefined too.
+ *     `composed` is the composition's `{formats, groups, kinds}` maps and its
+ *     `fromExif` extractors, which the readers consult instead of the build
+ *     flags. `decompression` is the pooled decompression the png and jxl
+ *     formats bring; without it `decompressConfig` is undefined too.
  * @returns {object} The context, with `decompress` running through a pool of at
  *     most four tasks when `decompression` is given, else undefined, and
  *     `valueBudget` holding the load's one value budget, which

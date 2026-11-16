@@ -34,4 +34,23 @@ describe('composable/groups/photoshop', () => {
         expect(photoshop.merge({carried: 'main'})).to.deep.equal({slot: 'carriedPhotoshop', mode: 'assign'});
         expect(photoshop.merge({carried: 'rawProfile'})).to.deep.equal({slot: 'carriedPhotoshop', mode: 'merge'});
     });
+
+    describe('building its block from the Exif tags', () => {
+        it('should build the block from the settings when both tags are there', () => {
+            const parsed = {ImageSourceData: {value: [1]}, PhotoshopSettings: {value: [2]}};
+
+            expect(photoshop.fromExif(parsed, {carried: 'main'})).to.deep.equal({kind: 'photoshop', value: [2], carried: 'main'});
+            expect(photoshop.fromExif(parsed, {carried: 'rawProfile'})).to.deep.equal({kind: 'photoshop', value: [2], carried: 'rawProfile'});
+        });
+
+        it('should build no block without both tags or with non-array settings', () => {
+            for (const parsed of [
+                {ImageSourceData: {value: [1]}},
+                {PhotoshopSettings: {value: [2]}},
+                {ImageSourceData: {value: [1]}, PhotoshopSettings: {value: 'settings'}},
+            ]) {
+                expect(photoshop.fromExif(parsed, {carried: 'main'}), JSON.stringify(parsed)).to.not.be.ok;
+            }
+        });
+    });
 });

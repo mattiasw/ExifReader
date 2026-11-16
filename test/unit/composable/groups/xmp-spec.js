@@ -219,6 +219,25 @@ describe('composable/groups/xmp', () => {
         expect(xmp.merge({carried: 'rawProfile'})).to.deep.equal({slot: 'carriedXmp', mode: 'merge'});
     });
 
+    describe('building its block from the Exif tags', () => {
+        it('should build the block from number-array ApplicationNotes, viewed as their byte string', () => {
+            const block = xmp.fromExif({ApplicationNotes: {value: [60, 120]}}, {carried: 'main', decompressed: false});
+
+            expect(block).to.include({kind: 'xmp', carried: 'main', decompressed: false, byteLength: 2});
+            expect(block.getDataView()).to.equal('<x');
+        });
+
+        it('should pass on how the Exif block was carried and whether it was decompressed', () => {
+            expect(xmp.fromExif({ApplicationNotes: {value: [60]}}, {carried: 'brob', decompressed: true})).to.include({carried: 'brob', decompressed: true});
+        });
+
+        it('should build no block for ApplicationNotes that are not a number array, or without them', () => {
+            expect(xmp.fromExif({ApplicationNotes: {value: ['<', 'x']}}, {carried: 'main', decompressed: false})).to.not.be.ok;
+            expect(xmp.fromExif({ApplicationNotes: {value: '<x'}}, {carried: 'main', decompressed: false})).to.not.be.ok;
+            expect(xmp.fromExif({}, {carried: 'main', decompressed: false})).to.not.be.ok;
+        });
+    });
+
     describe('the carried XMP suppression', () => {
         it('should suppress a carried packet when a finder XMP block has chunks', () => {
             expect(isSuppressed({carried: 'main'}, [{kind: 'xmp', chunks: [{}]}])).to.equal(true);

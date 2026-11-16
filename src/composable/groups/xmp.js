@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getCompressionMethod} from '../../utils.js';
+import {getCompressionMethod, getByteString} from '../../utils.js';
 import XmpTags from '../../xmp-tags.js';
 import {parsedTags, getBlockDataView, getBrobDataView, getInputSizeBound, getEmbeddableMergeDescriptor} from '../group-helpers.js';
 import {GROUP_BRAND} from '../brand.js';
@@ -21,6 +21,7 @@ export const xmp = {
     merge: getXmpMergeDescriptor,
     suppressions: [{kind: 'xmp', isSuppressed: isCarriedXmpSuppressed}],
     mergeModes: {brobXmp: assignBrobXmpTags},
+    fromExif: getXmpBlockFromExif,
     brand: GROUP_BRAND,
 };
 
@@ -97,4 +98,21 @@ function assignBrobXmpTags(tags, block, context) {
 // A brob block carries compressed XMP, not chunks.
 function hasXmpData(xmpBlock) {
     return xmpBlock !== undefined && xmpBlock.compression === undefined && xmpBlock.chunks.length > 0;
+}
+
+function getXmpBlockFromExif(parsed, exif) {
+    const applicationNotes = parsed['ApplicationNotes'] && parsed['ApplicationNotes'].value;
+    return isNumberArray(applicationNotes) && {
+        kind: 'xmp',
+        carried: exif.carried,
+        decompressed: exif.decompressed,
+        byteLength: applicationNotes.length,
+        getDataView: () => getByteString(applicationNotes),
+    };
+}
+
+// ASCII values hold strings and holes, values of two or more rationals hold
+// number pairs: neither converts to the character codes of an XMP packet.
+function isNumberArray(value) {
+    return Array.isArray(value) && typeof value[0] === 'number';
 }

@@ -14,6 +14,7 @@ export const icc = {
     read: readIccBlock,
     merge: (block) => getEmbeddableMergeDescriptor(block, 'icc', 'carriedIcc'),
     suppressions: [{kind: 'icc', isSuppressed: isCarriedIccSuppressed}],
+    fromExif: getIccBlockFromExif,
     brand: GROUP_BRAND,
 };
 
@@ -40,4 +41,12 @@ function isCarriedIccSuppressed(block, finderBlocks) {
 
 function hasIccData(iccBlock) {
     return iccBlock !== undefined && iccBlock.chunks.length > 0;
+}
+
+function getIccBlockFromExif(parsed, exif) {
+    if (!parsed['ICC_Profile']) {
+        return undefined;
+    }
+    const profile = parsed['ICC_Profile'].value;
+    return {kind: 'icc', dataView: profile, chunks: [{offset: 0, length: profile.length, chunkNumber: 1, chunksTotal: 1}], carried: exif.carried};
 }

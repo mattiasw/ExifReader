@@ -20,7 +20,7 @@ export function getContext({dataView = getDataView('\x00'.repeat(16)), options =
         decompressConfig,
         getBase64Image,
         getDomParser,
-        composed: {formats: composed.formats || {}, groups: composed.groups || {}, kinds: composed.kinds || {}},
+        composed: {formats: composed.formats || {}, groups: composed.groups || {}, kinds: composed.kinds || {}, fromExif: composed.fromExif || {}},
         decompression,
     });
 }

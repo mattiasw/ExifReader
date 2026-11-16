@@ -87,16 +87,16 @@ import {
 
 // Where each rule lives in src/.
 // Rule 1:  image-header-jpeg.js (getExifMarkerScore), image-header-png.js, image-header-jxl.js, png-text-tags.js
-// Rule 2:  engine.js (rank, suppression), exif-reader.js (the rules), image-header-jxl.js, image-header-png.js, png-text-tags.js
-// Rule 3:  composable/groups/xmp.js (the brobXmp mode), loadview-pipeline.js, exif-reader.js
-// Rule 4:  engine.js (dispatch order, context), composable/value-budget.js (the shared budget), exif-reader.js (the adapters), tags-helpers.js, png-text-tags.js
-// Rule 5:  loadview-pipeline.js, composable/formats/png.js (the text chunk tier), exif-reader.js (mergeBlocks)
+// Rule 2:  engine.js (rank, suppression), composable/composition.js (rank), composable/groups/iptc.js, xmp.js and icc.js and composable/formats/png.js (the rules), image-header-jxl.js, image-header-png.js, png-text-tags.js
+// Rule 3:  composable/groups/xmp.js (the brobXmp mode and reader), loadview-pipeline.js
+// Rule 4:  engine.js (dispatch order, context), composable/value-budget.js (the shared budget), composable/groups/ and composable/exif-block-reader.js (the adapters), tags-helpers.js, png-text-tags.js
+// Rule 5:  loadview-pipeline.js, composable/formats/png.js (the text chunk tier, the mergeBlocks combine)
 // Rule 6:  composable/formats/png.js (the pngFile and pngTextTags modes, the pngText copy)
-// Rule 7:  composable/groups/thumbnail.js, gps.js and composite.js (the modes), loadview-pipeline.js (the Composite input), exif-reader.js (the thumbnail group), composite.js
+// Rule 7:  composable/groups/thumbnail.js, gps.js and composite.js (the modes), loadview-pipeline.js (the Composite input), composite.js
 // Rule 8:  engine.js (a throwing group drops its block alone), png-text-tags.js, image-header.js, icc-tags.js
 // Rule 9:  tag-filter.js, tag-filter-config.js
-// Rule 10: engine.js (depth), png-text-tags.js, exif-reader.js
-// Rule 11: image-header-png.js, engine.js (the sync drop), exif-reader.js, composable/formats/png.js (the pngText copy), loadview-pipeline.js
+// Rule 10: engine.js (depth), png-text-tags.js, composable/exif-block-reader.js (the emitted blocks)
+// Rule 11: image-header-png.js, engine.js (the sync drop), composable/composition.js and composable/read-view.js (isHiddenInSyncMode), composable/formats/png.js (the pngText copy), loadview-pipeline.js
 // Rule 12: png-text-tags.js
 
 const domParser = new XmldomDomParser({onError: onErrorStopParsing});

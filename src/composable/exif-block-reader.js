@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getCompressionMethod, getByteString} from '../utils.js';
+import {getCompressionMethod} from '../utils.js';
 import ByteOrder from '../byte-order.js';
 import {getTiffHeaderOffset} from '../image-header-iso-bmff.js';
 import Tags from '../tags.js';
@@ -132,7 +132,7 @@ function readExifView(view, tiffHeaderOffset, ctx, {carried, decompressed}, tagN
     delete tags.Thumbnail;
 
     const parsed = filterTagsForParse('exif', tags, ctx.tagFilter);
-    const blocks = getExifEmittedBlocks(parsed, {view, tiffHeaderOffset, byteOrder, makerNoteOffset, thumbnailIfdTags, carried, decompressed});
+    const blocks = getExifEmittedBlocks(ctx.composed.fromExif, parsed, {view, tiffHeaderOffset, byteOrder, makerNoteOffset, thumbnailIfdTags, carried, decompressed});
     if (carried === 'brob' && Object.keys(parsed).length === 0) {
         return {tags: undefined, blocks};
     }
@@ -168,47 +168,19 @@ function shouldReadThumbnailIfd(ctx) {
     return ctx.composed.groups.thumbnail === true && ctx.tagFilter.shouldParseGroup('thumbnail');
 }
 
-// In emission order; the engine drops a kind no composed group consumes.
-function getExifEmittedBlocks(parsed, {view, tiffHeaderOffset, byteOrder, makerNoteOffset, thumbnailIfdTags, carried, decompressed}) {
+// Each composed group consuming an emitted kind brings its block's extractor.
+// The blocks follow EXIF_EMITTED_KINDS, not the groups' order: they dispatch in
+// emission order and their readers draw from one value budget.
+function getExifEmittedBlocks(fromExif, parsed, exif) {
     const blocks = [];
-
-    if (parsed['IPTC-NAA']) {
-        blocks.push({kind: 'iptc', dataView: parsed['IPTC-NAA'].value, dataOffset: 0, carried});
+    for (let i = 0; i < EXIF_EMITTED_KINDS.length; i++) {
+        const getBlock = fromExif[EXIF_EMITTED_KINDS[i]];
+        const block = getBlock && getBlock(parsed, exif);
+        if (block) {
+            blocks.push(block);
+        }
     }
-    if (parsed['ApplicationNotes'] && isNumberArray(parsed['ApplicationNotes'].value)) {
-        const applicationNotes = parsed['ApplicationNotes'].value;
-        blocks.push({kind: 'xmp', carried, decompressed, byteLength: applicationNotes.length, getDataView: () => getByteString(applicationNotes)});
-    }
-    if (parsed['ImageSourceData'] && parsed['PhotoshopSettings'] && Array.isArray(parsed['PhotoshopSettings'].value)) {
-        blocks.push({kind: 'photoshop', value: parsed['PhotoshopSettings'].value, carried});
-    }
-    if (parsed['ICC_Profile']) {
-        const profile = parsed['ICC_Profile'].value;
-        blocks.push({kind: 'icc', dataView: profile, chunks: [{offset: 0, length: profile.length, chunkNumber: 1, chunksTotal: 1}], carried});
-    }
-    if (parsed['MakerNote'] && makerNoteOffset !== undefined) {
-        blocks.push({
-            kind: 'makerNote',
-            tiffView: view,
-            tiffHeaderOffset,
-            makerNoteOffset,
-            byteOrder,
-            make: parsed['Make'] && parsed['Make'].value,
-            bytes: parsed['MakerNote'].value,
-            carried,
-        });
-    }
-    if (thumbnailIfdTags) {
-        blocks.push({kind: 'thumbnail', dataView: view, tiffHeaderOffset, ifd1Tags: thumbnailIfdTags, decompressed, rank: carried === 'main' ? 'main' : 'embedded'});
-    }
-
     return blocks;
-}
-
-// ASCII values hold strings and holes, values of two or more rationals hold
-// number pairs: neither converts to the character codes of an XMP packet.
-function isNumberArray(value) {
-    return Array.isArray(value) && typeof value[0] === 'number';
 }
 
 /**
