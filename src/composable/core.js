@@ -8,7 +8,7 @@ import {readView} from './read-view.js';
 import {createCompositionTagFilter} from './composition-tag-filter.js';
 import {createTagFilter} from '../tag-filter.js';
 import {FILTER_GROUPS} from '../tag-filter-config.js';
-import Errors from '../errors.js';
+import {UnsupportedFormatError} from '../unsupported-format-error.js';
 import {objectAssign, getDataViewFromBytes, getByteString, assertPromiseSupport} from '../utils.js';
 
 const FORMATS_IMPORT = '\'exifreader/formats\'';
@@ -21,7 +21,7 @@ const BOOLEAN_OPTIONS = ['expanded', 'includeUnknown', 'computed', 'includeOffse
 const SUPPORTED_OPTIONS = BOOLEAN_OPTIONS.concat(['includeTags', 'excludeTags']);
 const INPUT_MESSAGE = 'reader.load: data must be an ArrayBuffer, a SharedArrayBuffer, a DataView, a typed array such as Uint8Array or a Node Buffer, or a Blob or File';
 
-export const errors = {UnsupportedFormatError: Errors.UnsupportedFormatError};
+export const errors = {UnsupportedFormatError};
 
 // Only this object references narrowIncludeTags and assertOptions, so a bundle
 // without the tag filter leaves the caller's includeTags handling and the
@@ -399,8 +399,8 @@ function getIncludeTagsConfig(mapping) {
 }
 
 function getReadError(error, unsupportedFormatMessage) {
-    if (error instanceof Errors.UnsupportedFormatError) {
-        return new Errors.UnsupportedFormatError(unsupportedFormatMessage);
+    if (error instanceof UnsupportedFormatError) {
+        return new UnsupportedFormatError(unsupportedFormatMessage);
     }
     return error;
 }

@@ -27,6 +27,8 @@ const SRC_PATH = path.join(__dirname, '..', '..', 'src');
 // its single quotes matches only the quoted literal, in either quote style.
 const MODULE_MARKERS = {
     'errors.js': 'No Exif data',
+    // Quoted, since the bare name is also an identifier in errors.js, image-header.js and core.js.
+    'unsupported-format-error.js': '\'UnsupportedFormatError\'',
     'file-loaders.js': 'Content-Range',
     'image-header.js': 'Invalid image format',
     'load-auto.js': 'length: "auto" is not supported for this file type ',
@@ -90,6 +92,7 @@ const ALWAYS_PRESENT_MODULES = [
     'load-auto.js',
     'loadview-pipeline.js',
     'tag-filter-config.js',
+    'unsupported-format-error.js',
     'utils.js'
 ];
 

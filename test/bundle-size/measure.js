@@ -91,7 +91,7 @@ const BUFFER_CHECK = {marker: BUFFER_CODE, why: 'a code use of Buffer, which mak
 // What the composed formats and groups may bring along, the modules this gate
 // allows. Any other probed module in a composable bundle is a module
 // the consumer did not compose, the default-entry-only ones included.
-const CORE = ['errors.js', 'image-header.js', 'loadview-pipeline.js', 'engine.js', 'tag-filter-config.js', 'utils.js'];
+const CORE = ['unsupported-format-error.js', 'image-header.js', 'loadview-pipeline.js', 'engine.js', 'tag-filter-config.js', 'utils.js'];
 const JPEG = [
     'file-tags.js',
     'jfif-tags.js',

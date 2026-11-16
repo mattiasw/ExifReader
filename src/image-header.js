@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import Errors from './errors.js';
+import {UnsupportedFormatError} from './unsupported-format-error.js';
 
 export default {
     parseAppMarkers
@@ -34,7 +34,7 @@ function parseAppMarkers(dataView, includeRanges, formats) {
         }
     }
 
-    throw new Errors.UnsupportedFormatError('Invalid image format');
+    throw new UnsupportedFormatError('Invalid image format');
 }
 
 function finalize(blocks, fileType, fileTypeDescription, ranges) {
