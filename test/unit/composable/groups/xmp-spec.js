@@ -78,8 +78,63 @@ describe('composable/groups/xmp', () => {
             const ctx = getContext();
 
             expect(xmp.read({kind: 'xmp', carried: 'main', byteLength: 1000000, getDataView: () => 'packet'}, ctx)).to.deep.equal({tags: XMP_TAGS});
+            expect(ctx.decompressedApplicationNotesSize || 0).to.equal(0);
+        });
+
+        it('should bound the decompressed carried packets by 4 times the file size plus 64 KiB together', () => {
+            const reads = swapXmpRead();
+            const ctx = getContext({dataView: getDataView('\x00'.repeat(1000))});
+            const bound = 4 * 1000 + 64 * 1024;
+
+            expect(xmp.read(getDecompressedBlock(bound - 10), ctx)).to.deep.equal({tags: XMP_TAGS});
+            expect(xmp.read(getDecompressedBlock(11), ctx)).to.equal(undefined);
+            expect(reads).to.have.lengthOf(1);
+            expect(xmp.read(getDecompressedBlock(10), ctx)).to.deep.equal({tags: XMP_TAGS});
+            expect(ctx.decompressedApplicationNotesSize).to.equal(bound);
+        });
+
+        it('should read an empty decompressed carried packet without drawing on the bound', () => {
+            swapXmpRead();
+            const ctx = getContext();
+
+            expect(xmp.read(getDecompressedBlock(0), ctx)).to.deep.equal({tags: XMP_TAGS});
             expect(ctx.decompressedApplicationNotesSize).to.equal(0);
         });
+
+        for (const byteLength of [NaN, undefined, null, '5', -1]) {
+            it(`should refuse a decompressed carried packet of byte length ${describeValue(byteLength)} and keep the bound`, () => {
+                const reads = swapXmpRead();
+                const ctx = getContext();
+
+                expect(xmp.read(getDecompressedBlock(byteLength), ctx)).to.equal(undefined);
+                expect(reads).to.have.lengthOf(0);
+                expect(ctx.decompressedApplicationNotesSize).to.equal(undefined);
+                expect(xmp.read(getDecompressedBlock(10), ctx)).to.deep.equal({tags: XMP_TAGS});
+                expect(ctx.decompressedApplicationNotesSize).to.equal(10);
+            });
+        }
+
+        it('should refuse every decompressed carried packet when the file size is NaN', () => {
+            const reads = swapXmpRead();
+            const ctx = getContext({dataView: {byteLength: NaN}});
+
+            expect(xmp.read(getDecompressedBlock(1), ctx)).to.equal(undefined);
+            expect(reads).to.have.lengthOf(0);
+        });
+
+        it('should give each load the whole bound', () => {
+            swapXmpRead();
+            const bound = 4 * 16 + 64 * 1024;
+            const first = getContext();
+            const second = getContext();
+
+            expect(xmp.read(getDecompressedBlock(bound), first)).to.deep.equal({tags: XMP_TAGS});
+            expect(xmp.read(getDecompressedBlock(bound), second)).to.deep.equal({tags: XMP_TAGS});
+        });
+
+        function getDecompressedBlock(byteLength) {
+            return {kind: 'xmp', carried: 'rawProfile', decompressed: true, byteLength, getDataView: () => 'packet'};
+        }
     });
 
     describe('reading a brob block', () => {
@@ -112,6 +167,35 @@ describe('composable/groups/xmp', () => {
             const reads = swapXmpRead();
             const ctx = getContext({dataView: getDataView('\x00'.repeat(16)), composed: {formats: {jxl: true}}});
             recordDecompressions(ctx, {byteLength: 4 * 16 + 64 * 1024 + 1});
+
+            expect(await xmp.read(BROB_BLOCK, ctx)).to.deep.equal({tags: {}});
+            expect(reads).to.have.lengthOf(0);
+        });
+
+        it('should read a decompressed packet of exactly the brob XMP bound', async () => {
+            const reads = swapXmpRead();
+            const ctx = getContext({dataView: getDataView('\x00'.repeat(16)), composed: {formats: {jxl: true}}});
+            recordDecompressions(ctx, {byteLength: 4 * 16 + 64 * 1024});
+
+            expect(await xmp.read(BROB_BLOCK, ctx)).to.deep.equal({tags: XMP_TAGS});
+            expect(reads).to.have.lengthOf(1);
+        });
+
+        for (const byteLength of [NaN, undefined]) {
+            it(`should give empty tags for a decompressed packet of byte length ${describeValue(byteLength)}`, async () => {
+                const reads = swapXmpRead();
+                const ctx = getContext({composed: {formats: {jxl: true}}});
+                recordDecompressions(ctx, {byteLength});
+
+                expect(await xmp.read(BROB_BLOCK, ctx)).to.deep.equal({tags: {}});
+                expect(reads).to.have.lengthOf(0);
+            });
+        }
+
+        it('should give empty tags for every decompressed packet when the file size is NaN', async () => {
+            const reads = swapXmpRead();
+            const ctx = getContext({dataView: {byteLength: NaN, buffer: new ArrayBuffer(16), byteOffset: 0}, composed: {formats: {jxl: true}}});
+            recordDecompressions(ctx, {byteLength: 1});
 
             expect(await xmp.read(BROB_BLOCK, ctx)).to.deep.equal({tags: {}});
             expect(reads).to.have.lengthOf(0);
@@ -158,5 +242,9 @@ describe('composable/groups/xmp', () => {
         const {calls, restore} = recordCalls(XmpTags, 'read', () => Object.assign({}, XMP_TAGS));
         restores.push(restore);
         return calls;
+    }
+
+    function describeValue(value) {
+        return typeof value === 'string' ? `the string '${value}'` : String(value);
     }
 });

@@ -24,6 +24,18 @@ export function getBrobDataView(dataView, brobBlock) {
     return new DataView(dataView.buffer, dataView.byteOffset + brobBlock.dataOffset, length);
 }
 
+/**
+ * @param {DataView|undefined} dataView The input.
+ * @param {number} perInputSize What each byte of input allows.
+ * @param {number} allowance What any input allows.
+ * @returns {number} `perInputSize` times the input's byte length plus
+ *     `allowance`, where an absent view or a non-number byte length counts as 0.
+ */
+export function getInputSizeBound(dataView, perInputSize, allowance) {
+    const byteLength = dataView !== undefined && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
+    return perInputSize * byteLength + allowance;
+}
+
 export function getEmbeddableMergeDescriptor(block, slot, carriedSlot) {
     if (block.carried !== undefined) {
         return {slot: carriedSlot, mode: block.carried === 'main' ? 'assign' : 'merge'};

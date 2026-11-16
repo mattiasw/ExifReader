@@ -4,7 +4,15 @@
 
 import Thumbnail from '../../thumbnail.js';
 import {filterTagsForParse} from '../../tag-filter.js';
+import {getInputSizeBound} from '../group-helpers.js';
 import {GROUP_BRAND} from '../brand.js';
+
+// An embedded thumbnail is sliced from a decoded or decompressed view that can be
+// far larger than the file. A real JPEG thumbnail shrinks only a little when
+// compressed, so bound the embedded thumbnails of a file by twice its size in
+// total, plus room for a typical thumbnail.
+const EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE = 2;
+const EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE = 64 * 1024;
 
 export const thumbnail = {
     key: 'thumbnail',
@@ -31,16 +39,22 @@ function readThumbnailBlock(block, ctx) {
         return undefined;
     }
     const lengthTag = parsed.JPEGInterchangeFormatLength;
-    if (!lengthTag || typeof lengthTag.value !== 'number' || lengthTag.value > ctx.embeddedThumbnailSizeBound - ctx.copiedThumbnailSize) {
+    const copiedSize = ctx.copiedThumbnailSize || 0;
+    const room = getInputSizeBound(ctx.dataView, EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE, EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE) - copiedSize;
+    if (!(lengthTag && isNonNegativeInteger(lengthTag.value) && lengthTag.value <= room)) {
         return undefined;
     }
     const thumbnailTags = Thumbnail.get(block.dataView, parsed, block.tiffHeaderOffset, ctx.getBase64Image);
     if (!thumbnailTags.image) {
         return undefined;
     }
-    ctx.copiedThumbnailSize += lengthTag.value;
+    ctx.copiedThumbnailSize = copiedSize + lengthTag.value;
     if (!block.decompressed) {
         ctx.hasEmbeddedThumbnailImage = true;
     }
     return {tags: thumbnailTags};
+}
+
+function isNonNegativeInteger(value) {
+    return (typeof value === 'number') && (value >= 0) && (value % 1 === 0);
 }

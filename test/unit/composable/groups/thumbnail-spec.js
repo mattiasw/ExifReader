@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
+import {getDataView} from '../../test-utils.js';
 import Thumbnail from '../../../../src/thumbnail.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {thumbnail} from '../../../../src/composable/groups/thumbnail.js';
@@ -31,7 +32,7 @@ describe('composable/groups/thumbnail', () => {
 
         expect(thumbnail.read(block, ctx)).to.deep.equal({tags: {type: 'tiff'}});
         expect(gets).to.deep.equal([[block.dataView, IFD1_TAGS, 6, getBase64Image]]);
-        expect(ctx.hasEmbeddedThumbnailImage).to.equal(false);
+        expect(ctx.hasEmbeddedThumbnailImage).to.not.be.ok;
     });
 
     it('should filter the IFD1 tags before reading the thumbnail', () => {
@@ -66,7 +67,7 @@ describe('composable/groups/thumbnail', () => {
             const ctx = getContext();
 
             expect(thumbnail.read(getBlock({rank: 'embedded'}), ctx)).to.equal(undefined);
-            expect(ctx.copiedThumbnailSize).to.equal(0);
+            expect(ctx.copiedThumbnailSize || 0).to.equal(0);
         });
 
         it('should not be a candidate once an uncompressed block gave one', () => {
@@ -83,7 +84,7 @@ describe('composable/groups/thumbnail', () => {
             const ctx = getContext();
 
             expect(thumbnail.read(getBlock({rank: 'embedded', decompressed: true}), ctx)).to.not.equal(undefined);
-            expect(ctx.hasEmbeddedThumbnailImage).to.equal(false);
+            expect(ctx.hasEmbeddedThumbnailImage).to.not.be.ok;
             expect(thumbnail.read(getBlock({rank: 'embedded', decompressed: true}), ctx)).to.not.equal(undefined);
             expect(ctx.copiedThumbnailSize).to.equal(200);
         });
@@ -91,13 +92,66 @@ describe('composable/groups/thumbnail', () => {
         it('should not be a candidate past the copy bound or without a numeric length', () => {
             const gets = swapThumbnailGet(() => ({image: 'image'}));
             const ctx = getContext();
-            const room = ctx.embeddedThumbnailSizeBound - ctx.copiedThumbnailSize;
+            const room = 2 * 16 + 64 * 1024;
 
             expect(thumbnail.read(getBlock({rank: 'embedded', length: room + 1}), ctx)).to.equal(undefined);
             expect(thumbnail.read(getBlock({rank: 'embedded', length: 'many'}), ctx)).to.equal(undefined);
             expect(thumbnail.read(getBlock({rank: 'embedded', ifd1Tags: {JPEGInterchangeFormat: {value: 10}}}), ctx)).to.equal(undefined);
             expect(gets).to.have.lengthOf(0);
             expect(thumbnail.read(getBlock({rank: 'embedded', length: room}), ctx)).to.not.equal(undefined);
+        });
+
+        it('should bound the embedded thumbnails by 2 times the file size plus 64 KiB', () => {
+            swapThumbnailGet(() => ({image: 'image'}));
+            const bound = 2 * 1000 + 64 * 1024;
+
+            expect(thumbnail.read(getBlock({rank: 'embedded', length: bound + 1}), getContext({dataView: getDataView('\x00'.repeat(1000))}))).to.equal(undefined);
+            expect(thumbnail.read(getBlock({rank: 'embedded', length: bound}), getContext({dataView: getDataView('\x00'.repeat(1000))}))).to.not.equal(undefined);
+        });
+
+        it('should bound the decompressed blocks\' thumbnails together', () => {
+            swapThumbnailGet(() => ({image: 'image'}));
+            const ctx = getContext({dataView: getDataView('\x00'.repeat(1000))});
+            const bound = 2 * 1000 + 64 * 1024;
+
+            expect(thumbnail.read(getBlock({rank: 'embedded', decompressed: true, length: bound - 10}), ctx)).to.not.equal(undefined);
+            expect(thumbnail.read(getBlock({rank: 'embedded', decompressed: true, length: 11}), ctx)).to.equal(undefined);
+            expect(thumbnail.read(getBlock({rank: 'embedded', decompressed: true, length: 10}), ctx)).to.not.equal(undefined);
+            expect(ctx.copiedThumbnailSize).to.equal(bound);
+        });
+
+        it('should accept an empty thumbnail without drawing on the bound', () => {
+            swapThumbnailGet(() => ({image: 'image'}));
+            const ctx = getContext();
+
+            expect(thumbnail.read(getBlock({rank: 'embedded', decompressed: true, length: 0}), ctx)).to.not.equal(undefined);
+            expect(ctx.copiedThumbnailSize).to.equal(0);
+        });
+
+        for (const length of [-1, 1.5, NaN, Infinity, null, '5']) {
+            it(`should not be a candidate with a length of ${describeValue(length)}`, () => {
+                const gets = swapThumbnailGet(() => ({image: 'image'}));
+                const ctx = getContext();
+
+                expect(thumbnail.read(getBlock({rank: 'embedded', length}), ctx)).to.equal(undefined);
+                expect(gets).to.have.lengthOf(0);
+                expect(ctx.copiedThumbnailSize).to.equal(undefined);
+            });
+        }
+
+        it('should not be a candidate when the file size is NaN', () => {
+            const gets = swapThumbnailGet(() => ({image: 'image'}));
+
+            expect(thumbnail.read(getBlock({rank: 'embedded'}), getContext({dataView: {byteLength: NaN}}))).to.equal(undefined);
+            expect(gets).to.have.lengthOf(0);
+        });
+
+        it('should give each load the whole bound', () => {
+            swapThumbnailGet(() => ({image: 'image'}));
+            const bound = 2 * 16 + 64 * 1024;
+
+            expect(thumbnail.read(getBlock({rank: 'embedded', decompressed: true, length: bound}), getContext())).to.not.equal(undefined);
+            expect(thumbnail.read(getBlock({rank: 'embedded', decompressed: true, length: bound}), getContext())).to.not.equal(undefined);
         });
     });
 
@@ -116,5 +170,9 @@ describe('composable/groups/thumbnail', () => {
         const {calls, restore} = recordCalls(Thumbnail, 'get', result);
         restores.push(restore);
         return calls;
+    }
+
+    function describeValue(value) {
+        return typeof value === 'string' ? `the string '${value}'` : String(value);
     }
 });

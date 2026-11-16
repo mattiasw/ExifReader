@@ -4,8 +4,13 @@
 
 import {getCompressionMethod} from '../../utils.js';
 import XmpTags from '../../xmp-tags.js';
-import {parsedTags, getBlockDataView, getBrobDataView, getEmbeddableMergeDescriptor} from '../group-helpers.js';
+import {parsedTags, getBlockDataView, getBrobDataView, getInputSizeBound, getEmbeddableMergeDescriptor} from '../group-helpers.js';
 import {GROUP_BRAND} from '../brand.js';
+
+// Brob XMP is bounded by the file size, as brob Exif is, plus room for one JPEG
+// standard XMP segment so that a small file can still carry a typical packet.
+const BROB_XMP_SIZE_PER_INPUT_SIZE = 4;
+const BROB_XMP_SIZE_ALLOWANCE = 64 * 1024;
 
 export const xmp = {
     key: 'xmp',
@@ -28,7 +33,7 @@ function readXmpBlock(block, ctx) {
             .then((view) => readBrobXmpView(view, ctx));
     }
     if (block.carried !== undefined) {
-        if (block.decompressed && !ctx.takeDecompressedApplicationNotesAllowance(block.byteLength)) {
+        if (block.decompressed && !takeDecompressedApplicationNotesAllowance(ctx, block.byteLength)) {
             return undefined;
         }
         return parsedTags('xmp', XmpTags.read(getBlockDataView(block, ctx), undefined, domParser, ctx.getDomParser), ctx);
@@ -40,10 +45,28 @@ function readXmpBlock(block, ctx) {
 }
 
 function readBrobXmpView(view, ctx) {
-    if (ctx.exceedsBrobXmpSizeBound(view.byteLength)) {
+    if (exceedsBrobXmpSizeBound(ctx, view.byteLength)) {
         return parsedTags('xmp', {}, ctx);
     }
     return parsedTags('xmp', XmpTags.read(view, [{dataOffset: 0, length: view.byteLength}], ctx.options.domParser, ctx.getDomParser), ctx);
+}
+
+// The brob XMP bound covers the decompressed Exif blocks of a file together, so
+// that several cannot each pass it.
+function takeDecompressedApplicationNotesAllowance(ctx, byteLength) {
+    if (!(typeof byteLength === 'number' && byteLength >= 0)) {
+        return false;
+    }
+    const total = (ctx.decompressedApplicationNotesSize || 0) + byteLength;
+    if (exceedsBrobXmpSizeBound(ctx, total)) {
+        return false;
+    }
+    ctx.decompressedApplicationNotesSize = total;
+    return true;
+}
+
+function exceedsBrobXmpSizeBound(ctx, byteLength) {
+    return !(typeof byteLength === 'number' && byteLength <= getInputSizeBound(ctx.dataView, BROB_XMP_SIZE_PER_INPUT_SIZE, BROB_XMP_SIZE_ALLOWANCE));
 }
 
 function getXmpMergeDescriptor(block) {

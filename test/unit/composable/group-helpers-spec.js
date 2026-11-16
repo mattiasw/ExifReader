@@ -11,6 +11,7 @@ import {
     parsedTags,
     getBlockDataView,
     getBrobDataView,
+    getInputSizeBound,
     getEmbeddableMergeDescriptor,
     isPngTextChunkBlock,
     mergeMakerNoteGroups,
@@ -65,6 +66,21 @@ describe('composable/group-helpers', () => {
 
             expect(getBrobDataView(dataView, {dataOffset: 4, length: 100}).byteLength).to.equal(6);
             expect(getBrobDataView(dataView, {dataOffset: 10, length: 100}).byteLength).to.equal(0);
+        });
+    });
+
+    describe('getInputSizeBound', () => {
+        it('should give the factor times the input size plus the allowance', () => {
+            expect(getInputSizeBound(getDataView('\x00'.repeat(1000)), 4, 64 * 1024)).to.equal(4 * 1000 + 64 * 1024);
+        });
+
+        it('should give the allowance alone without a view or a numeric byte length', () => {
+            expect(getInputSizeBound(undefined, 2, 10)).to.equal(10);
+            expect(getInputSizeBound({byteLength: '5'}, 2, 10)).to.equal(10);
+        });
+
+        it('should give NaN for a NaN byte length so that every bound check refuses', () => {
+            expect(getInputSizeBound({byteLength: NaN}, 2, 10)).to.be.NaN;
         });
     });
 

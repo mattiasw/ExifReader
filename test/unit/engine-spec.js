@@ -6,7 +6,7 @@ import {expect} from 'chai';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {getDataView} from './test-utils.js';
+import {getDataView, swapProperties} from './test-utils.js';
 import {run, createContext, validateComposition, MAX_BLOCK_DEPTH} from '../../src/engine.js';
 import {decompression} from '../../src/decompression.js';
 import {createTagFilter} from '../../src/tag-filter.js';
@@ -515,24 +515,16 @@ describe('engine', () => {
     });
 
     describe('context', () => {
-        it('should bound the decompressed ApplicationNotes by 4 times the file size plus 64 KiB cumulatively', () => {
-            const context = getContext({dataView: getDataView('\x00'.repeat(1000))});
-            const bound = 4 * 1000 + 64 * 1024;
+        it('should inherit no group state from Object.prototype', () => {
+            const restore = swapProperties(Object.prototype, {copiedThumbnailSize: -1e12});
+            let copiedThumbnailSize;
+            try {
+                copiedThumbnailSize = getContext().copiedThumbnailSize;
+            } finally {
+                restore();
+            }
 
-            expect(context.exceedsBrobXmpSizeBound(bound)).to.equal(false);
-            expect(context.exceedsBrobXmpSizeBound(bound + 1)).to.equal(true);
-            expect(context.takeDecompressedApplicationNotesAllowance(bound - 10)).to.equal(true);
-            expect(context.takeDecompressedApplicationNotesAllowance(11)).to.equal(false);
-            expect(context.takeDecompressedApplicationNotesAllowance(10)).to.equal(true);
-            expect(context.decompressedApplicationNotesSize).to.equal(bound);
-        });
-
-        it('should bound the embedded thumbnails by 2 times the file size plus 64 KiB', () => {
-            const context = getContext({dataView: getDataView('\x00'.repeat(1000))});
-
-            expect(context.embeddedThumbnailSizeBound).to.equal(2 * 1000 + 64 * 1024);
-            expect(context.copiedThumbnailSize).to.equal(0);
-            expect(context.hasEmbeddedThumbnailImage).to.equal(false);
+            expect(copiedThumbnailSize).to.equal(undefined);
         });
 
         it('should carry the options, the tag filter and the entry\'s helpers', () => {

@@ -7,17 +7,6 @@ import {isThenable, objectAssign} from './utils.js';
 // A finder block, a block it emits and a block emitted by that one.
 export const MAX_BLOCK_DEPTH = 3;
 
-// Brob XMP is bounded by the file size, as brob Exif is, plus room for one JPEG
-// standard XMP segment so that a small file can still carry a typical packet.
-const BROB_XMP_SIZE_PER_INPUT_SIZE = 4;
-const BROB_XMP_SIZE_ALLOWANCE = 64 * 1024;
-// An embedded thumbnail is sliced from a decoded or decompressed view that can be
-// far larger than the file. A real JPEG thumbnail shrinks only a little when
-// compressed, so bound the embedded thumbnails of a file by twice its size in
-// total, plus room for a typical thumbnail.
-const EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE = 2;
-const EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE = 64 * 1024;
-
 /**
  * Runs the composition's groups over the finder's blocks and the blocks the
  * groups emit, and collects their merge blocks in dispatch order.
@@ -254,7 +243,9 @@ function getNodeMergeBlocks(node) {
 
 /**
  * Builds the per-load state the groups share: the input, the options, the
- * budgets, the entry's helpers and the facts about what is composed.
+ * value budget, the entry's helpers and the facts about what is composed. A
+ * group keeps any state of its own on the context, created when it first needs
+ * it.
  *
  * @param {{dataView: DataView, options: object, tagFilter: object, decompressConfig: (object|undefined), getBase64Image: function, getDomParser: function, composed: object, decompression: (object|undefined)}} parts
  *     `composed` is the composition's `{formats, groups, kinds}` maps, which
@@ -268,42 +259,19 @@ function getNodeMergeBlocks(node) {
  *     use.
  */
 export function createContext({dataView, options, tagFilter, decompressConfig, getBase64Image, getDomParser, composed, decompression}) {
-    const inputByteLength = getInputByteLength(dataView);
-    const context = {
-        dataView,
-        options,
-        tagFilter,
-        decompressConfig,
-        getBase64Image,
-        getDomParser,
-        composed,
-        valueBudget: undefined,
-        decompressedApplicationNotesSize: 0,
-        copiedThumbnailSize: 0,
-        hasEmbeddedThumbnailImage: false,
-        compressedPngTextChunks: 0,
-        hasRawIptcProfile: undefined,
-        embeddedThumbnailSizeBound: EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE * inputByteLength + EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE,
-        decompress: decompression ? decompression.createPooledDecompress(decompressConfig) : undefined,
-        // The brob XMP bound covers the decompressed Exif blocks of a file
-        // together, so that several cannot each pass it.
-        takeDecompressedApplicationNotesAllowance(byteLength) {
-            if (context.exceedsBrobXmpSizeBound(context.decompressedApplicationNotesSize + byteLength)) {
-                return false;
-            }
-            context.decompressedApplicationNotesSize += byteLength;
-            return true;
-        },
-        exceedsBrobXmpSizeBound(byteLength) {
-            return byteLength > BROB_XMP_SIZE_PER_INPUT_SIZE * inputByteLength + BROB_XMP_SIZE_ALLOWANCE;
-        },
-    };
-
+    // No prototype, so a group's state is absent until the group sets it even if
+    // Object.prototype has that property; objectAssign would copy it from there.
+    const context = Object.create(null);
+    context.dataView = dataView;
+    context.options = options;
+    context.tagFilter = tagFilter;
+    context.decompressConfig = decompressConfig;
+    context.getBase64Image = getBase64Image;
+    context.getDomParser = getDomParser;
+    context.composed = composed;
+    context.valueBudget = undefined;
+    context.decompress = decompression ? decompression.createPooledDecompress(decompressConfig) : undefined;
     return context;
-}
-
-function getInputByteLength(dataView) {
-    return dataView !== undefined && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
 }
 
 /**

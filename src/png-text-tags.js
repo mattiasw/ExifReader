@@ -24,7 +24,8 @@ const MAX_COMPRESSED_TEXT_CHUNKS = 255;
  *
  * @param {object} block The finder's block.
  * @param {object} context The load context: `dataView`, `tagFilter` and the
- *     pooled `decompress`.
+ *     pooled `decompress`. `read` counts the load's compressed chunks on it as
+ *     `compressedPngTextChunks`, created on first use.
  * @returns {{tags: object, blocks?: Array<object>}|Promise<{tags: object, blocks?: Array<object>}>|undefined}
  *     The text tag, parse-filtered, or for a raw profile no tags and an emitted
  *     exif or iptc block whose `getDataView()` decodes the profile on demand
@@ -38,10 +39,11 @@ function read(block, context) {
     if (block.compression === undefined) {
         return classify(getUncompressedTag(context.dataView, block.text), context, false);
     }
-    if (context.compressedPngTextChunks >= MAX_COMPRESSED_TEXT_CHUNKS) {
+    const count = context.compressedPngTextChunks || 0;
+    if (count >= MAX_COMPRESSED_TEXT_CHUNKS) {
         return undefined;
     }
-    context.compressedPngTextChunks++;
+    context.compressedPngTextChunks = count + 1;
     return decompressTextChunk(context, block).then((tag) => classify(tag, context, true));
 }
 

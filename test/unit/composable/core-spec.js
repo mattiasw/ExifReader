@@ -763,6 +763,20 @@ describe('composable/core', () => {
             expect(tags.metadataRange.blocks.map((block) => block.type)).to.deep.equal(['file', 'jfif', 'exif', 'xmp']);
         });
 
+        it('should give each load of one reader the whole compressed text chunk cap, also concurrent loads', async () => {
+            const reader = createReader({formats: [png]});
+            const image = getPng(...Array.from({length: 260}, (_, i) => getZtxtChunk('k' + i, 'v' + i)));
+            const expectedKeys = Array.from({length: 255}, (_, i) => 'k' + i);
+            const getTextKeys = (tags) => Object.keys(tags.png).filter((key) => /^k\d+$/.test(key));
+
+            const concurrent = await Promise.all([reader.load(getDataView(image)), reader.load(getDataView(image))]);
+            const sequential = [await reader.load(getDataView(image)), await reader.load(getDataView(image))];
+
+            for (const tags of concurrent.concat(sequential)) {
+                expect(getTextKeys(tags)).to.deep.equal(expectedKeys);
+            }
+        });
+
         describe('decompress', () => {
             const LIMIT = 4096;
             const EXIF_BLOCK = '\x00\x00\x00\x00' + getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]});
