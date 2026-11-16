@@ -3,23 +3,23 @@
     "dist": {"version": "4.54.0", "raw": 156197, "gzip": 46919, "maxRatio": 1.04},
     "consumers": {
         "webpack": {
-            "composable-jpeg-datetime": 13015,
-            "composable-jpeg-datetime-filter": 14791,
-            "composable-jpeg-exif": 19520,
-            "composable-jpeg-floor": 9381,
-            "composable-jpeg-iptc-byline": 14562,
-            "composable-tiff-floor": 7047,
-            "composable-tiff-gps": 10961,
+            "composable-jpeg-datetime": 12737,
+            "composable-jpeg-datetime-filter": 14510,
+            "composable-jpeg-exif": 19282,
+            "composable-jpeg-floor": 9371,
+            "composable-jpeg-iptc-byline": 14314,
+            "composable-tiff-floor": 7037,
+            "composable-tiff-gps": 10666,
             "legacy-stock": 47389
         },
         "esbuild": {
-            "composable-jpeg-datetime": 13137,
-            "composable-jpeg-datetime-filter": 14946,
-            "composable-jpeg-exif": 19431,
-            "composable-jpeg-floor": 9631,
-            "composable-jpeg-iptc-byline": 14819,
-            "composable-tiff-floor": 7244,
-            "composable-tiff-gps": 11095,
+            "composable-jpeg-datetime": 12868,
+            "composable-jpeg-datetime-filter": 14678,
+            "composable-jpeg-exif": 19199,
+            "composable-jpeg-floor": 9617,
+            "composable-jpeg-iptc-byline": 14607,
+            "composable-tiff-floor": 7235,
+            "composable-tiff-gps": 10820,
             "legacy-stock": 48640
         }
     }
