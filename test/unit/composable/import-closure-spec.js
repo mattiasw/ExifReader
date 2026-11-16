@@ -58,6 +58,16 @@ describe('composable import closure', () => {
         ])).to.not.include(decompressionModule);
     });
 
+    it('keeps tags-helpers.js out of a reader without an Exif, IPTC, MPF or maker-note reader', () => {
+        const tagsHelpersModule = fromRoot('src/tags-helpers.js');
+
+        expect(getImportClosure([fromRoot('src/composable/groups/exif.js')])).to.include(tagsHelpersModule);
+        expect(getImportClosure([
+            fromRoot('src/composable/core.js'),
+            fromRoot('src/composable/formats.js')
+        ])).to.not.include(tagsHelpersModule);
+    });
+
     it('reports code references to Buffer', () => {
         const source = 'if (typeof Buffer !== \'undefined\') {\n    use(Buffer.from(x));\n}';
 

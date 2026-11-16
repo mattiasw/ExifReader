@@ -89,7 +89,7 @@ import {
 // Rule 1:  image-header-jpeg.js (getExifMarkerScore), image-header-png.js, image-header-jxl.js, png-text-tags.js
 // Rule 2:  engine.js (rank, suppression), exif-reader.js (the rules), image-header-jxl.js, image-header-png.js, png-text-tags.js
 // Rule 3:  loadview-pipeline.js, exif-reader.js
-// Rule 4:  engine.js (dispatch order, context), exif-reader.js (the adapters), tags-helpers.js, png-text-tags.js
+// Rule 4:  engine.js (dispatch order, context), composable/value-budget.js (the shared budget), exif-reader.js (the adapters), tags-helpers.js, png-text-tags.js
 // Rule 5:  loadview-pipeline.js, exif-reader.js (mergeBlocks)
 // Rule 6:  loadview-pipeline.js
 // Rule 7:  loadview-pipeline.js, exif-reader.js (the thumbnail group), composite.js

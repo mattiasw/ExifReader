@@ -13,6 +13,7 @@ import * as IptcTagDescriptors from '../../../src/composable/tags/iptc.js';
 import {ByLine, Keywords, DateCreated} from '../../../src/composable/tags/iptc.js';
 import * as ExifTagDescriptors from '../../../src/composable/tags/exif.js';
 import {IPTCNAA} from '../../../src/composable/tags/exif.js';
+import {getSharedValueBudget} from '../../../src/composable/value-budget.js';
 import {getContext} from './test-context.js';
 import {getNaaBlock, headline} from '../loadview-inventory-images.js';
 
@@ -79,13 +80,13 @@ describe('composable/iptc-block-reader', () => {
 
         it('should draw every dataset from the shared value budget', () => {
             const ctx = getContext();
-            ctx.getValueBudget().iptcDatasetsRemaining = 1;
+            getSharedValueBudget(ctx).iptcDatasetsRemaining = 1;
             const block = getBlock(getNaaBlock([headline('H'), byLine('A')]));
 
             const {tags} = iptcBlockReader.createParseOnlyGroup([ByLine]).read(block, ctx);
 
             expect(tags).to.deep.equal({});
-            expect(ctx.getValueBudget().iptcDatasetsRemaining).to.equal(0);
+            expect(getSharedValueBudget(ctx).iptcDatasetsRemaining).to.equal(0);
         });
     });
 

@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {isThenable, objectAssign} from './utils.js';
-import {getValueBudget} from './tags-helpers.js';
 
 // A finder block, a block it emits and a block emitted by that one.
 export const MAX_BLOCK_DEPTH = 3;
@@ -264,7 +263,9 @@ function getNodeMergeBlocks(node) {
  *     `decompressConfig` is undefined too.
  * @returns {object} The context, with `decompress` running through a pool of at
  *     most four tasks when `decompression` is given, else undefined, and
- *     `getValueBudget(view)` creating one budget on its first call.
+ *     `valueBudget` holding the load's one value budget, which
+ *     `getSharedValueBudget` in `composable/value-budget.js` creates on first
+ *     use.
  */
 export function createContext({dataView, options, tagFilter, decompressConfig, getBase64Image, getDomParser, composed, decompression}) {
     const inputByteLength = getInputByteLength(dataView);
@@ -284,18 +285,6 @@ export function createContext({dataView, options, tagFilter, decompressConfig, g
         hasRawIptcProfile: undefined,
         embeddedThumbnailSizeBound: EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE * inputByteLength + EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE,
         decompress: decompression ? decompression.createPooledDecompress(decompressConfig) : undefined,
-        // The main Exif block creates the budget from its view; later callers
-        // get the same object, whatever view they pass. The view is only
-        // missing in unit tests that fake the readers.
-        getValueBudget(view) {
-            if (context.valueBudget === undefined) {
-                const budgetView = view || dataView;
-                if (budgetView !== undefined) {
-                    context.valueBudget = getValueBudget(budgetView);
-                }
-            }
-            return context.valueBudget;
-        },
         // The brob XMP bound covers the decompressed Exif blocks of a file
         // together, so that several cannot each pass it.
         takeDecompressedApplicationNotesAllowance(byteLength) {

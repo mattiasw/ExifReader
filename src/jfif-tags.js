@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import Types from './types.js';
+import {getShortAt, getByteAt} from './types.js';
 
 export default {
     read
@@ -39,7 +39,7 @@ function read(dataView, jfifDataOffset) {
 
 function getLength(dataView, jfifDataOffset) {
     // The declared length is untrusted, so bound it by the bytes present.
-    return Math.min(Types.getShortAt(dataView, jfifDataOffset), dataView.byteLength - jfifDataOffset);
+    return Math.min(getShortAt(dataView, jfifDataOffset), dataView.byteLength - jfifDataOffset);
 }
 
 function getVersion(dataView, jfifDataOffset, length) {
@@ -50,8 +50,8 @@ function getVersion(dataView, jfifDataOffset, length) {
         return undefined;
     }
 
-    const majorVersion = Types.getByteAt(dataView, jfifDataOffset + OFFSET);
-    const minorVersion = Types.getByteAt(dataView, jfifDataOffset + OFFSET + 1);
+    const majorVersion = getByteAt(dataView, jfifDataOffset + OFFSET);
+    const minorVersion = getByteAt(dataView, jfifDataOffset + OFFSET + 1);
     return {
         value: majorVersion * 0x100 + minorVersion,
         description: majorVersion + '.' + minorVersion
@@ -66,7 +66,7 @@ function getResolutionUnit(dataView, jfifDataOffset, length) {
         return undefined;
     }
 
-    const value = Types.getByteAt(dataView, jfifDataOffset + OFFSET);
+    const value = getByteAt(dataView, jfifDataOffset + OFFSET);
     return {
         value,
         description: getResolutionUnitDescription(value)
@@ -94,7 +94,7 @@ function getXResolution(dataView, jfifDataOffset, length) {
         return undefined;
     }
 
-    const value = Types.getShortAt(dataView, jfifDataOffset + OFFSET);
+    const value = getShortAt(dataView, jfifDataOffset + OFFSET);
     return {
         value,
         description: '' + value
@@ -109,7 +109,7 @@ function getYResolution(dataView, jfifDataOffset, length) {
         return undefined;
     }
 
-    const value = Types.getShortAt(dataView, jfifDataOffset + OFFSET);
+    const value = getShortAt(dataView, jfifDataOffset + OFFSET);
     return {
         value,
         description: '' + value
@@ -124,7 +124,7 @@ function getThumbnailWidth(dataView, jfifDataOffset, length) {
         return undefined;
     }
 
-    const value = Types.getByteAt(dataView, jfifDataOffset + OFFSET);
+    const value = getByteAt(dataView, jfifDataOffset + OFFSET);
     return {
         value,
         description: `${value}px`
@@ -139,7 +139,7 @@ function getThumbnailHeight(dataView, jfifDataOffset, length) {
         return undefined;
     }
 
-    const value = Types.getByteAt(dataView, jfifDataOffset + OFFSET);
+    const value = getByteAt(dataView, jfifDataOffset + OFFSET);
     return {
         value,
         description: `${value}px`

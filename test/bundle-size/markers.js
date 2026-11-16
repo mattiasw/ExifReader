@@ -290,6 +290,7 @@ const UNPROBEABLE_REASONS = {
     'read-view.js': `the load pipeline, in every build since the entry point's loadView delegates to it, and ${NO_UNIQUE_LITERAL}`,
     'tag-binding-name.js': NO_UNIQUE_LITERAL,
     'tiff.js': COMPOSABLE_TABLE_MODULE,
+    'value-budget.js': NO_UNIQUE_LITERAL,
     'webp.js': COMPOSABLE_TABLE_MODULE,
     'xmp.js': COMPOSABLE_TABLE_MODULE
 };

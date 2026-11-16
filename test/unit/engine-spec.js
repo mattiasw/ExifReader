@@ -515,30 +515,6 @@ describe('engine', () => {
     });
 
     describe('context', () => {
-        it('should create the value budget once, from the first view given, and ignore later views', () => {
-            const context = getContext();
-            const first = getDataView('\x00'.repeat(100));
-
-            const budget = context.getValueBudget(first);
-
-            expect(budget.ifdEntriesRemaining).to.equal(Math.floor(100 / 12) * 4);
-            expect(context.getValueBudget(getDataView('\x00'.repeat(2000)))).to.equal(budget);
-            expect(context.getValueBudget()).to.equal(budget);
-            expect(context.valueBudget).to.equal(budget);
-        });
-
-        it('should create the value budget from the file view when no view is given', () => {
-            const context = getContext({dataView: getDataView('\x00'.repeat(120))});
-
-            expect(context.getValueBudget().ifdEntriesRemaining).to.equal(10 * 4);
-        });
-
-        it('should give no value budget without any view', () => {
-            const context = createContext({dataView: undefined, options: {}, tagFilter: createTagFilter()});
-
-            expect(context.getValueBudget()).to.be.undefined;
-        });
-
         it('should bound the decompressed ApplicationNotes by 4 times the file size plus 64 KiB cumulatively', () => {
             const context = getContext({dataView: getDataView('\x00'.repeat(1000))});
             const bound = 4 * 1000 + 64 * 1024;

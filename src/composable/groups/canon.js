@@ -4,12 +4,13 @@
 
 import CanonTags from '../../canon-tags.js';
 import {getEmbeddableMergeDescriptor, readMakerNoteWithDecoders} from '../group-helpers.js';
+import {getSharedValueBudget} from '../value-budget.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const canonDecoder = {
     name: 'canon',
     matches: (block) => Array.isArray(block.make) && block.make[0] === 'Canon',
-    read: (block, ctx) => CanonTags.read(block.tiffView, block.tiffHeaderOffset, block.makerNoteOffset, block.byteOrder, ctx.options.includeUnknown, ctx.options.computed, ctx.tagFilter, ctx.getValueBudget()),
+    read: (block, ctx) => CanonTags.read(block.tiffView, block.tiffHeaderOffset, block.makerNoteOffset, block.byteOrder, ctx.options.includeUnknown, ctx.options.computed, ctx.tagFilter, getSharedValueBudget(ctx)),
 };
 
 export const canon = {

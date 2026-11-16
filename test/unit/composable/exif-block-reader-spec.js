@@ -18,6 +18,7 @@ import {EXIF_EMITTED_KINDS, exifBlockReader, readExifBlock, getExifMergeDescript
 import * as ExifTagDescriptors from '../../../src/composable/tags/exif.js';
 import {DateTime, ExposureTime, GPSLatitudeRef, InteroperabilityIndex, WhiteBalance, Make} from '../../../src/composable/tags/exif.js';
 import {ByLine} from '../../../src/composable/tags/iptc.js';
+import {getSharedValueBudget} from '../../../src/composable/value-budget.js';
 import {getContext, recordCalls} from './test-context.js';
 import {TAG_MAKE, TAG_MODEL, ascii, short, getTiff} from '../loadview-inventory-images.js';
 
@@ -186,7 +187,8 @@ describe('composable/exif-block-reader', () => {
             // Reading Exif draws no IPTC datasets, so this count still shows which view sized the budget.
             expect(ctx.valueBudget.iptcDatasetsRemaining).to.equal(getValueBudget(view).iptcDatasetsRemaining);
             expect(getValueBudget(ctx.dataView).iptcDatasetsRemaining).to.not.equal(getValueBudget(view).iptcDatasetsRemaining);
-            expect(ctx.getValueBudget()).to.equal(ctx.valueBudget);
+            const budget = ctx.valueBudget;
+            expect(getSharedValueBudget(ctx)).to.equal(budget);
         });
 
         it('should read nothing from a block without a TIFF header offset', () => {

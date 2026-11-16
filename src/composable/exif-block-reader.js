@@ -11,6 +11,7 @@ import {addDecompressedValueAllowance} from '../tags-helpers.js';
 import {filterTagsForParse} from '../tag-filter.js';
 import {EXIF_POINTER_TAGS} from '../tag-filter-config.js';
 import {getBlockDataView, getBrobDataView} from './group-helpers.js';
+import {getSharedValueBudget} from './value-budget.js';
 import {GROUP_BRAND} from './brand.js';
 
 export const EXIF_EMITTED_KINDS = ['iptc', 'xmp', 'photoshop', 'icc', 'makerNote', 'thumbnail'];
@@ -121,7 +122,7 @@ export function readExifBlock(block, ctx, tagNames) {
 // draws from the shared one and, when decompressed, adds its allowance.
 function readExifView(view, tiffHeaderOffset, ctx, {carried, decompressed}, tagNames) {
     const isMain = carried === 'main';
-    const valueBudget = isMain ? ctx.getValueBudget(view) : ctx.getValueBudget();
+    const valueBudget = isMain ? getSharedValueBudget(ctx, view) : getSharedValueBudget(ctx);
     if (decompressed) {
         addDecompressedValueAllowance(valueBudget, view.byteLength);
     }

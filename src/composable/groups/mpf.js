@@ -4,6 +4,7 @@
 
 import MpfTags from '../../mpf-tags.js';
 import {parsedTags} from '../group-helpers.js';
+import {getSharedValueBudget} from '../value-budget.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const mpf = {
@@ -16,7 +17,7 @@ export const mpf = {
         ctx.options.includeUnknown,
         ctx.options.computed,
         ctx.tagFilter,
-        ctx.getValueBudget(),
+        getSharedValueBudget(ctx),
         ctx.getBase64Image
     ), ctx),
     merge: () => ({slot: 'mpf', mode: 'assign'}),

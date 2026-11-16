@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import Types from './types.js';
+import {getShortAt, getByteAt} from './types.js';
 
 export default {
     read
@@ -22,7 +22,7 @@ function read(dataView, fileDataOffset) {
 
 function getLength(dataView, fileDataOffset) {
     // The declared length is untrusted, so bound it by the bytes present.
-    return Math.min(Types.getShortAt(dataView, fileDataOffset), dataView.byteLength - fileDataOffset);
+    return Math.min(getShortAt(dataView, fileDataOffset), dataView.byteLength - fileDataOffset);
 }
 
 function getDataPrecision(dataView, fileDataOffset, length) {
@@ -33,7 +33,7 @@ function getDataPrecision(dataView, fileDataOffset, length) {
         return undefined;
     }
 
-    const value = Types.getByteAt(dataView, fileDataOffset + OFFSET);
+    const value = getByteAt(dataView, fileDataOffset + OFFSET);
     return {
         value,
         description: '' + value
@@ -48,7 +48,7 @@ function getImageHeight(dataView, fileDataOffset, length) {
         return undefined;
     }
 
-    const value = Types.getShortAt(dataView, fileDataOffset + OFFSET);
+    const value = getShortAt(dataView, fileDataOffset + OFFSET);
     return {
         value,
         description: `${value}px`
@@ -63,7 +63,7 @@ function getImageWidth(dataView, fileDataOffset, length) {
         return undefined;
     }
 
-    const value = Types.getShortAt(dataView, fileDataOffset + OFFSET);
+    const value = getShortAt(dataView, fileDataOffset + OFFSET);
     return {
         value,
         description: `${value}px`
@@ -78,7 +78,7 @@ function getNumberOfColorComponents(dataView, fileDataOffset, length) {
         return undefined;
     }
 
-    const value = Types.getByteAt(dataView, fileDataOffset + OFFSET);
+    const value = getByteAt(dataView, fileDataOffset + OFFSET);
     return {
         value,
         description: '' + value
@@ -98,9 +98,9 @@ function getSubsampling(dataView, fileDataOffset, numberOfColorComponents, lengt
     for (let i = 0; i < numberOfColorComponents; i++) {
         const componentOffset = fileDataOffset + OFFSET + i * 3;
         components.push([
-            Types.getByteAt(dataView, componentOffset),
-            Types.getByteAt(dataView, componentOffset + 1),
-            Types.getByteAt(dataView, componentOffset + 2)
+            getByteAt(dataView, componentOffset),
+            getByteAt(dataView, componentOffset + 1),
+            getByteAt(dataView, componentOffset + 2)
         ]);
     }
 

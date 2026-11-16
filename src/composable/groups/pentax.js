@@ -5,12 +5,13 @@
 import {getStringValueFromArray} from '../../utils.js';
 import PentaxTags from '../../pentax-tags.js';
 import {getEmbeddableMergeDescriptor, readMakerNoteWithDecoders} from '../group-helpers.js';
+import {getSharedValueBudget} from '../value-budget.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const pentaxDecoder = {
     name: 'pentax',
     matches: (block) => hasPentaxType1Prefix(block.bytes),
-    read: (block, ctx) => PentaxTags.read(block.tiffView, block.tiffHeaderOffset, block.makerNoteOffset, ctx.options.includeUnknown, ctx.options.computed, ctx.tagFilter, ctx.getValueBudget()),
+    read: (block, ctx) => PentaxTags.read(block.tiffView, block.tiffHeaderOffset, block.makerNoteOffset, ctx.options.includeUnknown, ctx.options.computed, ctx.tagFilter, getSharedValueBudget(ctx)),
 };
 
 export const pentax = {

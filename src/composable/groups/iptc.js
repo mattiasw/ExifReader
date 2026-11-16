@@ -6,6 +6,7 @@ import IptcTags from '../../iptc-tags.js';
 import IptcTagNames from '../../iptc-tag-names.js';
 import {addDecompressedIptcAllowance} from '../../tags-helpers.js';
 import {parsedTags, getBlockDataView, getEmbeddableMergeDescriptor, isPngTextChunkBlock} from '../group-helpers.js';
+import {getSharedValueBudget} from '../value-budget.js';
 import {GROUP_BRAND} from '../brand.js';
 
 export const iptc = /* #__PURE__ */ createIptcGroup(readWithFullDictionary);
@@ -61,7 +62,7 @@ export function withRepeatableAsArrays(tags, tagNames) {
 // A carried IPTC-NAA draws no allowance; a decompressed raw profile does.
 function readIptcBlock(block, ctx, readTags) {
     const view = getBlockDataView(block, ctx);
-    const valueBudget = ctx.getValueBudget();
+    const valueBudget = getSharedValueBudget(ctx);
     if (block.origin === 'rawProfile' && block.decompressed) {
         addDecompressedIptcAllowance(valueBudget, view.byteLength);
     }
