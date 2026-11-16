@@ -55,6 +55,7 @@ const MODULE_MARKERS = {
     'iptc-tag-names.js': 'Model Version',
     'iptc-tag-names-descriptions.js': 'IPTC7901 Recommended Message Format',
     'xml.js': '<?xpacket begin',
+    'dom-parser.js': 'Warning: DOMParser is not available.',
     'xmp-tags.js': 'application/xml',
     'xmp-namespaces.js': 'prefix not bound to a namespace',
     'xmp-tag-names.js': 'Mirror horizontal',
@@ -130,6 +131,7 @@ const MODULE_PROBES = {
     ],
     xmp: [
         {label: 'xml.js', when: whenIncluded('xmp')},
+        {label: 'dom-parser.js', when: whenIncluded('xmp')},
         {label: 'xmp-tags.js', when: whenIncluded('xmp')},
         {label: 'xmp-namespaces.js', when: whenIncluded('xmp')},
         {label: 'xmp-tag-names.js', when: whenIncluded('xmp')}
@@ -229,7 +231,6 @@ const UNPROBEABLE_REASONS = {
     'base64-image.js': NO_UNIQUE_LITERAL,
     'composite.js': NO_UNIQUE_LITERAL,
     'constants.js': NO_UNIQUE_LITERAL,
-    'dom-parser.js': NO_UNIQUE_LITERAL,
     'ifd-types.js': NO_UNIQUE_LITERAL,
     'image-header-avif.js': NO_UNIQUE_LITERAL,
     'image-header-iso-bmff-iloc.js': NO_UNIQUE_LITERAL,

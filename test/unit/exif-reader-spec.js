@@ -9,6 +9,7 @@ import {deflateSync} from 'node:zlib';
 import {expect} from 'chai';
 import {getCharacterArray} from '../../src/utils.js';
 import {getBase64Image} from '../../src/base64-image.js';
+import DOMParser from '../../src/dom-parser.js';
 import * as ExifReader from '../../src/exif-reader.js';
 import ByteOrder from '../../src/byte-order.js';
 import {getArrayBuffer, getDataView, getByteStringFromNumber, getConsoleWarnSpy, swapProperties} from './test-utils.js';
@@ -5079,6 +5080,63 @@ describe('exif-reader', function () {
                 }
             }
             return entries.concat(groups.map((group) => group.key));
+        }
+    });
+
+    describe('the environment handed to the engine', () => {
+        it('should hand over the DOM parser getter and the base64 helper by default', () => {
+            const environment = captureEnvironment();
+
+            expect(environment.getDomParser).to.equal(DOMParser.get);
+            expect(environment.getBase64Image).to.equal(getBase64Image);
+        });
+
+        it('should hand over no DOM parser getter without USE_XMP', () => {
+            swap(Constants, {USE_XMP: false});
+
+            expect(captureEnvironment().getDomParser).to.equal(undefined);
+        });
+
+        it('should hand over no base64 helper without USE_THUMBNAIL and USE_MPF', () => {
+            swap(Constants, {USE_THUMBNAIL: false, USE_MPF: false});
+
+            expect(captureEnvironment().getBase64Image).to.equal(undefined);
+        });
+
+        it('should hand over no base64 helper without USE_EXIF and USE_MPF', () => {
+            swap(Constants, {USE_EXIF: false, USE_MPF: false});
+
+            expect(captureEnvironment().getBase64Image).to.equal(undefined);
+        });
+
+        for (const flag of ['USE_THUMBNAIL', 'USE_MPF', 'USE_EXIF']) {
+            it(`should still hand over the base64 helper without ${flag} alone`, () => {
+                swap(Constants, {[flag]: false});
+
+                expect(captureEnvironment().getBase64Image).to.equal(getBase64Image);
+            });
+        }
+
+        function captureEnvironment() {
+            const environments = [];
+            for (const group of [exifGroup, xmpGroup]) {
+                const originalRead = group.read;
+                swap(group, {
+                    read(block, ctx) {
+                        environments.push({getDomParser: ctx.getDomParser, getBase64Image: ctx.getBase64Image});
+                        return originalRead(block, ctx);
+                    }
+                });
+            }
+
+            const warnSpy = getConsoleWarnSpy();
+            try {
+                ExifReader.loadView(getDataView(getWebpWithMetadata()));
+            } finally {
+                warnSpy.reset();
+            }
+
+            return environments[0];
         }
     });
 });

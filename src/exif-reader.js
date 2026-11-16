@@ -74,7 +74,7 @@ function loadFromData(data, options) {
 }
 
 export function loadView(dataView, options = {}) {
-    return readView(getDefaultComposition(), dataView, options, {getDomParser: DOMParser.get, getBase64Image, createTagFilter});
+    return readView(getDefaultComposition(), dataView, options, getEnvironment());
 }
 
 function getDefaultComposition() {
@@ -85,6 +85,16 @@ function getDefaultComposition() {
         defaultCompositionEntries = entries;
     }
     return defaultComposition;
+}
+
+// Each helper is behind the flags of the groups that read it, so that a
+// custom build without them folds the helper's module away.
+function getEnvironment() {
+    return {
+        getDomParser: Constants.USE_XMP ? DOMParser.get : undefined,
+        getBase64Image: (Constants.USE_EXIF && Constants.USE_THUMBNAIL) || Constants.USE_MPF ? getBase64Image : undefined,
+        createTagFilter,
+    };
 }
 
 // Every format and group, each inside its build gate so that a custom build
