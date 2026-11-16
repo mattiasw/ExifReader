@@ -4,6 +4,8 @@
 
 import {filterTagsForParse} from '../tag-filter.js';
 
+const DECODER_ORDER = ['canon', 'pentax'];
+
 export function parsedTags(groupKey, readTags, ctx) {
     return {tags: filterTagsForParse(groupKey, readTags, ctx.tagFilter)};
 }
@@ -31,6 +33,45 @@ export function getEmbeddableMergeDescriptor(block, slot, carriedSlot) {
 
 export function isPngTextChunkBlock(block) {
     return block.text !== undefined;
+}
+
+/**
+ * Merges the engine groups consuming maker notes into one with the union of
+ * their decoders, since two groups reading the same maker note would read it
+ * twice.
+ *
+ * @param {Array<object>} groups The engine groups, each listed once.
+ * @returns {Array<object>} The same array when fewer than two groups consume
+ *     maker notes, otherwise the other groups in their order followed by the
+ *     merged group, which has the first maker note group's key and `merge`.
+ */
+export function mergeMakerNoteGroups(groups) {
+    const makerNoteGroups = groups.filter(consumesMakerNote);
+    if (makerNoteGroups.length < 2) {
+        return groups;
+    }
+
+    let decoders = [];
+    for (let i = 0; i < makerNoteGroups.length; i++) {
+        decoders = decoders.concat(makerNoteGroups[i].decoders);
+    }
+    decoders = decoders
+        .filter((decoder, index) => decoders.indexOf(decoder) === index)
+        .sort((a, b) => DECODER_ORDER.indexOf(a.name) - DECODER_ORDER.indexOf(b.name));
+
+    const merged = {
+        key: makerNoteGroups[0].key,
+        consumes: ['makerNote'],
+        emits: [],
+        decoders,
+        read: (block, ctx) => readMakerNoteWithDecoders(block, ctx, decoders),
+        merge: makerNoteGroups[0].merge,
+    };
+    return groups.filter((group) => !consumesMakerNote(group)).concat([merged]);
+}
+
+function consumesMakerNote(group) {
+    return group.consumes.indexOf('makerNote') !== -1;
 }
 
 /**

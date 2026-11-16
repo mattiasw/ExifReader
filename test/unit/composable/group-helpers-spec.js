@@ -4,6 +4,8 @@
 
 import {expect} from 'chai';
 import {getDataView} from '../test-utils.js';
+import CanonTags from '../../../src/canon-tags.js';
+import PentaxTags from '../../../src/pentax-tags.js';
 import {createTagFilter} from '../../../src/tag-filter.js';
 import {
     parsedTags,
@@ -11,11 +13,24 @@ import {
     getBrobDataView,
     getEmbeddableMergeDescriptor,
     isPngTextChunkBlock,
+    mergeMakerNoteGroups,
     readMakerNoteWithDecoders,
 } from '../../../src/composable/group-helpers.js';
-import {getContext} from './test-context.js';
+import {canon, canonDecoder} from '../../../src/composable/groups/canon.js';
+import {pentax, pentaxDecoder} from '../../../src/composable/groups/pentax.js';
+import {makerNotes} from '../../../src/composable/groups/maker-notes.js';
+import {getContext, recordCalls} from './test-context.js';
+import {getMakerNoteBlock, getPentaxType1Bytes} from './groups/maker-note-test-data.js';
 
 describe('composable/group-helpers', () => {
+    const restores = [];
+
+    afterEach(() => {
+        while (restores.length > 0) {
+            restores.pop()();
+        }
+    });
+
     it('should filter parsed tags by the context\'s filter for the group', () => {
         const ctx = getContext({tagFilter: createTagFilter({includeTags: {exif: ['Make']}})});
 
@@ -68,6 +83,72 @@ describe('composable/group-helpers', () => {
     it('should tell a PNG text chunk block by its text', () => {
         expect(isPngTextChunkBlock({kind: 'exif', text: {}})).to.equal(true);
         expect(isPngTextChunkBlock({kind: 'exif'})).to.equal(false);
+    });
+
+    describe('mergeMakerNoteGroups', () => {
+        it('should return the very same groups when none consumes a maker note', () => {
+            const groups = [getOtherGroup('a'), getOtherGroup('b')];
+
+            expect(mergeMakerNoteGroups(groups)).to.equal(groups);
+            expect(mergeMakerNoteGroups([])).to.deep.equal([]);
+        });
+
+        it('should return the very same groups when only one consumes a maker note', () => {
+            const groups = [getOtherGroup('a'), canon, getOtherGroup('b')];
+
+            expect(mergeMakerNoteGroups(groups)).to.equal(groups);
+        });
+
+        it('should merge the maker note groups into one with both decoders, Canon first, whatever the order', () => {
+            const lists = [
+                [canon, pentax],
+                [pentax, canon],
+                [makerNotes, canon],
+                [pentax, makerNotes],
+                [makerNotes, canon, pentax],
+            ];
+            for (const groups of lists) {
+                const label = groups.map((group) => group.decoders.map((decoder) => decoder.name).join('+')).join();
+
+                const merged = mergeMakerNoteGroups(groups);
+
+                expect(merged, label).to.have.lengthOf(1);
+                expect(merged[0].key, label).to.equal('makerNotes');
+                expect(merged[0].consumes, label).to.deep.equal(['makerNote']);
+                expect(merged[0].emits, label).to.deep.equal([]);
+                expect(merged[0].decoders, label).to.deep.equal([canonDecoder, pentaxDecoder]);
+                expect(merged[0].merge, label).to.equal(groups[0].merge);
+            }
+        });
+
+        it('should keep the other groups in their order, with the merged group last', () => {
+            const first = getOtherGroup('a');
+            const second = getOtherGroup('b');
+
+            const merged = mergeMakerNoteGroups([first, pentax, second, canon]);
+
+            expect(merged).to.have.lengthOf(3);
+            expect(merged[0]).to.equal(first);
+            expect(merged[1]).to.equal(second);
+            expect(merged[2].decoders).to.deep.equal([canonDecoder, pentaxDecoder]);
+        });
+
+        it('should read with the merged decoders, Canon by Make before Pentax by prefix', () => {
+            const [merged] = mergeMakerNoteGroups([pentax, canon]);
+            const canonReads = recordCalls(CanonTags, 'read', {Canon: {value: 1}});
+            const pentaxReads = recordCalls(PentaxTags, 'read', {Pentax: {value: 1}});
+            restores.push(canonReads.restore, pentaxReads.restore);
+
+            expect(merged.read(getMakerNoteBlock({make: ['Canon'], bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Canon: {value: 1}}});
+            expect(merged.read(getMakerNoteBlock({make: ['PENTAX'], bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Pentax: {value: 1}}});
+            expect(merged.read(getMakerNoteBlock({make: ['Nikon']}), getContext())).to.equal(undefined);
+            expect(canonReads.calls).to.have.lengthOf(1);
+            expect(pentaxReads.calls).to.have.lengthOf(1);
+        });
+
+        function getOtherGroup(key) {
+            return {key, consumes: ['exif'], emits: [], read: () => undefined, merge: () => ({})};
+        }
     });
 
     describe('readMakerNoteWithDecoders', () => {

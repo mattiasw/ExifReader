@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {validateComposition} from '../engine.js';
-import {isPngTextChunkBlock, readMakerNoteWithDecoders} from './group-helpers.js';
+import {isPngTextChunkBlock} from './group-helpers.js';
 
 const DETECTION_ORDER = ['tiff', 'jpeg', 'png', 'heic', 'avif', 'jxl', 'webp', 'gif', 'xml'];
 // By the first kind a group consumes. The engine dispatches finder blocks in
@@ -13,7 +13,6 @@ const DISPATCH_ORDER = [
     'riff', 'gif', 'jxlFile', 'isoBmffFile', 'photoshop', 'makerNote', 'thumbnail',
 ];
 const DERIVED_ORDER = ['gps', 'composite'];
-const DECODER_ORDER = ['canon', 'pentax'];
 
 export default {
     createComposition,
@@ -23,7 +22,8 @@ export default {
  * Turns a formats table and a groups table into what the engine runs, in a
  * fixed detection and dispatch order whatever order they are listed in. A
  * format or reader listed twice, or brought by two formats, is used once, and
- * the groups reading maker notes become one with the union of their decoders.
+ * a group carrying `combine` combines the engine groups, which makes the
+ * maker note groups one.
  *
  * @param {{formats: Array<object>, groups: Array<object>}} tables The formats,
  *     each `{header, readers}`, and the groups, block-reading ones as engine
@@ -65,39 +65,20 @@ function getEngineGroups(formats, groups) {
     candidates = candidates.concat(groups.filter((group) => !isDerivedGroup(group)));
 
     const readers = unique(candidates.filter((group) => group !== undefined));
-    return sortByOrder(mergeMakerNoteGroups(readers), DISPATCH_ORDER, (group) => group.consumes[0]);
+    return sortByOrder(combineGroups(readers), DISPATCH_ORDER, (group) => group.consumes[0]);
 }
 
 function isDerivedGroup(group) {
     return group.mergeDeps !== undefined;
 }
 
-// Two groups reading the same maker note would read it twice.
-function mergeMakerNoteGroups(groups) {
-    const makerNoteGroups = groups.filter(consumesMakerNote);
-    if (makerNoteGroups.length < 2) {
-        return groups;
+function combineGroups(groups) {
+    for (let i = 0; i < groups.length; i++) {
+        if (groups[i].combine !== undefined) {
+            return groups[i].combine(groups);
+        }
     }
-
-    let decoders = [];
-    for (let i = 0; i < makerNoteGroups.length; i++) {
-        decoders = decoders.concat(makerNoteGroups[i].decoders);
-    }
-    decoders = sortByOrder(unique(decoders), DECODER_ORDER, (decoder) => decoder.name);
-
-    const merged = {
-        key: makerNoteGroups[0].key,
-        consumes: ['makerNote'],
-        emits: [],
-        decoders,
-        read: (block, ctx) => readMakerNoteWithDecoders(block, ctx, decoders),
-        merge: makerNoteGroups[0].merge,
-    };
-    return groups.filter((group) => !consumesMakerNote(group)).concat([merged]);
-}
-
-function consumesMakerNote(group) {
-    return group.consumes.indexOf('makerNote') !== -1;
+    return groups;
 }
 
 function unique(items) {

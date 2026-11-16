@@ -111,7 +111,7 @@ describe('composable/composition', () => {
             });
 
             it('should merge canon and pentax into one group with both decoders, Canon first', () => {
-                for (const groups of [[canon, pentax], [pentax, canon], [pentax, makerNotes], [makerNotes, canon, pentax]]) {
+                for (const groups of [[canon, pentax], [pentax, canon], [makerNotes, canon], [pentax, makerNotes], [makerNotes, canon, pentax]]) {
                     const composition = createComposition({groups});
 
                     expect(composition.groups, groups.map((group) => group.decoders[0].name).join()).to.have.lengthOf(1);
@@ -141,6 +141,48 @@ describe('composable/composition', () => {
                 const composition = createComposition({groups: [thumbnail, canon, pentax, exif]});
 
                 expect(composition.groups.map((group) => group.consumes[0])).to.deep.equal(['exif', 'makerNote', 'thumbnail']);
+            });
+        });
+
+        describe('a group carrying combine', () => {
+            it('should receive the unique engine groups and have its result dispatch-sorted', () => {
+                const other = getStandInGroup('other', 'xmp');
+                const replacement = getStandInGroup('replacement', 'exif');
+                const received = [];
+                const combining = getStandInGroup('combining', 'thumbnail', (groups) => {
+                    received.push(groups);
+                    return [groups[1], replacement, groups[0]];
+                });
+
+                const composition = createComposition({groups: [other, combining, other]});
+
+                expect(received).to.have.lengthOf(1);
+                expect(received[0]).to.deep.equal([other, combining]);
+                expect(composition.groups).to.deep.equal([replacement, other, combining]);
+            });
+
+            it('should be the only one called when several groups carry a combine, the first listed', () => {
+                const calls = [];
+                const first = getStandInGroup('first', 'iptc', (groups) => {
+                    calls.push('first');
+                    return groups.slice(0, 1);
+                });
+                const second = getStandInGroup('second', 'exif', () => {
+                    calls.push('second');
+                    return [];
+                });
+
+                const composition = createComposition({groups: [first, second]});
+
+                expect(calls).to.deep.equal(['first']);
+                expect(composition.groups).to.deep.equal([first]);
+            });
+
+            it('should leave the groups as they are when no group carries one', () => {
+                const first = getStandInGroup('a', 'xmp');
+                const second = getStandInGroup('b', 'exif');
+
+                expect(createComposition({groups: [first, second]}).groups).to.deep.equal([second, first]);
             });
         });
 
@@ -245,6 +287,14 @@ describe('composable/composition', () => {
         });
     });
 });
+
+function getStandInGroup(key, kind, combine) {
+    const group = {key, consumes: [kind], emits: [], read: () => undefined, merge: () => ({})};
+    if (combine !== undefined) {
+        group.combine = combine;
+    }
+    return group;
+}
 
 function createComposition({formats = [], groups = []}) {
     return Composition.createComposition({formats, groups});
