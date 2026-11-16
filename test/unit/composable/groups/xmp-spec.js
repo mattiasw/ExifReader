@@ -87,10 +87,9 @@ describe('composable/groups/xmp', () => {
 
         it('should read nothing when the jxl format is not composed', () => {
             const ctx = getContext();
-            const decompressions = recordDecompressions(ctx, getDataView('<x/>'));
 
+            expect(ctx.decompress).to.equal(undefined);
             expect(xmp.read(BROB_BLOCK, ctx)).to.equal(undefined);
-            expect(decompressions).to.have.lengthOf(0);
         });
 
         it('should decompress the box, bounded by the bytes present, and read the packet when jxl is composed', async () => {

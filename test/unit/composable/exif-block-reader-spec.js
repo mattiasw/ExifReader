@@ -327,10 +327,9 @@ describe('composable/exif-block-reader', () => {
 
         it('should read nothing when the jxl format is not composed', () => {
             const ctx = getContext({dataView: getDataView('\x00'.repeat(16))});
-            const decompressions = recordDecompressions(ctx, getDataView(''));
 
+            expect(ctx.decompress).to.equal(undefined);
             expect(readExifBlock(BROB_BLOCK, ctx, TAG_NAMES)).to.equal(undefined);
-            expect(decompressions).to.have.lengthOf(0);
         });
 
         it('should decompress the box, bounded by the bytes present, and read the TIFF after its header offset when jxl is composed', async () => {
@@ -346,6 +345,21 @@ describe('composable/exif-block-reader', () => {
             expect(decompressions[0].rest).to.deep.equal([COMPRESSION_METHOD_BROTLI, undefined, 'dataview']);
             expect(result.tags.Make.value).to.deep.equal(['Canon']);
             expect(result.blocks).to.deep.equal([]);
+        });
+
+        it('should decompress through the context\'s pooled decompression with the load\'s config when jxl is composed', async () => {
+            const tiff = getTiff({ifd0: [ascii(TAG_MAKE, 'Canon')]});
+            const compressedViews = [];
+            const decompressConfig = {brotli: (bytes) => {
+                compressedViews.push(bytes.byteLength);
+                return getDataView(getByteStringFromNumber(0, 4) + tiff).buffer;
+            }};
+            const ctx = getContext({dataView: getDataView('\x00'.repeat(16)), composed: {formats: {jxl: true}}, decompressConfig});
+
+            const result = await readExifBlock(BROB_BLOCK, ctx, TAG_NAMES);
+
+            expect(compressedViews).to.deep.equal([14]);
+            expect(result.tags.Make.value).to.deep.equal(['Canon']);
         });
 
         it('should give no tags of its own for a brob block that parsed to none', async () => {

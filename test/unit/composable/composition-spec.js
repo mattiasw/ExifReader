@@ -13,7 +13,9 @@ import {allFormats, tiff, jpeg, png, heic, avif, jxl, webp, gif, xml} from '../.
 import {allGroups, exif, iptc, xmp, icc, canon, pentax, makerNotes, gps, composite, thumbnail} from '../../../src/composable/groups.js';
 import {canonDecoder} from '../../../src/composable/groups/canon.js';
 import {pentaxDecoder} from '../../../src/composable/groups/pentax.js';
-import {pngText} from '../../../src/composable/formats/png.js';
+import {pngText, pngHeader} from '../../../src/composable/formats/png.js';
+import {jxlHeader} from '../../../src/composable/formats/jxl.js';
+import {decompression} from '../../../src/decompression.js';
 import {getContext, recordCalls} from './test-context.js';
 import {getMakerNoteBlock, getPentaxType1Bytes} from './groups/maker-note-test-data.js';
 
@@ -222,6 +224,24 @@ describe('composable/composition', () => {
             expect(createComposition({formats: [jpeg]}).isHiddenInSyncMode(block)).to.equal(false);
             expect(createComposition({formats: [jpeg, png]}).isHiddenInSyncMode(block)).to.equal(true);
             expect(createComposition({formats: [png]}).isHiddenInSyncMode({kind: 'pngText', text: {chunkType: TYPE_TEXT}})).to.equal(false);
+        });
+    });
+
+    describe('decompression', () => {
+        it('should be the one pooled decompression with both formats', () => {
+            expect(createComposition({formats: [png, jxl]}).decompression).to.equal(decompression);
+            expect(createComposition({formats: [jxl, png]}).decompression).to.equal(decompression);
+        });
+
+        it('should be taken from the first format that brings one, not only the first format', () => {
+            expect(createComposition({formats: [jpeg, png]}).decompression).to.equal(pngHeader.decompression);
+            expect(createComposition({formats: [jpeg, jxl]}).decompression).to.equal(jxlHeader.decompression);
+        });
+
+        it('should be undefined without the png and jxl formats', () => {
+            const composition = createComposition({formats: [jpeg, tiff, heic, avif, webp, gif, xml]});
+
+            expect(composition.decompression).to.equal(undefined);
         });
     });
 });

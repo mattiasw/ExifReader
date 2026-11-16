@@ -30,8 +30,9 @@ export default {
  *     groups and derived ones with `mergeDeps`.
  * @returns {object} The engine composition (`groups`, `dispatchKind`, `rank`,
  *     `suppressions`) plus `formats` in detection order, the `derived` groups,
- *     the `composed` facts (`formats`, `groups` and `kinds` maps) and
- *     `isHiddenInSyncMode(block)`.
+ *     the `composed` facts (`formats`, `groups` and `kinds` maps),
+ *     `isHiddenInSyncMode(block)` and `decompression`, the pooled decompression
+ *     the png and jxl formats bring, or undefined when neither is composed.
  * @throws {Error} When the groups' emission graph has a cycle.
  */
 function createComposition({formats, groups}) {
@@ -49,6 +50,7 @@ function createComposition({formats, groups}) {
             kinds: getFlags(engineGroups, (group) => group.consumes),
         },
         isHiddenInSyncMode: createIsHiddenInSyncMode(formats),
+        decompression: getDecompression(formats),
     };
 
     validateComposition(composition);
@@ -160,4 +162,13 @@ function createIsHiddenInSyncMode(formats) {
         return (block.kind === 'icc' && block.compression !== undefined)
             || formatRules.some((isHidden) => isHidden(block));
     };
+}
+
+function getDecompression(formats) {
+    for (let i = 0; i < formats.length; i++) {
+        if (formats[i].header.decompression !== undefined) {
+            return formats[i].header.decompression;
+        }
+    }
+    return undefined;
 }

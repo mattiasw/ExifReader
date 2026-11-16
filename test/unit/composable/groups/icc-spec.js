@@ -3,9 +3,11 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
-import {getDataView} from '../../test-utils.js';
+import {deflateSync} from 'node:zlib';
+import {getDataView, swapProperties} from '../../test-utils.js';
 import IccTags from '../../../../src/icc-tags.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
+import {withDecompressBudget} from '../../../../src/utils.js';
 import {icc} from '../../../../src/composable/groups/icc.js';
 import {getContext, recordCalls} from '../test-context.js';
 
@@ -60,6 +62,50 @@ describe('composable/groups/icc', () => {
         expect(icc.merge({origin: 'rawProfile'})).to.deep.equal({slot: 'icc', mode: 'merge'});
         expect(icc.merge({carried: 'main'})).to.deep.equal({slot: 'carriedIcc', mode: 'assign'});
         expect(icc.merge({carried: 'brob'})).to.deep.equal({slot: 'carriedIcc', mode: 'merge'});
+    });
+
+    describe('a compressed profile', () => {
+        const COMPRESSED_PROFILE = deflateSync(Buffer.alloc(128));
+        const COMPRESSED_BLOCK = {
+            kind: 'icc',
+            compression: 'deflate',
+            chunks: [{offset: 0, length: COMPRESSED_PROFILE.length, chunkNumber: 1, chunksTotal: 1, compressionMethod: 0}],
+        };
+        let constructed;
+
+        beforeEach(() => {
+            constructed = 0;
+            const OriginalDecompressionStream = globalThis.DecompressionStream;
+            restores.push(swapProperties(globalThis, {
+                DecompressionStream: class extends OriginalDecompressionStream {
+                    constructor(format) {
+                        super(format);
+                        constructed++;
+                    }
+                }
+            }));
+        });
+
+        it('should read nothing without the load\'s decompression config', () => {
+            const ctx = getCompressedProfileContext({decompressConfig: undefined, composed: {}});
+
+            expect(icc.read(COMPRESSED_BLOCK, ctx)).to.equal(undefined);
+            expect(constructed).to.equal(0);
+        });
+
+        it('should decompress it with the load\'s config', async () => {
+            const ctx = getCompressedProfileContext({decompressConfig: withDecompressBudget({}), composed: {formats: {png: true}}});
+
+            const result = await icc.read(COMPRESSED_BLOCK, ctx);
+
+            expect(result).to.deep.equal({tags: {}});
+            expect(constructed).to.equal(1);
+        });
+
+        function getCompressedProfileContext({decompressConfig, composed}) {
+            const dataView = new DataView(COMPRESSED_PROFILE.buffer.slice(COMPRESSED_PROFILE.byteOffset, COMPRESSED_PROFILE.byteOffset + COMPRESSED_PROFILE.length));
+            return getContext({dataView, options: {async: true}, decompressConfig, composed});
+        }
     });
 
     describe('the carried ICC suppression', () => {

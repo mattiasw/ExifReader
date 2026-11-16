@@ -7,11 +7,13 @@ import {DOMParser} from '@xmldom/xmldom';
 import {readView} from '../../../src/composable/read-view.js';
 import Composition from '../../../src/composable/composition.js';
 import Errors from '../../../src/errors.js';
-import {allFormats} from '../../../src/composable/formats.js';
+import {allFormats, jpeg as jpegFormat, png as pngFormat} from '../../../src/composable/formats.js';
 import {allGroups, exif, iptc} from '../../../src/composable/groups.js';
 import {createTagFilter, NOOP_TAG_FILTER} from '../../../src/tag-filter.js';
 import Composite from '../../../src/composite.js';
+import {decompression} from '../../../src/decompression.js';
 import {getDataView, swapProperties} from '../test-utils.js';
+import {recordCalls} from './test-context.js';
 import {
     ascii,
     getTiff,
@@ -21,6 +23,7 @@ import {
     getXmpPacket,
     getPng,
     getTextChunk,
+    getZtxtChunk,
     getExifRawProfile,
     TAG_MAKE,
     TAG_MODEL,
@@ -162,6 +165,58 @@ describe('composable/read-view', () => {
         const pngOnly = Composition.createComposition({formats: allFormats.filter((format) => format.header.fileType.value === 'png'), groups: []});
 
         expect(() => readView(pngOnly, getDataView(JPEG), {async: true}, getEnvironment())).to.throw(Errors.UnsupportedFormatError, 'Invalid image format');
+    });
+
+    describe('decompression', () => {
+        const PNG_WITH_ZTXT = getPng(getZtxtChunk('Comment', 'compressed'));
+
+        it('should give each load through one composition its own budget', async () => {
+            const pngOnly = Composition.createComposition({formats: [pngFormat], groups: []});
+            const options = {async: true, decompress: {deflate: () => getDataView('abcd'), maxDecompressedSize: 4}};
+
+            const first = await readView(pngOnly, getDataView(PNG_WITH_ZTXT), options, getEnvironment());
+            const second = await readView(pngOnly, getDataView(PNG_WITH_ZTXT), options, getEnvironment());
+
+            expect(first.Comment.description).to.equal('abcd');
+            expect(second.Comment.description).to.equal('abcd');
+        });
+
+        it('should hand the decompress option\'s limit to the decompressor', async () => {
+            const pngOnly = Composition.createComposition({formats: [pngFormat], groups: []});
+            const load = (text) => readView(pngOnly, getDataView(PNG_WITH_ZTXT), {async: true, decompress: {deflate: () => getDataView(text), maxDecompressedSize: 4}}, getEnvironment());
+            const warnings = [];
+            restores.push(swapProperties(console, {warn: (message) => warnings.push(message)}));
+
+            const underLimit = await load('abcd');
+            const overLimit = await load('abcde');
+
+            expect(underLimit.Comment.description).to.equal('abcd');
+            expect(overLimit.Comment.description).to.not.equal('abcde');
+            expect(warnings.join()).to.include('maximum of 4 bytes');
+        });
+
+        it('should build the budget and the pool per load only for a composition with png or jxl', () => {
+            const budgets = recordCalls(decompression, 'withDecompressBudget', decompression.withDecompressBudget);
+            const pools = recordCalls(decompression, 'createPooledDecompress', decompression.createPooledDecompress);
+            restores.push(budgets.restore, pools.restore);
+            const jpegOnly = Composition.createComposition({formats: [jpegFormat], groups: [exif]});
+            const pngOnly = Composition.createComposition({formats: [pngFormat], groups: []});
+            const config = {maxDecompressedSize: 10};
+
+            const tags = readView(jpegOnly, getDataView(JPEG), {decompress: config}, getEnvironment());
+            expect(tags.Make.description).to.equal('Make');
+            expect(budgets.calls).to.deep.equal([]);
+            expect(pools.calls).to.deep.equal([]);
+
+            readView(pngOnly, getDataView(getPng()), {decompress: config}, getEnvironment());
+            readView(pngOnly, getDataView(getPng()), {decompress: config}, getEnvironment());
+            expect(budgets.calls).to.deep.equal([[config], [config]]);
+            expect(pools.calls).to.have.lengthOf(2);
+            expect(pools.calls[0][0]).to.not.equal(config);
+            expect(pools.calls[0][0].maxDecompressedSize).to.equal(10);
+            expect(pools.calls[0][0].budget.remaining).to.equal(10);
+            expect(pools.calls[1][0]).to.not.equal(pools.calls[0][0]);
+        });
     });
 });
 

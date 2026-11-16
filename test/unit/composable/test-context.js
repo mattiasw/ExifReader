@@ -5,12 +5,14 @@
 import {getDataView, swapProperties} from '../test-utils.js';
 import {createContext} from '../../../src/engine.js';
 import {createTagFilter} from '../../../src/tag-filter.js';
+import {decompression as pooledDecompression} from '../../../src/decompression.js';
 
 /**
  * An engine context for the composable readers, with nothing composed unless
- * the test says so.
+ * the test says so, and the pooled decompression only when png or jxl is
+ * composed.
  */
-export function getContext({dataView = getDataView('\x00'.repeat(16)), options = {}, tagFilter = createTagFilter(), decompressConfig = undefined, composed = {}, getBase64Image = undefined, getDomParser = undefined} = {}) {
+export function getContext({dataView = getDataView('\x00'.repeat(16)), options = {}, tagFilter = createTagFilter(), decompressConfig = undefined, composed = {}, decompression = getDecompressionFor(composed), getBase64Image = undefined, getDomParser = undefined} = {}) {
     return createContext({
         dataView,
         options,
@@ -19,7 +21,13 @@ export function getContext({dataView = getDataView('\x00'.repeat(16)), options =
         getBase64Image,
         getDomParser,
         composed: {formats: composed.formats || {}, groups: composed.groups || {}, kinds: composed.kinds || {}},
+        decompression,
     });
+}
+
+function getDecompressionFor(composed) {
+    const formats = composed.formats || {};
+    return formats.png || formats.jxl ? pooledDecompression : undefined;
 }
 
 /**

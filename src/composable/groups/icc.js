@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {isThenable} from '../../utils.js';
+import {isThenable, COMPRESSION_METHOD_NONE} from '../../utils.js';
 import IccTags from '../../icc-tags.js';
 import {parsedTags, getEmbeddableMergeDescriptor} from '../group-helpers.js';
 import {GROUP_BRAND} from '../brand.js';
@@ -20,6 +20,11 @@ export const icc = {
 // A compressed iCCP gives a thenable in async mode, which defers the block.
 function readIccBlock(block, ctx) {
     if (!hasIccData(block)) {
+        return undefined;
+    }
+    // A compressed profile is read only with the load's budgeted decompression
+    // config, which only a png or jxl composition has.
+    if (block.chunks[0].compressionMethod !== COMPRESSION_METHOD_NONE && ctx.decompressConfig === undefined) {
         return undefined;
     }
     const readTags = IccTags.read(block.dataView || ctx.dataView, block.chunks, ctx.options.async, ctx.decompressConfig);

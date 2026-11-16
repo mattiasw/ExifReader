@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {objectAssign, withDecompressBudget, getDataView, assertPromiseSupport, MAX_METADATA_BLOCKS} from '../utils.js';
+import {objectAssign, getDataView, assertPromiseSupport, MAX_METADATA_BLOCKS} from '../utils.js';
 import ImageHeader from '../image-header.js';
 import {filterTagsForReturn} from '../tag-filter.js';
 import {buildTagsFromMergeBlocks} from '../loadview-pipeline.js';
@@ -54,10 +54,11 @@ export function readView(composition, dataView, options, environment) {
         dataView,
         options: {expanded, async, computed, includeUnknown, includeOffsets, domParser, includeTags, excludeTags},
         tagFilter,
-        decompressConfig: withDecompressBudget(decompressConfig),
+        decompressConfig: composition.decompression ? composition.decompression.withDecompressBudget(decompressConfig) : undefined,
         getBase64Image: environment.getBase64Image,
         getDomParser: environment.getDomParser,
         composed: composition.composed,
+        decompression: composition.decompression,
     });
     // The pipeline copies png into pngText only when png is returned, so the
     // filter needs no check here.

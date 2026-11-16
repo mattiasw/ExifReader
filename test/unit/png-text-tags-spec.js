@@ -13,6 +13,7 @@ import {
 import ImageHeaderPng, {TYPE_TEXT, TYPE_ITXT, TYPE_ZTXT} from '../../src/image-header-png.js';
 import PngTextTags, {hasRawIptcProfile} from '../../src/png-text-tags.js';
 import {createContext} from '../../src/engine.js';
+import {decompression} from '../../src/decompression.js';
 import {createTagFilter} from '../../src/tag-filter.js';
 import {getStringFromDataView, withDecompressBudget} from '../../src/utils.js';
 import {crc32, inflateSync} from 'node:zlib';
@@ -899,7 +900,7 @@ describe('png-text-tags', () => {
     // The decompression config is given as is: a test that wants the shared
     // decompression budget wraps it with withDecompressBudget itself.
     function getContext(dataView, {async = false, tagFilter = createTagFilter(), decompressConfig = undefined} = {}) {
-        return createContext({dataView, options: {async}, tagFilter, decompressConfig});
+        return createContext({dataView, options: {async}, tagFilter, decompressConfig, decompression});
     }
 
     // Reads every block with one context, as the engine does for a file, and

@@ -13,7 +13,7 @@ and **over 95% less bandwidth**.
 
 You can compose a reader from only the formats, groups and tags you read. A
 reader of the date and the GPS position of JPEG files bundles to
-**about 14 KiB** (esbuild, minified, Brotli). See [the composable
+**about 13 KiB** (esbuild, minified, Brotli). See [the composable
 API](#composable-api).
 
 ExifReader supports module formats ESM, AMD, CommonJS, and globals and can
@@ -181,7 +181,7 @@ requirejs(['/path/to/exif-reader.js'], function (ExifReader) {
 > // tags.exif.DateTimeOriginal, tags.gps.Latitude, tags.gps.Longitude
 > ```
 >
-> It bundles to about 14 KiB, against about 42 KiB for the default entry
+> It bundles to about 13 KiB, against about 42 KiB for the default entry
 > (esbuild, minified, Brotli). See [the composable API](#composable-api) for the
 > rest. For everything else, start with the default entry as shown above.
 
@@ -797,7 +797,7 @@ subpaths reference. Under Metro 0.88, a reader of JPEG files with `gps` and two
 tags is over 230 KiB raw and 60 KiB gzip. That is still smaller than the
 default entry under Metro (over 250 KiB and 75 KiB), but esbuild bundles the
 one-tag `Single tags` example of the [composable API](#composable-api) to about
-48 KiB and 16 KiB.
+44 KiB and 15 KiB.
 
 With the default entry, or an older Metro, import ExifReader like this:
 
@@ -1116,11 +1116,11 @@ extra setup or have limits:
   `exports`.
 - **Parcel.** Parcel 2.16.4 resolves the subpaths with `packageExports` enabled
   but leaves unreferenced code in the bundle: the `Single tags` example is
-  about 20 KiB gzip there against 16 KiB with esbuild.
+  about 20 KiB gzip there against 15 KiB with esbuild.
 - **CommonJS-compiled consumers.** A consumer compiled to CommonJS before
   bundling (`require('exifreader/core')`) loses tree shaking under esbuild and
   Vite 8 (a JPEG reader with `DateTimeOriginal`: over 120 KiB raw against
-  46 KiB). webpack 5, Rspack and `bun build` keep it.
+  43 KiB). webpack 5, Rspack and `bun build` keep it.
 - **No tree shaking.** Without a tree-shaking bundler (Metro, unbundled Node,
   Deno or Bun), every format and group the imported subpaths reference is
   loaded.

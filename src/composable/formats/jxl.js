@@ -6,11 +6,13 @@ import Jxl from '../../image-header-jxl.js';
 import JxlFileTags from '../../jxl-file-tags.js';
 import {parsedTags} from '../group-helpers.js';
 import {FORMAT_BRAND} from '../brand.js';
+import {decompression} from '../../decompression.js';
 
 export const jxlHeader = {
     fileType: {value: 'jxl', description: 'JPEG XL'},
     detect: (dataView) => Jxl.isJxlFile(dataView),
     find: (dataView, ranges) => Jxl.findJxlOffsets(dataView, ranges),
+    decompression,
 };
 
 export const jxlFile = {

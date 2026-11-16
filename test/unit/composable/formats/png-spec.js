@@ -9,6 +9,7 @@ import PngTextTags from '../../../../src/png-text-tags.js';
 import PngTags from '../../../../src/png-tags.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
 import {png, pngHeader, pngFile, pngText, pngChunk} from '../../../../src/composable/formats/png.js';
+import {decompression} from '../../../../src/decompression.js';
 import {getContext, recordCalls} from '../test-context.js';
 
 describe('composable/formats/png', () => {
@@ -22,6 +23,10 @@ describe('composable/formats/png', () => {
 
     it('should give the PNG file type', () => {
         expect(pngHeader.fileType).to.deep.equal({value: 'png', description: 'PNG'});
+    });
+
+    it('should bring the pooled decompression', () => {
+        expect(pngHeader.decompression).to.equal(decompression);
     });
 
     it('should detect and find through Png.isPngFile and Png.findPngOffsets at call time', () => {

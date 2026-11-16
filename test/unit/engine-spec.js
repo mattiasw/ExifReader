@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {getDataView} from './test-utils.js';
-import {run, createContext, validateComposition, MAX_BLOCK_DEPTH, MAX_DECOMPRESSIONS_IN_FLIGHT} from '../../src/engine.js';
+import {run, createContext, validateComposition, MAX_BLOCK_DEPTH} from '../../src/engine.js';
+import {decompression} from '../../src/decompression.js';
 import {createTagFilter} from '../../src/tag-filter.js';
 import {COMPRESSION_METHOD_DEFLATE} from '../../src/utils.js';
 
@@ -332,7 +333,6 @@ describe('engine', () => {
             }
             const {mergeBlocks} = await resultPromise;
 
-            expect(MAX_DECOMPRESSIONS_IN_FLIGHT).to.equal(4);
             expect(maxPending).to.equal(4);
             expect(pendingPerRound).to.deep.equal([4, 4, 2]);
             expect(mergeBlocks.map((block) => (block.blocks ? block.blocks[0] : block).tags.n)).to.deep.equal([0, 1, 2, 3, 4, 0, 1, 2, 3, 4]);
@@ -566,7 +566,7 @@ describe('engine', () => {
             const options = {async: true};
             const dataView = getDataView('');
 
-            const context = createContext({dataView, options, tagFilter, decompressConfig: {}, getBase64Image, getDomParser});
+            const context = createContext({dataView, options, tagFilter, decompressConfig: {}, getBase64Image, getDomParser, decompression});
 
             expect(context.dataView).to.equal(dataView);
             expect(context.options).to.equal(options);
@@ -593,6 +593,12 @@ describe('engine', () => {
                 error = caught;
             }
             expect(error.message).to.equal('deflate failed');
+        });
+
+        it('should leave decompress undefined without the pooled decompression', () => {
+            const context = createContext({dataView: getDataView(''), options: {async: true}, tagFilter: createTagFilter(), decompressConfig: undefined});
+
+            expect(context.decompress).to.equal(undefined);
         });
     });
 
@@ -658,6 +664,7 @@ function getContext({async = false, includeTags = undefined, deflate = undefined
         decompressConfig: deflate ? {deflate} : undefined,
         getBase64Image: undefined,
         getDomParser: undefined,
+        decompression,
     });
 }
 

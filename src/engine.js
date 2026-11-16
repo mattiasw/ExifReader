@@ -2,12 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {decompress, isThenable, objectAssign} from './utils.js';
+import {isThenable, objectAssign} from './utils.js';
 import {getValueBudget} from './tags-helpers.js';
 
 // A finder block, a block it emits and a block emitted by that one.
 export const MAX_BLOCK_DEPTH = 3;
-export const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;
 
 // Brob XMP is bounded by the file size, as brob Exif is, plus room for one JPEG
 // standard XMP segment so that a small file can still carry a typical packet.
@@ -258,15 +257,16 @@ function getNodeMergeBlocks(node) {
  * Builds the per-load state the groups share: the input, the options, the
  * budgets, the entry's helpers and the facts about what is composed.
  *
- * @param {{dataView: DataView, options: object, tagFilter: object, decompressConfig: object, getBase64Image: function, getDomParser: function, composed: object}} parts
+ * @param {{dataView: DataView, options: object, tagFilter: object, decompressConfig: (object|undefined), getBase64Image: function, getDomParser: function, composed: object, decompression: (object|undefined)}} parts
  *     `composed` is the composition's `{formats, groups, kinds}` maps, which
- *     the readers consult instead of the build flags.
+ *     the readers consult instead of the build flags. `decompression` is the
+ *     pooled decompression the png and jxl formats bring; without it
+ *     `decompressConfig` is undefined too.
  * @returns {object} The context, with `decompress` running through a pool of at
- *     most MAX_DECOMPRESSIONS_IN_FLIGHT tasks and `getValueBudget(view)`
- *     creating one budget on its first call.
+ *     most four tasks when `decompression` is given, else undefined, and
+ *     `getValueBudget(view)` creating one budget on its first call.
  */
-export function createContext({dataView, options, tagFilter, decompressConfig, getBase64Image, getDomParser, composed}) {
-    const pool = createPool(MAX_DECOMPRESSIONS_IN_FLIGHT);
+export function createContext({dataView, options, tagFilter, decompressConfig, getBase64Image, getDomParser, composed, decompression}) {
     const inputByteLength = getInputByteLength(dataView);
     const context = {
         dataView,
@@ -283,9 +283,7 @@ export function createContext({dataView, options, tagFilter, decompressConfig, g
         compressedPngTextChunks: 0,
         hasRawIptcProfile: undefined,
         embeddedThumbnailSizeBound: EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE * inputByteLength + EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE,
-        decompress(view, compressionMethod, encoding, returnType) {
-            return pool.run(() => decompress(view, compressionMethod, encoding, returnType, decompressConfig));
-        },
+        decompress: decompression ? decompression.createPooledDecompress(decompressConfig) : undefined,
         // The main Exif block creates the budget from its view; later callers
         // get the same object, whatever view they pass. The view is only
         // missing in unit tests that fake the readers.
@@ -317,40 +315,6 @@ export function createContext({dataView, options, tagFilter, decompressConfig, g
 
 function getInputByteLength(dataView) {
     return dataView !== undefined && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
-}
-
-// Starts a task when fewer than `limit` are running, else queues it until one
-// settles. Promise is only referenced once a task is given, in async mode.
-function createPool(limit) {
-    const queue = [];
-    let running = 0;
-
-    return {
-        run(task) {
-            return new Promise((resolve, reject) => {
-                queue.push({task, resolve, reject});
-                startNext();
-            });
-        },
-    };
-
-    function startNext() {
-        if (running >= limit || queue.length === 0) {
-            return;
-        }
-        const {task, resolve, reject} = queue.shift();
-        running++;
-        // The wrapper turns a synchronous throw from a task into a rejection.
-        new Promise((start) => start(task())).then((result) => {
-            running--;
-            startNext();
-            resolve(result);
-        }, (error) => {
-            running--;
-            startNext();
-            reject(error);
-        });
-    }
 }
 
 /**

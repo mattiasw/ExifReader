@@ -5139,6 +5139,68 @@ describe('exif-reader', function () {
             return environments[0];
         }
     });
+
+    describe('decompression through the default entry', () => {
+        const brotliIsSupported = brotliStreamIsSupported();
+        let constructed;
+        let warnSpy;
+        let restoreDecompressionStream;
+
+        beforeEach(() => {
+            constructed = 0;
+            warnSpy = getConsoleWarnSpy();
+            const OriginalDecompressionStream = globalThis.DecompressionStream;
+            restoreDecompressionStream = swapProperties(globalThis, {
+                DecompressionStream: class extends OriginalDecompressionStream {
+                    constructor(format) {
+                        super(format);
+                        constructed++;
+                    }
+                }
+            });
+        });
+
+        afterEach(() => {
+            restoreDecompressionStream();
+            warnSpy.reset();
+        });
+
+        it('should decompress the one compressed block of test.png', async () => {
+            await loadFixture('test.png');
+
+            expect(constructed).to.equal(1);
+        });
+
+        it('should decompress the two brob boxes of test-brotli.jxl', async function () {
+            if (!brotliIsSupported) {
+                this.skip();
+            }
+
+            await loadFixture('test-brotli.jxl');
+
+            expect(constructed).to.equal(2);
+        });
+
+        it('should decompress nothing for test.jxl', async () => {
+            await loadFixture('test.jxl');
+
+            expect(constructed).to.equal(0);
+        });
+
+        function loadFixture(fileName) {
+            const bytes = fs.readFileSync(fileURLToPath(new URL(`../fixtures/images/${fileName}`, import.meta.url)));
+            return ExifReader.load(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), {async: true, expanded: true});
+        }
+
+        function brotliStreamIsSupported() {
+            try {
+                new DecompressionStream('brotli');
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
+    });
 });
 
 async function loadWithoutNodeModules(fileOrUrl) {

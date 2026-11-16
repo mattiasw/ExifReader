@@ -46,6 +46,18 @@ describe('composable import closure', () => {
         expect(closure).to.not.include(fromRoot('src/composable/iptc-block-reader.js'));
     });
 
+    it('brings decompression.js only with the png and jxl formats', () => {
+        const decompressionModule = fromRoot('src/decompression.js');
+
+        expect(getImportClosure([fromRoot('src/composable/formats/png.js')])).to.include(decompressionModule);
+        expect(getImportClosure([fromRoot('src/composable/formats/jxl.js')])).to.include(decompressionModule);
+        expect(getImportClosure([
+            fromRoot('src/composable/core.js'),
+            fromRoot('src/composable/formats/jpeg.js'),
+            fromRoot('src/composable/groups/exif.js')
+        ])).to.not.include(decompressionModule);
+    });
+
     it('reports code references to Buffer', () => {
         const source = 'if (typeof Buffer !== \'undefined\') {\n    use(Buffer.from(x));\n}';
 

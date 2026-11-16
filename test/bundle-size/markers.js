@@ -37,6 +37,8 @@ const MODULE_MARKERS = {
     'tag-filter-config.js': 'relatedimage',
     // getDataViewFromBytes's TypeError, which every build reaches through load.
     'utils.js': 'Passed data type is unsupported.',
+    // decompress's rejection, reached only from the png, jxl and icc modules.
+    'utils.js:decompress': 'Brotli decompression is not supported in this environment',
     'file-tags.js': 'Subsampling',
     'jfif-tags.js': 'JFIF Version',
     'png-file-tags.js': 'Grayscale with Alpha',
@@ -138,7 +140,8 @@ const MODULE_PROBES = {
     ],
     icc: [
         {label: 'icc-tags.js', when: whenIncluded('icc')},
-        {label: 'icc-tag-names.js', when: whenIncluded('icc')}
+        {label: 'icc-tag-names.js', when: whenIncluded('icc')},
+        {label: 'utils.js:decompress', when: decompressionIsIncluded}
     ],
     photoshop: [
         {label: 'photoshop-tags.js', when: whenIncluded('photoshop')},
@@ -163,7 +166,8 @@ const MODULE_PROBES = {
     png: [
         {label: 'png-tags.js', when: whenIncluded('png')},
         {label: 'image-header-png.js', when: whenIncluded('png')},
-        {label: 'png-text-tags.js', when: whenIncluded('png')}
+        {label: 'png-text-tags.js', when: whenIncluded('png')},
+        {label: 'utils.js:decompress', when: decompressionIsIncluded}
     ],
     heic: [
         {label: 'image-header-heic.js', when: whenIncluded('heic')},
@@ -176,7 +180,8 @@ const MODULE_PROBES = {
         {label: 'image-header-iso-bmff.js:findIinfXmpItemId', when: isoBmffIsIncluded}
     ],
     jxl: [
-        {label: 'jxl-file-tags.js', when: whenIncluded('jxl')}
+        {label: 'jxl-file-tags.js', when: whenIncluded('jxl')},
+        {label: 'utils.js:decompress', when: decompressionIsIncluded}
     ],
     webp: [
         {label: 'image-header-webp.js', when: whenIncluded('webp')},
@@ -231,6 +236,7 @@ const UNPROBEABLE_REASONS = {
     'base64-image.js': NO_UNIQUE_LITERAL,
     'composite.js': NO_UNIQUE_LITERAL,
     'constants.js': NO_UNIQUE_LITERAL,
+    'decompression.js': NO_UNIQUE_LITERAL,
     'ifd-types.js': NO_UNIQUE_LITERAL,
     'image-header-avif.js': NO_UNIQUE_LITERAL,
     'image-header-iso-bmff-iloc.js': NO_UNIQUE_LITERAL,
@@ -316,6 +322,11 @@ function whenIncludedInFull(moduleName) {
 
 function isoBmffIsIncluded(modules) {
     return !!(modules.heic || modules.avif);
+}
+
+// The png, jxl and icc modules each import decompress from utils.js.
+function decompressionIsIncluded(modules) {
+    return !!(modules.png || modules.jxl || modules.icc);
 }
 
 function assertMarkersAreUnique() {

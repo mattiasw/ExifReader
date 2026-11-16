@@ -8,12 +8,14 @@ import PngTextTags, {hasRawIptcProfile} from '../../png-text-tags.js';
 import PngTags from '../../png-tags.js';
 import {parsedTags, isPngTextChunkBlock} from '../group-helpers.js';
 import {FORMAT_BRAND} from '../brand.js';
+import {decompression} from '../../decompression.js';
 
 export const pngHeader = {
     fileType: {value: 'png', description: 'PNG'},
     detect: (dataView) => Png.isPngFile(dataView),
     find: (dataView, ranges) => Png.findPngOffsets(dataView, ranges),
     isHiddenInSyncMode: isCompressedTextChunkTypeBlock,
+    decompression,
 };
 
 export const pngFile = {

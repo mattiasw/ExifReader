@@ -6,7 +6,8 @@ import {expect} from 'chai';
 import Jxl from '../../../../src/image-header-jxl.js';
 import JxlFileTags from '../../../../src/jxl-file-tags.js';
 import {createTagFilter} from '../../../../src/tag-filter.js';
-import {jxl, jxlHeader, jxlFile} from '../../../../src/composable/formats/jxl.js';
+import {jxlHeader, jxlFile} from '../../../../src/composable/formats/jxl.js';
+import {decompression} from '../../../../src/decompression.js';
 import {getContext, recordCalls} from '../test-context.js';
 
 describe('composable/formats/jxl', () => {
@@ -20,6 +21,10 @@ describe('composable/formats/jxl', () => {
 
     it('should give the JPEG XL file type', () => {
         expect(jxlHeader.fileType).to.deep.equal({value: 'jxl', description: 'JPEG XL'});
+    });
+
+    it('should bring the pooled decompression', () => {
+        expect(jxlHeader.decompression).to.equal(decompression);
     });
 
     it('should detect and find through Jxl.isJxlFile and Jxl.findJxlOffsets at call time', () => {
@@ -38,12 +43,6 @@ describe('composable/formats/jxl', () => {
         expect(finds.calls[0]).to.have.lengthOf(2);
         expect(finds.calls[0][0]).to.equal(dataView);
         expect(finds.calls[0][1]).to.equal(ranges);
-    });
-
-    it('should bring its header and its file reader', () => {
-        expect(jxl.header).to.equal(jxlHeader);
-        expect(jxl.readers).to.have.lengthOf(1);
-        expect(jxl.readers[0]).to.equal(jxlFile);
     });
 
     it('should assign its tags to the jxlFile slot', () => {
