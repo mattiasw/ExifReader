@@ -12,7 +12,8 @@ import {isPngTextChunkBlock} from './group-helpers.js';
 /**
  * Runs a composition over an image's bytes and builds its tags.
  *
- * @param {object} composition From Composition.createComposition.
+ * @param {object} composition From Composition.createComposition; a sync load
+ *     also needs its `isHiddenInSyncMode` from createIsHiddenInSyncMode.
  * @param {DataView} dataView The image. A window into a larger buffer is
  *     copied out first.
  * @param {object} options The load options (`expanded`, `async`, `computed`,

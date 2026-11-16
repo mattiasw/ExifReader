@@ -14,7 +14,7 @@ import Constants from './constants.js';
 import {getBase64Image} from './base64-image.js';
 import DOMParser from './dom-parser.js';
 import exifErrors from './errors.js';
-import Composition from './composable/composition.js';
+import Composition, {createIsHiddenInSyncMode} from './composable/composition.js';
 import {readView} from './composable/read-view.js';
 import {createTagFilter} from './tag-filter.js';
 import {tiff} from './composable/formats/tiff.js';
@@ -78,6 +78,7 @@ function getDefaultComposition() {
     const entries = getTableEntries(tables);
     if (defaultComposition === undefined || !haveSameItems(entries, defaultCompositionEntries)) {
         defaultComposition = Composition.createComposition(tables);
+        defaultComposition.isHiddenInSyncMode = createIsHiddenInSyncMode(tables.formats);
         defaultCompositionEntries = entries;
     }
     return defaultComposition;

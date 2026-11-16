@@ -7,7 +7,7 @@ import {TYPE_TEXT, TYPE_ZTXT} from '../../../src/image-header-png.js';
 import IsoBmffFileTags from '../../../src/iso-bmff-file-tags.js';
 import CanonTags from '../../../src/canon-tags.js';
 import {run, validateComposition} from '../../../src/engine.js';
-import Composition from '../../../src/composable/composition.js';
+import Composition, {createIsHiddenInSyncMode} from '../../../src/composable/composition.js';
 import {allFormats, tiff, jpeg, png, heic, avif, jxl, webp, gif, xml} from '../../../src/composable/formats.js';
 import * as Groups from '../../../src/composable/groups.js';
 import {allGroups, exif, iptc, xmp, icc, canon, pentax, makerNotes, gps, composite, thumbnail} from '../../../src/composable/groups.js';
@@ -376,9 +376,9 @@ describe('composable/composition', () => {
         });
     });
 
-    describe('isHiddenInSyncMode', () => {
+    describe('createIsHiddenInSyncMode', () => {
         it('should hide a compressed ICC block whatever is composed', () => {
-            const {isHiddenInSyncMode} = createComposition({});
+            const isHiddenInSyncMode = createIsHiddenInSyncMode([]);
 
             expect(isHiddenInSyncMode({kind: 'icc', compression: 'deflate'})).to.equal(true);
             expect(isHiddenInSyncMode({kind: 'icc'})).to.equal(false);
@@ -388,9 +388,15 @@ describe('composable/composition', () => {
         it('should hide a compressed-text chunk type block only with the png format', () => {
             const block = {kind: 'pngText', text: {chunkType: TYPE_ZTXT}};
 
-            expect(createComposition({formats: [jpeg]}).isHiddenInSyncMode(block)).to.equal(false);
-            expect(createComposition({formats: [jpeg, png]}).isHiddenInSyncMode(block)).to.equal(true);
-            expect(createComposition({formats: [png]}).isHiddenInSyncMode({kind: 'pngText', text: {chunkType: TYPE_TEXT}})).to.equal(false);
+            expect(createIsHiddenInSyncMode([jpeg])(block)).to.equal(false);
+            expect(createIsHiddenInSyncMode([jpeg, png])(block)).to.equal(true);
+            expect(createIsHiddenInSyncMode([png])({kind: 'pngText', text: {chunkType: TYPE_TEXT}})).to.equal(false);
+        });
+    });
+
+    describe('isHiddenInSyncMode', () => {
+        it('should not be on a composition, since only the default entry adds it', () => {
+            expect(createComposition({formats: [png], groups: allGroups})).to.not.have.property('isHiddenInSyncMode');
         });
     });
 

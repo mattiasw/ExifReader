@@ -72,6 +72,7 @@ import {
     getSof0Segment,
     getPng as getInventoryPng,
     getTextChunk,
+    getZtxtChunk,
     getExifRawProfile,
     getIptcRawProfile,
     getExifChunk,
@@ -513,6 +514,27 @@ describe('exif-reader', function () {
                 expect(await ExifReader.loadView(getDataView('\x00'.repeat(32)), {async: true}), block.kind).to.deep.equal({});
                 expect(readCalls(), block.kind).to.equal(1);
             }
+        });
+
+        it('should leave a zTXt chunk and a compressed iCCP chunk unread and out of metadataRange in sync mode of a real PNG', async () => {
+            const png = getInventoryPng(
+                getTextChunk('Comment', 'Text'),
+                getZtxtChunk('Title', 'compressed'),
+                getIccpChunk('Profile', 0, deflateText(getIccProfile('TEST')))
+            );
+            const options = {expanded: true, includeOffsets: true};
+
+            const syncTags = ExifReader.loadView(getDataView(png), options);
+            const asyncTags = await ExifReader.loadView(getDataView(png), {...options, async: true});
+
+            expect(syncTags.pngText.Comment.description).to.equal('Text');
+            expect(syncTags.pngText.Title).to.equal(undefined);
+            expect(syncTags.icc).to.equal(undefined);
+            expect(syncTags.metadataRange.blocks.map(({type}) => type)).to.deep.equal(['file', 'png']);
+            expect(asyncTags.pngText.Comment.description).to.equal('Text');
+            expect(asyncTags.pngText.Title.description).to.equal('compressed');
+            expect(asyncTags.icc).to.not.equal(undefined);
+            expect(asyncTags.metadataRange.blocks.map(({type}) => type)).to.deep.equal(['file', 'png', 'png', 'icc']);
         });
 
         it('should read an uncompressed tEXt block in both modes', async () => {

@@ -31,11 +31,10 @@ export default {
  * @returns {object} The engine composition (`groups`, `dispatchKind`, `rank`,
  *     `suppressions`) plus `formats` in detection order, the `derived` groups,
  *     the `composed` facts (`formats`, `groups` and `kinds` maps),
- *     `isHiddenInSyncMode(block)`, `decompression` (the pooled decompression
- *     the png and jxl formats bring, or undefined when neither is composed),
- *     `mergeModes` (the merge modes the engine and derived groups bring) and
- *     the engine groups' `prepareMergeBlocks` and `finishTags` steps in
- *     dispatch order.
+ *     `decompression` (the pooled decompression the png and jxl formats
+ *     bring, or undefined when neither is composed), `mergeModes` (the merge
+ *     modes the engine and derived groups bring) and the engine groups'
+ *     `prepareMergeBlocks` and `finishTags` steps in dispatch order.
  */
 function createComposition({formats, groups}) {
     const engineGroups = getEngineGroups(formats, groups);
@@ -52,7 +51,6 @@ function createComposition({formats, groups}) {
             groups: getFlags(groups, (group) => [group.key]),
             kinds: getFlags(engineGroups, (group) => group.consumes),
         },
-        isHiddenInSyncMode: createIsHiddenInSyncMode(formats),
         decompression: getDecompression(formats),
         mergeModes: getMergeModes(engineGroups.concat(derived)),
         prepareMergeBlocks: getSteps(engineGroups, 'prepareMergeBlocks'),
@@ -131,24 +129,6 @@ function getFlags(items, getNames) {
     return flags;
 }
 
-// Sync mode leaves the PNG compressed-text chunks, whatever their header says,
-// and the iCCP chunk (always compressed) out of metadataRange, the
-// potential-metadata check and the readers, as the PNG finder did when it took
-// the async flag. A compressed iTXt and a brob box stay listed, and unread.
-function createIsHiddenInSyncMode(formats) {
-    const formatRules = [];
-    for (let i = 0; i < formats.length; i++) {
-        if (formats[i].header.isHiddenInSyncMode !== undefined) {
-            formatRules.push(formats[i].header.isHiddenInSyncMode);
-        }
-    }
-
-    return function isHiddenInSyncMode(block) {
-        return (block.kind === 'icc' && block.compression !== undefined)
-            || formatRules.some((isHidden) => isHidden(block));
-    };
-}
-
 function getDecompression(formats) {
     for (let i = 0; i < formats.length; i++) {
         if (formats[i].header.decompression !== undefined) {
@@ -174,4 +154,29 @@ function getSteps(groups, name) {
         }
     }
     return steps;
+}
+
+/**
+ * Sync mode leaves the PNG compressed-text chunks, whatever their header says,
+ * and the iCCP chunk (always compressed) out of metadataRange, the
+ * potential-metadata check and the readers, as the default entry has always
+ * done in sync mode. A compressed iTXt and a brob box stay listed, and unread.
+ * Only the default entry loads in sync mode, so only it adds the result to its
+ * composition as `isHiddenInSyncMode`.
+ *
+ * @param {Array<object>} formats The formats table.
+ * @returns {function(object): boolean}
+ */
+export function createIsHiddenInSyncMode(formats) {
+    const formatRules = [];
+    for (let i = 0; i < formats.length; i++) {
+        if (formats[i].header.isHiddenInSyncMode !== undefined) {
+            formatRules.push(formats[i].header.isHiddenInSyncMode);
+        }
+    }
+
+    return function isHiddenInSyncMode(block) {
+        return (block.kind === 'icc' && block.compression !== undefined)
+            || formatRules.some((isHidden) => isHidden(block));
+    };
 }

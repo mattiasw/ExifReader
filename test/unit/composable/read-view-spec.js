@@ -5,7 +5,7 @@
 import {expect} from 'chai';
 import {DOMParser} from '@xmldom/xmldom';
 import {readView} from '../../../src/composable/read-view.js';
-import Composition from '../../../src/composable/composition.js';
+import Composition, {createIsHiddenInSyncMode} from '../../../src/composable/composition.js';
 import Errors from '../../../src/errors.js';
 import {allFormats, jpeg as jpegFormat, png as pngFormat} from '../../../src/composable/formats.js';
 import {allGroups, exif, iptc} from '../../../src/composable/groups.js';
@@ -29,7 +29,7 @@ import {
     TAG_MODEL,
 } from '../loadview-inventory-images.js';
 
-const ALL = Composition.createComposition({formats: allFormats, groups: allGroups});
+const ALL = createDefaultLikeComposition({formats: allFormats, groups: allGroups});
 const FORMATS_BUT_XML = allFormats.filter((format) => format.header.fileType.value !== 'xml');
 const THUMBNAIL_IMAGE = '\xff\xd8\xff\xd9';
 const JPEG = getJpeg(
@@ -60,7 +60,7 @@ describe('composable/read-view', () => {
     });
 
     it('should list in metadataRange only the kinds the composition consumes', () => {
-        const withoutXmp = Composition.createComposition({formats: FORMATS_BUT_XML, groups: [exif]});
+        const withoutXmp = createDefaultLikeComposition({formats: FORMATS_BUT_XML, groups: [exif]});
 
         const all = readView(ALL, getDataView(JPEG), {expanded: true, includeOffsets: true}, getEnvironment());
         const exifOnly = readView(withoutXmp, getDataView(JPEG), {expanded: true, includeOffsets: true}, getEnvironment());
@@ -76,7 +76,7 @@ describe('composable/read-view', () => {
             getTextChunk('Raw profile type exif', getExifRawProfile(getTiff({ifd0: [ascii(TAG_MODEL, 'Model')]})))
         );
 
-        const tags = readView(Composition.createComposition({formats: FORMATS_BUT_XML, groups: [exif, iptc]}), getDataView(png), {}, getEnvironment());
+        const tags = readView(createDefaultLikeComposition({formats: FORMATS_BUT_XML, groups: [exif, iptc]}), getDataView(png), {}, getEnvironment());
 
         expect(tags.Make.description).to.equal('Make');
         expect(tags.Model.description).to.equal('Model');
@@ -87,7 +87,7 @@ describe('composable/read-view', () => {
 
     for (const async of [false, true]) {
         it(`should run the composition's steps on the engine's merge blocks and on the tags with the blocks it reads (async: ${async})`, async () => {
-            const composition = Composition.createComposition({formats: [pngFormat], groups: []});
+            const composition = createDefaultLikeComposition({formats: [pngFormat], groups: []});
             const prepared = [];
             const finished = [];
             composition.prepareMergeBlocks = [
@@ -203,7 +203,7 @@ describe('composable/read-view', () => {
     });
 
     it('should throw an UnsupportedFormatError synchronously for a format the composition lacks', () => {
-        const pngOnly = Composition.createComposition({formats: allFormats.filter((format) => format.header.fileType.value === 'png'), groups: []});
+        const pngOnly = createDefaultLikeComposition({formats: allFormats.filter((format) => format.header.fileType.value === 'png'), groups: []});
 
         expect(() => readView(pngOnly, getDataView(JPEG), {async: true}, getEnvironment())).to.throw(Errors.UnsupportedFormatError, 'Invalid image format');
     });
@@ -212,7 +212,7 @@ describe('composable/read-view', () => {
         const PNG_WITH_ZTXT = getPng(getZtxtChunk('Comment', 'compressed'));
 
         it('should give each load through one composition its own budget', async () => {
-            const pngOnly = Composition.createComposition({formats: [pngFormat], groups: []});
+            const pngOnly = createDefaultLikeComposition({formats: [pngFormat], groups: []});
             const options = {async: true, decompress: {deflate: () => getDataView('abcd'), maxDecompressedSize: 4}};
 
             const first = await readView(pngOnly, getDataView(PNG_WITH_ZTXT), options, getEnvironment());
@@ -223,7 +223,7 @@ describe('composable/read-view', () => {
         });
 
         it('should hand the decompress option\'s limit to the decompressor', async () => {
-            const pngOnly = Composition.createComposition({formats: [pngFormat], groups: []});
+            const pngOnly = createDefaultLikeComposition({formats: [pngFormat], groups: []});
             const load = (text) => readView(pngOnly, getDataView(PNG_WITH_ZTXT), {async: true, decompress: {deflate: () => getDataView(text), maxDecompressedSize: 4}}, getEnvironment());
             const warnings = [];
             restores.push(swapProperties(console, {warn: (message) => warnings.push(message)}));
@@ -240,8 +240,8 @@ describe('composable/read-view', () => {
             const budgets = recordCalls(decompression, 'withDecompressBudget', decompression.withDecompressBudget);
             const pools = recordCalls(decompression, 'createPooledDecompress', decompression.createPooledDecompress);
             restores.push(budgets.restore, pools.restore);
-            const jpegOnly = Composition.createComposition({formats: [jpegFormat], groups: [exif]});
-            const pngOnly = Composition.createComposition({formats: [pngFormat], groups: []});
+            const jpegOnly = createDefaultLikeComposition({formats: [jpegFormat], groups: [exif]});
+            const pngOnly = createDefaultLikeComposition({formats: [pngFormat], groups: []});
             const config = {maxDecompressedSize: 10};
 
             const tags = readView(jpegOnly, getDataView(JPEG), {decompress: config}, getEnvironment());
@@ -268,4 +268,11 @@ function getEnvironment({includeTagsIsLimit} = {}) {
         createTagFilter,
         includeTagsIsLimit,
     };
+}
+
+// As the default entry composes: with the sync-mode rule.
+function createDefaultLikeComposition(tables) {
+    const composition = Composition.createComposition(tables);
+    composition.isHiddenInSyncMode = createIsHiddenInSyncMode(tables.formats);
+    return composition;
 }
