@@ -33,7 +33,8 @@ const MODULE_MARKERS = {
     'image-header.js': 'Invalid image format',
     'load-auto.js': 'length: "auto" is not supported for this file type ',
     'loadview-pipeline.js': 'mpfImage',
-    'engine.js': 'The group emission graph has a cycle through ',
+    // Quoted: the dispatch verdict in createShouldDispatch, which every build runs.
+    'engine.js': '\'visiting\'',
     'tag-filter-config.js': 'relatedimage',
     // getDataViewFromBytes's TypeError, which every build reaches through load.
     'utils.js': 'Passed data type is unsupported.',

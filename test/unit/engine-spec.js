@@ -77,6 +77,27 @@ describe('engine', () => {
             expect(log).to.deep.equal(['a', 'b', 'c']);
         });
 
+        it('should stop a cyclic composition at the depth limit when its groups dispatch', () => {
+            const log = [];
+            const composition = getComposition([
+                group('a', log, {emits: ['b'], blocks: [{kind: 'b'}]}),
+                group('b', log, {emits: ['a'], blocks: [{kind: 'a'}]}),
+            ]);
+
+            run(composition, [{kind: 'a'}], getContext());
+
+            expect(log).to.deep.equal(['a', 'b', 'a']);
+        });
+
+        it('should stop a group that emits its own kind at the depth limit', () => {
+            const log = [];
+            const composition = getComposition([group('a', log, {emits: ['a'], blocks: [{kind: 'a'}]})]);
+
+            run(composition, [{kind: 'a'}], getContext());
+
+            expect(log).to.deep.equal(['a', 'a', 'a']);
+        });
+
         it('should give every group consuming a kind its own result, in table order', () => {
             const log = [];
             const composition = getComposition([group('first', log, {consumes: ['a']}), group('second', log, {consumes: ['a']})]);

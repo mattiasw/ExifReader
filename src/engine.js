@@ -66,8 +66,8 @@ function createDispatchPlan(composition, blocks, context) {
 }
 
 // A group dispatches when the filter parses its key, or a group that consumes
-// a kind it emits does. A cycle counts as false; validateComposition rejects
-// one anyway.
+// a kind it emits does. A cycle counts as false, so a forged cyclic group
+// cannot recurse forever.
 function createShouldDispatch(groups, consumersOf, tagFilter) {
     const verdicts = [];
 
@@ -277,7 +277,8 @@ export function createContext({dataView, options, tagFilter, decompressConfig, g
 /**
  * Throws when the groups' static emission graph has a cycle (a kind that,
  * through the groups consuming it and what they emit, leads back to itself) or
- * a chain of consumed kinds longer than MAX_BLOCK_DEPTH.
+ * a chain of consumed kinds longer than MAX_BLOCK_DEPTH. Only the unit tests
+ * call it, over every format and group, the union of every composition.
  *
  * @param {{groups: Array<object>}} composition
  */

@@ -340,10 +340,12 @@ describe('composable/core', () => {
             }
         });
 
-        it('should reject a cyclic emission graph', () => {
+        it('should create a reader for groups whose emission graph has a cycle, and load with it', async () => {
             const groups = [getGroup('a', ['b']), getGroup('b', ['a'])];
 
-            expect(() => createReader({formats: [jpeg], groups})).to.throw(Error, /^createReader: The group emission graph has a cycle through a$/);
+            const reader = createReader({formats: [jpeg], groups});
+
+            expect(await reader.load(getDataView(JPEG))).to.be.an('object');
         });
 
         it('should compose a second time only when tags or groups add a parse-only group', () => {

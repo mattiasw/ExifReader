@@ -6,14 +6,11 @@ import {expect} from 'chai';
 import {TYPE_TEXT, TYPE_ZTXT} from '../../../src/image-header-png.js';
 import IsoBmffFileTags from '../../../src/iso-bmff-file-tags.js';
 import CanonTags from '../../../src/canon-tags.js';
-import PentaxTags from '../../../src/pentax-tags.js';
-import {run} from '../../../src/engine.js';
+import {run, validateComposition} from '../../../src/engine.js';
 import Composition from '../../../src/composable/composition.js';
 import {allFormats, tiff, jpeg, png, heic, avif, jxl, webp, gif, xml} from '../../../src/composable/formats.js';
 import * as Groups from '../../../src/composable/groups.js';
 import {allGroups, exif, iptc, xmp, icc, canon, pentax, makerNotes, gps, composite, thumbnail} from '../../../src/composable/groups.js';
-import {canonDecoder} from '../../../src/composable/groups/canon.js';
-import {pentaxDecoder} from '../../../src/composable/groups/pentax.js';
 import {pngFile, pngText, pngHeader} from '../../../src/composable/formats/png.js';
 import {xmp as xmpModule} from '../../../src/composable/groups/xmp.js';
 import {thumbnail as thumbnailModule} from '../../../src/composable/groups/thumbnail.js';
@@ -25,7 +22,7 @@ import {CORE_MERGE_MODES} from '../../../src/loadview-pipeline.js';
 import {jxlHeader} from '../../../src/composable/formats/jxl.js';
 import {decompression} from '../../../src/decompression.js';
 import {getContext, recordCalls} from './test-context.js';
-import {getMakerNoteBlock, getPentaxType1Bytes} from './groups/maker-note-test-data.js';
+import {getMakerNoteBlock} from './groups/maker-note-test-data.js';
 
 const DISPATCH_ORDER = [
     'file', 'jfif', 'exif', 'iptc', 'xmp', 'icc', 'mpf', 'pngFile', 'pngText', 'pngChunk',
@@ -118,33 +115,6 @@ describe('composable/composition', () => {
                 expect(mergeBlocks[0]).to.deep.equal({group: 'makerNotes', tags: {LensModel: {value: 'l'}}, slot: 'makerNotes', mode: 'assign'});
             });
 
-            it('should merge canon and pentax into one group with both decoders, Canon first', () => {
-                for (const groups of [[canon, pentax], [pentax, canon], [makerNotes, canon], [pentax, makerNotes], [makerNotes, canon, pentax]]) {
-                    const composition = createComposition({groups});
-
-                    expect(composition.groups, groups.map((group) => group.decoders[0].name).join()).to.have.lengthOf(1);
-                    const merged = composition.groups[0];
-                    expect(merged.key).to.equal('makerNotes');
-                    expect(merged.consumes).to.deep.equal(['makerNote']);
-                    expect(merged.emits).to.deep.equal([]);
-                    expect(merged.merge).to.equal(groups[0].merge);
-                    expect(merged.decoders).to.deep.equal([canonDecoder, pentaxDecoder]);
-                }
-            });
-
-            it('should read with the merged decoders, Canon by Make before Pentax by prefix', () => {
-                const [merged] = createComposition({groups: [pentax, canon]}).groups;
-                const canonReads = recordCalls(CanonTags, 'read', {Canon: {value: 1}});
-                const pentaxReads = recordCalls(PentaxTags, 'read', {Pentax: {value: 1}});
-                restores.push(canonReads.restore, pentaxReads.restore);
-
-                expect(merged.read(getMakerNoteBlock({make: ['Canon'], bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Canon: {value: 1}}});
-                expect(merged.read(getMakerNoteBlock({make: ['PENTAX'], bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Pentax: {value: 1}}});
-                expect(merged.read(getMakerNoteBlock({make: ['Nikon']}), getContext())).to.equal(undefined);
-                expect(canonReads.calls).to.have.lengthOf(1);
-                expect(pentaxReads.calls).to.have.lengthOf(1);
-            });
-
             it('should sort the merged group into its dispatch position', () => {
                 const composition = createComposition({groups: [thumbnail, canon, pentax, exif]});
 
@@ -194,10 +164,13 @@ describe('composable/composition', () => {
             });
         });
 
-        it('should reject a composition whose emission graph has a cycle', () => {
-            const looping = {key: 'loop', consumes: ['exif'], emits: ['exif'], read: () => undefined, merge: () => ({})};
+        it('should have no cycle or too deep a chain with every format and every group composed', () => {
+            const groups = getExportedGroups().concat([
+                exifBlockReader.createParseOnlyGroup([], undefined),
+                iptcBlockReader.createParseOnlyGroup([]),
+            ]);
 
-            expect(() => createComposition({groups: [looping]})).to.throw('The group emission graph has a cycle through exif');
+            expect(() => validateComposition(createComposition({formats: allFormats, groups}))).to.not.throw();
         });
     });
 

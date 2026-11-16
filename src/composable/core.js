@@ -47,7 +47,6 @@ export const tagFilter = {brand: FILTER_BRAND, createTagFilter, narrowIncludeTag
  *     parseFromString method, or decompress is given and is not an object of
  *     optional brotli and deflate functions and a maxDecompressedSize of zero
  *     or more, or has another key.
- * @throws {Error} When the groups' emission graph has a cycle or is too deep.
  */
 export function createReader(tables) {
     const given = tables || {};
@@ -58,14 +57,14 @@ export function createReader(tables) {
     assertDomParserShape(domParser);
     const decompressConfig = getDecompressConfig(decompress);
 
-    const composition = compose(formats, groups);
+    const composition = Composition.createComposition({formats, groups});
     const unsupportedFormatMessage = getUnsupportedFormatMessage(composition.formats);
     const includeTagsMapping = getIncludeTagsMapping(composition, tags);
     const readGroups = groups.concat(getParseOnlyGroups(includeTagsMapping));
     const exifDescriptors = tags.filter((tag) => tag.group === 'exif').concat(getExifDependencies(readGroups));
     const addsExif = needsExif(exifDescriptors) && composition.composed.groups.exif !== true;
     const runGroups = addsExif ? readGroups.concat([getParseOnlyExifGroup(exifDescriptors, groups)]) : readGroups;
-    const runComposition = runGroups.length > groups.length ? compose(formats, runGroups) : composition;
+    const runComposition = runGroups.length > groups.length ? Composition.createComposition({formats, groups: runGroups}) : composition;
     const environments = getEnvironments(groups, filter ? filter.createTagFilter : getCompositionTagFilterFactory(readGroups));
     const environmentChecks = getEnvironmentChecks(groups);
 
@@ -192,14 +191,6 @@ function assertDecompressKeys(decompress) {
 function assertDecompressFunction(value, key) {
     if (value !== undefined && typeof value !== 'function') {
         throw new TypeError('createReader: decompress.' + key + ' must be a function');
-    }
-}
-
-function compose(formats, groups) {
-    try {
-        return Composition.createComposition({formats, groups});
-    } catch (error) {
-        throw new Error('createReader: ' + error.message);
     }
 }
 

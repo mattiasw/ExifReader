@@ -3,7 +3,6 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {objectAssign} from '../utils.js';
-import {validateComposition} from '../engine.js';
 import {isPngTextChunkBlock} from './group-helpers.js';
 
 const DETECTION_ORDER = ['tiff', 'jpeg', 'png', 'heic', 'avif', 'jxl', 'webp', 'gif', 'xml'];
@@ -37,12 +36,11 @@ export default {
  *     `mergeModes` (the merge modes the engine and derived groups bring) and
  *     the engine groups' `prepareMergeBlocks` and `finishTags` steps in
  *     dispatch order.
- * @throws {Error} When the groups' emission graph has a cycle.
  */
 function createComposition({formats, groups}) {
     const engineGroups = getEngineGroups(formats, groups);
     const derived = sortByOrder(unique(groups.filter(isDerivedGroup)), DERIVED_ORDER, (group) => group.key);
-    const composition = {
+    return {
         groups: engineGroups,
         dispatchKind,
         rank,
@@ -60,9 +58,6 @@ function createComposition({formats, groups}) {
         prepareMergeBlocks: getSteps(engineGroups, 'prepareMergeBlocks'),
         finishTags: getSteps(engineGroups, 'finishTags'),
     };
-
-    validateComposition(composition);
-    return composition;
 }
 
 function getEngineGroups(formats, groups) {

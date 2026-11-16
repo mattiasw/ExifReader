@@ -14,6 +14,7 @@ import * as ExifReader from '../../src/exif-reader.js';
 import ByteOrder from '../../src/byte-order.js';
 import {getArrayBuffer, getDataView, getByteStringFromNumber, getConsoleWarnSpy, swapProperties} from './test-utils.js';
 import Constants from '../../src/constants.js';
+import {validateComposition} from '../../src/engine.js';
 import ImageHeader from '../../src/image-header.js';
 import Composition from '../../src/composable/composition.js';
 import * as Formats from '../../src/composable/formats.js';
@@ -4964,22 +4965,8 @@ describe('exif-reader', function () {
             });
         }
 
-        it('should build the default composition at import, so that an invalid one throws there', async () => {
-            swap(Composition, {
-                createComposition() {
-                    throw new Error('The group emission graph has a cycle through exif');
-                }
-            });
-
-            let error;
-            try {
-                // The query gives a fresh instance of the entry, which shares the swapped Composition.
-                await import('../../src/exif-reader.js?import-time-composition');
-            } catch (caught) {
-                error = caught;
-            }
-
-            expect(error && error.message).to.equal('The group emission graph has a cycle through exif');
+        it('should have no cycle or too deep a chain in the default entry\'s own composition', () => {
+            expect(() => validateComposition(captureComposition())).to.not.throw();
         });
 
         it('should hand the composed formats to the format detection', () => {
@@ -5061,6 +5048,21 @@ describe('exif-reader', function () {
             });
             loadIgnoringFormatErrors();
             return tables[0];
+        }
+
+        function captureComposition() {
+            loadWithOtherTables();
+            const compositions = [];
+            const originalCreateComposition = Composition.createComposition;
+            swap(Composition, {
+                createComposition(composedTables) {
+                    const composition = originalCreateComposition(composedTables);
+                    compositions.push(composition);
+                    return composition;
+                }
+            });
+            loadIgnoringFormatErrors();
+            return compositions[0];
         }
 
         function loadIgnoringFormatErrors() {

@@ -48,10 +48,6 @@ export default {
 let defaultComposition;
 let defaultCompositionEntries;
 
-// Builds the default composition once at import, so that a cycle in the
-// groups' emission graph throws here rather than on the first load.
-getDefaultComposition();
-
 export const errors = exifErrors;
 
 export function load(data, options = {}) {

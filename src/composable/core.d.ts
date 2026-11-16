@@ -115,8 +115,8 @@ type ComposedReader<F, G, T, Filter> = Reader<
  *     `TagDescriptor[]`) gives every group, typed as this module's
  *     `ExpandedTags`, and `Tags`.
  * @throws When a table holds a value that was not imported from its module,
- *     domParser is given and has no parseFromString method, decompress is
- *     invalid, or the composition is invalid.
+ *     domParser is given and has no parseFromString method, or decompress is
+ *     invalid.
  */
 export declare function createReader<
     F extends readonly Format[],
