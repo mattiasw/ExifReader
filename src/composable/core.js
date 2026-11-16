@@ -9,7 +9,7 @@ import {createCompositionTagFilter} from './composition-tag-filter.js';
 import {createTagFilter} from '../tag-filter.js';
 import {FILTER_GROUPS} from '../tag-filter-config.js';
 import {UnsupportedFormatError} from '../unsupported-format-error.js';
-import {objectAssign, getDataViewFromBytes, getByteString, assertPromiseSupport} from '../utils.js';
+import {objectAssign, getDataViewFromBytes, assertPromiseSupport} from '../utils.js';
 
 const FORMATS_IMPORT = '\'exifreader/formats\'';
 const GROUPS_IMPORT = '\'exifreader/groups\'';
@@ -66,8 +66,8 @@ export function createReader(tables) {
     const addsExif = needsExif(exifDescriptors) && composition.composed.groups.exif !== true;
     const runGroups = addsExif ? readGroups.concat([getParseOnlyExifGroup(exifDescriptors, groups)]) : readGroups;
     const runComposition = runGroups.length > groups.length ? compose(formats, runGroups) : composition;
-    const hasXmp = composition.composed.groups.xmp === true;
-    const environments = getEnvironments(filter ? filter.createTagFilter : getCompositionTagFilterFactory(readGroups));
+    const environments = getEnvironments(groups, filter ? filter.createTagFilter : getCompositionTagFilterFactory(readGroups));
+    const environmentChecks = getEnvironmentChecks(groups);
 
     return {load};
 
@@ -77,7 +77,7 @@ export function createReader(tables) {
             const loadOptions = getLoadOptions(options);
             const expanded = loadOptions.expanded === undefined ? true : loadOptions.expanded;
             assertTagFilterOptions(filter, loadOptions);
-            assertDomParser(hasXmp, domParser);
+            environmentChecks.forEach((check) => check(domParser));
             return getInputDataView(data).then((dataView) => {
                 const run = getRun(objectAssign({}, loadOptions, {domParser, decompress: decompressConfig, expanded}), includeTagsMapping, addsExif, filter, environments);
                 return readView(runComposition, dataView, run.options, run.environment);
@@ -271,8 +271,12 @@ function getIfd1TagNames(groups) {
     return undefined;
 }
 
-function getEnvironments(createFilter) {
-    const environment = {getDomParser, getBase64Image, createTagFilter: createFilter};
+// From the groups as given: parse-only groups carry no environment.
+function getEnvironments(groups, createFilter) {
+    const environment = {createTagFilter: createFilter};
+    for (let i = 0; i < groups.length; i++) {
+        objectAssign(environment, groups[i].environment);
+    }
     return {
         environment,
         // includeTags then only caps what is read, so excludeTags applies to every group.
@@ -285,6 +289,16 @@ function getEnvironments(createFilter) {
 function getCompositionTagFilterFactory(groups) {
     const exifDependencyNames = getNames(getExifDependencies(groups));
     return ({includeTags}) => createCompositionTagFilter(includeTags, exifDependencyNames);
+}
+
+function getEnvironmentChecks(groups) {
+    const checks = [];
+    for (let i = 0; i < groups.length; i++) {
+        if (groups[i].assertEnvironment !== undefined) {
+            checks.push(groups[i].assertEnvironment);
+        }
+    }
+    return checks;
 }
 
 function getLoadOptions(options) {
@@ -338,12 +352,6 @@ function assertTagFilterOptions(filter, options) {
 
 function getMissingFilterError(option) {
     return new TypeError('reader.load: ' + option + ' needs the tag filter: add tagFilter, imported from ' + CORE_IMPORT + ', to createReader');
-}
-
-function assertDomParser(hasXmp, domParser) {
-    if (hasXmp && !domParser && typeof DOMParser === 'undefined') {
-        throw new Error('reader.load: xmp is in groups but no DOM parser is available: pass domParser to createReader, for example new DOMParser({onError: onErrorStopParsing}) from @xmldom/xmldom, or leave xmp out of groups');
-    }
 }
 
 function getInputDataView(data) {
@@ -521,15 +529,4 @@ function getDescriptorNames(mapping) {
         }
     }
     return names;
-}
-
-function getDomParser(domParser) {
-    return {parser: domParser || new DOMParser()};
-}
-
-function getBase64Image(image) {
-    if (typeof btoa === 'undefined') {
-        return undefined;
-    }
-    return btoa(getByteString(new Uint8Array(image)));
 }

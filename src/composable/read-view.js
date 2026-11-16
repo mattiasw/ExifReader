@@ -18,11 +18,11 @@ import {isPngTextChunkBlock} from './group-helpers.js';
  * @param {object} options The load options (`expanded`, `async`, `computed`,
  *     `includeUnknown`, `includeOffsets`, `domParser`, `includeTags`,
  *     `excludeTags`, `decompress`).
- * @param {{getDomParser: function, getBase64Image: function, createTagFilter: function, includeTagsIsLimit: (boolean|undefined)}} environment
- *     How XMP gets a DOM parser and a thumbnail its base64, what builds the
- *     tag filter from includeTags, excludeTags and includeTagsIsLimit, and
- *     whether includeTags only caps what is read (see createTagFilter in
- *     tag-filter.js).
+ * @param {{getDomParser: (function|undefined), getBase64Image: (function|undefined), createTagFilter: function, includeTagsIsLimit: (boolean|undefined)}} environment
+ *     How XMP gets a DOM parser and a thumbnail or an MPF image its base64,
+ *     what builds the tag filter from includeTags, excludeTags and
+ *     includeTagsIsLimit, and whether includeTags only caps what is read (see
+ *     createTagFilter in tag-filter.js).
  * @returns {object|Promise<object>} The tags, or a promise of them when
  *     `options.async` is set.
  * @throws {UnsupportedFormatError} Synchronously, when no composed format

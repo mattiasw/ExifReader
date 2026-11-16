@@ -25,7 +25,7 @@ import {ByLine, Headline, CodedCharacterSet, Keywords} from '../../../src/compos
 import {exifBlockReader} from '../../../src/composable/exif-block-reader.js';
 import {iptcBlockReader} from '../../../src/composable/iptc-block-reader.js';
 import {createTagFilter} from '../../../src/tag-filter.js';
-import {getDataView, swapProperties} from '../test-utils.js';
+import {getDataView, getByteStringFromNumber, swapProperties} from '../test-utils.js';
 import {
     ascii,
     rationals,
@@ -43,6 +43,7 @@ import {
     getJpeg,
     getSof0Segment,
     getJfifSegment,
+    getMpfSegment,
     getExifSegment,
     getXmpSegment,
     getXmpPacket,
@@ -1931,6 +1932,22 @@ describe('composable/core', () => {
             const tags = await createReader({formats: [jpeg], groups: [thumbnail]}).load(getDataView(JPEG));
 
             expect(tags.Thumbnail.base64).to.equal(undefined);
+        });
+
+        it('should give the MPF images their base64', async () => {
+            const imageSize = 12;
+            const mpfTiff = 'MM\x00\x2a' + getByteStringFromNumber(8, 4)
+                + getByteStringFromNumber(2, 2)
+                + '\xb0\x01' + getByteStringFromNumber(4, 2) + getByteStringFromNumber(1, 4) + getByteStringFromNumber(1, 4)
+                + '\xb0\x02' + getByteStringFromNumber(7, 2) + getByteStringFromNumber(16, 4) + getByteStringFromNumber(38, 4)
+                + getByteStringFromNumber(0, 4)
+                + getByteStringFromNumber(0, 4) + getByteStringFromNumber(imageSize, 4) + getByteStringFromNumber(0, 4) + getByteStringFromNumber(0, 4);
+            const image = getJpeg(getSof0Segment(), getJfifSegment(), getMpfSegment(mpfTiff));
+
+            const tags = await createReader({formats: [jpeg], groups: [mpf]}).load(getDataView(image));
+
+            expect(tags.mpf.Images).to.have.length(1);
+            expect(tags.mpf.Images[0].base64).to.equal(btoa(image.slice(0, imageSize)));
         });
 
         it('should read the same without the tag filter as with it when the load filters nothing', async () => {
