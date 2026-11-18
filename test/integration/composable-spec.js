@@ -37,7 +37,7 @@ const Composite = require('../../src/composite.js').default;
 const IptcTagNames = require('../../src/iptc-tag-names.js').default;
 
 const IMAGES_PATH = path.join(__dirname, '..', 'fixtures', 'images');
-const TRACKED_IMAGES = ['test.jpg', 'test.png', 'test.tiff', 'test.heic', 'test.avif', 'test.jxl', 'test.gif'];
+const TRACKED_IMAGES = ['test.jpg', 'test.png', 'test.tiff', 'test.heic', 'test.avif', 'test.jxl', 'test.gif', 'test-maker-note-canon.jpg', 'test-maker-note-pentax.jpg'];
 const XMP_SIDECAR_NAME = 'crafted XMP sidecar';
 const XMP_SIDECAR = '<?xpacket begin="\uFEFF" id="W5M0MpCehiHzreSzNTczkc9d"?>'
     + '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
