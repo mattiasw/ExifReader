@@ -3,6 +3,15 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import { load, loadView, errors, type Tags, type ExpandedTags } from "../../exif-reader.js";
+import type * as ExifTagModule from "../../src/composable/tags/exif.js";
+import type * as IptcTagModule from "../../src/composable/tags/iptc.js";
+import type { TagDescriptor } from "../../src/composable/core.js";
+
+type DescriptorNames<M> = { [K in keyof M]: M[K] extends TagDescriptor<string, infer Name> ? Name : never }[keyof M];
+type MustBeNever<T extends never> = T;
+// Fails, naming the tag, when a generated tag module has a tag that exif-reader.d.ts does not declare.
+type UndeclaredExifTags = MustBeNever<Exclude<DescriptorNames<typeof ExifTagModule>, keyof NonNullable<ExpandedTags["exif"]>>>;
+type UndeclaredIptcTags = MustBeNever<Exclude<DescriptorNames<typeof IptcTagModule>, keyof NonNullable<ExpandedTags["iptc"]>>>;
 
 load("", { includeUnknown: true });
 load("", { computed: true });
@@ -152,6 +161,25 @@ if (computedGpsLatitude) {
     computedGpsLatitude[0] === null;
     // @ts-expect-error
     computedGpsLatitude[0] === "1";
+}
+
+expandedTags["exif"]?.["LensSpecification"]?.value[0][0] === 4;
+// @ts-expect-error
+expandedTags["exif"]?.["LensSpecification"]?.value[0] === "28";
+const computedLensSpecification = computedExpandedTags["exif"]?.["LensSpecification"]?.computed;
+computedLensSpecification?.[0] === 4.2;
+computedLensSpecification?.[0] === null;
+expandedTags["exif"]?.["HostComputer"]?.value[0] === "Mac";
+
+const applicationNotes = tags["ApplicationNotes"];
+if (applicationNotes && Array.isArray(applicationNotes.value)) {
+    applicationNotes.value[0] === 60;
+}
+const expandedApplicationNotes = expandedTags["exif"]?.["ApplicationNotes"]?.value;
+if (Array.isArray(expandedApplicationNotes)) {
+    expandedApplicationNotes[0] === 60;
+} else {
+    expandedApplicationNotes === 60;
 }
 
 expandedTags["exif"]?.["Thumbnail"]?.type === "image/jpeg";

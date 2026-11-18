@@ -11,7 +11,7 @@ import type { Tags as CoreTags, ExpandedTags as CoreExpandedTags, LoadInput, Loa
 import type { formatBrand } from "exifreader/core";
 import { jpeg, png, jxl, allFormats } from "exifreader/formats";
 import { exif, iptc, xmp, mpf, canon, pentax, makerNotes, gps, thumbnail, allGroups } from "exifreader/groups";
-import { DateTimeOriginal } from "exifreader/tags/exif";
+import { DateTimeOriginal, LensSpecification, ApplicationNotes } from "exifreader/tags/exif";
 import { ModelVersion, Keywords, Headline } from "exifreader/tags/iptc";
 import type * as ExifTagModule from "exifreader/tags/exif";
 import type * as IptcTagModule from "exifreader/tags/iptc";
@@ -56,6 +56,7 @@ const coreTagsIsTags: Equal<CoreTags, Tags> = true;
 const coreExpandedTagsKeywords: Equal<NonNullable<CoreExpandedTags["iptc"]>["Keywords"], NumberArrayTag[] | undefined> = true;
 const coreExpandedTagsHeadline: Equal<NonNullable<CoreExpandedTags["iptc"]>["Headline"], NumberArrayTag | undefined> = true;
 // Each group has only its own tag names, with the value types of the default entry.
+const coreExpandedTagsExif: Equal<keyof NonNullable<CoreExpandedTags["exif"]>, DescriptorNames<typeof ExifTagModule>> = true;
 const coreExpandedTagsIptcNames: Equal<
     keyof NonNullable<CoreExpandedTags["iptc"]>,
     DescriptorNames<typeof IptcTagModule> | "ObjectData Preview File Format" | "Record 2 destination" | "ObjectData Preview File Format Version"
@@ -229,6 +230,14 @@ const dateTimeOriginalType: Equal<
 > = true;
 // @ts-expect-error
 dateTimeOriginal.exif?.Make;
+const lensTags = await createReader({ formats: [jpeg], tags: [LensSpecification, ApplicationNotes, DateTimeOriginal] })
+    .load(new ArrayBuffer(0));
+const lensTagsNames: Equal<keyof NonNullable<typeof lensTags.exif>, "LensSpecification" | "ApplicationNotes" | "DateTimeOriginal"> = true;
+const lensTagsType: Equal<
+    NonNullable<typeof lensTags.exif>["LensSpecification"],
+    NonNullable<ExpandedTags["exif"]>["LensSpecification"]
+> = true;
+lensTags.exif?.ApplicationNotes;
 const modelVersion = await createReader({ formats: [jpeg], tags: [ModelVersion] }).load(new ArrayBuffer(0));
 const modelVersionNames: Equal<keyof NonNullable<typeof modelVersion.iptc>, "Model Version"> = true;
 // The whole group wins over its descriptors.
@@ -423,6 +432,7 @@ export {
     coreTagsIsTags,
     coreExpandedTagsKeywords,
     coreExpandedTagsHeadline,
+    coreExpandedTagsExif,
     defaultEntryKeywords,
     coreExpandedTagsAsDefault,
     noArgumentIsExpandedTags,

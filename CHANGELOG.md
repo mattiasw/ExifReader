@@ -64,6 +64,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TypeScript now declares the `mpf` group of the expanded result of `load` and
   `loadView` (`tags.mpf.Images`, `tags.mpf.MPFVersion` and the other MPF tags).
   Reading `tags.mpf` failed with TS2339.
+- TypeScript now declares every Exif tag the library reads, among them
+  `LensSpecification`, `HostComputer` and `ApplicationNotes`. They can now be
+  read without a cast from the expanded result of `load` and `loadView` and
+  from a `createReader` reader whose `tags` ask for them. In the flat result
+  these names were typed through its index signatures, always present and
+  with a string `value`. Like the other Exif tags they are now optional and
+  typed by the shapes the library returns, so a read such as
+  `tags.Rating.value` may need a check for `undefined` and a narrowing.
 
 ### Security
 

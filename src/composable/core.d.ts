@@ -23,7 +23,7 @@ type ExifDescriptorName = DescriptorNames<(typeof ExifDescriptors)[keyof typeof 
 type IptcDescriptorName = DescriptorNames<(typeof IptcDescriptors)[keyof typeof IptcDescriptors], 'iptc'>;
 // The names of 2:200 and 2:201 have no descriptor: they come only with the whole iptc group.
 type IptcGroupOnlyName = 'ObjectData Preview File Format' | 'Record 2 destination' | 'ObjectData Preview File Format Version';
-type ComposedExifTags = Pick<ExifTags, Extract<ExifDescriptorName, keyof ExifTags>>;
+type ComposedExifTags = Pick<ExifTags, ExifDescriptorName>;
 // A composed reader returns a repeatable IPTC dataset as an array, also when the file holds it once.
 type ComposedIptcTags = Pick<ExifTags, Exclude<IptcDescriptorName | IptcGroupOnlyName, RepeatableIptcName>> & {[Name in RepeatableIptcName]?: NumberArrayTag[]};
 type ComposedExpandedTags = Omit<ExpandedTags, 'exif' | 'iptc'> & {exif?: ComposedExifTags, iptc?: ComposedIptcTags};

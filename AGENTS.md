@@ -139,4 +139,4 @@ After updating, read through the whole `Unreleased` section again. Each change t
 2. Add description function if needed, as a named export of the dictionary's sibling `*-descriptions.js` module, or of `src/tag-names-common.js` when dictionaries share it. An inline arrow in a dictionary fails `test/unit/tag-dictionary-shape-spec.js`
 3. Run `npm run generate:tags` to regenerate the per-tag modules in `src/composable/tags/`
 4. Add unit test in corresponding `test/unit/tag-names-*-spec.js`
-5. Update `exif-reader.d.ts` and `test/types/exif-reader.ts` if the tag is user-facing
+5. Update `exif-reader.d.ts` and `test/types/exif-reader.ts` if the tag is user-facing. A type test in `test/types/exif-reader.ts` fails (`npm run test:types`) when a tag in a generated module under `src/composable/tags/` is not declared in `exif-reader.d.ts`.
