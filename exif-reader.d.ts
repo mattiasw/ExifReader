@@ -169,9 +169,9 @@ interface NumberArrayFileTag {
     value: Array<number>
 }
 
-type TypedTag<V, C = V> = {
+type TypedTag<V, C = V, D = string> = {
     id: number,
-    description: string,
+    description: D,
     computed?: C,
     value: V
 }
@@ -179,6 +179,12 @@ type TypedTag<V, C = V> = {
 type RationalTag = TypedTag<[number, number], number | null>
 
 type RationalArrayTag = TypedTag<[number, number][], (number | null)[]>
+
+type GpsDecimalCoordinateTag = TypedTag<
+    [[number, number], [number, number], [number, number]],
+    [number | null, number | null, number | null],
+    number
+>
 
 type NumberTag = TypedTag<number>;
 
@@ -222,10 +228,10 @@ interface ThumbnailTags {
     YCbCrPositioning?: NumberTag,
     Orientation?: NumberTag,
     PhotometricInterpretation?: NumberTag,
-    StripOffsets?: NumberArrayTag,
+    StripOffsets?: NumberTag | NumberArrayTag,
     SamplesPerPixel?: NumberTag,
     RowsPerStrip?: NumberTag,
-    StripByteCounts?: NumberArrayTag
+    StripByteCounts?: NumberTag | NumberArrayTag
 }
 
 export interface ExpandedTags {
@@ -523,7 +529,7 @@ interface ExifTags {
     'OldSubfileType'?: NumberTag,
     'ImageWidth'?: NumberTag,
     'ImageLength'?: NumberTag,
-    'BitsPerSample'?: NumberArrayTag,
+    'BitsPerSample'?: NumberTag | NumberArrayTag,
     'Compression'?: NumberTag,
     'PhotometricInterpretation'?: NumberTag,
     'Thresholding'?: NumberTag,
@@ -534,11 +540,11 @@ interface ExifTags {
     'ImageDescription'?: StringArrayTag,
     'Make'?: StringArrayTag,
     'Model'?: StringArrayTag,
-    'StripOffsets'?: NumberArrayTag,
+    'StripOffsets'?: NumberTag | NumberArrayTag,
     'Orientation'?: NumberTag,
     'SamplesPerPixel'?: NumberTag,
     'RowsPerStrip'?: NumberTag,
-    'StripByteCounts'?: NumberArrayTag,
+    'StripByteCounts'?: NumberTag | NumberArrayTag,
     'MinSampleValue'?: NumberTag | NumberArrayTag,
     'MaxSampleValue'?: NumberTag | NumberArrayTag,
     'XResolution'?: RationalTag | NumberFileTag, // Also in JFIF tags.
@@ -556,8 +562,8 @@ interface ExifTags {
     'Artist'?: StringArrayTag,
     'HostComputer'?: StringArrayTag,
     'Predictor'?: NumberTag,
-    'WhitePoint'?: NumberArrayTag,
-    'PrimaryChromaticities'?: NumberArrayTag,
+    'WhitePoint'?: RationalArrayTag,
+    'PrimaryChromaticities'?: RationalArrayTag,
     'HalftoneHints'?: NumberArrayTag,
     'TileWidth'?: NumberTag,
     'TileLength'?: NumberTag,
@@ -568,10 +574,10 @@ interface ExifTags {
     'SampleFormat'?: NumberTag | NumberArrayTag,
     'JPEGInterchangeFormat'?: NumberTag,
     'JPEGInterchangeFormatLength'?: NumberTag,
-    'YCbCrCoefficients'?: NumberArrayTag,
+    'YCbCrCoefficients'?: RationalArrayTag,
     'YCbCrSubSampling'?: NumberArrayTag,
     'YCbCrPositioning'?: NumberTag,
-    'ReferenceBlackWhite'?: NumberArrayTag,
+    'ReferenceBlackWhite'?: RationalArrayTag,
     'ApplicationNotes'?: AnyFieldTypeTag,
     'Rating'?: AnyFieldTypeTag,
     'RatingPercent'?: AnyFieldTypeTag,
@@ -690,11 +696,11 @@ interface ExifTags {
     'ISOSpeed'?: NumberTag,
     'ISOSpeedLatitudeyyy'?: NumberTag,
     'ISOSpeedLatitudezzz'?: NumberTag,
-    'ExifVersion'?: NumberArrayTag,
+    'ExifVersion'?: NumberArrayTag | StringArrayTag, // Some writers store it as ASCII.
     'DateTimeOriginal'?: StringArrayTag,
     'DateTimeDigitized'?: StringArrayTag,
     'GooglePlusUploadCode'?: AnyFieldTypeTag,
-    'ComponentsConfiguration'?: NumberArrayTag,
+    'ComponentsConfiguration'?: NumberArrayTag | NumberTag, // Some writers store one value.
     'CompressedBitsPerPixel'?: RationalTag,
     'ShutterSpeedValue'?: RationalTag,
     'ApertureValue'?: RationalTag,
@@ -722,13 +728,13 @@ interface ExifTags {
     'WaterDepth'?: RationalTag,
     'Acceleration'?: RationalTag,
     'CameraElevationAngle'?: RationalTag,
-    'FlashpixVersion'?: NumberArrayTag,
+    'FlashpixVersion'?: NumberArrayTag | StringArrayTag | NumberTag, // Some writers store it as ASCII or as one value.
     'ColorSpace'?: NumberTag,
     'PixelXDimension'?: NumberTag,
     'PixelYDimension'?: NumberTag,
     'RelatedSoundFile'?: StringArrayTag,
     'Interoperability IFD Pointer'?: NumberTag,
-    'FlashEnergy'?: NumberTag,
+    'FlashEnergy'?: RationalTag,
     'SpatialFrequencyResponse'?: unknown,
     'FocalPlaneXResolution'?: RationalTag,
     'FocalPlaneYResolution'?: RationalTag,
@@ -737,7 +743,7 @@ interface ExifTags {
     'ExposureIndex'?: RationalTag,
     'SensingMethod'?: NumberTag,
     'FileSource'?: NumberTag,
-    'SceneType'?: NumberTag,
+    'SceneType'?: NumberTag | StringArrayTag, // Some writers store it as ASCII.
     'CFAPattern'?: unknown,
     'CustomRendered'?: NumberTag,
     'ExposureMode'?: NumberTag,
@@ -777,49 +783,43 @@ interface ExifTags {
     'OffsetTime'?: StringArrayTag,
     'OffsetTimeDigitized'?: StringArrayTag,
     'OffsetTimeOriginal'?: StringArrayTag,
-    'GPSHPositioningError'?: NumberArrayTag,
+    'GPSHPositioningError'?: RationalTag,
 
     // GPS tags
-    'GPSVersionID'?: NumberTag,
+    'GPSVersionID'?: NumberArrayTag,
     'GPSLatitudeRef'?: StringArrayTag,
-    'GPSLatitude'?: TypedTag<
-        [[number, number], [number, number], [number, number]],
-        [number | null, number | null, number | null]
-    >,
+    'GPSLatitude'?: GpsDecimalCoordinateTag,
     'GPSLongitudeRef'?: StringArrayTag,
-    'GPSLongitude'?: TypedTag<
-        [[number, number], [number, number], [number, number]],
-        [number | null, number | null, number | null]
-    >,
+    'GPSLongitude'?: GpsDecimalCoordinateTag,
     'GPSAltitudeRef'?: NumberTag,
     'GPSAltitude'?: RationalTag,
-    'GPSTimeStamp'?: NumberArrayTag,
+    'GPSTimeStamp'?: RationalArrayTag,
     'GPSSatellites'?: StringArrayTag,
     'GPSStatus'?: StringArrayTag,
     'GPSMeasureMode'?: StringArrayTag,
-    'GPSDOP'?: NumberTag,
+    'GPSDOP'?: RationalTag,
     'GPSSpeedRef'?: StringArrayTag,
-    'GPSSpeed'?: NumberTag,
+    'GPSSpeed'?: RationalTag,
     'GPSTrackRef'?: StringArrayTag,
-    'GPSTrack'?: NumberTag,
+    'GPSTrack'?: RationalTag,
     'GPSImgDirectionRef'?: StringArrayTag,
     'GPSImgDirection'?: RationalTag,
     'GPSMapDatum'?: StringArrayTag,
     'GPSDestLatitudeRef'?: StringArrayTag,
-    'GPSDestLatitude'?: NumberArrayTag,
+    'GPSDestLatitude'?: GpsDecimalCoordinateTag,
     'GPSDestLongitudeRef'?: StringArrayTag,
-    'GPSDestLongitude'?: NumberArrayTag,
+    'GPSDestLongitude'?: GpsDecimalCoordinateTag,
     'GPSDestBearingRef'?: StringArrayTag,
-    'GPSDestBearing'?: NumberTag,
+    'GPSDestBearing'?: RationalTag,
     'GPSDestDistanceRef'?: StringArrayTag,
-    'GPSDestDistance'?: NumberTag,
+    'GPSDestDistance'?: RationalTag,
     'GPSProcessingMethod'?: unknown,
     'GPSAreaInformation'?: unknown,
     'GPSDateStamp'?: StringArrayTag,
     'GPSDifferential'?: NumberTag,
 
     // MPF tags
-    'MPFVersion'?: NumberArrayTag,
+    'MPFVersion'?: NumberArrayTag | StringArrayTag, // Some writers store it as ASCII.
     'NumberOfImages'?: NumberTag,
     'MPEntry'?: NumberArrayTag,
     'ImageUIDList'?: NumberArrayTag,

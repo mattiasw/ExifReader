@@ -205,6 +205,137 @@ if (computedXResolution && "id" in computedXResolution) {
     const xResolutionComputedString: string = computedXResolution.computed;
 }
 
+const whitePointNumerator: number = expandedTags["exif"]?.["WhitePoint"]?.value[0][0] ?? 0;
+const gpsSpeedNumerator: number = expandedTags["exif"]?.["GPSSpeed"]?.value[0] ?? 0;
+
+const gpsLatitudeDescription: number = expandedTags["exif"]?.["GPSLatitude"]?.description ?? 0;
+// @ts-expect-error
+const gpsLatitudeDescriptionString: string = expandedTags["exif"]?.["GPSLatitude"]?.description ?? "";
+const gpsLongitudeDescription: number = expandedTags["exif"]?.["GPSLongitude"]?.description ?? 0;
+// @ts-expect-error
+const gpsLongitudeDescriptionString: string = expandedTags["exif"]?.["GPSLongitude"]?.description ?? "";
+const gpsDestLatitudeDescription: number = expandedTags["exif"]?.["GPSDestLatitude"]?.description ?? 0;
+// @ts-expect-error
+const gpsDestLatitudeDescriptionString: string = expandedTags["exif"]?.["GPSDestLatitude"]?.description ?? "";
+const gpsDestLongitudeDescription: number = expandedTags["exif"]?.["GPSDestLongitude"]?.description ?? 0;
+// @ts-expect-error
+const gpsDestLongitudeDescriptionString: string = expandedTags["exif"]?.["GPSDestLongitude"]?.description ?? "";
+
+const flatGpsLatitude = tags["GPSLatitude"];
+if (flatGpsLatitude && "id" in flatGpsLatitude) {
+    const flatGpsLatitudeDescription: number = flatGpsLatitude.description;
+    // @ts-expect-error
+    const flatGpsLatitudeDescriptionString: string = flatGpsLatitude.description;
+}
+const flatGpsLongitude = tags["GPSLongitude"];
+if (flatGpsLongitude && "id" in flatGpsLongitude) {
+    const flatGpsLongitudeDescription: number = flatGpsLongitude.description;
+    // @ts-expect-error
+    const flatGpsLongitudeDescriptionString: string = flatGpsLongitude.description;
+}
+// @ts-expect-error
+const flatGpsLatitudeUnnarrowed: number = tags["GPSLatitude"]?.description ?? 0;
+const flatGpsDestLatitude = tags["GPSDestLatitude"];
+if (flatGpsDestLatitude && "id" in flatGpsDestLatitude) {
+    const flatGpsDestLatitudeDescription: number = flatGpsDestLatitude.description;
+    // @ts-expect-error
+    const flatGpsDestLatitudeDescriptionString: string = flatGpsDestLatitude.description;
+}
+const flatGpsDestLongitude = tags["GPSDestLongitude"];
+if (flatGpsDestLongitude && "id" in flatGpsDestLongitude) {
+    const flatGpsDestLongitudeDescription: number = flatGpsDestLongitude.description;
+    // @ts-expect-error
+    const flatGpsDestLongitudeDescriptionString: string = flatGpsDestLongitude.description;
+}
+
+// @ts-expect-error
+expandedTags["exif"]?.["WhitePoint"]?.value[0] === 3127;
+expandedTags["exif"]?.["PrimaryChromaticities"]?.value[0][0] === 64;
+// @ts-expect-error
+expandedTags["exif"]?.["PrimaryChromaticities"]?.value[0] === 64;
+expandedTags["exif"]?.["YCbCrCoefficients"]?.value[0][0] === 299;
+// @ts-expect-error
+expandedTags["exif"]?.["YCbCrCoefficients"]?.value[0] === 299;
+expandedTags["exif"]?.["ReferenceBlackWhite"]?.value[0][0] === 0;
+// @ts-expect-error
+expandedTags["exif"]?.["ReferenceBlackWhite"]?.value[0] === 0;
+expandedTags["exif"]?.["GPSTimeStamp"]?.value[0][0] === 12;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSTimeStamp"]?.value[0] === 12;
+const computedGpsTimeStamp = computedExpandedTags["exif"]?.["GPSTimeStamp"]?.computed;
+computedGpsTimeStamp?.[0] === 12;
+computedGpsTimeStamp?.[0] === null;
+// @ts-expect-error
+const computedGpsTimeStampNumbers: number[] | undefined = computedExpandedTags["exif"]?.["GPSTimeStamp"]?.computed;
+
+expandedTags["exif"]?.["GPSDestLatitude"]?.value[0][0] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSDestLatitude"]?.value[0] === 1;
+expandedTags["exif"]?.["GPSDestLongitude"]?.value[0][0] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSDestLongitude"]?.value[0] === 1;
+
+expandedTags["exif"]?.["FlashEnergy"]?.value[0] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["FlashEnergy"]?.value === 1;
+expandedTags["exif"]?.["GPSDOP"]?.value[0] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSDOP"]?.value === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSSpeed"]?.value === 1;
+expandedTags["exif"]?.["GPSTrack"]?.value[0] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSTrack"]?.value === 1;
+expandedTags["exif"]?.["GPSDestBearing"]?.value[0] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSDestBearing"]?.value === 1;
+expandedTags["exif"]?.["GPSDestDistance"]?.value[0] === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSDestDistance"]?.value === 1;
+const gpsHPositioningError: [number, number] | undefined = expandedTags["exif"]?.["GPSHPositioningError"]?.value;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSHPositioningError"]?.value[2] === 1;
+
+expandedTags["exif"]?.["GPSVersionID"]?.value[0] === 2;
+// @ts-expect-error
+expandedTags["exif"]?.["GPSVersionID"]?.value === 2;
+
+expandedTags["exif"]?.["BitsPerSample"]?.value === 8;
+// @ts-expect-error
+expandedTags["exif"]?.["BitsPerSample"]?.value.length;
+expandedTags["exif"]?.["StripOffsets"]?.value === 8;
+// @ts-expect-error
+expandedTags["exif"]?.["StripOffsets"]?.value.length;
+const stripOffsets = expandedTags["exif"]?.["StripOffsets"]?.value;
+if (Array.isArray(stripOffsets)) {
+    stripOffsets.length === 2;
+}
+expandedTags["exif"]?.["StripByteCounts"]?.value === 8;
+// @ts-expect-error
+expandedTags["exif"]?.["StripByteCounts"]?.value.length;
+
+expandedTags["exif"]?.["ComponentsConfiguration"]?.value === 1;
+// @ts-expect-error
+expandedTags["exif"]?.["ComponentsConfiguration"]?.value.length;
+expandedTags["exif"]?.["ExifVersion"]?.value[0] === "0220";
+// @ts-expect-error
+const exifVersionNumbers: number[] | undefined = expandedTags["exif"]?.["ExifVersion"]?.value;
+expandedTags["exif"]?.["FlashpixVersion"]?.value === 256;
+const flashpixVersion = expandedTags["exif"]?.["FlashpixVersion"]?.value;
+if (Array.isArray(flashpixVersion)) {
+    flashpixVersion[0] === "0100";
+}
+// @ts-expect-error
+expandedTags["exif"]?.["FlashpixVersion"]?.value.length;
+const sceneType = expandedTags["exif"]?.["SceneType"]?.value;
+if (Array.isArray(sceneType)) {
+    sceneType[0] === "1";
+}
+// @ts-expect-error
+const sceneTypeNumber: number | undefined = expandedTags["exif"]?.["SceneType"]?.value;
+
+expandedTags["exif"]?.["Thumbnail"]?.StripOffsets?.value === 8;
+
 // @ts-expect-error
 expandedTags["exif"]?.["NonExistent"];
 
@@ -237,6 +368,9 @@ expandedTypedArrayTags["mpf"]?.["MPFVersion"];
 // @ts-expect-error
 expandedTags["mpf"]?.["DateTimeOriginal"];
 expandedTags["exif"]?.["MPFVersion"]?.value[0] === 48;
+expandedTags["mpf"]?.["MPFVersion"]?.value[0] === "0100";
+// @ts-expect-error
+const mpfVersionNumbers: number[] | undefined = expandedTags["mpf"]?.["MPFVersion"]?.value;
 
 ////////
 // XMP

@@ -72,6 +72,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with a string `value`. Like the other Exif tags they are now optional and
   typed by the shapes the library returns, so a read such as
   `tags.Rating.value` may need a check for `undefined` and a narrowing.
+- TypeScript now types these Exif tags as the library returns them: the
+  `value` of `WhitePoint`, `PrimaryChromaticities`, `YCbCrCoefficients`,
+  `ReferenceBlackWhite`, `GPSTimeStamp`, `GPSDestLatitude`,
+  `GPSDestLongitude`, `FlashEnergy`, `GPSHPositioningError`, `GPSDOP`,
+  `GPSSpeed`, `GPSTrack`, `GPSDestBearing` and `GPSDestDistance` as
+  `[numerator, denominator]` pairs, of `GPSVersionID` as an array of numbers,
+  of `BitsPerSample`, `StripOffsets`, `StripByteCounts`,
+  `ComponentsConfiguration` and `FlashpixVersion` also as a single number
+  when one value is stored, and of `ExifVersion`, `FlashpixVersion`,
+  `MPFVersion` and `SceneType` also as strings when a writer stores them as
+  ASCII. The descriptions of `GPSLatitude`, `GPSLongitude`, `GPSDestLatitude`
+  and `GPSDestLongitude` are now typed as numbers, the decimal coordinate the
+  library returns. A read of these tags may now need a narrowing.
 
 ### Security
 
