@@ -200,6 +200,17 @@ if (iptcDestination) {
 }
 
 ////////
+// MPF
+expandedTags["mpf"]?.["MPFVersion"]?.value[0] === 48;
+expandedTags["mpf"]?.["NumberOfImages"]?.value === 2;
+expandedTags["mpf"]?.["Images"]?.[0]?.["ImageSize"].value;
+computedExpandedTags["mpf"]?.["NumberOfImages"]?.value === 2;
+expandedTypedArrayTags["mpf"]?.["MPFVersion"];
+// @ts-expect-error
+expandedTags["mpf"]?.["DateTimeOriginal"];
+expandedTags["exif"]?.["MPFVersion"]?.value[0] === 48;
+
+////////
 // XMP
 if (tags["DateTimeOriginal"]) {
     if ("attributes" in tags["DateTimeOriginal"]) {

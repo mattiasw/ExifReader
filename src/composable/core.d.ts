@@ -82,7 +82,7 @@ type HasUnknown<F, G, T> = (F extends Format<infer Keys> ? (string extends Keys 
     | (G extends Group<infer Keys, MakerNoteMake> ? (string extends Keys ? true : never) : never)
     | (T extends TagDescriptor<string, infer Name> ? (string extends Name ? true : never) : never);
 type UnionToIntersection<U> = (U extends unknown ? (u: U) => void : never) extends (i: infer I) => void ? I : never;
-// mpf is a runtime key that ExpandedTags does not type.
+// Extract narrows the inferred keys, which TypeScript bounds only by string, to the keys GroupedTags takes.
 type ComposedKeys<F, G, T> = Extract<FormatKeys<F> | GroupKeys<G> | DescriptorGroups<T>, keyof ExpandedTags>;
 // TypeScript 5.4.5 without skipLibCheck rejects ComposedExpandedTags[K] in the group branch (TS2536); the intersection avoids it.
 type GroupedTags<Keys extends keyof ExpandedTags, F, G, T> = {

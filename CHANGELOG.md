@@ -61,6 +61,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wrong characters.
 - `includeTags`: a group set to `false` is now left out. Before,
   `includeTags: {exif: true, gps: false}` still returned `gps`.
+- TypeScript now declares the `mpf` group of the expanded result of `load` and
+  `loadView` (`tags.mpf.Images`, `tags.mpf.MPFVersion` and the other MPF tags).
+  Reading `tags.mpf` failed with TS2339.
 
 ### Security
 

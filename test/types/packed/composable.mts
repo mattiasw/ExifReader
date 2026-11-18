@@ -210,9 +210,13 @@ const jpegExifFlatIsTags: Equal<typeof jpegExifFlat, Promise<Tags>> = true;
 
 const pngOnly = await createReader({ formats: [png] }).load(new ArrayBuffer(0));
 const pngOnlyKeys: Equal<keyof typeof pngOnly, "file" | "png"> = true;
-// The mpf key is not in ExpandedTags.
 const jpegMpf = await createReader({ formats: [jpeg], groups: [mpf] }).load(new ArrayBuffer(0));
-const jpegMpfKeys: Equal<keyof typeof jpegMpf, "file" | "jfif"> = true;
+const jpegMpfKeys: Equal<keyof typeof jpegMpf, "file" | "jfif" | "mpf"> = true;
+const jpegMpfType: Equal<typeof jpegMpf.mpf, ExpandedTags["mpf"]> = true;
+jpegMpf.mpf?.Images?.[0]?.ImageSize.value;
+jpegMpf.mpf?.MPFVersion;
+// @ts-expect-error
+jpegMpf.mpf?.DateTimeOriginal;
 const jpegThumbnail = await createReader({ formats: [jpeg], groups: [thumbnail] }).load(new ArrayBuffer(0));
 const jpegThumbnailKeys: Equal<keyof typeof jpegThumbnail, "file" | "jfif" | "Thumbnail"> = true;
 

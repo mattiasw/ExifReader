@@ -244,6 +244,7 @@ export interface ExpandedTags {
         _raw: string
     } & XmpTags,
     icc?: IccTags,
+    mpf?: MPFTags,
     riff?: RiffTags,
     gif?: GifTags,
     Thumbnail?: ThumbnailTags,
@@ -322,6 +323,8 @@ interface MPFImageTags {
     image: ArrayBuffer | SharedArrayBuffer | Buffer,
     base64: string
 }
+
+type MPFTags = Pick<ExifTags, 'MPFVersion' | 'NumberOfImages' | 'MPEntry' | 'ImageUIDList' | 'TotalFrames' | 'Images'>;
 
 interface PhotoshopTags {
     // CaptionDigest: StringTag;
