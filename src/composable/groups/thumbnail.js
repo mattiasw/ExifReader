@@ -67,24 +67,40 @@ function addThumbnailCandidate(tags, block, context) {
     return tags;
 }
 
-// The main thumbnail when it has an image, else the first embedded Exif
-// thumbnail with one, else the main thumbnail without an image.
+// The composed readers' thumbnail mode; the default entry replaces it with its
+// own, which keeps the Thumbnail key.
 function addThumbnail(tags, block, context) {
     removeThumbnailTag(tags);
+    // Flat output can already hold an XMP or PNG text tag named thumbnail.
+    delete tags.thumbnail;
 
+    const selected = getSelectedThumbnail(context);
+    if (selected) {
+        tags.thumbnail = selected;
+    }
+
+    return tags;
+}
+
+/**
+ * Selects the thumbnail a load returns: the main thumbnail when it has an
+ * image, else the first embedded Exif thumbnail with one, else the main
+ * thumbnail without an image.
+ *
+ * @param {object} context The merge context, with `tagFilter` and the
+ *     `thumbnails` candidates.
+ * @returns {object|undefined} The thumbnail tags, or undefined when the
+ *     thumbnail group or its Thumbnail tag is filtered out or no candidate
+ *     qualifies.
+ */
+export function getSelectedThumbnail(context) {
     if (
         !context.tagFilter.shouldReturnGroup('thumbnail')
         || !context.tagFilter.shouldReturnTag('thumbnail', 'Thumbnail')
     ) {
-        return tags;
+        return undefined;
     }
-
-    const selected = selectThumbnail(context.thumbnails);
-    if (selected) {
-        tags.Thumbnail = selected;
-    }
-
-    return tags;
+    return selectThumbnail(context.thumbnails);
 }
 
 function selectThumbnail(candidates) {

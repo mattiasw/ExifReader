@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `npx exifreader analyze --imports`, which prints the `createReader` imports
   that read everything found in the given images, in place of the custom build
   configuration.
+- `ExifReader.load` and `loadView` also return the thumbnail as `thumbnail`,
+  the same value as `Thumbnail`. It is not enumerable, so `Object.keys` and
+  `JSON.stringify` give what they gave before.
 
 ### Changed
 
@@ -40,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rebuild (already deprecated), the string-replace pass in `webpack.config.js`
   and the Babel tag filter (`bin/TagFilterPlugin.js`). `npx exifreader build`
   now prints a pointer to the composable API.
+- The `Thumbnail` key in the result of `ExifReader.load` and `loadView`. Read
+  `thumbnail` instead. Removed in v5.
 
 ### Fixed
 

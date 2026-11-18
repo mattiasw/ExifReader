@@ -35,7 +35,8 @@ import {mpf} from './composable/groups/mpf.js';
 import {makerNotes} from './composable/groups/maker-notes.js';
 import {gps} from './composable/groups/gps.js';
 import {composite} from './composable/groups/composite.js';
-import {thumbnail} from './composable/groups/thumbnail.js';
+import {thumbnail, getSelectedThumbnail} from './composable/groups/thumbnail.js';
+import {removeThumbnailTag} from './loadview-pipeline.js';
 
 export default {
     load,
@@ -79,9 +80,28 @@ function getDefaultComposition() {
     if (defaultComposition === undefined || !haveSameItems(entries, defaultCompositionEntries)) {
         defaultComposition = Composition.createComposition(tables);
         defaultComposition.isHiddenInSyncMode = createIsHiddenInSyncMode(tables.formats);
+        if (Constants.USE_EXIF && Constants.USE_THUMBNAIL) {
+            defaultComposition.mergeModes = objectAssign(Object.create(null), defaultComposition.mergeModes, {thumbnail: addThumbnailWithAlias});
+        }
         defaultCompositionEntries = entries;
     }
     return defaultComposition;
+}
+
+// Thumbnail is the enumerable key existing code reads; thumbnail is the same
+// object, left out of Object.keys and JSON.stringify so the output is unchanged.
+function addThumbnailWithAlias(tags, block, context) {
+    removeThumbnailTag(tags);
+
+    const selected = getSelectedThumbnail(context);
+    if (selected) {
+        tags.Thumbnail = selected;
+        if (!Object.prototype.hasOwnProperty.call(tags, 'thumbnail')) {
+            Object.defineProperty(tags, 'thumbnail', {value: selected, writable: true, configurable: true});
+        }
+    }
+
+    return tags;
 }
 
 // Each helper is behind the flags of the groups that read it, so that a

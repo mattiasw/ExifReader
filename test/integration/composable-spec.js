@@ -22,6 +22,12 @@
 //   nothing, where the default entry keeps it as {} (an Exif group composed
 //   by tags that finds none, an icc group of an unsupported iCCP compression
 //   method), so the expected value drops such groups.
+// - A composed reader returns the thumbnail as thumbnail, where the default
+//   entry returns it as Thumbnail, so the expected value renames the key.
+// - In flat output a composed reader removes an XMP or PNG text tag named
+//   thumbnail, with or without the thumbnail group, which the default entry
+//   keeps, so the expected value drops it. No fixture has such a tag; the core
+//   unit tests cover that case.
 
 const {expect} = require('chai');
 const fs = require('fs');
@@ -64,7 +70,6 @@ const FORMAT_READER_KEYS = {
     gif: ['gif'],
     xml: [],
 };
-const GROUP_OUTPUT_KEYS = {thumbnail: 'Thumbnail'};
 const COMPOSITE_TAG_NAMES = ['FocalLength35efl', 'ScaleFactorTo35mmEquivalent', 'FieldOfView'];
 const REPEATABLE_IPTC_IDS = getRepeatableIptcIds();
 
@@ -142,7 +147,7 @@ describe('composable reader against the default entry', function () {
                 for (const {options, modes} of ALL_GROUPS_OPTION_SETS) {
                     for (const expanded of modes) {
                         const loadOptions = Object.assign({}, BASE, options, {expanded});
-                        const expected = withRepeatableIptcArrays(asComposedGroups(await getReference(loadOptions), expanded), expanded);
+                        const expected = withRepeatableIptcArrays(asComposedGroups(withThumbnailKey(await getReference(loadOptions)), expanded), expanded);
                         const reader = options.includeTags || options.excludeTags ? filteredAllReader : allReader;
                         const actual = await getOutcome(() => reader.load(bytes, loadOptions));
                         expect(withoutUnsupportedFormatMessage(actual), JSON.stringify(Object.assign({}, options, {expanded})))
@@ -168,7 +173,7 @@ describe('composable reader against the default entry', function () {
                             expectUnsupportedFormat(actual, composition.name, composition.formats);
                             continue;
                         }
-                        const expected = restrict(withRepeatableIptcArrays(asComposedGroups(await getReference(loadOptions), true), true), composition);
+                        const expected = restrict(withRepeatableIptcArrays(asComposedGroups(withThumbnailKey(await getReference(loadOptions)), true), true), composition);
                         expect(withoutUnsupportedFormatMessage(actual), composition.name + ' ' + JSON.stringify(options))
                             .to.deep.equal(withoutUnsupportedFormatMessage(expected));
                     }
@@ -185,7 +190,7 @@ describe('composable reader against the default entry', function () {
                         expectUnsupportedFormat(actual, composition.name, composition.formats);
                         continue;
                     }
-                    let expected = withRepeatableIptcArrays(await getOutcome(() => ExifReader.load(bytes, Object.assign({async: true, domParser}, BASE, {includeTags: getMapping(composition)}))), false);
+                    let expected = withRepeatableIptcArrays(withThumbnailKey(await getOutcome(() => ExifReader.load(bytes, Object.assign({async: true, domParser}, BASE, {includeTags: getMapping(composition)})))), false);
                     if (readsCompositeWithoutExif(composition)) {
                         expected = withCappedComposite(expected, await getReference(Object.assign({}, BASE, {expanded: true})));
                     }
@@ -212,7 +217,7 @@ describe('composable reader against the default entry', function () {
                     const expected = await getOutcome(() => ExifReader.load(bytes, Object.assign({async: true, domParser}, loadOptions, {includeTags})));
                     const actual = await getOutcome(() => tagReader.load(bytes, loadOptions));
                     expect(withoutUnsupportedFormatMessage(actual), 'expanded ' + expanded)
-                        .to.deep.equal(withoutUnsupportedFormatMessage(withRepeatableIptcArrays(asComposedGroups(expected, expanded), expanded)));
+                        .to.deep.equal(withoutUnsupportedFormatMessage(withRepeatableIptcArrays(asComposedGroups(withThumbnailKey(expected), expanded), expanded)));
                 }
             });
 
@@ -337,7 +342,7 @@ function getOutputKeys(composition) {
         keys.push(...FORMAT_READER_KEYS[format.header.fileType.value]);
     }
     for (const group of composition.groups) {
-        keys.push(GROUP_OUTPUT_KEYS[group.key] || group.key);
+        keys.push(group.key);
     }
     return keys;
 }
@@ -355,6 +360,22 @@ function getMapping(composition) {
         includeTags[group.key] = true;
     }
     return includeTags;
+}
+
+// A composed reader returns the thumbnail as thumbnail, and in flat output it
+// removes a text tag named thumbnail.
+function withThumbnailKey(outcome) {
+    if (!outcome.tags) {
+        return outcome;
+    }
+    const tags = {};
+    for (const key of Object.keys(outcome.tags)) {
+        if (key === 'thumbnail') {
+            continue;
+        }
+        tags[key === 'Thumbnail' ? 'thumbnail' : key] = outcome.tags[key];
+    }
+    return Object.assign({}, outcome, {tags});
 }
 
 // The composed reader returns png alone in expanded mode, as png holds every

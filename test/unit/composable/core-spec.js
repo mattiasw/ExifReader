@@ -488,7 +488,7 @@ describe('composable/core', () => {
                 it('should keep a group whose entries are not tags', async () => {
                     const tags = await createReader({formats: [jpeg], groups: [thumbnail]}).load(getDataView(JPEG));
 
-                    expect(Object.keys(tags.Thumbnail)).to.include('image');
+                    expect(Object.keys(tags.thumbnail)).to.include('image');
                 });
 
                 it('should keep metadataRange', async () => {
@@ -583,7 +583,8 @@ describe('composable/core', () => {
             const tags = await exifReader.load(new Uint8Array(pool.buffer, 16, bytes.length), {expanded: true});
 
             expect(tags).to.deep.equal(await exifReader.load(bytes.buffer, {expanded: true}));
-            expect(tags.Thumbnail.image.byteLength).to.equal(THUMBNAIL_IMAGE.length);
+            expect(tags.thumbnail.image.byteLength).to.equal(THUMBNAIL_IMAGE.length);
+            expect(tags).to.not.have.property('Thumbnail');
         });
 
         it('should reject options that are not an object', async () => {
@@ -1055,6 +1056,95 @@ describe('composable/core', () => {
             const expected = await ExifReader.load(pngBytes, {async: true, includeTags: {png: true, file: true}});
 
             expect(await createReader({formats: [png]}).load(pngBytes, {expanded: false})).to.deep.equal(expected);
+        });
+
+        describe('a PNG text tag named thumbnail', () => {
+            const PNG_WITH_THUMBNAIL_TEXT = getDataView(getPng(getTextChunk('thumbnail', 'text'), getExifChunk(getTiff({thumbnail: {image: THUMBNAIL_IMAGE}}))));
+
+            it('should give way to the thumbnail in flat tags', async () => {
+                const tags = await createReader({formats: [png], groups: allGroups, domParser: new XmldomParser()}).load(PNG_WITH_THUMBNAIL_TEXT, {expanded: false});
+
+                expect(tags.thumbnail.type).to.equal('image/jpeg');
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+
+            it('should be removed from flat tags when the thumbnail is filtered out', async () => {
+                const reader = createReader({formats: [png], groups: allGroups, tagFilter, domParser: new XmldomParser()});
+
+                const tags = await reader.load(PNG_WITH_THUMBNAIL_TEXT, {expanded: false, excludeTags: {thumbnail: true}});
+
+                expect(tags).to.not.have.property('thumbnail');
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+
+            for (const [readerName, groups] of [['exif', [exif]], ['no groups', []]]) {
+                it(`should be removed from flat tags without the thumbnail group, reader with ${readerName}`, async () => {
+                    const tags = await createReader({formats: [png], groups}).load(PNG_WITH_THUMBNAIL_TEXT, {expanded: false});
+
+                    expect(tags).to.not.have.property('thumbnail');
+                    expect(tags).to.not.have.property('Thumbnail');
+                });
+
+                it(`should stay in grouped tags without the thumbnail group, reader with ${readerName}`, async () => {
+                    const tags = await createReader({formats: [png], groups}).load(PNG_WITH_THUMBNAIL_TEXT);
+
+                    expect(tags.png.thumbnail.description).to.equal('text');
+                    expect(tags).to.not.have.property('thumbnail');
+                    expect(tags).to.not.have.property('Thumbnail');
+                });
+            }
+
+            it('should stay in grouped tags beside the thumbnail', async () => {
+                const tags = await createReader({formats: [png], groups: allGroups, domParser: new XmldomParser()}).load(PNG_WITH_THUMBNAIL_TEXT);
+
+                expect(tags.png.thumbnail.description).to.equal('text');
+                expect(tags.thumbnail.type).to.equal('image/jpeg');
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+        });
+
+        describe('an XMP tag named thumbnail', () => {
+            const WITH_THUMBNAIL = getExifSegment(getTiff({thumbnail: {image: THUMBNAIL_IMAGE}}));
+            const domParser = new XmldomParser();
+            const READERS = [
+                ['the thumbnail group', {formats: [jpeg], groups: [xmp, thumbnail], domParser}],
+                ['no thumbnail group', {formats: [jpeg], groups: [xmp], domParser}],
+            ];
+
+            for (const name of ['thumbnail', 'Thumbnail']) {
+                const xmpSegment = getXmpSegment(getXmpPacket({[name]: 'text'}));
+                for (const [fileName, image, hasThumbnail] of [
+                    ['an Exif thumbnail', getDataView(getJpeg(xmpSegment, WITH_THUMBNAIL)), true],
+                    ['no Exif thumbnail', getDataView(getJpeg(xmpSegment)), false],
+                ]) {
+                    for (const [readerName, tables] of READERS) {
+                        const readsThumbnail = hasThumbnail && tables.groups.includes(thumbnail);
+
+                        it(`should leave the text tag out of flat tags, ${name} with ${fileName}, reader with ${readerName}`, async () => {
+                            const tags = await createReader(tables).load(image, {expanded: false});
+
+                            if (readsThumbnail) {
+                                expect(tags.thumbnail.type).to.equal('image/jpeg');
+                            } else {
+                                expect(tags).to.not.have.property('thumbnail');
+                            }
+                            expect(tags).to.not.have.property('Thumbnail');
+                        });
+
+                        it(`should keep the text tag in grouped tags, ${name} with ${fileName}, reader with ${readerName}`, async () => {
+                            const tags = await createReader(tables).load(image);
+
+                            expect(tags.xmp[name].description).to.equal('text');
+                            if (readsThumbnail) {
+                                expect(tags.thumbnail.type).to.equal('image/jpeg');
+                            } else {
+                                expect(tags).to.not.have.property('thumbnail');
+                            }
+                            expect(tags).to.not.have.property('Thumbnail');
+                        });
+                    }
+                }
+            }
         });
 
         it('should return FileType for formats that bring no file reader', async () => {
@@ -1619,8 +1709,8 @@ describe('composable/core', () => {
 
                     const tags = await createReader({formats: [jpeg], groups: [group], domParser}).load(bytes, {expanded: true});
 
-                    expect(tags[group.key === 'thumbnail' ? 'Thumbnail' : group.key], group.key).to.not.equal(undefined);
-                    expect(tags, group.key).to.deep.equal(expected);
+                    expect(tags[group.key], group.key).to.not.equal(undefined);
+                    expect(tags, group.key).to.deep.equal(withThumbnailKey(expected));
                 }
             });
 
@@ -1695,14 +1785,14 @@ describe('composable/core', () => {
                 {
                     label: 'thumbnail',
                     tables: {groups: [thumbnail]},
-                    flat: {Thumbnail: THUMBNAIL_TAGS},
-                    expanded: {Thumbnail: THUMBNAIL_TAGS},
+                    flat: {thumbnail: THUMBNAIL_TAGS},
+                    expanded: {thumbnail: THUMBNAIL_TAGS},
                 },
                 {
                     label: 'tags and thumbnail',
                     tables: {tags: [DateTime], groups: [thumbnail]},
-                    flat: {DateTime: DATE_TIME_TAG, Thumbnail: THUMBNAIL_TAGS},
-                    expanded: {exif: {DateTime: DATE_TIME_TAG}, Thumbnail: THUMBNAIL_TAGS},
+                    flat: {DateTime: DATE_TIME_TAG, thumbnail: THUMBNAIL_TAGS},
+                    expanded: {exif: {DateTime: DATE_TIME_TAG}, thumbnail: THUMBNAIL_TAGS},
                 },
             ];
             const domParser = new XmldomParser();
@@ -1757,7 +1847,8 @@ describe('composable/core', () => {
             it('should drop the thumbnail whether or not something caps Exif', async () => {
                 for (const groups of [[exif, thumbnail], [thumbnail]]) {
                     const tags = await createReader({formats: [jpeg], groups, tagFilter}).load(getDataView(JPEG), {expanded: true, excludeTags: {thumbnail: true}});
-                    expect(tags.Thumbnail).to.equal(undefined);
+                    expect(tags).to.not.have.property('thumbnail');
+                    expect(tags).to.not.have.property('Thumbnail');
                 }
             });
 
@@ -1939,7 +2030,7 @@ describe('composable/core', () => {
 
             const tags = await createReader({formats: [jpeg], groups: [exif, thumbnail]}).load(bytes);
 
-            expect(tags.Thumbnail.base64).to.equal(btoa(THUMBNAIL_IMAGE));
+            expect(tags.thumbnail.base64).to.equal(btoa(THUMBNAIL_IMAGE));
         });
 
         it('should give no thumbnail base64 without btoa', async () => {
@@ -1947,7 +2038,7 @@ describe('composable/core', () => {
 
             const tags = await createReader({formats: [jpeg], groups: [thumbnail]}).load(getDataView(JPEG));
 
-            expect(tags.Thumbnail.base64).to.equal(undefined);
+            expect(tags.thumbnail.base64).to.equal(undefined);
         });
 
         it('should give the MPF images their base64', async () => {
@@ -2003,7 +2094,7 @@ describe('composable/core', () => {
                         delete expected.pngFile;
                         delete expected.pngText;
                     }
-                    expect(await allReader.load(bytes, {expanded}), fileName).to.deep.equal(expected);
+                    expect(await allReader.load(bytes, {expanded}), fileName).to.deep.equal(withThumbnailKey(expected));
                 }
             }
         });
@@ -2081,4 +2172,13 @@ async function expectRejection(promise, message, label) {
 
 function getPlainTags(tags) {
     return JSON.parse(JSON.stringify(tags, (key, value) => (value instanceof ArrayBuffer ? Array.from(new Uint8Array(value)) : value)));
+}
+
+// The default entry returns the thumbnail as Thumbnail, a composed reader as thumbnail.
+function withThumbnailKey(defaultEntryTags) {
+    const renamed = {};
+    for (const key of Object.keys(defaultEntryTags)) {
+        renamed[key === 'Thumbnail' ? 'thumbnail' : key] = defaultEntryTags[key];
+    }
+    return renamed;
 }

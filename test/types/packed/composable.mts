@@ -51,7 +51,9 @@ const decompressReader: Reader = createReader({
 const noDecompressReader: Reader = createReader({ formats: [jpeg], decompress: undefined });
 const emptyDecompressReader: Reader = createReader({ formats: [jpeg], decompress: {} });
 
-const coreTagsIsTags: Equal<CoreTags, Tags> = true;
+// A composed reader returns the thumbnail as thumbnail only.
+const coreTagsIsTags: Equal<CoreTags, Tags & { Thumbnail?: never }> = true;
+const coreTagsAsDefault: Tags = {} as CoreTags;
 // A composed reader returns a repeatable IPTC dataset as an array, also when the file holds it once.
 const coreExpandedTagsKeywords: Equal<NonNullable<CoreExpandedTags["iptc"]>["Keywords"], NumberArrayTag[] | undefined> = true;
 const coreExpandedTagsHeadline: Equal<NonNullable<CoreExpandedTags["iptc"]>["Headline"], NumberArrayTag | undefined> = true;
@@ -74,7 +76,7 @@ const noArgumentIsExpandedTags: Equal<typeof noArgument, Promise<CoreExpandedTag
 const expanded = reader.load(new ArrayBuffer(0), { expanded: true });
 const expandedIsExpandedTags: Equal<typeof expanded, Promise<CoreExpandedTags>> = true;
 const explicitFlat = reader.load(new ArrayBuffer(0), { expanded: false });
-const explicitFlatIsTags: Equal<typeof explicitFlat, Promise<Tags>> = true;
+const explicitFlatIsTags: Equal<typeof explicitFlat, Promise<CoreTags>> = true;
 const noOptions = reader.load(new ArrayBuffer(0), {});
 const noOptionsIsExpandedTags: Equal<typeof noOptions, Promise<CoreExpandedTags>> = true;
 const undefinedExpanded = reader.load(new ArrayBuffer(0), { expanded: undefined });
@@ -83,14 +85,14 @@ const offsets = reader.load(new ArrayBuffer(0), { includeOffsets: true });
 const offsetsIsExpandedTags: Equal<typeof offsets, Promise<CoreExpandedTags>> = true;
 declare const isExpanded: boolean;
 const booleanExpanded = reader.load(new ArrayBuffer(0), { expanded: isExpanded });
-const booleanExpandedIsEither: Equal<typeof booleanExpanded, Promise<Tags | CoreExpandedTags>> = true;
+const booleanExpandedIsEither: Equal<typeof booleanExpanded, Promise<CoreTags | CoreExpandedTags>> = true;
 const prebuiltOptions = { expanded: true };
 const prebuilt = reader.load(new ArrayBuffer(0), prebuiltOptions);
-const prebuiltIsEither: Equal<typeof prebuilt, Promise<Tags | CoreExpandedTags>> = true;
+const prebuiltIsEither: Equal<typeof prebuilt, Promise<CoreTags | CoreExpandedTags>> = true;
 const input: LoadInput = new Uint8Array(0);
 const typedOptions: LoadOptions = { expanded: isExpanded };
 const typed = reader.load(input, typedOptions);
-const typedIsEither: Equal<typeof typed, Promise<Tags | CoreExpandedTags>> = true;
+const typedIsEither: Equal<typeof typed, Promise<CoreTags | CoreExpandedTags>> = true;
 
 const fromBlob: Promise<ExpandedTags> = reader.load(new Blob([]));
 const fromTypedArray: Promise<ExpandedTags> = reader.load(new Uint8Array(0));
@@ -207,7 +209,7 @@ declare const withOffsets: boolean;
 const jpegExifMaybeOffsets = await jpegExifReader.load(new ArrayBuffer(0), { includeOffsets: withOffsets });
 const jpegExifMaybeOffsetsKeys: Equal<keyof typeof jpegExifMaybeOffsets, "file" | "jfif" | "exif" | "metadataRange"> = true;
 const jpegExifFlat = jpegExifReader.load(new ArrayBuffer(0), { expanded: false });
-const jpegExifFlatIsTags: Equal<typeof jpegExifFlat, Promise<Tags>> = true;
+const jpegExifFlatIsTags: Equal<typeof jpegExifFlat, Promise<CoreTags>> = true;
 
 const pngOnly = await createReader({ formats: [png] }).load(new ArrayBuffer(0));
 const pngOnlyKeys: Equal<keyof typeof pngOnly, "file" | "png"> = true;
@@ -219,7 +221,16 @@ jpegMpf.mpf?.MPFVersion;
 // @ts-expect-error
 jpegMpf.mpf?.DateTimeOriginal;
 const jpegThumbnail = await createReader({ formats: [jpeg], groups: [thumbnail] }).load(new ArrayBuffer(0));
-const jpegThumbnailKeys: Equal<keyof typeof jpegThumbnail, "file" | "jfif" | "Thumbnail"> = true;
+const jpegThumbnailKeys: Equal<keyof typeof jpegThumbnail, "file" | "jfif" | "thumbnail"> = true;
+jpegThumbnail.thumbnail?.type;
+// @ts-expect-error
+jpegThumbnail.Thumbnail;
+const jpegThumbnailFlat = await createReader({ formats: [jpeg], groups: [thumbnail] }).load(new ArrayBuffer(0), { expanded: false });
+jpegThumbnailFlat.thumbnail?.type;
+// @ts-expect-error
+jpegThumbnailFlat.Thumbnail?.type;
+const jpegXmpFlat = await createReader({ formats: [jpeg], groups: [xmp] }).load(new ArrayBuffer(0), { expanded: false });
+const jpegXmpFlatThumbnail: Equal<typeof jpegXmpFlat.thumbnail, Tags["thumbnail"]> = true;
 
 // Tag descriptors narrow their group to their output names.
 const dateTimeOriginal = await createReader({ formats: [jpeg], tags: [DateTimeOriginal] }).load(new ArrayBuffer(0));
@@ -295,7 +306,7 @@ const maybeFiltered = await maybeFilterReader.load(new ArrayBuffer(0), { include
 const maybeFilteredKeys: Equal<keyof typeof maybeFiltered, "file" | "jfif" | "exif"> = true;
 
 // A table whose contents are not known gives the broad tags; includeTags and excludeTags still need the tag filter.
-type BroadReader = Reader<CoreExpandedTags, Tags, false>;
+type BroadReader = Reader<CoreExpandedTags, CoreTags, false>;
 const allFormatsReader = createReader({ formats: allFormats, groups: [exif] });
 const allFormatsIsBroad: Equal<typeof allFormatsReader, BroadReader> = true;
 const allFormatsGrouped = allFormatsReader.load(new ArrayBuffer(0));
@@ -303,13 +314,13 @@ const allFormatsGroupedIsExpandedTags: Equal<typeof allFormatsGrouped, Promise<C
 const allFormatsOffsets = allFormatsReader.load(new ArrayBuffer(0), { includeOffsets: withOffsets });
 const allFormatsOffsetsIsExpandedTags: Equal<typeof allFormatsOffsets, Promise<CoreExpandedTags>> = true;
 const allFormatsFlat = allFormatsReader.load(new ArrayBuffer(0), { expanded: false });
-const allFormatsFlatIsTags: Equal<typeof allFormatsFlat, Promise<Tags>> = true;
+const allFormatsFlatIsTags: Equal<typeof allFormatsFlat, Promise<CoreTags>> = true;
 const allFormatsAny = allFormatsReader.load(new ArrayBuffer(0), { expanded: isExpanded });
-const allFormatsAnyIsBroad: Equal<typeof allFormatsAny, Promise<Tags | CoreExpandedTags>> = true;
+const allFormatsAnyIsBroad: Equal<typeof allFormatsAny, Promise<CoreTags | CoreExpandedTags>> = true;
 // @ts-expect-error
 allFormatsReader.load(new ArrayBuffer(0), { includeTags: { exif: true } });
 const allFormatsFilterReader = createReader({ formats: allFormats, groups: allGroups, tagFilter });
-const allFormatsFilterIsBroad: Equal<typeof allFormatsFilterReader, Reader<CoreExpandedTags, Tags, true>> = true;
+const allFormatsFilterIsBroad: Equal<typeof allFormatsFilterReader, Reader<CoreExpandedTags, CoreTags, true>> = true;
 allFormatsFilterReader.load(new ArrayBuffer(0), { includeTags: { exif: true }, excludeTags: { exif: ["Model"] } });
 const allGroupsReader = createReader({ formats: [jpeg], groups: allGroups });
 // @ts-expect-error
@@ -317,6 +328,9 @@ allGroupsReader.load(new ArrayBuffer(0), { excludeTags: { exif: true } });
 const allGroupsReaderIsBroad: Equal<typeof allGroupsReader, BroadReader> = true;
 const allGroupsTags = await allGroupsReader.load(new ArrayBuffer(0));
 const allGroupsKeywords: Equal<NonNullable<typeof allGroupsTags.iptc>["Keywords"], NumberArrayTag[] | undefined> = true;
+allGroupsTags.thumbnail?.type;
+// @ts-expect-error
+allGroupsTags.Thumbnail;
 const formatArray: Format[] = [jpeg];
 const formatArrayReader = createReader({ formats: formatArray });
 const formatArrayReaderIsBroad: Equal<typeof formatArrayReader, BroadReader> = true;

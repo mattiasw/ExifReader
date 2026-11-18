@@ -313,7 +313,7 @@ const tags = ExifReader.load(fileBuffer, {
 **Filtering groups**
 
 The group keys follow the same concept as the output when `expanded: true` is
-used. (The `thumbnail` group controls the top-level `Thumbnail` value.)
+used. (The `thumbnail` group controls the top-level `thumbnail` value.)
 
 For PNG, filtering is done with the `png` group only. (The `pngFile` and
 `pngText` groups exist in `expanded` output today, but `png` is the filtering
@@ -335,7 +335,7 @@ key and those groups will be deprecated later.)
 | `gif`         | GIF tags.                                                                     | no           |
 | `gps`         | Computed GPS group (only when `expanded: true`).                              | no           |
 | `composite`   | Composite tags (e.g. FieldOfView).                                            | no           |
-| `thumbnail`   | Top-level `Thumbnail` output.                                                 | no           |
+| `thumbnail`   | Top-level `thumbnail` output.                                                 | no           |
 
 **Important: dependency tags**
 
@@ -361,7 +361,7 @@ output is still filtered.
 Filtering removes parsed tags only, not the raw data they were parsed from.
 Some tags hold such data, for example `xmp._raw` (with `expanded: true`), the
 Exif `ApplicationNotes` and `IPTC-NAA` tags, the MPF `Images`, PNG text tags
-and `Thumbnail`. When filtering for privacy, list the tags you want in
+and `thumbnail`. When filtering for privacy, list the tags you want in
 `includeTags` (by name, not `true`) instead of excluding the ones you do not.
 
 #### Unknown tags
@@ -840,18 +840,18 @@ values](https://github.com/mattiasw/ExifReader/issues/378#issuecomment-230270598
 
 ### Using the thumbnail
 
-The thumbnail and its details will be accessible through `tags['Thumbnail']`.
+The thumbnail and its details will be accessible through `tags['thumbnail']`.
 There is information about e.g. width and height, and the thumbnail image data
-is stored in `tags['Thumbnail'].image`.
+is stored in `tags['thumbnail'].image`.
 
 How you use it is going to depend on your environment. For a web browser you can
-either use the raw byte data in `tags['Thumbnail'].image` and use it the way you
-want, or you can use the helper property `tags['Thumbnail'].base64` that is a
+either use the raw byte data in `tags['thumbnail'].image` and use it the way you
+want, or you can use the helper property `tags['thumbnail'].base64` that is a
 base64 representation of the image. It can be used for a data URI like this:
 
 ```javascript
 const tags = ExifReader.load(fileBuffer);
-imageElement.src = 'data:image/jpg;base64,' + tags['Thumbnail'].base64;
+imageElement.src = 'data:image/jpg;base64,' + tags['thumbnail'].base64;
 ```
 
 If you're using node, you can store it as a new file like this:
@@ -859,8 +859,17 @@ If you're using node, you can store it as a new file like this:
 ```javascript
 const fs = require('fs');
 const tags = ExifReader.load(fileBuffer);
-fs.writeFileSync('/path/to/new/thumbnail.jpg', Buffer.from(tags['Thumbnail'].image));
+fs.writeFileSync('/path/to/new/thumbnail.jpg', Buffer.from(tags['thumbnail'].image));
 ```
+
+On `ExifReader.load` and `loadView`, `tags['Thumbnail']` is the old name of the
+same value and is removed in v5. Until then it is the one that `Object.keys` and
+`JSON.stringify` list, since `thumbnail` is not enumerable there, so a copy of
+the result (spread, `Object.assign`, `structuredClone` or a JSON round trip)
+keeps only `Thumbnail`. When a file has a PNG text or XMP tag named
+`thumbnail`, that tag keeps the key in the flat result, so code that has to
+handle such files reads `Thumbnail` until v5. A reader from the
+[composable API](#composable-api) returns only `thumbnail`.
 
 See the [examples site](https://mattiasw.github.io/ExifReader/) for more
 details.
@@ -901,15 +910,17 @@ const tags = await reader.load(file);
 The output is grouped, since a reader is built from groups. `expanded: false`
 gives flat output, for code that moves over from `ExifReader.load` (see
 [Migrating to the composable API](#migrating-to-the-composable-api) for what
-differs). `tags.gps` (`Latitude`, `Longitude` and `Altitude`) is only in the
-grouped output. In a flat load, `gps` therefore adds no GPS values at all: a
-reader composed with `gps` alone returns only the `file` and `jfif` tags for a
-JPEG file. For GPS values in flat output, import `GPSLatitude`,
-`GPSLatitudeRef`, `GPSLongitude`, `GPSLongitudeRef`, `GPSAltitude` and
-`GPSAltitudeRef` from `exifreader/tags/exif` and pass them in `tags`. A flat
-load then has `GPSLatitude` with its unsigned decimal description, and the `Ref`
-tags carry the hemisphere and whether the altitude is below sea level (see
-[Notes](#notes) and the [GPS section](#gps)).
+differs). In flat output the name `thumbnail` is reserved for the
+thumbnail, so a PNG text or XMP tag of that name is read from the grouped
+output (`tags.png.thumbnail`, `tags.xmp.thumbnail`). `tags.gps` (`Latitude`,
+`Longitude` and `Altitude`) is only in the grouped output. In a flat load, `gps`
+therefore adds no GPS values at all: a reader composed with `gps` alone returns
+only the `file` and `jfif` tags for a JPEG file. For GPS values in flat output,
+import `GPSLatitude`, `GPSLatitudeRef`, `GPSLongitude`, `GPSLongitudeRef`,
+`GPSAltitude` and `GPSAltitudeRef` from `exifreader/tags/exif` and pass them in
+`tags`. A flat load then has `GPSLatitude` with its unsigned decimal
+description, and the `Ref` tags carry the hemisphere and whether the altitude is
+below sea level (see [Notes](#notes) and the [GPS section](#gps)).
 
 A group or tag the file does not hold is absent from the result, so
 `tags.exif?.DateTimeOriginal?.description` covers every case.
@@ -1144,6 +1155,7 @@ describes them the same way. What differs when you move over from
 | PNG groups | `png`, `pngFile` and `pngText` | `png` |
 | A repeatable IPTC dataset such as `Keywords` | A tag when the file holds it once, an array when it holds several | Always an array |
 | A group with no tags | `{}` | Absent |
+| Thumbnail | `tags.thumbnail`, and `tags.Thumbnail` until v5 | `tags.thumbnail` |
 | `base64` of the thumbnail and MPF images | From `Buffer` or `btoa` | From `btoa`; `undefined` where there is none |
 | Errors | `ExifReader.errors` | `errors` from `exifreader/core` |
 | Published code | A UMD `dist` file, transpiled to ES5 | ES modules, not transpiled (see **Runtime**) |

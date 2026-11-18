@@ -26,7 +26,9 @@ type IptcGroupOnlyName = 'ObjectData Preview File Format' | 'Record 2 destinatio
 type ComposedExifTags = Pick<ExifTags, ExifDescriptorName>;
 // A composed reader returns a repeatable IPTC dataset as an array, also when the file holds it once.
 type ComposedIptcTags = Pick<ExifTags, Exclude<IptcDescriptorName | IptcGroupOnlyName, RepeatableIptcName>> & {[Name in RepeatableIptcName]?: NumberArrayTag[]};
-type ComposedExpandedTags = Omit<ExpandedTags, 'exif' | 'iptc'> & {exif?: ComposedExifTags, iptc?: ComposedIptcTags};
+type ComposedExpandedTags = Omit<ExpandedTags, 'exif' | 'iptc' | 'Thumbnail'> & {exif?: ComposedExifTags, iptc?: ComposedIptcTags};
+// Omit cannot remove a named key from Tags, whose index signatures swallow the named keys.
+type ComposedTags = Tags & {Thumbnail?: never};
 type MakerNoteTagsByMake = {canon: CanonTags, pentax: PentaxTags};
 type MakerNoteMake = keyof MakerNoteTagsByMake;
 
@@ -63,7 +65,7 @@ type ReaderOptions<HasFilter extends boolean> = ReaderCommonOptions & FilterOpti
 export type LoadOptions<HasFilter extends boolean = boolean> = ReaderOptions<HasFilter>
     & ({expanded?: true, includeOffsets?: boolean} | {expanded?: boolean, includeOffsets?: false});
 
-export interface Reader<Grouped = ComposedExpandedTags, Flat = Tags, HasFilter extends boolean = boolean, GroupedWithOffsets = Grouped> {
+export interface Reader<Grouped = ComposedExpandedTags, Flat = ComposedTags, HasFilter extends boolean = boolean, GroupedWithOffsets = Grouped> {
     load(data: LoadInput): Promise<Grouped>;
     load(data: LoadInput, options: ReaderOptions<HasFilter> & {expanded?: true, includeOffsets?: false}): Promise<Grouped>;
     load(data: LoadInput, options: ReaderOptions<HasFilter> & {expanded?: true, includeOffsets?: boolean}): Promise<GroupedWithOffsets>;
@@ -83,9 +85,9 @@ type HasUnknown<F, G, T> = (F extends Format<infer Keys> ? (string extends Keys 
     | (T extends TagDescriptor<string, infer Name> ? (string extends Name ? true : never) : never);
 type UnionToIntersection<U> = (U extends unknown ? (u: U) => void : never) extends (i: infer I) => void ? I : never;
 // Extract narrows the inferred keys, which TypeScript bounds only by string, to the keys GroupedTags takes.
-type ComposedKeys<F, G, T> = Extract<FormatKeys<F> | GroupKeys<G> | DescriptorGroups<T>, keyof ExpandedTags>;
+type ComposedKeys<F, G, T> = Extract<FormatKeys<F> | GroupKeys<G> | DescriptorGroups<T>, keyof ComposedExpandedTags>;
 // TypeScript 5.4.5 without skipLibCheck rejects ComposedExpandedTags[K] in the group branch (TS2536); the intersection avoids it.
-type GroupedTags<Keys extends keyof ExpandedTags, F, G, T> = {
+type GroupedTags<Keys extends keyof ComposedExpandedTags, F, G, T> = {
     [K in Keys]?: K extends 'makerNotes' ? UnionToIntersection<MakerNoteTagsByMake[MakerNotesOf<G>]>
         : K extends FormatKeys<F> | GroupKeys<G> ? ComposedExpandedTags[K & keyof ComposedExpandedTags]
         : K extends 'iptc' ? Pick<ComposedIptcTags, Extract<DescriptorNames<T, K>, keyof ComposedIptcTags>>
@@ -95,7 +97,7 @@ type GroupedTags<Keys extends keyof ExpandedTags, F, G, T> = {
 type HasTagFilter<Filter> = [Filter] extends [undefined] ? false : true;
 type ComposedReader<F, G, T, Filter> = Reader<
     GroupedTags<ComposedKeys<F, G, T>, F, G, T>,
-    Tags,
+    ComposedTags,
     HasTagFilter<Filter>,
     GroupedTags<ComposedKeys<F, G, T> | 'metadataRange', F, G, T>
 >;
@@ -132,7 +134,7 @@ export declare function createReader<
     decompress?: DecompressOptions
 }): [HasUnknown<F[number], G[number], T[number]>] extends [never]
     ? ComposedReader<F[number], G[number], T[number], Filter>
-    : Reader<ComposedExpandedTags, Tags, HasTagFilter<Filter>>;
+    : Reader<ComposedExpandedTags, ComposedTags, HasTagFilter<Filter>>;
 
 export namespace errors {
     export class UnsupportedFormatError extends Error {}
@@ -140,7 +142,7 @@ export namespace errors {
 
 export declare const tagFilter: TagFilter;
 
-export type {Tags, ComposedExpandedTags as ExpandedTags};
+export type {ComposedTags as Tags, ComposedExpandedTags as ExpandedTags};
 
 // Only the declarations marked export are exported; the brand symbols stay private.
 export {};

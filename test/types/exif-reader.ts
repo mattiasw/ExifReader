@@ -114,6 +114,10 @@ if (tags["DateTimeOriginal"]) {
     tags["Thumbnail"]?.Compression?.id === 4711;
     tags["Thumbnail"]?.Compression?.value === 32946;
     tags["Thumbnail"]?.Compression?.description === "Deflate";
+    tags["thumbnail"]?.type === "image/jpeg";
+    tags["thumbnail"]?.Compression?.id === 4711;
+    tags["thumbnail"]?.Compression?.value === 32946;
+    tags["thumbnail"]?.Compression?.description === "Deflate";
     tags["Images"]?.[0];
     // @ts-expect-error
     tags["NotImages"]?.[0];
@@ -186,6 +190,10 @@ expandedTags["exif"]?.["Thumbnail"]?.type === "image/jpeg";
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.id === 4711;
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.value === 32946;
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.description === "Deflate";
+expandedTags["Thumbnail"]?.type === "image/jpeg";
+expandedTags["thumbnail"]?.type === "image/jpeg";
+expandedTags["thumbnail"]?.Compression?.value === 32946;
+expandedTags["thumbnail"]?.Compression?.description === "Deflate";
 expandedTags["exif"]?.["Images"]?.[0];
 
 tags["SceneType"]?.value === 1;

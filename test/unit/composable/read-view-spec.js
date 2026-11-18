@@ -55,8 +55,8 @@ describe('composable/read-view', () => {
         const tags = readView(ALL, window, {expanded: true}, getEnvironment());
 
         expect(tags.exif.Make.description).to.equal('Make');
-        expect(tags.Thumbnail.image.byteLength).to.equal(THUMBNAIL_IMAGE.length);
-        expect(new Uint8Array(tags.Thumbnail.image)).to.deep.equal(new Uint8Array(getDataView(THUMBNAIL_IMAGE).buffer));
+        expect(tags.thumbnail.image.byteLength).to.equal(THUMBNAIL_IMAGE.length);
+        expect(new Uint8Array(tags.thumbnail.image)).to.deep.equal(new Uint8Array(getDataView(THUMBNAIL_IMAGE).buffer));
     });
 
     it('should list in metadataRange only the kinds the composition consumes', () => {
@@ -144,7 +144,7 @@ describe('composable/read-view', () => {
         const tags = readView(ALL, getDataView(JPEG), {expanded: true, domParser}, environment);
 
         expect(tags.xmp.Label.value).to.equal('xmp');
-        expect(tags.Thumbnail.base64).to.equal('base64');
+        expect(tags.thumbnail.base64).to.equal('base64');
         expect(calls).to.deep.equal([['getDomParser', domParser], ['getBase64Image', THUMBNAIL_IMAGE.length]]);
     });
 
@@ -189,7 +189,7 @@ describe('composable/read-view', () => {
         const tags = readView(ALL, getDataView(JPEG), {expanded: true, includeTags, excludeTags}, environment);
 
         expect(tags.exif).to.equal(undefined);
-        expect(tags.Thumbnail.image.byteLength).to.equal(THUMBNAIL_IMAGE.length);
+        expect(tags.thumbnail.image.byteLength).to.equal(THUMBNAIL_IMAGE.length);
         expect(calls).to.deep.equal([{includeTags, excludeTags, includeTagsIsLimit: true}]);
         expect(calls[0].includeTags).to.equal(includeTags);
         expect(calls[0].excludeTags).to.equal(excludeTags);

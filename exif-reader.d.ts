@@ -257,7 +257,9 @@ export interface ExpandedTags {
     mpf?: MPFTags,
     riff?: RiffTags,
     gif?: GifTags,
+    /** @deprecated Use `thumbnail`. `Thumbnail` is removed in v5. */
     Thumbnail?: ThumbnailTags,
+    thumbnail?: ThumbnailTags,
     gps?: GpsTags
     photoshop?: PhotoshopTags;
     makerNotes?: CanonTags & PentaxTags;
@@ -918,8 +920,11 @@ interface IccTags {
 }
 
 export type Tags = FileTags & XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & PentaxTags & CompositeTags & {
+    /** @deprecated Use `thumbnail`. `Thumbnail` is removed in v5. */
     'Thumbnail'?: ThumbnailTags;
+    /** Can instead be a PNG text or XMP tag named `thumbnail` when the file has one. */
+    'thumbnail'?: ThumbnailTags;
     'Images'?: MPFImageTags[],
 } & {
-    [K in keyof ExifTags]: ExifTags[K] | XmpTag;
+    [K in keyof Omit<ExifTags, 'Thumbnail'>]: ExifTags[K] | XmpTag;
 }

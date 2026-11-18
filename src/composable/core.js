@@ -89,6 +89,9 @@ export function createReader(tables) {
                     delete result.pngFile;
                     delete result.pngText;
                     deleteEmptyGroups(result);
+                } else if (composition.composed.groups.thumbnail !== true) {
+                    // In flat output the name thumbnail is the thumbnail's alone.
+                    delete result.thumbnail;
                 }
                 return result;
             });

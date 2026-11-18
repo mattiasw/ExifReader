@@ -15,6 +15,6 @@ export declare const pentax: Group<'makerNotes', 'pentax'>;
 export declare const makerNotes: Group<'makerNotes', 'canon' | 'pentax'>;
 export declare const gps: Group<'gps'>;
 export declare const composite: Group<'composite'>;
-export declare const thumbnail: Group<'Thumbnail'>;
+export declare const thumbnail: Group<'thumbnail'>;
 
 export declare const allGroups: readonly Group[];

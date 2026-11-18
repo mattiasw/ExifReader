@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import vm from 'node:vm';
 import {deflateSync} from 'node:zlib';
 import {expect} from 'chai';
+import {DOMParser as XmldomParser} from '@xmldom/xmldom';
 import {getCharacterArray} from '../../src/utils.js';
 import {getBase64Image} from '../../src/base64-image.js';
 import DOMParser from '../../src/dom-parser.js';
@@ -2384,6 +2385,155 @@ describe('exif-reader', function () {
         });
 
         expect(ExifReader.loadView()).to.deep.equal({...myTags, ...compositeTags});
+    });
+
+    describe('the thumbnail key', () => {
+        const THUMBNAIL_IMAGE = '\xff\xd8\xff\xdbTHUMBNAIL\xff\xd9';
+        const JPEG_WITH_THUMBNAIL = getJpeg(getExifSegment(getTiff({ifd0: [ascii(TAG_MAKE, 'Canon')], thumbnail: {image: THUMBNAIL_IMAGE}})));
+        const PNG_WITH_THUMBNAIL_TEXT = getInventoryPng(getTextChunk('thumbnail', 'text'), getExifChunk(getTiff({thumbnail: {image: THUMBNAIL_IMAGE}})));
+        const LOADS = [
+            ['load', (options) => ExifReader.load(getArrayBuffer(JPEG_WITH_THUMBNAIL), options)],
+            ['loadView', (options) => ExifReader.loadView(getDataView(JPEG_WITH_THUMBNAIL), options)],
+        ];
+
+        for (const [name, load] of LOADS) {
+            for (const expanded of [false, true]) {
+                for (const async of [false, true]) {
+                    it(`should return the thumbnail as Thumbnail and as a hidden thumbnail from ${name}, expanded ${expanded}, async ${async}`, async () => {
+                        const tags = await load({expanded, async});
+
+                        expect(tags.Thumbnail.type).to.equal('image/jpeg');
+                        expect(tags.thumbnail).to.equal(tags.Thumbnail);
+                        expect(Object.getOwnPropertyDescriptor(tags, 'Thumbnail').enumerable).to.equal(true);
+                        expect(Object.getOwnPropertyDescriptor(tags, 'thumbnail').enumerable).to.equal(false);
+                        expect(Object.keys(tags)).to.deep.equal(expanded ? ['exif', 'Thumbnail', 'file'] : ['Make', 'Thumbnail', 'FileType']);
+                        expect(JSON.parse(JSON.stringify(tags))).to.not.have.property('thumbnail');
+                    });
+                }
+            }
+        }
+
+        it('should let the caller replace and delete the hidden thumbnail', () => {
+            const tags = ExifReader.load(getArrayBuffer(JPEG_WITH_THUMBNAIL));
+
+            tags.thumbnail = 'replaced';
+            expect(tags.thumbnail).to.equal('replaced');
+            delete tags.thumbnail;
+            expect(tags).to.not.have.property('thumbnail');
+        });
+
+        it('should return the thumbnail of a length auto load as a hidden thumbnail too', async () => {
+            const tags = await ExifReader.load(getArrayBuffer(JPEG_WITH_THUMBNAIL), {length: 'auto', expanded: true, includeOffsets: true});
+
+            expect(tags.thumbnail).to.equal(tags.Thumbnail);
+            expect(Object.keys(tags)).to.not.include('thumbnail');
+        });
+
+        for (const expanded of [false, true]) {
+            it(`should return neither key without a thumbnail, expanded ${expanded}`, () => {
+                const tags = ExifReader.load(getArrayBuffer(getJpeg(getExifSegment(getTiff({ifd0: [ascii(TAG_MAKE, 'Canon')]})))), {expanded});
+
+                expect(tags).to.not.have.property('Thumbnail');
+                expect(tags).to.not.have.property('thumbnail');
+            });
+
+            it(`should return neither key when the thumbnail is excluded, expanded ${expanded}`, () => {
+                const tags = ExifReader.load(getArrayBuffer(JPEG_WITH_THUMBNAIL), {expanded, excludeTags: {thumbnail: true}});
+
+                expect(tags).to.not.have.property('Thumbnail');
+                expect(tags).to.not.have.property('thumbnail');
+            });
+
+            it(`should return neither key in a build without the thumbnail module, expanded ${expanded}`, () => {
+                swap(Constants, {USE_THUMBNAIL: false});
+
+                const tags = ExifReader.load(getArrayBuffer(JPEG_WITH_THUMBNAIL), {expanded});
+
+                expect(tags).to.not.have.property('Thumbnail');
+                expect(tags).to.not.have.property('thumbnail');
+                expect(tags).to.not.deep.equal({});
+            });
+        }
+
+        it('should keep a flat text tag named thumbnail beside the thumbnail', () => {
+            const tags = ExifReader.load(getArrayBuffer(PNG_WITH_THUMBNAIL_TEXT));
+
+            expect(tags.thumbnail.description).to.equal('text');
+            expect(Object.getOwnPropertyDescriptor(tags, 'thumbnail').enumerable).to.equal(true);
+            expect(tags.Thumbnail.type).to.equal('image/jpeg');
+        });
+
+        it('should keep a flat text tag named thumbnail when the thumbnail is excluded', () => {
+            const tags = ExifReader.load(getArrayBuffer(PNG_WITH_THUMBNAIL_TEXT), {excludeTags: {thumbnail: true}});
+
+            expect(tags.thumbnail.description).to.equal('text');
+            expect(tags).to.not.have.property('Thumbnail');
+        });
+
+        describe('an XMP tag named thumbnail', () => {
+            const domParser = new XmldomParser();
+            const getJpegWithXmp = (name, thumbnail) => getJpeg(
+                getXmpSegment(getXmpPacket({[name]: 'text'})),
+                ...(thumbnail ? [getExifSegment(getTiff({thumbnail: {image: THUMBNAIL_IMAGE}}))] : [])
+            );
+            const load = (image, options) => ExifReader.load(getArrayBuffer(image), {domParser, ...options});
+
+            it('should stay the flat thumbnail beside the thumbnail as Thumbnail', () => {
+                const tags = load(getJpegWithXmp('thumbnail', true));
+
+                expect(tags.thumbnail.description).to.equal('text');
+                expect(Object.getOwnPropertyDescriptor(tags, 'thumbnail').enumerable).to.equal(true);
+                expect(tags.Thumbnail.type).to.equal('image/jpeg');
+            });
+
+            it('should give way to the thumbnail in grouped tags, with the text tag in xmp', () => {
+                const tags = load(getJpegWithXmp('thumbnail', true), {expanded: true});
+
+                expect(tags.thumbnail).to.equal(tags.Thumbnail);
+                expect(tags.Thumbnail.type).to.equal('image/jpeg');
+                expect(tags.xmp.thumbnail.description).to.equal('text');
+            });
+
+            it('should stay the flat thumbnail without a thumbnail', () => {
+                const tags = load(getJpegWithXmp('thumbnail', false));
+
+                expect(tags.thumbnail.description).to.equal('text');
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+
+            it('should leave neither top-level key in grouped tags without a thumbnail', () => {
+                const tags = load(getJpegWithXmp('thumbnail', false), {expanded: true});
+
+                expect(tags).to.not.have.property('thumbnail');
+                expect(tags).to.not.have.property('Thumbnail');
+                expect(tags.xmp.thumbnail.description).to.equal('text');
+            });
+
+            it('should stay the flat thumbnail in a build without the thumbnail module', () => {
+                swap(Constants, {USE_THUMBNAIL: false});
+
+                const tags = load(getJpegWithXmp('thumbnail', true));
+
+                expect(tags.thumbnail.description).to.equal('text');
+                expect(tags).to.not.have.property('Thumbnail');
+            });
+
+            for (const expanded of [false, true]) {
+                it(`should give way to the thumbnail when the XMP tag is named Thumbnail, expanded ${expanded}`, () => {
+                    const tags = load(getJpegWithXmp('Thumbnail', true), {expanded});
+
+                    expect(tags.Thumbnail.type).to.equal('image/jpeg');
+                    expect(tags.thumbnail).to.equal(tags.Thumbnail);
+                });
+
+                it(`should leave neither top-level key without a thumbnail when the XMP tag is named Thumbnail, expanded ${expanded}`, () => {
+                    const tags = load(getJpegWithXmp('Thumbnail', false), {expanded});
+
+                    expect(tags).to.not.have.property('Thumbnail');
+                    expect(tags).to.not.have.property('thumbnail');
+                });
+            }
+        });
     });
 
     describe('gps group', () => {
@@ -4984,6 +5134,14 @@ describe('exif-reader', function () {
                 const entries = getEntries(captureDefaultTables());
 
                 expect(entries).to.deep.equal(ALL_FORMAT_ENTRIES.concat(ALL_GROUP_ENTRIES).filter((entry) => !DROPPED_ENTRIES[flag].includes(entry)));
+            });
+        }
+
+        for (const flag of ['USE_EXIF', 'USE_THUMBNAIL']) {
+            it(`should keep the core thumbnail mode without ${flag}`, () => {
+                swap(Constants, {[flag]: false});
+
+                expect(captureComposition().mergeModes.thumbnail).to.equal(undefined);
             });
         }
 
