@@ -3,9 +3,21 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import {expect} from 'chai';
+import fs from 'fs';
+import path from 'path';
+import {fileURLToPath} from 'url';
 import XmpTagNames from '../../src/xmp-tag-names.js';
 
+const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
 describe('xmp-tag-names', () => {
+    it('should import the shared descriptions by name and not the default object', () => {
+        const source = fs.readFileSync(path.join(REPO_ROOT, 'src', 'xmp-tag-names.js'), 'utf8');
+
+        expect(source).to.not.match(/^import \w+[ ,]/m);
+        expect(source).to.not.include('TagNamesCommon');
+    });
+
     it('should report correct description for tiff:Orientation', () => {
         expect(XmpTagNames['tiff:Orientation']('1')).to.equal('Horizontal (normal)');
         expect(XmpTagNames['tiff:Orientation']('2')).to.equal('Mirror horizontal');

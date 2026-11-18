@@ -66,11 +66,14 @@ const IPTC_PER_TAG_PROOFS = [
     {marker: '\'Keywords\'', why: 'an unimported repeatable IPTC tag'}
 ];
 
+const LIGHT_SOURCE_TABLE = {marker: 'ISO studio tungsten', why: 'the LightSource table in tag-names-common.js, which XMP does not describe'};
+
 const ABSENCE_CHECKS = {
     'composable-jpeg-floor': PER_TAG_PROOFS.concat([DATETIME_DESCRIPTOR], TAG_FILTER_MARKERS),
     'composable-jpeg-iptc-byline': PER_TAG_PROOFS.concat([DATETIME_DESCRIPTOR], TAG_FILTER_MARKERS, IPTC_PER_TAG_PROOFS),
     'composable-tiff-floor': PER_TAG_PROOFS.concat([DATETIME_DESCRIPTOR], TAG_FILTER_MARKERS),
     'composable-jpeg-datetime': PER_TAG_PROOFS.concat(TAG_FILTER_MARKERS),
+    'composable-jpeg-xmp': [LIGHT_SOURCE_TABLE],
     'composable-tiff-gps': [
         DATETIME_DESCRIPTOR,
         {marker: 'ExposureTime', why: 'an unimported Exif tag'},
@@ -108,6 +111,7 @@ const EXIF_GROUP = [
     'tag-names-interoperability-ifd.js',
     'tag-names-utils.js:getEncodedString'
 ];
+const XMP_GROUP = ['xmp-tags.js', 'xmp-namespaces.js', 'xmp-tag-names.js'];
 const ALLOWED_MODULES = {
     'composable-jpeg-floor': CORE.concat(JPEG),
     'composable-tiff-floor': CORE,
@@ -115,13 +119,14 @@ const ALLOWED_MODULES = {
     'composable-jpeg-datetime-filter': CORE.concat(JPEG),
     'composable-jpeg-exif': CORE.concat(JPEG, EXIF_GROUP),
     'composable-jpeg-iptc-byline': CORE.concat(JPEG, ['iptc-tags.js']),
+    'composable-jpeg-xmp': CORE.concat(JPEG, XMP_GROUP),
     'composable-tiff-gps': CORE
 };
 
 // An absence proves nothing about a string no bundle ever holds, so each marker
 // the absence checks rely on is shown present somewhere, in the same bundler.
 const PRESENCE_CHECKS = {
-    'composable-jpeg-exif': PER_TAG_PROOFS.map(getMarker).concat([DATETIME_DESCRIPTOR.marker, 'ExposureTime', 'GPSSatellites']),
+    'composable-jpeg-exif': PER_TAG_PROOFS.map(getMarker).concat([DATETIME_DESCRIPTOR.marker, 'ExposureTime', 'GPSSatellites', LIGHT_SOURCE_TABLE.marker]),
     'composable-jpeg-datetime-filter': TAG_FILTER_MARKERS.map(getMarker),
     'legacy-stock': ['Photoshop 3.0', BUFFER_CODE].concat(getModuleMarkersLeftOut(), IPTC_PER_TAG_PROOFS.map(getMarker))
 };
@@ -158,6 +163,13 @@ const JPEG_WITH_IPTC =
     + '\x1c\x02\x69\x00\x01H'
     + '\xff\xda\x00\x02';
 
+// An XMP packet with a tiff and an exif tag, both described through tag-names-common.js.
+const XMP_PACKET = '<x:xmpmeta xmlns:x="adobe:ns:meta/">'
+    + '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+    + '<rdf:Description rdf:about="" xmlns:tiff="http://ns.adobe.com/tiff/1.0/"'
+    + ' xmlns:exif="http://ns.adobe.com/exif/1.0/" tiff:ResolutionUnit="2" exif:ColorSpace="1"/>'
+    + '</rdf:RDF></x:xmpmeta>';
+
 // Each case lists the exact set of groups and tags the bundle returns.
 const CORRECTNESS_CHECKS = [
     {id: 'composable-jpeg-floor', data: JPEG_WITH_DATE_AND_GPS, tags: {file: {FileType: 'JPEG'}}},
@@ -185,7 +197,14 @@ const CORRECTNESS_CHECKS = [
         }
     },
     {id: 'composable-tiff-gps', data: TIFF_WITH_DATE_AND_GPS, tags: {exif: {GPSLatitudeRef: 'North latitude'}, file: {FileType: 'TIFF'}}},
-    {id: 'composable-jpeg-iptc-byline', data: JPEG_WITH_IPTC, tags: {iptc: {'By-line': ['\u0418\u0432\u0430\u043d']}, file: {FileType: 'JPEG'}}}
+    {id: 'composable-jpeg-iptc-byline', data: JPEG_WITH_IPTC, tags: {iptc: {'By-line': ['\u0418\u0432\u0430\u043d']}, file: {FileType: 'JPEG'}}},
+    {
+        // The emitted bundle runs in Node, which has no global DOMParser.
+        id: 'composable-jpeg-xmp',
+        data: getJpegWithXmp,
+        domParser: true,
+        tags: {xmp: {_raw: XMP_PACKET, about: '', ResolutionUnit: 'inches', ColorSpace: 'sRGB'}, file: {FileType: 'JPEG'}}
+    }
 ];
 
 // A real file too, since crafted bytes cannot show that a real segment layout
@@ -489,7 +508,8 @@ async function checkCorrectness(bundles) {
     for (const bundler of BUNDLERS) {
         for (const check of CORRECTNESS_CHECKS) {
             const name = `${check.id} (${bundler})${check.options ? ` with ${JSON.stringify(check.options)}` : ''}`;
-            const result = await loadThrough(bundles[bundler][check.id], getArrayBuffer(check.data), check.options);
+            const data = typeof check.data === 'function' ? check.data() : check.data;
+            const result = await loadThrough(bundles[bundler][check.id], getArrayBuffer(data), check.options, check.domParser);
             failures.push(...compareGroups(name, result, check.tags));
         }
         for (const check of FIXTURE_CHECKS) {
@@ -501,14 +521,30 @@ async function checkCorrectness(bundles) {
     return failures;
 }
 
+// A function, so the ES module it needs is required only when the checks run.
+function getJpegWithXmp() {
+    const {getJpeg, getXmpSegment} = require('../unit/loadview-inventory-images.js');
+    return getJpeg(getXmpSegment(XMP_PACKET));
+}
+
 // Composable consumers export a reader, the legacy one a loadTags function.
-async function loadThrough(bundle, data, options) {
+// A reader that composed the xmp group finds the DOM parser as a global when it loads.
+async function loadThrough(bundle, data, options, domParser) {
+    let restore;
     try {
+        if (domParser) {
+            const {swapProperties} = require('../unit/test-utils.js');
+            restore = swapProperties(globalThis, {DOMParser: require('@xmldom/xmldom').DOMParser});
+        }
         const consumer = require(bundle.filePath);
         const tags = consumer.reader ? await consumer.reader.load(data, options) : await consumer.loadTags(data);
         return {tags};
     } catch (error) {
         return {error};
+    } finally {
+        if (restore) {
+            restore();
+        }
     }
 }
 
@@ -555,6 +591,9 @@ function compareTags(name, {tags, error}, expected, {exact = true} = {}) {
 // Descriptions are not always strings, so compare their text, and a tag
 // returned as an array as the list of its texts.
 function getDescriptionText(tag) {
+    if (typeof tag === 'string') {
+        return tag;
+    }
     if (Array.isArray(tag)) {
         return tag.map(getDescriptionText);
     }
