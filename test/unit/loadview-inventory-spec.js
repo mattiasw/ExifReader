@@ -34,6 +34,8 @@ import {
     TAG_LENS_MODEL,
     TAG_GPS_LATITUDE_REF,
     TAG_GPS_LATITUDE,
+    TAG_GPS_LONGITUDE_REF,
+    TAG_GPS_LONGITUDE,
     TAG_MPF_NUMBER_OF_IMAGES,
     TAG_CANON_LENS_MODEL,
     ascii,
@@ -1207,6 +1209,41 @@ describe('loadView behaviour inventory', function () {
                 expect(expanded.gps).to.deep.equal({Latitude: 1});
                 expect(expanded.exif.Make.value).to.deep.equal(['gps']);
                 expect(Object.keys(flat)).to.deep.equal(['Make', 'GPS Info IFD Pointer', 'GPSLatitudeRef', 'GPSLatitude', 'FileType']);
+            });
+
+            it(`should describe a GPS coordinate of fewer than three rational pairs as NaN (async: ${async})`, async () => {
+                const image = getJpeg(getExifSegment(getTiff({
+                    gpsIfd: [
+                        ascii(TAG_GPS_LATITUDE_REF, 'N'),
+                        rationals(TAG_GPS_LATITUDE, [[1, 1], [0, 1], [0, 1]]),
+                        ascii(TAG_GPS_LONGITUDE_REF, 'E'),
+                        rationals(TAG_GPS_LONGITUDE, [[31, 1]]),
+                    ],
+                })));
+
+                const expanded = await load(image, {expanded: true, async});
+                const flat = await load(image, {async});
+
+                expect(expanded.exif.GPSLongitude.value).to.deep.equal([31, 1]);
+                expect(expanded.exif.GPSLongitude.description).to.be.NaN;
+                expect(expanded.exif.GPSLatitude.description).to.equal(1);
+                expect(expanded.gps).to.deep.equal({Latitude: 1});
+                expect(flat.GPSLongitude.description).to.be.NaN;
+            });
+
+            it(`should describe a GPS coordinate of four rational pairs by the first three, as the gps group does (async: ${async})`, async () => {
+                const image = getJpeg(getExifSegment(getTiff({
+                    gpsIfd: [
+                        ascii(TAG_GPS_LONGITUDE_REF, 'W'),
+                        rationals(TAG_GPS_LONGITUDE, [[20, 1], [15, 1], [0, 1], [7, 1]]),
+                    ],
+                })));
+
+                const expanded = await load(image, {expanded: true, async});
+
+                expect(expanded.exif.GPSLongitude.value).to.deep.equal([[20, 1], [15, 1], [0, 1], [7, 1]]);
+                expect(expanded.gps).to.deep.equal({Longitude: -20.25});
+                expect(expanded.exif.GPSLongitude.description).to.equal(Math.abs(expanded.gps.Longitude));
             });
 
             it(`should compute composite from the merged flat tags without a filter and from parsed exif with one (async: ${async})`, async () => {

@@ -41,7 +41,7 @@ describe('pentax-tags', () => {
 
         const tags = PentaxTags.read(dataView, TIFF_HEADER_OFFSET, OFFSET, false);
 
-        expect(tags).to.deep.equal({PentaxModelID: {id: PENTAX_MODEL_ID_TAG_ID, value: 42, description: 42}});
+        expect(tags).to.deep.equal({PentaxModelID: {id: PENTAX_MODEL_ID_TAG_ID, value: 42, description: '42'}});
     });
 
     it('should not throw when the byte order marker is out of bounds', () => {

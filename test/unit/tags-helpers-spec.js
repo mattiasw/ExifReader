@@ -13,6 +13,7 @@ import {getByteStringFromNumber, getDataView, swapProperties} from './test-utils
 import TagNames from '../../src/tag-names.js';
 import {readIfd as readIfdWithTagNames, get0thIfdOffset, getValueBudget, addDecompressedValueAllowance, addDecompressedIptcAllowance, BUDGET_BYTES_PER_EXTRA_ASCII_STRING} from '../../src/tags-helpers.js';
 import ByteOrder from '../../src/byte-order.js';
+import {IFD_TYPE_GPS} from '../../src/ifd-types.js';
 import {createTagFilter} from '../../src/tag-filter.js';
 
 // readIfd takes the tag dictionaries after the value budget. The tests below
@@ -134,7 +135,7 @@ describe('tags-helpers', () => {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyExifTag'}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyExifTag'].id).to.equal(0x4711);
-        expect(tags['MyExifTag'].description).to.equal(0x42);
+        expect(tags['MyExifTag'].description).to.equal('66');
         expect(tags['MyExifTag'].__offset).to.be.undefined;
     });
 
@@ -175,7 +176,7 @@ describe('tags-helpers', () => {
         const dataView = getDataView('\x00\x01' + '\x92\x7c\x00\x01\x00\x00\x00\x01\x42\x00\x00\x00' + '\x00\x00\x00\x00');
         restoreTagNames = swapProperties(TagNames, {'0th': {0x927c: 'MakerNote'}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
-        expect(tags['MakerNote']).to.deep.equal({id: 0x927c, value: 0x42, description: 0x42});
+        expect(tags['MakerNote']).to.deep.equal({id: 0x927c, value: 0x42, description: '66'});
     });
 
     it('should pass on an in-slot MakerNote offset relative to the offset origin', () => {
@@ -217,8 +218,8 @@ describe('tags-helpers', () => {
             }
         });
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
-        expect(tags['MyExifTag0'].description).to.equal(0x42);
-        expect(tags['MyExifTag1'].description).to.equal(0x43);
+        expect(tags['MyExifTag0'].description).to.equal('66');
+        expect(tags['MyExifTag1'].description).to.equal('67');
     });
 
     it('should be able to read an undefined IFD', () => {
@@ -227,8 +228,17 @@ describe('tags-helpers', () => {
         restoreTagNames = swapProperties(TagNames, {'0th': {}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, true);
         expect(tags['undefined-18193'].id).to.equal(0x4711);
-        expect(tags['undefined-18193'].description).to.equal(0x42);
+        expect(tags['undefined-18193'].description).to.equal('66');
         expect(tags['undefined-18193'].value).to.equal(0x42);
+    });
+
+    it('keeps the array value of an unknown tag as its description', () => {
+        // Field count + field with two SHORTs + offset to next IFD.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x03\x00\x00\x00\x02\x00\x42\x00\x43' + '\x00\x00\x00\x00');
+        restoreTagNames = swapProperties(TagNames, {'0th': {}});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, true);
+        expect(tags['undefined-18193'].value).to.deep.equal([0x42, 0x43]);
+        expect(tags['undefined-18193'].description).to.deep.equal([0x42, 0x43]);
     });
 
     it('should ignore undefined IFDs', () => {
@@ -483,7 +493,7 @@ describe('tags-helpers', () => {
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x0b\x00\x00\x00\x01\xbe\x80\x00\x00' + '\x00\x00\x00\x00');
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags['MyFloatTag'].value).to.equal(-0.25);
-        expect(tags['MyFloatTag'].description).to.equal(-0.25);
+        expect(tags['MyFloatTag'].description).to.equal('-0.25');
     });
 
     it('should be able to read a multi-element DOUBLE tag eight bytes per element', () => {
@@ -626,7 +636,7 @@ describe('tags-helpers', () => {
         const tags = readIfd(dataView, '0th', 0, 0x1a, ByteOrder.BIG_ENDIAN, false);
         expect(tags['MyTag0'].value).to.equal(0);
         expect(tags['Thumbnail']).to.deep.equal({
-            MyThumbnailTag: {id: 0x4714, value: 0, description: 0}
+            MyThumbnailTag: {id: 0x4714, value: 0, description: '0'}
         });
     });
 
@@ -703,7 +713,7 @@ describe('tags-helpers', () => {
             MyExifTag: {
                 id: 0x4711,
                 value: 0x42,
-                description: 0x42
+                description: '66'
             }
         });
     });
@@ -760,7 +770,7 @@ describe('tags-helpers', () => {
         expect(tags.UserComment.description).to.equal('<faulty value>');
     });
 
-    it('should describe a single-byte version tag as the byte value', () => {
+    it('should describe a single-byte version tag as the byte value as a string', () => {
         const dataView = getDataView(
             '\x00\x01' // Number of fields.
             + '\x90\x00\x00\x07' // ExifVersion, UNDEFINED.
@@ -770,7 +780,36 @@ describe('tags-helpers', () => {
         );
         const tags = readIfd(dataView, 'exif', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags.ExifVersion.value).to.equal(0x30);
-        expect(tags.ExifVersion.description).to.equal(0x30);
+        expect(tags.ExifVersion.description).to.equal('48');
+    });
+
+    it('should describe a single-value ComponentsConfiguration as the value as a string', () => {
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x91\x01\x00\x03' // ComponentsConfiguration, SHORT.
+            + '\x00\x00\x00\x01' // Number of tag items.
+            + '\x00\x05\x00\x00' // Inline value.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+        );
+        const tags = readIfd(dataView, 'exif', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags.ComponentsConfiguration.value).to.equal(5);
+        expect(tags.ComponentsConfiguration.description).to.equal('5');
+    });
+
+    it('should describe GPSLatitude as the decimal coordinate number', () => {
+        const dataView = getDataView(
+            '\x00\x01' // Number of fields.
+            + '\x00\x02\x00\x05' // GPSLatitude, RATIONAL.
+            + '\x00\x00\x00\x03' // Number of tag items.
+            + '\x00\x00\x00\x12' // Offset to the values.
+            + '\x00\x00\x00\x00' // Offset to next IFD.
+            + '\x00\x00\x00\x3b\x00\x00\x00\x01' // 59/1 degrees.
+            + '\x00\x00\x00\x1e\x00\x00\x00\x01' // 30/1 minutes.
+            + '\x00\x00\x00\x24\x00\x00\x00\x0a' // 36/10 seconds.
+        );
+        const tags = readIfd(dataView, IFD_TYPE_GPS, 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags.GPSLatitude.description).to.be.a('number');
+        expect(tags.GPSLatitude.description).to.be.closeTo(59.501, 0.0000001);
     });
 
     it('should describe a version tag with a faulty offset as the faulty value', () => {
@@ -1176,7 +1215,7 @@ describe('tags-helpers', () => {
             const budget = {remaining: 100, ifdEntriesRemaining: 10};
             const tags = readIfdWithTagNames(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, false, undefined, 'exif', budget, THREE_TAG_NAMES);
             expect(tags['Thumbnail']).to.deep.equal({
-                MyThumbnailTag: {id: 0x4714, value: 0, description: 0}
+                MyThumbnailTag: {id: 0x4714, value: 0, description: '0'}
             });
             expect(budget.ifdEntriesRemaining).to.equal(7);
         });

@@ -355,7 +355,7 @@ function readTag(
         tagValue = getAsciiTagValue(tagValue, stringBudget);
     }
 
-    let tagDescription = tagValue;
+    let tagDescription = getNumberAsString(tagValue);
 
     if (tagNames[ifdType][tagCode] !== undefined) {
         if ((tagNames[ifdType][tagCode]['name'] !== undefined) && (tagNames[ifdType][tagCode]['description'] !== undefined)) {
@@ -504,7 +504,11 @@ function getDescriptionFromTagValue(tagValue) {
     if (tagValue instanceof Array) {
         return tagValue.join(', ');
     }
-    return tagValue;
+    return getNumberAsString(tagValue);
+}
+
+function getNumberAsString(value) {
+    return typeof value === 'number' ? String(value) : value;
 }
 
 function getComputedTagValue(tagType, value) {

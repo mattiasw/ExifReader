@@ -79,7 +79,7 @@ describe('mpf-tags', () => {
 
         const tags = MpfTags.read(dataView, PREFIX_PADDING_SIZE, false, false, undefined, undefined, getBase64Image);
 
-        expect(tags['NumberOfImages'].description).to.equal(2);
+        expect(tags['NumberOfImages'].description).to.equal('2');
         expect(tags['Images'].length).to.equal(2);
 
         // The image buffers have to be removed before deeply checking equality, otherwise it hangs.

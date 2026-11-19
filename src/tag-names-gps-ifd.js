@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getEncodedString, getCalculatedGpsValue} from './tag-names-utils.js';
+import {getEncodedString, getGpsCoordinateDescription} from './tag-names-utils.js';
 import {
     getGPSVersionIDDescription,
     getGPSLatitudeRefDescription,
@@ -16,9 +16,7 @@ import {
     getGPSTrackRefDescription,
     getGPSImgDirectionRefDescription,
     getGPSDestLatitudeRefDescription,
-    getGPSDestLatitudeDescription,
     getGPSDestLongitudeRefDescription,
-    getGPSDestLongitudeDescription,
     getGPSDestBearingRefDescription,
     getGPSDestDistanceRefDescription,
     getGPSDifferentialDescription
@@ -35,7 +33,7 @@ export default {
     },
     0x0002: {
         'name': 'GPSLatitude',
-        'description': getCalculatedGpsValue
+        'description': getGpsCoordinateDescription
     },
     0x0003: {
         'name': 'GPSLongitudeRef',
@@ -43,7 +41,7 @@ export default {
     },
     0x0004: {
         'name': 'GPSLongitude',
-        'description': getCalculatedGpsValue
+        'description': getGpsCoordinateDescription
     },
     0x0005: {
         'name': 'GPSAltitudeRef',
@@ -89,7 +87,7 @@ export default {
     },
     0x0014: {
         'name': 'GPSDestLatitude',
-        'description': getGPSDestLatitudeDescription
+        'description': getGpsCoordinateDescription
     },
     0x0015: {
         'name': 'GPSDestLongitudeRef',
@@ -97,7 +95,7 @@ export default {
     },
     0x0016: {
         'name': 'GPSDestLongitude',
-        'description': getGPSDestLongitudeDescription
+        'description': getGpsCoordinateDescription
     },
     0x0017: {
         'name': 'GPSDestBearingRef',

@@ -35,9 +35,9 @@ export function getEncodedString(value) {
  * Converts the bytes of a version tag, such as ExifVersion, to a string. A
  * value of strings (an ASCII-typed tag) is returned as its strings joined
  * with ', ', as for other ASCII tags. A value that is not an array (a single
- * byte, or '<faulty value>') is returned as it is.
+ * byte, or '<faulty value>') is returned as its string.
  * @param {number[]|string[]|number|string} value
- * @returns {string|number}
+ * @returns {string}
  */
 export function getVersionString(value) {
     if (Array.isArray(value)) {
@@ -46,7 +46,7 @@ export function getVersionString(value) {
         }
         return getByteString(value);
     }
-    return value;
+    return String(value);
 }
 
 /**
@@ -84,6 +84,31 @@ function isString(item) {
 export function getTableDescription(table, value) {
     const key = String(value);
     return Object.prototype.hasOwnProperty.call(table, key) ? table[key] : 'Unknown';
+}
+
+/**
+ * Describes a GPS coordinate as its unsigned decimal value.
+ *
+ * @param {*} value The tag value, [numerator, denominator] pairs for the
+ *     degrees, minutes and seconds. Pairs after the third are ignored.
+ * @returns {number} The decimal coordinate, or NaN when the value does not
+ *     start with three pairs.
+ */
+export function getGpsCoordinateDescription(value) {
+    if (!startsWithThreeRationalPairs(value)) {
+        return NaN;
+    }
+    return getCalculatedGpsValue(value);
+}
+
+function startsWithThreeRationalPairs(value) {
+    return Array.isArray(value)
+        && isRationalPair(value[0]) && isRationalPair(value[1]) && isRationalPair(value[2]);
+}
+
+function isRationalPair(value) {
+    return Array.isArray(value) && value.length === 2
+        && typeof value[0] === 'number' && typeof value[1] === 'number';
 }
 
 export function getCalculatedGpsValue(value) {

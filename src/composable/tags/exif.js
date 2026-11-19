@@ -63,9 +63,7 @@ import {
     getGPSAltitudeRefDescription,
     getGPSDestBearingRefDescription,
     getGPSDestDistanceRefDescription,
-    getGPSDestLatitudeDescription,
     getGPSDestLatitudeRefDescription,
-    getGPSDestLongitudeDescription,
     getGPSDestLongitudeRefDescription,
     getGPSDifferentialDescription,
     getGPSImgDirectionRefDescription,
@@ -79,8 +77,8 @@ import {
     getGPSVersionIDDescription
 } from '../../tag-names-gps-ifd-descriptions.js';
 import {
-    getCalculatedGpsValue,
     getEncodedString,
+    getGpsCoordinateDescription,
     getVersionString
 } from '../../tag-names-utils.js';
 import {
@@ -361,9 +359,9 @@ export const Smoothness = {name: 'Smoothness', ids: [0xfe57], group: 'exif', dic
 export const MoireFilter = {name: 'MoireFilter', ids: [0xfe58], group: 'exif', dictionary: 'exif', reader: exifBlockReader};
 export const GPSVersionID = {name: 'GPSVersionID', ids: [0x0000], group: 'exif', dictionary: 'gps', description: getGPSVersionIDDescription, reader: exifBlockReader};
 export const GPSLatitudeRef = {name: 'GPSLatitudeRef', ids: [0x0001], group: 'exif', dictionary: 'gps', description: getGPSLatitudeRefDescription, reader: exifBlockReader};
-export const GPSLatitude = {name: 'GPSLatitude', ids: [0x0002], group: 'exif', dictionary: 'gps', description: getCalculatedGpsValue, reader: exifBlockReader};
+export const GPSLatitude = {name: 'GPSLatitude', ids: [0x0002], group: 'exif', dictionary: 'gps', description: getGpsCoordinateDescription, reader: exifBlockReader};
 export const GPSLongitudeRef = {name: 'GPSLongitudeRef', ids: [0x0003], group: 'exif', dictionary: 'gps', description: getGPSLongitudeRefDescription, reader: exifBlockReader};
-export const GPSLongitude = {name: 'GPSLongitude', ids: [0x0004], group: 'exif', dictionary: 'gps', description: getCalculatedGpsValue, reader: exifBlockReader};
+export const GPSLongitude = {name: 'GPSLongitude', ids: [0x0004], group: 'exif', dictionary: 'gps', description: getGpsCoordinateDescription, reader: exifBlockReader};
 export const GPSAltitudeRef = {name: 'GPSAltitudeRef', ids: [0x0005], group: 'exif', dictionary: 'gps', description: getGPSAltitudeRefDescription, reader: exifBlockReader};
 export const GPSAltitude = {name: 'GPSAltitude', ids: [0x0006], group: 'exif', dictionary: 'gps', description: getGPSAltitudeDescription, reader: exifBlockReader};
 export const GPSTimeStamp = {name: 'GPSTimeStamp', ids: [0x0007], group: 'exif', dictionary: 'gps', description: getGPSTimeStampDescription, reader: exifBlockReader};
@@ -379,9 +377,9 @@ export const GPSImgDirectionRef = {name: 'GPSImgDirectionRef', ids: [0x0010], gr
 export const GPSImgDirection = {name: 'GPSImgDirection', ids: [0x0011], group: 'exif', dictionary: 'gps', reader: exifBlockReader};
 export const GPSMapDatum = {name: 'GPSMapDatum', ids: [0x0012], group: 'exif', dictionary: 'gps', reader: exifBlockReader};
 export const GPSDestLatitudeRef = {name: 'GPSDestLatitudeRef', ids: [0x0013], group: 'exif', dictionary: 'gps', description: getGPSDestLatitudeRefDescription, reader: exifBlockReader};
-export const GPSDestLatitude = {name: 'GPSDestLatitude', ids: [0x0014], group: 'exif', dictionary: 'gps', description: getGPSDestLatitudeDescription, reader: exifBlockReader};
+export const GPSDestLatitude = {name: 'GPSDestLatitude', ids: [0x0014], group: 'exif', dictionary: 'gps', description: getGpsCoordinateDescription, reader: exifBlockReader};
 export const GPSDestLongitudeRef = {name: 'GPSDestLongitudeRef', ids: [0x0015], group: 'exif', dictionary: 'gps', description: getGPSDestLongitudeRefDescription, reader: exifBlockReader};
-export const GPSDestLongitude = {name: 'GPSDestLongitude', ids: [0x0016], group: 'exif', dictionary: 'gps', description: getGPSDestLongitudeDescription, reader: exifBlockReader};
+export const GPSDestLongitude = {name: 'GPSDestLongitude', ids: [0x0016], group: 'exif', dictionary: 'gps', description: getGpsCoordinateDescription, reader: exifBlockReader};
 export const GPSDestBearingRef = {name: 'GPSDestBearingRef', ids: [0x0017], group: 'exif', dictionary: 'gps', description: getGPSDestBearingRefDescription, reader: exifBlockReader};
 export const GPSDestBearing = {name: 'GPSDestBearing', ids: [0x0018], group: 'exif', dictionary: 'gps', reader: exifBlockReader};
 export const GPSDestDistanceRef = {name: 'GPSDestDistanceRef', ids: [0x0019], group: 'exif', dictionary: 'gps', description: getGPSDestDistanceRefDescription, reader: exifBlockReader};

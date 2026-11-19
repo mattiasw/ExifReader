@@ -44,7 +44,7 @@ describe('tags', () => {
         const {tags, byteOrder} = Tags.read(dataView, 0, false);
 
         expect(byteOrder).to.equal(ByteOrder.BIG_ENDIAN);
-        expect(tags['MyExifTag'].description).to.equal(0x42);
+        expect(tags['MyExifTag'].description).to.equal('66');
     });
 
     it('should name tags from the tag dictionaries it is given', () => {
@@ -56,7 +56,7 @@ describe('tags', () => {
 
         const {tags} = TagsModule.read(dataView, 0, false, false, undefined, undefined, tagNames);
 
-        expect(tags['MyTag'].description).to.equal(0x42);
+        expect(tags['MyTag'].description).to.equal('66');
     });
 
     it('should be able to read 1st IFD (thumbnail) following 0th IFD', () => {
@@ -72,8 +72,8 @@ describe('tags', () => {
 
         const {tags} = Tags.read(dataView, 0, false);
 
-        expect(tags['MyExifTag1'].description).to.equal(0x42);
-        expect(tags['Thumbnail']['MyExifTag2'].description).to.equal(0x43);
+        expect(tags['MyExifTag1'].description).to.equal('66');
+        expect(tags['Thumbnail']['MyExifTag2'].description).to.equal('67');
     });
 
     describe('thumbnail IFD argument', () => {
@@ -82,7 +82,7 @@ describe('tags', () => {
         it('should not read the thumbnail IFD when told not to', () => {
             const {tags} = TagsModule.read(getTiffWithThumbnailIfd(), 0, false, false, undefined, undefined, TAG_NAMES, false);
 
-            expect(tags['MyExifTag1'].description).to.equal(0x42);
+            expect(tags['MyExifTag1'].description).to.equal('66');
             expect(tags).to.not.have.property('Thumbnail');
         });
 
@@ -91,7 +91,7 @@ describe('tags', () => {
 
             const {tags} = TagsModule.read(getTiffWithThumbnailIfd(), 0, false, false, tagFilter, undefined, TAG_NAMES, true);
 
-            expect(tags['MyExifTag1'].description).to.equal(0x42);
+            expect(tags['MyExifTag1'].description).to.equal('66');
             expect(tags['Thumbnail']).to.deep.equal({});
         });
 
@@ -119,7 +119,7 @@ describe('tags', () => {
 
         const {tags} = Tags.read(dataView, 0, false);
 
-        expect(tags['MyExifTag'].description).to.equal(0x42);
+        expect(tags['MyExifTag'].description).to.equal('66');
     });
 
     it('should report the MakerNote offset relative to the TIFF header', () => {
@@ -167,7 +167,7 @@ describe('tags', () => {
 
         const {tags} = Tags.read(dataView, 0, false);
 
-        expect(tags['MyExifTag'].description).to.equal(0x42);
+        expect(tags['MyExifTag'].description).to.equal('66');
     });
 
     it('should be able to read Interoperability IFD through the Exif IFD pointer', () => {
@@ -183,7 +183,7 @@ describe('tags', () => {
 
         const {tags} = Tags.read(dataView, 0, false);
 
-        expect(tags['MyExifTag'].description).to.equal(0x42);
+        expect(tags['MyExifTag'].description).to.equal('66');
     });
 
     [

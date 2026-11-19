@@ -1405,7 +1405,11 @@ Notes
 -   In Exif data, the full GPS information is split into two different tags for
     each direction: the coordinate value (`GPSLatitude`, `GPSLongitude`) and the
     reference value (`GPSLatitudeRef`, `GPSLongitudeRef`). Use the references to
-    know whether the coordinate is north/south and east/west. Often you will see
+    know whether the coordinate is north/south and east/west. The `description`
+    of `GPSLatitude`, `GPSLongitude`, `GPSDestLatitude` and `GPSDestLongitude`
+    is the decimal coordinate as a number, unsigned, with the reference tag
+    giving the hemisphere. It is `NaN` when the value holds fewer than three
+    `[numerator, denominator]` pairs. Often you will see
     north and east represented as positive values, and south and west
     represented as negative values (e.g. in Google Maps). This setup is also
     used for the altitude using `GPSAltitude` and `GPSAltitudeRef` where the

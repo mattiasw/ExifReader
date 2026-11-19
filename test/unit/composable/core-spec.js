@@ -20,7 +20,7 @@ import {file, jpegHeader} from '../../../src/composable/formats/jpeg.js';
 import {
     allGroups, exif, iptc, xmp, icc, photoshop, mpf, canon, pentax, makerNotes, gps, composite, thumbnail,
 } from '../../../src/composable/groups.js';
-import {DateTime, DateTimeOriginal, GPSLatitude, WhiteBalance, InteroperabilityIndex, Make as MakeTag} from '../../../src/composable/tags/exif.js';
+import {DateTime, DateTimeOriginal, GPSLatitude, GPSLongitude, WhiteBalance, InteroperabilityIndex, Make as MakeTag} from '../../../src/composable/tags/exif.js';
 import {ByLine, Headline, CodedCharacterSet, Keywords} from '../../../src/composable/tags/iptc.js';
 import {exifBlockReader} from '../../../src/composable/exif-block-reader.js';
 import {iptcBlockReader} from '../../../src/composable/iptc-block-reader.js';
@@ -58,6 +58,8 @@ import {
     TAG_CANON_LENS_MODEL,
     TAG_GPS_LATITUDE_REF,
     TAG_GPS_LATITUDE,
+    TAG_GPS_LONGITUDE_REF,
+    TAG_GPS_LONGITUDE,
     TAG_FOCAL_LENGTH,
     TAG_FOCAL_PLANE_X_RESOLUTION,
     TAG_FOCAL_PLANE_Y_RESOLUTION,
@@ -1311,6 +1313,36 @@ describe('composable/core', () => {
             });
         });
 
+        describe('a GPS coordinate of fewer than three rational pairs', () => {
+            const image = getDataView(getJpeg(getExifSegment(getTiff({
+                gpsIfd: [
+                    ascii(TAG_GPS_LATITUDE_REF, 'N'),
+                    rationals(TAG_GPS_LATITUDE, [[1, 1], [0, 1], [0, 1]]),
+                    ascii(TAG_GPS_LONGITUDE_REF, 'E'),
+                    rationals(TAG_GPS_LONGITUDE, [[31, 1]]),
+                ],
+            }))));
+
+            it('should be described as NaN in grouped and flat output and left out of gps', async () => {
+                const reader = createReader({formats: [jpeg], groups: [exif, gps]});
+
+                const grouped = await reader.load(image);
+                const flat = await reader.load(image, {expanded: false});
+
+                expect(grouped.exif.GPSLongitude.value).to.deep.equal([31, 1]);
+                expect(grouped.exif.GPSLongitude.description).to.be.NaN;
+                expect(grouped.gps).to.deep.equal({Latitude: 1});
+                expect(flat.GPSLongitude.description).to.be.NaN;
+            });
+
+            it('should be described as NaN by its tag descriptor', async () => {
+                const tags = await createReader({formats: [jpeg], tags: [GPSLatitude, GPSLongitude]}).load(image);
+
+                expect(tags.exif.GPSLongitude.description).to.be.NaN;
+                expect(tags.exif.GPSLatitude.description).to.equal(1);
+            });
+        });
+
         describe('tag descriptors', () => {
             const dateTimeReader = createReader({formats: [jpeg], tags: [DateTime]});
             const filteredDateTimeReader = createReader({formats: [jpeg], tags: [DateTime], tagFilter});
@@ -1756,9 +1788,9 @@ describe('composable/core', () => {
                 Title: {value: 'xmp', attributes: {}, description: 'xmp'},
             };
             const THUMBNAIL_TAGS = {
-                Compression: {id: 0x0103, value: 6, description: 6},
-                JPEGInterchangeFormat: {id: 0x0201, value: 506, description: 506},
-                JPEGInterchangeFormatLength: {id: 0x0202, value: 9, description: 9},
+                Compression: {id: 0x0103, value: 6, description: '6'},
+                JPEGInterchangeFormat: {id: 0x0201, value: 506, description: '506'},
+                JPEGInterchangeFormatLength: {id: 0x0202, value: 9, description: '9'},
                 type: 'image/jpeg',
                 image: [0xff, 0xd8, 0x74, 0x68, 0x75, 0x6d, 0x62, 0xff, 0xd9],
                 base64: '/9h0aHVtYv/Z',

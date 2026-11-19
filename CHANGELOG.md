@@ -32,6 +32,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `errors.UnsupportedFormatError`. It is still an `Error` with the message
   `Invalid image format`, but its `name` is now `UnsupportedFormatError`, so
   `String(error)` changes to `UnsupportedFormatError: Invalid image format`.
+- The `description` of a tag read from the Exif data, its thumbnail, MPF and
+  maker note tags included, is now a string where it was a number. This
+  includes a numeric tag with no description of its own: the `description` of
+  `PixelXDimension` is now `'640'` rather than `640`. The descriptions of
+  `GPSLatitude`, `GPSLongitude`, `GPSDestLatitude` and `GPSDestLongitude` stay
+  the decimal coordinate as a number. When their value holds fewer than three
+  `[numerator, denominator]` pairs, the `description` is now `NaN`. Before, it
+  was a string such as `'31, 1'`.
 
 ### Deprecated
 
@@ -89,7 +97,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MPFVersion` and `SceneType` also as strings when a writer stores them as
   ASCII. The descriptions of `GPSLatitude`, `GPSLongitude`, `GPSDestLatitude`
   and `GPSDestLongitude` are now typed as numbers, the decimal coordinate the
-  library returns. A read of these tags may now need a narrowing.
+  library returns, and their values also as a single pair or any number of
+  pairs, which the library returns when a file does not store three. A read of
+  these tags may now need a narrowing.
 
 ### Security
 

@@ -180,11 +180,14 @@ type RationalTag = TypedTag<[number, number], number | null>
 
 type RationalArrayTag = TypedTag<[number, number][], (number | null)[]>
 
-type GpsDecimalCoordinateTag = TypedTag<
-    [[number, number], [number, number], [number, number]],
-    [number | null, number | null, number | null],
-    number
->
+type GpsDecimalCoordinateTag =
+    | TypedTag<
+        [[number, number], [number, number], [number, number]],
+        [number | null, number | null, number | null],
+        number
+    >
+    | TypedTag<[number, number], number | null, number>
+    | TypedTag<[number, number][], (number | null)[], number>
 
 type NumberTag = TypedTag<number>;
 

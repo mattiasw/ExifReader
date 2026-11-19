@@ -4,7 +4,7 @@
 
 import {expect} from 'chai';
 import {getCharacterArray} from '../../src/utils.js';
-import {getStringValue, getEncodedString, getVersionString, isArrayWithoutCharacterCodes, getStringsText, getTableDescription} from '../../src/tag-names-utils.js';
+import {getStringValue, getEncodedString, getVersionString, isArrayWithoutCharacterCodes, getStringsText, getTableDescription, getGpsCoordinateDescription} from '../../src/tag-names-utils.js';
 import {swapProperties} from './test-utils.js';
 
 describe('tag-names-utils', () => {
@@ -103,6 +103,14 @@ describe('tag-names-utils', () => {
 
     it('should get version string from character values', () => {
         expect(getVersionString([0x30, 0x32, 0x32, 0x30])).to.equal('0220');
+    });
+
+    it('should get version string from a single byte as the byte value as a string', () => {
+        expect(getVersionString(0x30)).to.equal('48');
+    });
+
+    it('should keep a faulty version value as it is', () => {
+        expect(getVersionString('<faulty value>')).to.equal('<faulty value>');
     });
 
     it('should get version string from a value of strings', () => {
@@ -211,6 +219,54 @@ describe('tag-names-utils', () => {
         it('should describe a falsy own key', () => {
             expect(getTableDescription({0: 'Zero'}, 0)).to.equal('Zero');
             expect(getTableDescription({0: 'Zero'}, -0)).to.equal('Zero');
+        });
+    });
+
+    describe('getGpsCoordinateDescription', () => {
+        it('should describe three rational pairs as the decimal coordinate', () => {
+            expect(getGpsCoordinateDescription([[74, 2], [13, 1], [550878, 10000]])).to.be.closeTo(37.231969, 0.000001);
+        });
+
+        it('should describe a missing value as NaN', () => {
+            expect(getGpsCoordinateDescription(undefined)).to.be.NaN;
+            expect(getGpsCoordinateDescription(null)).to.be.NaN;
+        });
+
+        it('should describe four or more pairs by the first three', () => {
+            expect(getGpsCoordinateDescription([[20, 1], [15, 1], [0, 1], [7, 1]])).to.equal(20.25);
+            expect(getGpsCoordinateDescription([[20, 1], [15, 1], [0, 1], [7, 1], [9, 1]])).to.equal(20.25);
+        });
+
+        it('should describe four values whose first three are not all pairs as NaN', () => {
+            for (let position = 0; position < 3; position++) {
+                const value = [[1, 1], [1, 1], [1, 1], [1, 1]];
+                value[position] = [1, 1, 9];
+                expect(getGpsCoordinateDescription(value), `position ${position}`).to.be.NaN;
+            }
+        });
+
+        it('should describe three values with one that is not a pair as NaN', () => {
+            for (let position = 0; position < 3; position++) {
+                const value = [[1, 1], [1, 1], [1, 1]];
+                value[position] = [1, 1, 9];
+                expect(getGpsCoordinateDescription(value), `position ${position}`).to.be.NaN;
+            }
+            expect(getGpsCoordinateDescription([null, [0, 1], [0, 1]])).to.be.NaN;
+        });
+
+        it('should describe a pair whose numerator or denominator is not a number as NaN', () => {
+            expect(getGpsCoordinateDescription([['1', 1], [0, 1], [0, 1]])).to.be.NaN;
+            expect(getGpsCoordinateDescription([[1, '1'], [0, 1], [0, 1]])).to.be.NaN;
+        });
+
+        it('should describe the other shapes the reader can give as NaN', () => {
+            for (const value of [[31, 1], [[1, 1], [2, 1]], [], [1, 2, 3], 5, '<faulty value>']) {
+                expect(getGpsCoordinateDescription(value), JSON.stringify(value)).to.be.NaN;
+            }
+        });
+
+        it('should describe a zero denominator in three pairs as Infinity', () => {
+            expect(getGpsCoordinateDescription([[1, 0], [0, 1], [0, 1]])).to.equal(Infinity);
         });
     });
 

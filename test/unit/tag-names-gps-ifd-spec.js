@@ -43,6 +43,22 @@ describe('tag-names-gps-ifd', () => {
         expect(TagNamesGpsIfd[0x0004].description([[230, 2], [48, 1], [400284, 10000]])).to.be.closeTo(115.811119, 0.000001);
     });
 
+    for (const [tagId, name] of [[0x0002, 'GPSLatitude'], [0x0004, 'GPSLongitude'], [0x0014, 'GPSDestLatitude'], [0x0016, 'GPSDestLongitude']]) {
+        it(`should describe ${name} as NaN when the value holds fewer than three rational pairs`, () => {
+            for (const value of [[31, 1], [[1, 1], [2, 1]], [], [1, 2, 3], 5]) {
+                expect(TagNamesGpsIfd[tagId].description(value), JSON.stringify(value)).to.be.NaN;
+            }
+        });
+
+        it(`should describe ${name} with four rational pairs by the first three`, () => {
+            expect(TagNamesGpsIfd[tagId].description([[20, 1], [15, 1], [0, 1], [7, 1]])).to.equal(20.25);
+        });
+
+        it(`should describe ${name} with a zero denominator as Infinity`, () => {
+            expect(TagNamesGpsIfd[tagId].description([[1, 0], [0, 1], [0, 1]])).to.equal(Infinity);
+        });
+    }
+
     it('should report correct name and description for GPSAltitudeRef', () => {
         expect(TagNamesGpsIfd[0x0005].name).to.equal('GPSAltitudeRef');
         expect(TagNamesGpsIfd[0x0005].description(0)).to.equal('Sea level');
@@ -134,7 +150,9 @@ describe('tag-names-gps-ifd', () => {
     it('should report correct name and description for GPSDestLatitude', () => {
         // 37.231969, 115.811119 (37° 13' 55.0878", 115° 48' 40.0284")
         expect(TagNamesGpsIfd[0x0014].name).to.equal('GPSDestLatitude');
-        expect(TagNamesGpsIfd[0x0014].description([[74, 2], [13, 1], [550878, 10000]])).to.be.closeTo(37.231969, 0.000001);
+        const description = TagNamesGpsIfd[0x0014].description([[74, 2], [13, 1], [550878, 10000]]);
+        expect(description).to.be.a('number');
+        expect(description).to.be.closeTo(37.231969, 0.000001);
     });
 
     it('should report correct name and description for GPSDestLongitudeRef', () => {
@@ -147,7 +165,9 @@ describe('tag-names-gps-ifd', () => {
     it('should report correct name and description for GPSDestLongitude', () => {
         // 37.231969, 115.811119 (37° 13' 55.0878", 115° 48' 40.0284")
         expect(TagNamesGpsIfd[0x0016].name).to.equal('GPSDestLongitude');
-        expect(TagNamesGpsIfd[0x0016].description([[230, 2], [48, 1], [400284, 10000]])).to.be.closeTo(115.811119, 0.000001);
+        const description = TagNamesGpsIfd[0x0016].description([[230, 2], [48, 1], [400284, 10000]]);
+        expect(description).to.be.a('number');
+        expect(description).to.be.closeTo(115.811119, 0.000001);
     });
 
     it('should report correct name and description for GPSDestBearingRef', () => {

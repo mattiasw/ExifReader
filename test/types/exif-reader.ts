@@ -113,10 +113,14 @@ if (tags["DateTimeOriginal"]) {
     tags["Thumbnail"]?.type === "image/jpeg";
     tags["Thumbnail"]?.Compression?.id === 4711;
     tags["Thumbnail"]?.Compression?.value === 32946;
+    // @ts-expect-error
+    tags["Thumbnail"]?.Compression?.description === 6;
     tags["Thumbnail"]?.Compression?.description === "Deflate";
     tags["thumbnail"]?.type === "image/jpeg";
     tags["thumbnail"]?.Compression?.id === 4711;
     tags["thumbnail"]?.Compression?.value === 32946;
+    // @ts-expect-error
+    tags["thumbnail"]?.Compression?.description === 6;
     tags["thumbnail"]?.Compression?.description === "Deflate";
     tags["Images"]?.[0];
     // @ts-expect-error
@@ -141,16 +145,23 @@ if (exifDateTimeComputed) {
 // @ts-expect-error
 computedExpandedTags["xmp"]?.["DateTimeOriginal"]?.computed;
 
+// @ts-expect-error
 expandedTags["exif"]?.["GPSLatitude"]?.value[0][0] === 1;
+const gpsLatitudeValue = expandedTags["exif"]?.["GPSLatitude"]?.value;
+if (gpsLatitudeValue && gpsLatitudeValue.length === 3) {
+    gpsLatitudeValue[0][0] === 1;
+    // @ts-expect-error
+    gpsLatitudeValue[0][2] === 1;
+}
 // @ts-expect-error
-expandedTags["exif"]?.["GPSLatitude"]?.value[0][2] === 1;
-// @ts-expect-error
-expandedTags["exif"]?.["GPSLatitude"]?.value[3][0] === 1;
 expandedTags["exif"]?.["GPSLongitude"]?.value[0][0] === 1;
-// @ts-expect-error
-expandedTags["exif"]?.["GPSLongitude"]?.value[0][2] === 1;
-// @ts-expect-error
-expandedTags["exif"]?.["GPSLongitude"]?.value[3][0] === 1;
+const gpsLongitudeValue = expandedTags["exif"]?.["GPSLongitude"]?.value;
+if (gpsLongitudeValue && gpsLongitudeValue.length === 3) {
+    gpsLongitudeValue[0][0] === 1;
+    // @ts-expect-error
+    gpsLongitudeValue[0][2] === 1;
+}
+const singlePairGpsLongitude: NonNullable<ExpandedTags["exif"]>["GPSLongitude"] = {id: 4, value: [31, 1], description: NaN};
 expandedTags["exif"]?.["GPSAltitude"]?.value[0] === 1;
 // @ts-expect-error
 expandedTags["exif"]?.["GPSAltitude"]?.value[2] === 1;
@@ -160,7 +171,7 @@ expandedTags["gps"]?.["Altitude"] === 12.345
 
 const computedGpsLatitude =
     computedExpandedTags["exif"]?.["GPSLatitude"]?.computed;
-if (computedGpsLatitude) {
+if (Array.isArray(computedGpsLatitude)) {
     computedGpsLatitude[0] === 1;
     computedGpsLatitude[0] === null;
     // @ts-expect-error
@@ -189,11 +200,15 @@ if (Array.isArray(expandedApplicationNotes)) {
 expandedTags["exif"]?.["Thumbnail"]?.type === "image/jpeg";
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.id === 4711;
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.value === 32946;
+// @ts-expect-error
+expandedTags["exif"]?.["Thumbnail"]?.Compression?.description === 6;
 expandedTags["exif"]?.["Thumbnail"]?.Compression?.description === "Deflate";
 expandedTags["Thumbnail"]?.type === "image/jpeg";
 expandedTags["thumbnail"]?.type === "image/jpeg";
 expandedTags["thumbnail"]?.Compression?.value === 32946;
 expandedTags["thumbnail"]?.Compression?.description === "Deflate";
+// @ts-expect-error
+expandedTags["thumbnail"]?.Compression?.description === 6;
 expandedTags["exif"]?.["Images"]?.[0];
 
 tags["SceneType"]?.value === 1;
@@ -215,6 +230,16 @@ if (computedXResolution && "id" in computedXResolution) {
 
 const whitePointNumerator: number = expandedTags["exif"]?.["WhitePoint"]?.value[0][0] ?? 0;
 const gpsSpeedNumerator: number = expandedTags["exif"]?.["GPSSpeed"]?.value[0] ?? 0;
+// @ts-expect-error
+const imageWidthDescription: number = expandedTags["exif"]?.["ImageWidth"]?.description ?? 0;
+const imageWidthDescriptionString: string = expandedTags["exif"]?.["ImageWidth"]?.description ?? "";
+const orientationDescription: string = expandedTags["exif"]?.["Orientation"]?.description ?? "";
+// @ts-expect-error
+expandedTags["exif"]?.["Rating"]?.description === 3;
+expandedTags["exif"]?.["Rating"]?.description === "3";
+// @ts-expect-error
+expandedTags["exif"]?.["WhiteBalance"]?.description === 0;
+expandedTags["exif"]?.["WhiteBalance"]?.description === "Auto";
 
 const gpsLatitudeDescription: number = expandedTags["exif"]?.["GPSLatitude"]?.description ?? 0;
 // @ts-expect-error
@@ -228,6 +253,9 @@ const gpsDestLatitudeDescriptionString: string = expandedTags["exif"]?.["GPSDest
 const gpsDestLongitudeDescription: number = expandedTags["exif"]?.["GPSDestLongitude"]?.description ?? 0;
 // @ts-expect-error
 const gpsDestLongitudeDescriptionString: string = expandedTags["exif"]?.["GPSDestLongitude"]?.description ?? "";
+const pixelXDimensionDescription: string = expandedTags["exif"]?.["PixelXDimension"]?.description ?? "";
+// @ts-expect-error
+const pixelXDimensionDescriptionNumber: number = expandedTags["exif"]?.["PixelXDimension"]?.description ?? 0;
 
 const flatGpsLatitude = tags["GPSLatitude"];
 if (flatGpsLatitude && "id" in flatGpsLatitude) {
@@ -255,6 +283,9 @@ if (flatGpsDestLongitude && "id" in flatGpsDestLongitude) {
     // @ts-expect-error
     const flatGpsDestLongitudeDescriptionString: string = flatGpsDestLongitude.description;
 }
+const flatPixelXDimensionDescription: string = tags["PixelXDimension"]?.description ?? "";
+// @ts-expect-error
+const flatPixelXDimensionDescriptionNumber: number = tags["PixelXDimension"]?.description ?? 0;
 
 // @ts-expect-error
 expandedTags["exif"]?.["WhitePoint"]?.value[0] === 3127;
@@ -276,12 +307,22 @@ computedGpsTimeStamp?.[0] === null;
 // @ts-expect-error
 const computedGpsTimeStampNumbers: number[] | undefined = computedExpandedTags["exif"]?.["GPSTimeStamp"]?.computed;
 
+// @ts-expect-error
 expandedTags["exif"]?.["GPSDestLatitude"]?.value[0][0] === 1;
+const gpsDestLatitudeValue = expandedTags["exif"]?.["GPSDestLatitude"]?.value;
+if (gpsDestLatitudeValue && gpsDestLatitudeValue.length === 3) {
+    gpsDestLatitudeValue[0][0] === 1;
+    // @ts-expect-error
+    gpsDestLatitudeValue[0][2] === 1;
+}
 // @ts-expect-error
-expandedTags["exif"]?.["GPSDestLatitude"]?.value[0] === 1;
 expandedTags["exif"]?.["GPSDestLongitude"]?.value[0][0] === 1;
-// @ts-expect-error
-expandedTags["exif"]?.["GPSDestLongitude"]?.value[0] === 1;
+const gpsDestLongitudeValue = expandedTags["exif"]?.["GPSDestLongitude"]?.value;
+if (gpsDestLongitudeValue && gpsDestLongitudeValue.length === 3) {
+    gpsDestLongitudeValue[0][0] === 1;
+    // @ts-expect-error
+    gpsDestLongitudeValue[0][2] === 1;
+}
 
 expandedTags["exif"]?.["FlashEnergy"]?.value[0] === 1;
 // @ts-expect-error
@@ -342,6 +383,9 @@ if (Array.isArray(sceneType)) {
 // @ts-expect-error
 const sceneTypeNumber: number | undefined = expandedTags["exif"]?.["SceneType"]?.value;
 
+const thumbnailImageWidth: string = expandedTags["exif"]?.["Thumbnail"]?.ImageWidth?.description ?? "";
+// @ts-expect-error
+const thumbnailImageWidthNumber: number = expandedTags["exif"]?.["Thumbnail"]?.ImageWidth?.description ?? 0;
 expandedTags["exif"]?.["Thumbnail"]?.StripOffsets?.value === 8;
 
 // @ts-expect-error
