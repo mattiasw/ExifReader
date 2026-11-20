@@ -72,7 +72,7 @@ Every cell where that release resolves differently from `EXPECTED` prints a
 `DEVIATION` line and makes the run exit 1. Do not copy that table into
 `EXPECTED`.
 
-## Why it is not in pre-commit or CI
+## Why it is not in validate or CI
 
 The exports map changes rarely, and a permanent matrix would track resolver
 changes in six third-party tools as devDependencies. The permanent legs cover

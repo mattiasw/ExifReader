@@ -54,7 +54,7 @@ jobs:
     - run: npm run test:integration
   bundle-size:
     # Bundle sizes against test/bundle-size/baseline.json, and what each bundle
-    # must and must not carry. Too slow for the pre-commit hook, so it runs here.
+    # must and must not carry. Too slow for the pre-push hook, so it runs here.
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

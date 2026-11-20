@@ -10,7 +10,7 @@
 // carry, and that every emitted bundle still parses.
 //
 // Run with `npm run test:bundle-size`. A CI job runs it; it is not part of
-// pre-commit or test:all, since it builds every consumer with both bundlers.
+// validate or test:all, since it builds every consumer with both bundlers.
 
 const {execFileSync} = require('child_process');
 const fs = require('fs');
