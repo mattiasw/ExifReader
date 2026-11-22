@@ -6,10 +6,10 @@
 
 import {
     fetchRange, nodeGetRange, readLocalFileRange, readFileObjectRange,
-    concatBuffers, isFilePathOrURL, isBrowserFileObject, isDataUri,
+    concatBuffers, isFilePathOrURL, isBrowserFileObject, isDataUri, dataUriToBuffer,
     HTTP_STATUS_OK, HTTP_STATUS_RANGE_NOT_SATISFIABLE,
 } from './file-loaders.js';
-import {objectAssign, dataUriToBuffer, assertPromiseSupport, isArrayBufferViewLike} from './utils.js';
+import {objectAssign, assertPromiseSupport, isArrayBufferViewLike} from './utils.js';
 
 const AUTO_INITIAL_LENGTH = 128 * 1024;
 const AUTO_MAX_ITERATIONS = 4;

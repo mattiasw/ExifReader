@@ -2,8 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import Constants from './constants.js';
-
 // A block's position in each mode is the index of its slot. Expanded output
 // takes its key order from the first block of each group: discovery order,
 // with the groups an Exif block carries just before it. In flat output a later
@@ -26,19 +24,11 @@ export const MERGE_ORDER = {
     ],
 };
 
-// Every Constants.USE_* guard sits inside the function, since the table is
-// built once at import.
-const MERGE_MODES = {
+export const CORE_MERGE_MODES = {
     assign: assignGroupTags,
     merge: mergeGroupTags,
-    brobXmp: assignBrobXmpTags,
-    pngFile: mergePngFileTags,
-    pngTextTags: mergePngTextTags,
     nested: mergeNestedBlocks,
-    thumbnailCandidate: addThumbnailCandidate,
-    gps: addGpsGroup,
-    composite: addCompositeGroup,
-    thumbnail: addThumbnail,
+    thumbnail: removeThumbnailTag,
     fileType: addFileType,
     metadataRange: addMetadataRange,
 };
@@ -48,14 +38,21 @@ const MERGE_MODES = {
  * current mode, whatever order they were pushed in.
  *
  * A block has a `slot` (its place in MERGE_ORDER) and a `mode` (a key of
- * MERGE_MODES). A tag block also has the `group` it merges into and its parsed
- * `tags`; a `nested` container has `blocks`, merged among themselves in slot
- * order at the container's position; a `thumbnailCandidate` has `rank` (main
- * or embedded) and the thumbnail as `tags`. A metadataRange block carries
- * `metadataBlocks` and `metadataTruncated`.
+ * `modes` or of CORE_MERGE_MODES). A tag block also has the `group` it merges
+ * into and its parsed `tags`; a `nested` container has `blocks`, merged among
+ * themselves in slot order at the container's position. A metadataRange block
+ * carries `metadataBlocks` and `metadataTruncated`.
+ *
+ * `modes` holds the modes the composed formats and groups bring, each
+ * `(tags, block, context) => tags`; one of them wins over a core mode of the
+ * same name.
  *
  * The top level merges in place, so a PNG with thousands of text chunk blocks
  * stays linear.
+ *
+ * `tagFilterIsReadCap` says the tag filter is active only because includeTags
+ * caps what is read; flat Composite then reads every parsed tag block, returned
+ * or not, merged in flat order as an unfiltered load merges them.
  *
  * @returns {object} The tags.
  */
@@ -64,19 +61,21 @@ export function buildTagsFromMergeBlocks({
     parsedGroups,
     expanded,
     tagFilter,
+    tagFilterIsReadCap,
     dataView,
     fileType,
-    pngTextBlocks,
-    pngTextIsAsync,
+    modes = {},
     deps,
 }) {
     const context = {
         parsedGroups,
         expanded,
         tagFilter,
+        compositeInput: tagFilterIsReadCap && !expanded && tagFilter.shouldReturnGroup('composite') ? {} : undefined,
         dataView,
         fileType,
         thumbnails: [],
+        modes,
         deps,
         merge: createInPlaceMerge(deps),
     };
@@ -87,7 +86,7 @@ export function buildTagsFromMergeBlocks({
         tags = applyMergeMode(tags, orderedBlocks[i], context);
     }
 
-    return addPngTextCopyOfPng(tags, {expanded, tagFilter, pngTextBlocks, pngTextIsAsync, deps});
+    return tags;
 }
 
 // Sorts by position, then push order, without relying on a stable sort.
@@ -101,43 +100,16 @@ function getBlocksInMergeOrder(blocks, expanded) {
 }
 
 function applyMergeMode(tags, block, context) {
-    return MERGE_MODES[block.mode](tags, block, context);
-}
-
-// Expanded output gets a pngText group that copies png when the text chunks
-// are read asynchronously, or when there are text chunks (raw profiles
-// included) but none of them gave PNG text tags.
-function addPngTextCopyOfPng(tags, {expanded, tagFilter, pngTextBlocks, pngTextIsAsync, deps}) {
-    if (
-        Constants.USE_PNG
-        && expanded
-        && pngTextIsAsync
-        && tagFilter.shouldReturnGroup('png')
-        && tags.png
-    ) {
-        tags.pngText = deps.objectAssign({}, tags.png);
-    }
-
-    if (
-        Constants.USE_PNG
-        && expanded
-        && tagFilter.shouldReturnGroup('png')
-        && deps.hasPngTextData(pngTextBlocks)
-        && tags.png
-        && !tags.pngText
-    ) {
-        tags.pngText = deps.objectAssign({}, tags.png);
-    }
-
-    return tags;
+    const mode = context.modes[block.mode] || CORE_MERGE_MODES[block.mode];
+    return mode(tags, block, context);
 }
 
 /**
  * Merges one block into the tags with the function its mode names.
  *
  * @param {object} context The block, the tags so far and the merge state; see
- * buildTagsFromMergeBlocks for the block shape. `merge` defaults to a copying
- * merge and `thumbnails` to a new list.
+ * buildTagsFromMergeBlocks for the block shape and `modes`. `merge` defaults
+ * to a copying merge and `thumbnails` to a new list.
  * @returns {object} The tags, which flat output replaces rather than mutates.
  */
 export function mergeBlock({
@@ -149,6 +121,7 @@ export function mergeBlock({
     dataView,
     fileType,
     thumbnails = [],
+    modes = {},
     deps,
     merge = createCopyingMerge(deps),
 }) {
@@ -159,21 +132,38 @@ export function mergeBlock({
         dataView,
         fileType,
         thumbnails,
+        modes,
         deps,
         merge,
     });
 }
 
-// Every tag block writes its parsed group as it merges, since gps, composite
-// and metadataRange read them, whether or not the group is returned.
-function assignGroupTags(tags, block, context) {
+/**
+ * Merges a tag block by assigning its group: it writes the parsed group
+ * whether or not the group is returned, since gps, composite and metadataRange
+ * read it, adds the tags to the Composite input and merges the returned tags.
+ *
+ * @returns {object} The tags.
+ */
+export function assignGroupTags(tags, block, context) {
     context.parsedGroups[block.group] = block.tags;
+    addToCompositeInput(block.tags, context);
     if (!context.tagFilter.shouldReturnGroup(block.group)) {
         return tags;
     }
     const returnedTags = context.deps.filterTagsForReturn(block.group, block.tags, context.tagFilter);
 
     return mergeAssignGroup(tags, block.group, returnedTags, context.expanded, context.deps);
+}
+
+/**
+ * Adds a block's parsed tags to the flat Composite input, when the merge
+ * collects one (see tagFilterIsReadCap in buildTagsFromMergeBlocks).
+ */
+export function addToCompositeInput(blockTags, context) {
+    if (context.compositeInput) {
+        context.deps.objectAssign(context.compositeInput, blockTags);
+    }
 }
 
 export function mergeAssignGroup(tags, groupKey, returnedTags, expanded, deps) {
@@ -188,7 +178,7 @@ export function mergeAssignGroup(tags, groupKey, returnedTags, expanded, deps) {
 
 // Every XMP block drops the raw packet in flat output.
 function getTagsForFlat(groupKey, returnedTags, deps) {
-    if (!(Constants.USE_XMP && groupKey === 'xmp')) {
+    if (groupKey !== 'xmp') {
         return returnedTags;
     }
     const xmpTagsWithoutRaw = deps.objectAssign({}, returnedTags);
@@ -199,6 +189,7 @@ function getTagsForFlat(groupKey, returnedTags, deps) {
 
 function mergeGroupTags(tags, block, context) {
     context.merge.group(context.parsedGroups, block.group, block.tags);
+    addToCompositeInput(block.tags, context);
     if (!context.tagFilter.shouldReturnGroup(block.group)) {
         return tags;
     }
@@ -211,42 +202,6 @@ function mergeGroupTags(tags, block, context) {
     }
 
     return context.merge.topLevel(tags, getTagsForFlat(block.group, returnedTags, context.deps));
-}
-
-// In expanded output a brob XMP replaces the xmp group, in flat output it
-// merges key by key, and an empty, failed or over-bound one leaves the earlier
-// xmp group as it is.
-function assignBrobXmpTags(tags, block, context) {
-    if (!Constants.USE_JXL) {
-        return tags;
-    }
-    if (!block.tags || Object.keys(block.tags).length === 0) {
-        return tags;
-    }
-
-    return assignGroupTags(tags, block, context);
-}
-
-// The png group gathers the file, text and chunk tags; pngFile keeps the file
-// tags alone.
-function mergePngFileTags(tags, block, context) {
-    if (!Constants.USE_PNG) {
-        return tags;
-    }
-    context.parsedGroups.pngFile = block.tags;
-    if (!context.tagFilter.shouldReturnGroup('png')) {
-        return tags;
-    }
-    const returnedTags = context.deps.filterTagsForReturn('png', block.tags, context.tagFilter);
-
-    if (context.expanded) {
-        context.merge.group(tags, 'png', returnedTags);
-        tags.pngFile = returnedTags;
-
-        return tags;
-    }
-
-    return context.merge.topLevel(tags, returnedTags);
 }
 
 // The blocks of one container (an Exif block with the groups it carries, or
@@ -265,110 +220,15 @@ function mergeEmbeddedBlocks(tags, blocks, context) {
     return tags;
 }
 
-// pngText holds the text tags only when there are any; otherwise
-// addPngTextCopyOfPng may fill it with a copy of png.
-function mergePngTextTags(tags, block, context) {
-    if (!Constants.USE_PNG || !context.tagFilter.shouldReturnGroup('png')) {
-        return tags;
-    }
-    const returnedTags = context.deps.filterTagsForReturn('png', block.tags, context.tagFilter);
-
-    if (context.expanded) {
-        context.merge.group(tags, 'png', returnedTags);
-        if (Object.keys(returnedTags).length > 0) {
-            context.merge.group(tags, 'pngText', returnedTags);
-        }
-
-        return tags;
-    }
-
-    return context.merge.topLevel(tags, returnedTags);
-}
-
-function addThumbnailCandidate(tags, block, context) {
-    context.thumbnails.push({rank: block.rank, thumbnail: block.tags});
-    return tags;
-}
-
-// Expanded output only, derived from the parsed Exif group.
-function addGpsGroup(tags, block, context) {
-    if (
-        Constants.USE_EXIF
-        && context.expanded
-        && context.tagFilter.shouldReturnGroup('gps')
-        && context.parsedGroups.exif
-    ) {
-        const gpsGroup = context.deps.getGpsGroupFromExifTags(context.parsedGroups.exif);
-        if (gpsGroup) {
-            tags.gps = context.deps.filterTagsForReturn('gps', gpsGroup, context.tagFilter);
-        }
-    }
-
-    return tags;
-}
-
-// Composite reads the merged tags, or with an active tag filter the parsed exif
-// and file groups.
-function addCompositeGroup(tags, block, context) {
-    if (!(Constants.USE_EXIF || Constants.USE_XMP) || !context.tagFilter.shouldReturnGroup('composite')) {
-        return tags;
-    }
-
-    let compositeInput = tags;
-    let compositeInputExpanded = context.expanded;
-    if (context.tagFilter.isActive) {
-        compositeInput = {exif: context.parsedGroups.exif, file: context.parsedGroups.file};
-        compositeInputExpanded = true;
-    }
-
-    const composite = context.deps.Composite.get(compositeInput, compositeInputExpanded);
-    if (!composite) {
-        return tags;
-    }
-
-    const returnedCompositeTags = context.deps.filterTagsForReturn('composite', composite, context.tagFilter);
-
-    return mergeAssignGroup(tags, 'composite', returnedCompositeTags, context.expanded, context.deps);
-}
-
-// The main thumbnail when it has an image, else the first embedded Exif
-// thumbnail with one, else the main thumbnail without an image.
-function addThumbnail(tags, block, context) {
+/**
+ * The core thumbnail mode, which the thumbnail group's mode also runs.
+ *
+ * @returns {object} The tags without a top-level Thumbnail tag.
+ */
+export function removeThumbnailTag(tags) {
     // Flat output can already hold an XMP or PNG text tag named Thumbnail.
     delete tags.Thumbnail;
-
-    if (
-        !context.tagFilter.shouldReturnGroup('thumbnail')
-        || !context.tagFilter.shouldReturnTag('thumbnail', 'Thumbnail')
-    ) {
-        return tags;
-    }
-
-    const thumbnail = selectThumbnail(context.thumbnails);
-    if (thumbnail) {
-        tags.Thumbnail = thumbnail;
-    }
-
     return tags;
-}
-
-function selectThumbnail(candidates) {
-    if (!(Constants.USE_EXIF && Constants.USE_THUMBNAIL)) {
-        return undefined;
-    }
-    const main = candidates.filter((candidate) => candidate.rank === 'main')[0];
-    if (main && hasImage(main.thumbnail)) {
-        return main.thumbnail;
-    }
-    const embedded = candidates.filter((candidate) => candidate.rank === 'embedded' && hasImage(candidate.thumbnail))[0];
-    if (embedded) {
-        return embedded.thumbnail;
-    }
-    return main ? main.thumbnail : undefined;
-}
-
-function hasImage(thumbnail) {
-    return !!thumbnail && !!thumbnail.image;
 }
 
 function addFileType(tags, block, context) {

@@ -11,7 +11,17 @@ import {
     getExifTagDependenciesForInclude,
 } from './tag-filter-config.js';
 
-export function createTagFilter({includeTags, excludeTags} = {}) {
+/**
+ * Builds the filter the readers and the merge consult for includeTags and
+ * excludeTags.
+ *
+ * @param {{includeTags: (object|undefined), excludeTags: (object|undefined), includeTagsIsLimit: (boolean|undefined)}} options
+ *     With `includeTagsIsLimit`, includeTags only caps what is read and
+ *     excludeTags applies to every group; without it a group listed in both
+ *     ignores its excludeTags entry.
+ * @returns {object} The filter.
+ */
+export function createTagFilter({includeTags, excludeTags, includeTagsIsLimit} = {}) {
     const hasIncludeTags = Boolean(includeTags);
     const hasExcludeTags = Boolean(excludeTags);
     const isActive = hasIncludeTags || hasExcludeTags;
@@ -51,12 +61,14 @@ export function createTagFilter({includeTags, excludeTags} = {}) {
 
     for (const groupKey in FILTER_GROUPS) {
         const hasIncludeEntry =
-            hasIncludeTags && Object.prototype.hasOwnProperty.call(includeTags, groupKey);
+            hasIncludeTags
+            && Object.prototype.hasOwnProperty.call(includeTags, groupKey)
+            && !!includeTags[groupKey];
         const hasExcludeEntry =
             hasExcludeTags && Object.prototype.hasOwnProperty.call(excludeTags, groupKey);
 
         let excludeValue = undefined;
-        if (hasExcludeEntry && !hasIncludeEntry) {
+        if (hasExcludeEntry && (!hasIncludeEntry || includeTagsIsLimit)) {
             excludeValue = excludeTags[groupKey];
         }
 

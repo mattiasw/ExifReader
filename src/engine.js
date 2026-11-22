@@ -2,23 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {decompress, isThenable, objectAssign} from './utils.js';
-import {getValueBudget} from './tags-helpers.js';
+import {isThenable, objectAssign} from './utils.js';
 
 // A finder block, a block it emits and a block emitted by that one.
 export const MAX_BLOCK_DEPTH = 3;
-export const MAX_DECOMPRESSIONS_IN_FLIGHT = 4;
-
-// Brob XMP is bounded by the file size, as brob Exif is, plus room for one JPEG
-// standard XMP segment so that a small file can still carry a typical packet.
-const BROB_XMP_SIZE_PER_INPUT_SIZE = 4;
-const BROB_XMP_SIZE_ALLOWANCE = 64 * 1024;
-// An embedded thumbnail is sliced from a decoded or decompressed view that can be
-// far larger than the file. A real JPEG thumbnail shrinks only a little when
-// compressed, so bound the embedded thumbnails of a file by twice its size in
-// total, plus room for a typical thumbnail.
-const EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE = 2;
-const EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE = 64 * 1024;
 
 /**
  * Runs the composition's groups over the finder's blocks and the blocks the
@@ -79,8 +66,8 @@ function createDispatchPlan(composition, blocks, context) {
 }
 
 // A group dispatches when the filter parses its key, or a group that consumes
-// a kind it emits does. A cycle counts as false; validateComposition rejects
-// one anyway.
+// a kind it emits does. A cycle counts as false, so a forged cyclic group
+// cannot recurse forever.
 function createShouldDispatch(groups, consumersOf, tagFilter) {
     const verdicts = [];
 
@@ -256,103 +243,42 @@ function getNodeMergeBlocks(node) {
 
 /**
  * Builds the per-load state the groups share: the input, the options, the
- * budgets and the entry's helpers.
+ * value budget, the entry's helpers and the facts about what is composed. A
+ * group keeps any state of its own on the context, created when it first needs
+ * it.
  *
- * @param {{dataView: DataView, options: object, tagFilter: object, decompressConfig: object, getBase64Image: function, getDomParser: function}} parts
+ * @param {{dataView: DataView, options: object, tagFilter: object, decompressConfig: (object|undefined), getBase64Image: function, getDomParser: function, composed: object, decompression: (object|undefined)}} parts
+ *     `composed` is the composition's `{formats, groups, kinds}` maps and its
+ *     `fromExif` extractors, which the readers consult instead of the build
+ *     flags. `decompression` is the pooled decompression the png and jxl
+ *     formats bring; without it `decompressConfig` is undefined too.
  * @returns {object} The context, with `decompress` running through a pool of at
- *     most MAX_DECOMPRESSIONS_IN_FLIGHT tasks and `getValueBudget(view)`
- *     creating one budget on its first call.
+ *     most four tasks when `decompression` is given, else undefined, and
+ *     `valueBudget` holding the load's one value budget, which
+ *     `getSharedValueBudget` in `composable/value-budget.js` creates on first
+ *     use.
  */
-export function createContext({dataView, options, tagFilter, decompressConfig, getBase64Image, getDomParser}) {
-    const pool = createPool(MAX_DECOMPRESSIONS_IN_FLIGHT);
-    const inputByteLength = getInputByteLength(dataView);
-    const context = {
-        dataView,
-        options,
-        tagFilter,
-        decompressConfig,
-        getBase64Image,
-        getDomParser,
-        valueBudget: undefined,
-        decompressedApplicationNotesSize: 0,
-        copiedThumbnailSize: 0,
-        hasEmbeddedThumbnailImage: false,
-        compressedPngTextChunks: 0,
-        hasRawIptcProfile: undefined,
-        embeddedThumbnailSizeBound: EMBEDDED_THUMBNAIL_SIZE_PER_INPUT_SIZE * inputByteLength + EMBEDDED_THUMBNAIL_SIZE_ALLOWANCE,
-        decompress(view, compressionMethod, encoding, returnType) {
-            return pool.run(() => decompress(view, compressionMethod, encoding, returnType, decompressConfig));
-        },
-        // The main Exif block creates the budget from its view; later callers
-        // get the same object, whatever view they pass. The view is only
-        // missing in unit tests that fake the readers.
-        getValueBudget(view) {
-            if (context.valueBudget === undefined) {
-                const budgetView = view || dataView;
-                if (budgetView !== undefined) {
-                    context.valueBudget = getValueBudget(budgetView);
-                }
-            }
-            return context.valueBudget;
-        },
-        // The brob XMP bound covers the decompressed Exif blocks of a file
-        // together, so that several cannot each pass it.
-        takeDecompressedApplicationNotesAllowance(byteLength) {
-            if (context.exceedsBrobXmpSizeBound(context.decompressedApplicationNotesSize + byteLength)) {
-                return false;
-            }
-            context.decompressedApplicationNotesSize += byteLength;
-            return true;
-        },
-        exceedsBrobXmpSizeBound(byteLength) {
-            return byteLength > BROB_XMP_SIZE_PER_INPUT_SIZE * inputByteLength + BROB_XMP_SIZE_ALLOWANCE;
-        },
-    };
-
+export function createContext({dataView, options, tagFilter, decompressConfig, getBase64Image, getDomParser, composed, decompression}) {
+    // No prototype, so a group's state is absent until the group sets it even if
+    // Object.prototype has that property; objectAssign would copy it from there.
+    const context = Object.create(null);
+    context.dataView = dataView;
+    context.options = options;
+    context.tagFilter = tagFilter;
+    context.decompressConfig = decompressConfig;
+    context.getBase64Image = getBase64Image;
+    context.getDomParser = getDomParser;
+    context.composed = composed;
+    context.valueBudget = undefined;
+    context.decompress = decompression ? decompression.createPooledDecompress(decompressConfig) : undefined;
     return context;
 }
 
-function getInputByteLength(dataView) {
-    return dataView !== undefined && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
-}
-
-// Starts a task when fewer than `limit` are running, else queues it until one
-// settles. Promise is only referenced once a task is given, in async mode.
-function createPool(limit) {
-    const queue = [];
-    let running = 0;
-
-    return {
-        run(task) {
-            return new Promise((resolve, reject) => {
-                queue.push({task, resolve, reject});
-                startNext();
-            });
-        },
-    };
-
-    function startNext() {
-        if (running >= limit || queue.length === 0) {
-            return;
-        }
-        const {task, resolve, reject} = queue.shift();
-        running++;
-        // The wrapper turns a synchronous throw from a task into a rejection.
-        new Promise((start) => start(task())).then((result) => {
-            running--;
-            startNext();
-            resolve(result);
-        }, (error) => {
-            running--;
-            startNext();
-            reject(error);
-        });
-    }
-}
-
 /**
- * Throws when the groups' static emission graph has a cycle: a kind that,
- * through the groups consuming it and what they emit, leads back to itself.
+ * Throws when the groups' static emission graph has a cycle (a kind that,
+ * through the groups consuming it and what they emit, leads back to itself) or
+ * a chain of consumed kinds longer than MAX_BLOCK_DEPTH. Only the unit tests
+ * call it, over every format and group, the union of every composition.
  *
  * @param {{groups: Array<object>}} composition
  */
@@ -371,6 +297,14 @@ export function validateComposition(composition) {
         visit(kind);
     }
 
+    // Runs after the cycle check, so the recursion ends.
+    const depths = Object.create(null);
+    for (const kind in edges) {
+        if (getDepth(kind) > MAX_BLOCK_DEPTH) {
+            throw new Error('The group emission graph is deeper than ' + MAX_BLOCK_DEPTH + ' blocks through ' + kind);
+        }
+    }
+
     function visit(kind) {
         if (states[kind] === 'done') {
             return;
@@ -384,5 +318,15 @@ export function validateComposition(composition) {
             visit(emitted[i]);
         }
         states[kind] = 'done';
+    }
+
+    // A kind no group consumes is dropped at run time, so it adds no depth.
+    function getDepth(kind) {
+        if (depths[kind] === undefined) {
+            depths[kind] = 1 + edges[kind].reduce((deepest, emitted) => (
+                edges[emitted] === undefined ? deepest : Math.max(deepest, getDepth(emitted))
+            ), 0);
+        }
+        return depths[kind];
     }
 }

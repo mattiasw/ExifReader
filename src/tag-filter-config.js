@@ -36,8 +36,8 @@ export const EXIF_POINTER_TAGS = {
 
 // The two id sets mirror the keys of tag-names-gps-ifd.js and tag-names-interoperability-ifd.js.
 // Importing those files here instead would bring them into builds that leave Exif out.
-const GPS_IFD_TAG_IDS = getIdLookup([[0x0000, 0x001f]]);
-const INTEROPERABILITY_IFD_TAG_IDS = getIdLookup([[0x0001, 0x0002], [0x1000, 0x1002]]);
+const GPS_IFD_TAG_IDS = /* #__PURE__ */ getIdLookup([[0x0000, 0x001f]]);
+const INTEROPERABILITY_IFD_TAG_IDS = /* #__PURE__ */ getIdLookup([[0x0001, 0x0002], [0x1000, 0x1002]]);
 
 function getIdLookup(idRanges) {
     const lookup = Object.create(null);
@@ -122,21 +122,30 @@ export function getExifTagDependenciesForInclude(includeTags) {
                     pointerSet[EXIF_POINTER_TAGS.interoperabilityIfdPointer] = true;
                 }
             }
-            if (typeof selector !== 'string') {
-                continue;
-            }
-
-            const selectorLower = selector.toLowerCase();
-            if (selectorLower.indexOf('gps') === 0) {
-                pointerSet[EXIF_POINTER_TAGS.gpsInfoIfdPointer] = true;
-            }
-            if (
-                selectorLower.indexOf('interoperability') === 0
-                || selectorLower.indexOf('relatedimage') === 0
-            ) {
-                pointerSet[EXIF_POINTER_TAGS.interoperabilityIfdPointer] = true;
+            if (typeof selector === 'string') {
+                addExifTagNamePointers(pointerSet, selector);
             }
         }
+    }
+}
+
+/**
+ * Adds to pointerSet the sub-IFD pointer an Exif tag name needs, judged by the
+ * name's prefix.
+ *
+ * @param {object} pointerSet Pointer tag names, set to true.
+ * @param {string} name The tag name.
+ */
+export function addExifTagNamePointers(pointerSet, name) {
+    const nameLower = name.toLowerCase();
+    if (nameLower.indexOf('gps') === 0) {
+        pointerSet[EXIF_POINTER_TAGS.gpsInfoIfdPointer] = true;
+    }
+    if (
+        nameLower.indexOf('interoperability') === 0
+        || nameLower.indexOf('relatedimage') === 0
+    ) {
+        pointerSet[EXIF_POINTER_TAGS.interoperabilityIfdPointer] = true;
     }
 }
 

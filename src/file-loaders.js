@@ -8,7 +8,7 @@
  */
 /* global Buffer */
 
-import {dataUriToBuffer, isArrayBufferViewLike} from './utils.js';
+import {getByteString, getHexDigitValue, isArrayBufferViewLike} from './utils.js';
 import NodeRequire from './node-require.js';
 
 export const HTTP_STATUS_OK = 200;
@@ -57,6 +57,79 @@ export function loadFile(filename, options) {
     }
 
     return readLocalFileRange(filename, range).then((r) => r.buffer);
+}
+
+export function dataUriToBuffer(dataUri) {
+    const commaIndex = dataUri.indexOf(',');
+    const header = dataUri.substring(0, commaIndex);
+    const data = dataUri.substring(commaIndex + 1);
+
+    if (header.indexOf(';base64') !== -1) {
+        const base64 = percentDecodeBase64Payload(data);
+        if (typeof atob !== 'undefined') {
+            return binaryStringToArrayBuffer(atob(base64));
+        }
+        if (typeof Buffer === 'undefined') {
+            return undefined;
+        }
+        if (typeof Buffer.from !== 'undefined') {
+            return Buffer.from(base64, 'base64');
+        }
+        return new Buffer(base64, 'base64');
+    }
+
+    return percentDecodeToBytes(data).buffer;
+}
+
+// WHATWG data: URL processing percent-decodes the body before the forgiving-base64 decode.
+// A non-ASCII payload can never be valid base64, so it goes to the decoder unchanged.
+function percentDecodeBase64Payload(data) {
+    if (data.indexOf('%') === -1 || /[\u0080-\uffff]/.test(data)) {
+        return data;
+    }
+    return getByteString(percentDecodeToBytes(data));
+}
+
+function binaryStringToArrayBuffer(string) {
+    const bytes = new Uint8Array(string.length);
+    for (let i = 0; i < string.length; i++) {
+        bytes[i] = string.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+// WHATWG URL "string percent-decode" (used for data: URLs, RFC 2397): UTF-8 encode, then each %XX is one byte.
+function percentDecodeToBytes(string) {
+    const byteString = /[\u0080-\uffff]/.test(string) ? unescape(encodeURIComponent(string)) : string;
+    const bytes = new Uint8Array(byteString.length - 2 * countPercentEscapes(byteString));
+    let byteIndex = 0;
+    for (let i = 0; i < byteString.length; i++) {
+        if (isPercentEscape(byteString, i)) {
+            bytes[byteIndex++] = getHexDigitValue(byteString.charCodeAt(i + 1)) * 16 + getHexDigitValue(byteString.charCodeAt(i + 2));
+            i += 2;
+        } else {
+            bytes[byteIndex++] = byteString.charCodeAt(i);
+        }
+    }
+    return bytes;
+}
+
+function countPercentEscapes(byteString) {
+    let count = 0;
+    for (let i = 0; i < byteString.length; i++) {
+        if (isPercentEscape(byteString, i)) {
+            count++;
+            i += 2;
+        }
+    }
+    return count;
+}
+
+function isPercentEscape(byteString, index) {
+    return byteString.charCodeAt(index) === 0x25
+        && index + 2 < byteString.length
+        && getHexDigitValue(byteString.charCodeAt(index + 1)) !== -1
+        && getHexDigitValue(byteString.charCodeAt(index + 2)) !== -1;
 }
 
 /**

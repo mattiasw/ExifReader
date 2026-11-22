@@ -383,79 +383,6 @@ export function deferInit(object, key, initializer) {
     });
 }
 
-export function dataUriToBuffer(dataUri) {
-    const commaIndex = dataUri.indexOf(',');
-    const header = dataUri.substring(0, commaIndex);
-    const data = dataUri.substring(commaIndex + 1);
-
-    if (header.indexOf(';base64') !== -1) {
-        const base64 = percentDecodeBase64Payload(data);
-        if (typeof atob !== 'undefined') {
-            return binaryStringToArrayBuffer(atob(base64));
-        }
-        if (typeof Buffer === 'undefined') {
-            return undefined;
-        }
-        if (typeof Buffer.from !== 'undefined') { // eslint-disable-line no-undef
-            return Buffer.from(base64, 'base64'); // eslint-disable-line no-undef
-        }
-        return new Buffer(base64, 'base64'); // eslint-disable-line no-undef
-    }
-
-    return percentDecodeToBytes(data).buffer;
-}
-
-// WHATWG data: URL processing percent-decodes the body before the forgiving-base64 decode.
-// A non-ASCII payload can never be valid base64, so it goes to the decoder unchanged.
-function percentDecodeBase64Payload(data) {
-    if (data.indexOf('%') === -1 || /[\u0080-\uffff]/.test(data)) {
-        return data;
-    }
-    return getByteString(percentDecodeToBytes(data));
-}
-
-function binaryStringToArrayBuffer(string) {
-    const bytes = new Uint8Array(string.length);
-    for (let i = 0; i < string.length; i++) {
-        bytes[i] = string.charCodeAt(i);
-    }
-    return bytes.buffer;
-}
-
-// WHATWG URL "string percent-decode" (used for data: URLs, RFC 2397): UTF-8 encode, then each %XX is one byte.
-function percentDecodeToBytes(string) {
-    const byteString = /[\u0080-\uffff]/.test(string) ? unescape(encodeURIComponent(string)) : string;
-    const bytes = new Uint8Array(byteString.length - 2 * countPercentEscapes(byteString));
-    let byteIndex = 0;
-    for (let i = 0; i < byteString.length; i++) {
-        if (isPercentEscape(byteString, i)) {
-            bytes[byteIndex++] = getHexDigitValue(byteString.charCodeAt(i + 1)) * 16 + getHexDigitValue(byteString.charCodeAt(i + 2));
-            i += 2;
-        } else {
-            bytes[byteIndex++] = byteString.charCodeAt(i);
-        }
-    }
-    return bytes;
-}
-
-function countPercentEscapes(byteString) {
-    let count = 0;
-    for (let i = 0; i < byteString.length; i++) {
-        if (isPercentEscape(byteString, i)) {
-            count++;
-            i += 2;
-        }
-    }
-    return count;
-}
-
-function isPercentEscape(byteString, index) {
-    return byteString.charCodeAt(index) === 0x25
-        && index + 2 < byteString.length
-        && getHexDigitValue(byteString.charCodeAt(index + 1)) !== -1
-        && getHexDigitValue(byteString.charCodeAt(index + 2)) !== -1;
-}
-
 /**
  * @param {number} charCode
  * @returns {number} The value of the hex digit, or -1 for any other character.
@@ -502,12 +429,14 @@ const MAX_CUSTOM_OUTPUT_LENGTH = (1024 * 1024 * 1024) - 1;
  * @returns {Object} {brotli, deflate, maxDecompressedSize, budget: {remaining, warned, failed, pending}}
  */
 export function withDecompressBudget(decompressConfig) {
-    return {
+    const config = {
         brotli: decompressConfig ? decompressConfig.brotli : undefined,
         deflate: decompressConfig ? decompressConfig.deflate : undefined,
-        maxDecompressedSize: decompressConfig ? decompressConfig.maxDecompressedSize : undefined,
-        budget: {remaining: getMaxDecompressedSize(decompressConfig), warned: false, failed: false, pending: undefined}
+        maxDecompressedSize: decompressConfig ? decompressConfig.maxDecompressedSize : undefined
     };
+    // From the copy, so a getter cannot make the enforced limit differ from the one decompress names.
+    config.budget = {remaining: getMaxDecompressedSize(config), warned: false, failed: false, pending: undefined};
+    return config;
 }
 
 /**
@@ -531,7 +460,7 @@ export function decompress(dataView, compressionMethod, encoding, returnType = '
     const maxDecompressedSize = getMaxDecompressedSize(decompressConfig);
     const budget = getDecompressBudget(decompressConfig, maxDecompressedSize);
 
-    if (compressionMethod !== COMPRESSION_METHOD_NONE && budget.remaining < 0) {
+    if (compressionMethod !== COMPRESSION_METHOD_NONE && isBudgetExhausted(budget)) {
         return rejectExceedsMax(budget, maxDecompressedSize);
     }
 
@@ -589,8 +518,9 @@ function getDecompressType(compressionMethod) {
 }
 
 function getMaxDecompressedSize(decompressConfig) {
-    if (decompressConfig && typeof decompressConfig.maxDecompressedSize === 'number') {
-        return decompressConfig.maxDecompressedSize;
+    const maxDecompressedSize = decompressConfig ? decompressConfig.maxDecompressedSize : undefined;
+    if (typeof maxDecompressedSize === 'number' && !isNaN(maxDecompressedSize)) {
+        return maxDecompressedSize;
     }
     return DEFAULT_MAX_DECOMPRESSED_SIZE;
 }
@@ -600,6 +530,11 @@ function getDecompressBudget(decompressConfig, maxDecompressedSize) {
         return decompressConfig.budget;
     }
     return {remaining: maxDecompressedSize, warned: false, failed: false, pending: undefined};
+}
+
+// Also true for a NaN budget, so no bad charge can lift the limit.
+function isBudgetExhausted(budget) {
+    return !(budget.remaining >= 0);
 }
 
 function decompressWithCustomFunctionInTurn(customFn, dataView, returnType, encoding, budget, maxDecompressedSize) {
@@ -618,7 +553,7 @@ function queueCustomFunctionCall(customFn, dataView, returnType, encoding, budge
     // Copy now: the input can view the caller's buffer, which may be reused once load() returns.
     const inputCopy = new DataView(dataView.buffer.slice(dataView.byteOffset, dataView.byteOffset + dataView.byteLength));
     return holdTurn(budget, previousCall.then(() => {
-        if (budget.remaining < 0) {
+        if (isBudgetExhausted(budget)) {
             return rejectExceedsMax(budget, maxDecompressedSize);
         }
         return decompressWithCustomFunction(customFn, inputCopy, returnType, encoding, budget, maxDecompressedSize);
@@ -683,7 +618,7 @@ export function isThenable(value) {
 
 function chargeCustomResult(result, returnType, encoding, budget, maxDecompressedSize) {
     budget.remaining -= getResultByteLength(result);
-    if (budget.remaining < 0) {
+    if (isBudgetExhausted(budget)) {
         return rejectExceedsMax(budget, maxDecompressedSize);
     }
     return convertCustomResult(result, returnType, encoding);
@@ -727,7 +662,7 @@ function readBoundedDecompressedStream(dataView, format, budget, maxDecompressed
             // Charge before checking and never give bytes back, so an
             // exceeded budget stays exhausted for every later block.
             budget.remaining -= value.byteLength;
-            if (budget.remaining < 0) {
+            if (isBudgetExhausted(budget)) {
                 return reader.cancel().then(() => rejectExceedsMax(budget, maxDecompressedSize));
             }
             chunks.push(value);
@@ -754,10 +689,12 @@ function decodeBuffer(arrayBuffer, returnType, encoding) {
 }
 
 function getResultByteLength(result) {
-    if (result && typeof result.byteLength === 'number') {
-        return result.byteLength;
+    const byteLength = result ? result.byteLength : undefined;
+    if (typeof byteLength !== 'number') {
+        return 0;
     }
-    return 0;
+    // A NaN or negative length would give bytes back, so it uses up the budget instead.
+    return byteLength >= 0 ? byteLength : Infinity;
 }
 
 function rejectExceedsMax(budget, maxDecompressedSize) {

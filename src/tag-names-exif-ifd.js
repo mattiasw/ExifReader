@@ -2,8 +2,36 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {getEncodedString, getTableDescription, getVersionString} from './tag-names-utils.js';
+import {getEncodedString, getVersionString} from './tag-names-utils.js';
 import TagNamesCommon from './tag-names-common.js';
+import {
+    getOECFDescription,
+    getSensitivityTypeDescription,
+    getMaxApertureValueDescription,
+    getSubjectDistanceDescription,
+    getFlashDescription,
+    getSecurityClassificationDescription,
+    getSubjectAreaDescription,
+    getMakerNoteDescription,
+    getAmbientTemperatureDescription,
+    getHumidityDescription,
+    getPressureDescription,
+    getWaterDepthDescription,
+    getAccelerationDescription,
+    getCameraElevationAngleDescription,
+    getSpatialFrequencyResponseDescription,
+    getSubjectLocationDescription,
+    getSensingMethodDescription,
+    getFileSourceDescription,
+    getSceneTypeDescription,
+    getCFAPatternDescription,
+    getDigitalZoomRatioDescription,
+    getGainControlDescription,
+    getDeviceSettingDescriptionDescription,
+    getSubjectDistanceRangeDescription,
+    getLensSpecificationDescription,
+    getCompositeImageDescription
+} from './tag-names-exif-ifd-descriptions.js';
 
 export default {
     0x829a: {
@@ -22,21 +50,13 @@ export default {
     0x8827: 'ISOSpeedRatings',
     0x8828: {
         'name': 'OECF',
-        'description': () => '[Raw OECF table data]'
+        'description': getOECFDescription
     },
     0x882a: 'TimeZoneOffset',
     0x882b: 'SelfTimerMode',
     0x8830: {
         name: 'SensitivityType',
-        description: (value) => getTableDescription({
-            1: 'Standard Output Sensitivity',
-            2: 'Recommended Exposure Index',
-            3: 'ISO Speed',
-            4: 'Standard Output Sensitivity and Recommended Exposure Index',
-            5: 'Standard Output Sensitivity and ISO Speed',
-            6: 'Recommended Exposure Index and ISO Speed',
-            7: 'Standard Output Sensitivity, Recommended Exposure Index and ISO Speed'
-        }, value)
+        description: getSensitivityTypeDescription
     },
     0x8831: 'StandardOutputSensitivity',
     0x8832: 'RecommendedExposureIndex',
@@ -70,13 +90,11 @@ export default {
     0x9204: 'ExposureBiasValue',
     0x9205: {
         'name': 'MaxApertureValue',
-        'description': (value) => {
-            return Math.pow(Math.sqrt(2), value[0] / value[1]).toFixed(2);
-        }
+        'description': getMaxApertureValueDescription
     },
     0x9206: {
         'name': 'SubjectDistance',
-        'description': (value) => (value[0] / value[1]) + ' m'
+        'description': getSubjectDistanceDescription
     },
     0x9207: {
         'name': 'MeteringMode',
@@ -88,54 +106,7 @@ export default {
     },
     0x9209: {
         'name': 'Flash',
-        'description': (value) => {
-            if (value === 0x00) {
-                return 'Flash did not fire';
-            } else if (value === 0x01) {
-                return 'Flash fired';
-            } else if (value === 0x05) {
-                return 'Strobe return light not detected';
-            } else if (value === 0x07) {
-                return 'Strobe return light detected';
-            } else if (value === 0x09) {
-                return 'Flash fired, compulsory flash mode';
-            } else if (value === 0x0d) {
-                return 'Flash fired, compulsory flash mode, return light not detected';
-            } else if (value === 0x0f) {
-                return 'Flash fired, compulsory flash mode, return light detected';
-            } else if (value === 0x10) {
-                return 'Flash did not fire, compulsory flash mode';
-            } else if (value === 0x18) {
-                return 'Flash did not fire, auto mode';
-            } else if (value === 0x19) {
-                return 'Flash fired, auto mode';
-            } else if (value === 0x1d) {
-                return 'Flash fired, auto mode, return light not detected';
-            } else if (value === 0x1f) {
-                return 'Flash fired, auto mode, return light detected';
-            } else if (value === 0x20) {
-                return 'No flash function';
-            } else if (value === 0x41) {
-                return 'Flash fired, red-eye reduction mode';
-            } else if (value === 0x45) {
-                return 'Flash fired, red-eye reduction mode, return light not detected';
-            } else if (value === 0x47) {
-                return 'Flash fired, red-eye reduction mode, return light detected';
-            } else if (value === 0x49) {
-                return 'Flash fired, compulsory flash mode, red-eye reduction mode';
-            } else if (value === 0x4d) {
-                return 'Flash fired, compulsory flash mode, red-eye reduction mode, return light not detected';
-            } else if (value === 0x4f) {
-                return 'Flash fired, compulsory flash mode, red-eye reduction mode, return light detected';
-            } else if (value === 0x59) {
-                return 'Flash fired, auto mode, red-eye reduction mode';
-            } else if (value === 0x5d) {
-                return 'Flash fired, auto mode, return light not detected, red-eye reduction mode';
-            } else if (value === 0x5f) {
-                return 'Flash fired, auto mode, return light detected, red-eye reduction mode';
-            }
-            return 'Unknown';
-        }
+        'description': getFlashDescription
     },
     0x920a: {
         'name': 'FocalLength',
@@ -144,31 +115,16 @@ export default {
     0x9211: 'ImageNumber',
     0x9212: {
         name: 'SecurityClassification',
-        description: (value) => getTableDescription({
-            'C': 'Confidential',
-            'R': 'Restricted',
-            'S': 'Secret',
-            'T': 'Top Secret',
-            'U': 'Unclassified'
-        }, value)
+        description: getSecurityClassificationDescription
     },
     0x9213: 'ImageHistory',
     0x9214: {
         'name': 'SubjectArea',
-        'description': (value) => {
-            if (value.length === 2) {
-                return `Location; X: ${value[0]}, Y: ${value[1]}`;
-            } else if (value.length === 3) {
-                return `Circle; X: ${value[0]}, Y: ${value[1]}, diameter: ${value[2]}`;
-            } else if (value.length === 4) {
-                return `Rectangle; X: ${value[0]}, Y: ${value[1]}, width: ${value[2]}, height: ${value[3]}`;
-            }
-            return 'Unknown';
-        }
+        'description': getSubjectAreaDescription
     },
     0x927c: {
         'name': 'MakerNote',
-        'description': () => '[Raw maker note data]'
+        'description': getMakerNoteDescription
     },
     0x9286: {
         'name': 'UserComment',
@@ -180,27 +136,27 @@ export default {
     0x935c: 'ImageSourceData',
     0x9400: {
         'name': 'AmbientTemperature',
-        'description': (value) => (value[0] / value[1]) + ' °C'
+        'description': getAmbientTemperatureDescription
     },
     0x9401: {
         'name': 'Humidity',
-        'description': (value) => (value[0] / value[1]) + ' %'
+        'description': getHumidityDescription
     },
     0x9402: {
         'name': 'Pressure',
-        'description': (value) => (value[0] / value[1]) + ' hPa'
+        'description': getPressureDescription
     },
     0x9403: {
         'name': 'WaterDepth',
-        'description': (value) => (value[0] / value[1]) + ' m'
+        'description': getWaterDepthDescription
     },
     0x9404: {
         'name': 'Acceleration',
-        'description': (value) => (value[0] / value[1]) + ' mGal'
+        'description': getAccelerationDescription
     },
     0x9405: {
         'name': 'CameraElevationAngle',
-        'description': (value) => (value[0] / value[1]) + ' °'
+        'description': getCameraElevationAngleDescription
     },
     0xa000: {
         'name': 'FlashpixVersion',
@@ -217,7 +173,7 @@ export default {
     0xa20b: 'FlashEnergy',
     0xa20c: {
         'name': 'SpatialFrequencyResponse',
-        'description': () => '[Raw SFR table data]'
+        'description': getSpatialFrequencyResponseDescription
     },
     0xa20e: 'FocalPlaneXResolution',
     0xa20f: 'FocalPlaneYResolution',
@@ -227,51 +183,24 @@ export default {
     },
     0xa214: {
         'name': 'SubjectLocation',
-        'description': ([x, y]) => `X: ${x}, Y: ${y}`
+        'description': getSubjectLocationDescription
     },
     0xa215: 'ExposureIndex',
     0xa217: {
         'name': 'SensingMethod',
-        'description': (value) => {
-            if (value === 1) {
-                return 'Undefined';
-            } else if (value === 2) {
-                return 'One-chip color area sensor';
-            } else if (value === 3) {
-                return 'Two-chip color area sensor';
-            } else if (value === 4) {
-                return 'Three-chip color area sensor';
-            } else if (value === 5) {
-                return 'Color sequential area sensor';
-            } else if (value === 7) {
-                return 'Trilinear sensor';
-            } else if (value === 8) {
-                return 'Color sequential linear sensor';
-            }
-            return 'Unknown';
-        }
+        'description': getSensingMethodDescription
     },
     0xa300: {
         'name': 'FileSource',
-        'description': (value) => {
-            if (value === 3) {
-                return 'DSC';
-            }
-            return 'Unknown';
-        }
+        'description': getFileSourceDescription
     },
     0xa301: {
         'name': 'SceneType',
-        'description': (value) => {
-            if (value === 1) {
-                return 'A directly photographed image';
-            }
-            return 'Unknown';
-        }
+        'description': getSceneTypeDescription
     },
     0xa302: {
         'name': 'CFAPattern',
-        'description': () => '[Raw CFA pattern table data]'
+        'description': getCFAPatternDescription
     },
     0xa401: {
         'name': 'CustomRendered',
@@ -287,12 +216,7 @@ export default {
     },
     0xa404: {
         'name': 'DigitalZoomRatio',
-        'description': (value) => {
-            if (value[0] === 0) {
-                return 'Digital zoom was not used';
-            }
-            return '' + (value[0] / value[1]);
-        }
+        'description': getDigitalZoomRatioDescription
     },
     0xa405: {
         'name': 'FocalLengthIn35mmFilm', // Sometimes called FocalLengthIn35mmFormat.
@@ -304,20 +228,7 @@ export default {
     },
     0xa407: {
         'name': 'GainControl',
-        'description': (value) => {
-            if (value === 0) {
-                return 'None';
-            } else if (value === 1) {
-                return 'Low gain up';
-            } else if (value === 2) {
-                return 'High gain up';
-            } else if (value === 3) {
-                return 'Low gain down';
-            } else if (value === 4) {
-                return 'High gain down';
-            }
-            return 'Unknown';
-        }
+        'description': getGainControlDescription
     },
     0xa408: {
         'name': 'Contrast',
@@ -333,40 +244,25 @@ export default {
     },
     0xa40b: {
         'name': 'DeviceSettingDescription',
-        'description': () => '[Raw device settings table data]'
+        'description': getDeviceSettingDescriptionDescription
     },
     0xa40c: {
         'name': 'SubjectDistanceRange',
-        'description': (value) => {
-            if (value === 1) {
-                return 'Macro';
-            } else if (value === 2) {
-                return 'Close view';
-            } else if (value === 3) {
-                return 'Distant view';
-            }
-            return 'Unknown';
-        }
+        'description': getSubjectDistanceRangeDescription
     },
     0xa420: 'ImageUniqueID',
     0xa430: 'CameraOwnerName',
     0xa431: 'BodySerialNumber',
     0xa432: {
         'name': 'LensSpecification',
-        'description': (value) => {
-            return `${getLensFocalLengths(value[0], value[1])} mm f/${getLensApertures(value[2], value[3])}`;
-        }
+        'description': getLensSpecificationDescription
     },
     0xa433: 'LensMake',
     0xa434: 'LensModel',
     0xa435: 'LensSerialNumber',
     0xa460: {
         name: 'CompositeImage',
-        description: (value) => getTableDescription({
-            1: 'Not a Composite Image',
-            2: 'General Composite Image',
-            3: 'Composite Image Captured While Shooting',
-        }, value)
+        description: getCompositeImageDescription
     },
     0xa461: 'SourceImageNumberOfCompositeImage',
     0xa462: 'SourceExposureTimesOfCompositeImage',
@@ -388,31 +284,3 @@ export default {
     0xfe57: 'Smoothness',
     0xfe58: 'MoireFilter'
 };
-
-function getLensFocalLengths(from, to) {
-    const focalLengthFrom = getRoundedRational(from);
-    const focalLengthTo = getRoundedRational(to);
-    if (focalLengthTo === 0 || focalLengthTo === focalLengthFrom) {
-        return `${focalLengthFrom}`;
-    }
-    return `${focalLengthFrom}-${focalLengthTo}`;
-}
-
-function getLensApertures(wide, long) {
-    const apertures = [wide, long].filter(isKnownRational).map(getRoundedRational);
-    if (apertures.length === 0) {
-        return '?';
-    }
-    if (apertures.length === 1 || apertures[1] === 0 || apertures[1] === apertures[0]) {
-        return `${apertures[0]}`;
-    }
-    return `${apertures[0]}-${apertures[1]}`;
-}
-
-function getRoundedRational(rational) {
-    return parseFloat((rational[0] / rational[1]).toFixed(5));
-}
-
-function isKnownRational(rational) {
-    return rational[1] !== 0;
-}

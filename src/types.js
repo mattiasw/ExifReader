@@ -57,6 +57,8 @@ export default {
     getTypeSize
 };
 
+export {getByteAt, getShortAt};
+
 function getByteAt(dataView, offset) {
     return dataView.getUint8(offset);
 }

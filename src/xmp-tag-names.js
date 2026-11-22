@@ -2,7 +2,28 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import TagNamesCommon from './tag-names-common.js';
+import {
+    getApertureValueDescription,
+    getColorSpaceDescription,
+    getComponentsConfigurationDescription,
+    getContrastDescription,
+    getCustomRenderedDescription,
+    getExposureModeDescription,
+    getExposureProgramDescription,
+    getExposureTimeDescription,
+    getFNumberDescription,
+    getFocalLengthDescription,
+    getFocalPlaneResolutionUnitDescription,
+    getMeteringModeDescription,
+    getResolutionUnitDescription,
+    getSaturationDescription,
+    getSceneCaptureTypeDescription,
+    getSharpnessDescription,
+    getShutterSpeedValueDescription,
+    getWhiteBalanceDescription,
+    getXResolutionDescription,
+    getYResolutionDescription
+} from './tag-names-common.js';
 
 export default {
     'tiff:Orientation'(value) {
@@ -32,39 +53,39 @@ export default {
         }
         return value;
     },
-    'tiff:ResolutionUnit': (value) => TagNamesCommon.ResolutionUnit(parseInt(value, 10)),
-    'tiff:XResolution': (value) => fraction(TagNamesCommon.XResolution, value),
-    'tiff:YResolution': (value) => fraction(TagNamesCommon.YResolution, value),
-    'exif:ApertureValue': (value) => fraction(TagNamesCommon.ApertureValue, value),
+    'tiff:ResolutionUnit': (value) => getResolutionUnitDescription(parseInt(value, 10)),
+    'tiff:XResolution': (value) => fraction(getXResolutionDescription, value),
+    'tiff:YResolution': (value) => fraction(getYResolutionDescription, value),
+    'exif:ApertureValue': (value) => fraction(getApertureValueDescription, value),
     'exif:GPSLatitude': calculateGPSValue,
     'exif:GPSLongitude': calculateGPSValue,
-    'exif:FNumber': (value) => fraction(TagNamesCommon.FNumber, value),
-    'exif:FocalLength': (value) => fraction(TagNamesCommon.FocalLength, value),
-    'exif:FocalPlaneResolutionUnit': (value) => TagNamesCommon.FocalPlaneResolutionUnit(parseInt(value, 10)),
-    'exif:ColorSpace': (value) => TagNamesCommon.ColorSpace(parseNumber(value)),
+    'exif:FNumber': (value) => fraction(getFNumberDescription, value),
+    'exif:FocalLength': (value) => fraction(getFocalLengthDescription, value),
+    'exif:FocalPlaneResolutionUnit': (value) => getFocalPlaneResolutionUnitDescription(parseInt(value, 10)),
+    'exif:ColorSpace': (value) => getColorSpaceDescription(parseNumber(value)),
     'exif:ComponentsConfiguration'(value, description) {
         if (/^\d, \d, \d, \d$/.test(description)) {
             const numbers = description.split(', ').map((number) => parseInt(number, 10));
-            return TagNamesCommon.ComponentsConfiguration(numbers);
+            return getComponentsConfigurationDescription(numbers);
         }
         return description;
     },
-    'exif:Contrast': (value) => TagNamesCommon.Contrast(parseInt(value, 10)),
-    'exif:CustomRendered': (value) => TagNamesCommon.CustomRendered(parseInt(value, 10)),
-    'exif:ExposureMode': (value) => TagNamesCommon.ExposureMode(parseInt(value, 10)),
-    'exif:ExposureProgram': (value) => TagNamesCommon.ExposureProgram(parseInt(value, 10)),
+    'exif:Contrast': (value) => getContrastDescription(parseInt(value, 10)),
+    'exif:CustomRendered': (value) => getCustomRenderedDescription(parseInt(value, 10)),
+    'exif:ExposureMode': (value) => getExposureModeDescription(parseInt(value, 10)),
+    'exif:ExposureProgram': (value) => getExposureProgramDescription(parseInt(value, 10)),
     'exif:ExposureTime'(value) {
         if (isFraction(value)) {
-            return TagNamesCommon.ExposureTime(value.split('/').map((number) => parseInt(number, 10)));
+            return getExposureTimeDescription(value.split('/').map((number) => parseInt(number, 10)));
         }
         return value;
     },
-    'exif:MeteringMode': (value) => TagNamesCommon.MeteringMode(parseInt(value, 10)),
-    'exif:Saturation': (value) => TagNamesCommon.Saturation(parseInt(value, 10)),
-    'exif:SceneCaptureType': (value) => TagNamesCommon.SceneCaptureType(parseInt(value, 10)),
-    'exif:Sharpness': (value) => TagNamesCommon.Sharpness(parseInt(value, 10)),
-    'exif:ShutterSpeedValue': (value) => fraction(TagNamesCommon.ShutterSpeedValue, value),
-    'exif:WhiteBalance': (value) => TagNamesCommon.WhiteBalance(parseInt(value, 10))
+    'exif:MeteringMode': (value) => getMeteringModeDescription(parseInt(value, 10)),
+    'exif:Saturation': (value) => getSaturationDescription(parseInt(value, 10)),
+    'exif:SceneCaptureType': (value) => getSceneCaptureTypeDescription(parseInt(value, 10)),
+    'exif:Sharpness': (value) => getSharpnessDescription(parseInt(value, 10)),
+    'exif:ShutterSpeedValue': (value) => fraction(getShutterSpeedValueDescription, value),
+    'exif:WhiteBalance': (value) => getWhiteBalanceDescription(parseInt(value, 10))
 };
 
 function fraction(func, value) {
