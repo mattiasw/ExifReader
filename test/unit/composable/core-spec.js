@@ -3,8 +3,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {brotliDecompressSync, inflateSync} from 'node:zlib';
 import {expect} from 'chai';
 import {DOMParser as XmldomParser} from '@xmldom/xmldom';
@@ -20,8 +21,8 @@ import {file, jpegHeader} from '../../../src/composable/formats/jpeg.js';
 import {
     allGroups, exif, iptc, xmp, icc, photoshop, mpf, canon, pentax, makerNotes, gps, composite, thumbnail,
 } from '../../../src/composable/groups.js';
-import {DateTime, DateTimeOriginal, GPSLatitude, GPSLongitude, WhiteBalance, InteroperabilityIndex, Make as MakeTag} from '../../../src/composable/tags/exif.js';
-import {ByLine, Headline, CodedCharacterSet, Keywords} from '../../../src/composable/tags/iptc.js';
+import {DateTime, DateTimeOriginal, DateTimeDigitized, GPSLatitude, GPSLongitude, WhiteBalance, InteroperabilityIndex, Make as MakeTag} from '../../../src/composable/tags/exif.js';
+import {ByLine, Headline, CodedCharacterSet, Keywords, SubLocation, DateCreated} from '../../../src/composable/tags/iptc.js';
 import {exifBlockReader} from '../../../src/composable/exif-block-reader.js';
 import {iptcBlockReader} from '../../../src/composable/iptc-block-reader.js';
 import {createTagFilter} from '../../../src/tag-filter.js';
@@ -81,6 +82,23 @@ import {
 } from '../loadview-inventory-images.js';
 
 const IMAGES_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'fixtures', 'images');
+const SRC_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'src');
+const TRACKED_IMAGES = [
+    'test-brotli.jxl',
+    'test-iptc.jpg',
+    'test-issue-608-truncated-exif-tiff-dos.jpg',
+    'test-maker-note-canon.jpg',
+    'test-maker-note-pentax.jpg',
+    'test-no-meta-data.heic',
+    'test-xmp-utf8.jpg',
+    'test.avif',
+    'test.gif',
+    'test.heic',
+    'test.jpg',
+    'test.jxl',
+    'test.png',
+    'test.tiff',
+];
 const FORMATS_BUT_XML = allFormats.filter((format) => format !== xml);
 const WHITE_BALANCE_ID = 0xa403;
 const WHITE_BALANCE_ALIAS_ID = 0xfe4e;
@@ -371,6 +389,82 @@ describe('composable/core', () => {
                 ['exif'],
                 ['exif', 'iptc'],
             ]);
+        });
+
+        describe('with values from separately bundled copies of the library', () => {
+            let copiesPath;
+            let copied;
+
+            before(async () => {
+                copiesPath = fs.mkdtempSync(path.join(os.tmpdir(), 'exifreader-bundled-subpaths-'));
+                copied = {
+                    formats: await importFromCopy(copiesPath, 'formats', 'composable/formats.js'),
+                    groups: await importFromCopy(copiesPath, 'groups', 'composable/groups.js'),
+                    exifTags: await importFromCopy(copiesPath, 'tags-exif', 'composable/tags/exif.js'),
+                    iptcTags: await importFromCopy(copiesPath, 'tags-iptc', 'composable/tags/iptc.js'),
+                    core: await importFromCopy(copiesPath, 'core', 'composable/core.js'),
+                };
+            });
+
+            after(() => {
+                fs.rmSync(copiesPath, {recursive: true, force: true});
+            });
+
+            it('should read as one module graph does with formats, groups and tagFilter from other copies', async () => {
+                const domParser = new XmldomParser();
+                const reader = createReader({
+                    formats: copied.formats.allFormats,
+                    groups: copied.groups.allGroups,
+                    tagFilter: copied.core.tagFilter,
+                    domParser,
+                });
+                const expectedReader = createReader({formats: allFormats, groups: allGroups, tagFilter, domParser});
+
+                await expectSameTagsForTrackedImages(reader, expectedReader);
+            });
+
+            it('should read as one module graph does with only tags from other copies', async () => {
+                const domParser = new XmldomParser();
+                const reader = createReader({
+                    formats: copied.formats.allFormats,
+                    tags: [copied.exifTags.DateTimeDigitized, copied.iptcTags.SubLocation, copied.iptcTags.DateCreated],
+                    domParser,
+                });
+                const expectedReader = createReader({formats: allFormats, tags: [DateTimeDigitized, SubLocation, DateCreated], domParser});
+
+                await expectSameTagsForTrackedImages(reader, expectedReader);
+            });
+
+            it('should read as one module graph does with every group but exif from one copy and an Exif tag from another', async () => {
+                const domParser = new XmldomParser();
+                const reader = createReader({
+                    formats: copied.formats.allFormats,
+                    groups: copied.groups.allGroups.filter((group) => group !== copied.groups.exif),
+                    tags: [copied.exifTags.DateTimeDigitized],
+                    domParser,
+                });
+                const expectedReader = createReader({
+                    formats: allFormats,
+                    groups: allGroups.filter((group) => group !== exif),
+                    tags: [DateTimeDigitized],
+                    domParser,
+                });
+
+                await expectSameTagsForTrackedImages(reader, expectedReader);
+            });
+
+            it('should reject input no format of another copy recognizes with an UnsupportedFormatError', async () => {
+                const domParser = new XmldomParser();
+                const bytes = fs.readFileSync(path.join(IMAGES_PATH, 'test-not-an-image.txt'));
+                const reader = createReader({formats: copied.formats.allFormats, domParser});
+                const expectedReader = createReader({formats: allFormats, domParser});
+
+                const error = await getRejection(reader.load(bytes));
+                const expectedError = await getRejection(expectedReader.load(bytes));
+
+                expect(error.name).to.equal('UnsupportedFormatError');
+                expect(error.message).to.equal(expectedError.message);
+            });
         });
     });
 
@@ -2132,6 +2226,26 @@ describe('composable/core', () => {
         });
     });
 });
+
+// A copy of src/ outside the repository shares no module with any other graph, as a CDN bundle of one subpath.
+function importFromCopy(copiesPath, copyName, modulePath) {
+    const copyPath = path.join(copiesPath, copyName);
+    fs.cpSync(SRC_PATH, copyPath, {recursive: true});
+    return import(pathToFileURL(path.join(copyPath, modulePath)).href);
+}
+
+async function expectSameTagsForTrackedImages(reader, expectedReader) {
+    for (const fileName of TRACKED_IMAGES) {
+        const bytes = fs.readFileSync(path.join(IMAGES_PATH, fileName));
+        for (const expanded of [true, false]) {
+            const label = fileName + ' expanded ' + expanded;
+            const expected = await expectedReader.load(bytes, {expanded}).then((tags) => tags, (error) => {
+                throw new Error(label + ': the single-graph reader rejected with ' + error.message);
+            });
+            expect(await reader.load(bytes, {expanded}), label).to.deep.equal(expected);
+        }
+    }
+}
 
 function getCompositeTags(tags) {
     return Object.fromEntries(COMPOSITE_TAG_NAMES.filter((name) => name in tags).map((name) => [name, tags[name]]));

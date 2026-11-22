@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `createReader` now accepts formats and groups bundled apart from it, as
+  jsDelivr's `+esm` bundles each of `exifreader/core`, `exifreader/formats` and
+  `exifreader/groups` on its own, and the `tagFilter` of another copy of
+  `exifreader/core`. Before, it threw
+  `createReader: formats[0] is not a value imported from 'exifreader/formats'`.
+
 ## [4.55.0] - 2026-11-22
 
 ### Added
