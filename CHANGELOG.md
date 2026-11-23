@@ -52,6 +52,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name, such as these two and `Profile Version`, are now typed as optional,
   like the named tags of the other groups, so code compiled with `strict`
   reads one with `?.` or after checking that it is there.
+- With `length: 'auto'`, the Exif and XMP of a WebP whose image data runs past
+  the first read are now read. They were left out, with
+  `metadataRange.complete` true. A WebP whose VP8X chunk declares Exif or XMP
+  and that is cut off before a chunk its RIFF header still declares now
+  reports `metadataRange.complete` false, with `metadataRange.end` at the
+  end the RIFF header declares, so the next read reaches the Exif and XMP
+  whatever chunks come before them.
 
 ## [4.55.1] - 2026-11-23
 

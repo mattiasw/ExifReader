@@ -79,6 +79,25 @@ describe('image-header', () => {
         expect(result.ranges).to.equal(received.ranges);
     });
 
+    it('should surface the resume end of a finder that reports one', () => {
+        const format = getFormat('a', {
+            detect: () => true,
+            find(_dataView, ranges) {
+                ranges.truncated = true;
+                ranges.resumeEnd = 45;
+                return [];
+            },
+        });
+
+        expect(ImageHeader.parseAppMarkers({}, true, [format])).to.deep.equal({
+            fileType: {value: 'a', description: 'A'},
+            blocks: [],
+            ranges: [],
+            truncated: true,
+            resumeEnd: 45,
+        });
+    });
+
     it('should give a finder that records no range an empty list and no truncation', () => {
         const result = ImageHeader.parseAppMarkers({}, true, [getFormat('a', {detect: () => true})]);
 
