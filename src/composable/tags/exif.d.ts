@@ -85,6 +85,7 @@ export declare const XPSubject: TagDescriptor<'exif', 'XPSubject'>;
 export declare const GDALMetadata: TagDescriptor<'exif', 'GDALMetadata'>;
 export declare const GDALNoData: TagDescriptor<'exif', 'GDALNoData'>;
 export declare const PrintIM: TagDescriptor<'exif', 'PrintIM'>;
+export declare const DNGVersion: TagDescriptor<'exif', 'DNGVersion'>;
 export declare const DNGBackwardVersion: TagDescriptor<'exif', 'DNGBackwardVersion'>;
 export declare const UniqueCameraModel: TagDescriptor<'exif', 'UniqueCameraModel'>;
 export declare const LocalizedCameraModel: TagDescriptor<'exif', 'LocalizedCameraModel'>;

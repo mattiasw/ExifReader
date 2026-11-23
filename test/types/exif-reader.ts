@@ -256,6 +256,10 @@ const gpsDestLongitudeDescriptionString: string = expandedTags["exif"]?.["GPSDes
 const pixelXDimensionDescription: string = expandedTags["exif"]?.["PixelXDimension"]?.description ?? "";
 // @ts-expect-error
 const pixelXDimensionDescriptionNumber: number = expandedTags["exif"]?.["PixelXDimension"]?.description ?? 0;
+const dngVersionValue: number[] = expandedTags["exif"]?.["DNGVersion"]?.value ?? [];
+const dngVersionDescription: string = expandedTags["exif"]?.["DNGVersion"]?.description ?? "";
+// @ts-expect-error
+const dngVersionDescriptionNumber: number = expandedTags["exif"]?.["DNGVersion"]?.description ?? 0;
 
 const flatGpsLatitude = tags["GPSLatitude"];
 if (flatGpsLatitude && "id" in flatGpsLatitude) {

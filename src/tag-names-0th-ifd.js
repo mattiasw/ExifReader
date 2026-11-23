@@ -22,6 +22,7 @@ import {
     getReferenceBlackWhiteDescription,
     getCopyrightDescription,
     decodeXPValue,
+    getDngVersionDescription,
     getMakerNoteSafetyDescription,
     getProfileEmbedPolicyDescription,
     getPreviewColorSpaceDescription,
@@ -185,7 +186,14 @@ export default {
     0xa480: 'GDALMetadata',
     0xa481: 'GDALNoData',
     0xc4a5: 'PrintIM',
-    0xc613: 'DNGBackwardVersion',
+    0xc612: {
+        name: 'DNGVersion',
+        description: getDngVersionDescription
+    },
+    0xc613: {
+        name: 'DNGBackwardVersion',
+        description: getDngVersionDescription
+    },
     0xc614: 'UniqueCameraModel',
     0xc615: 'LocalizedCameraModel',
     0xc621: 'ColorMatrix1',

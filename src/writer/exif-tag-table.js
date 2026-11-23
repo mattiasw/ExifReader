@@ -97,6 +97,7 @@ const tags = [
     {id: 0xa480, ifd: '0th', name: 'GDALMetadata', level: 'O', writable: false}, // GDAL
     {id: 0xa481, ifd: '0th', name: 'GDALNoData', level: 'O', writable: false}, // GDAL
     {id: 0xc4a5, ifd: '0th', name: 'PrintIM', level: 'O', writable: false}, // vendor
+    {id: 0xc612, ifd: '0th', name: 'DNGVersion', level: 'O', writable: false}, // DNG
     {id: 0xc613, ifd: '0th', name: 'DNGBackwardVersion', level: 'O', writable: false}, // DNG
     {id: 0xc614, ifd: '0th', name: 'UniqueCameraModel', level: 'O', writable: false}, // DNG
     {id: 0xc615, ifd: '0th', name: 'LocalizedCameraModel', level: 'O', writable: false}, // DNG

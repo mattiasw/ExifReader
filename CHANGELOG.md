@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The DNG tag `DNGVersion`, described as a dotted version such as `1.4.0.0`,
+  and its descriptor in `exifreader/tags/exif`.
+
+### Changed
+
+- `DNGBackwardVersion` is described as a dotted version such as `1.4.0.0`
+  instead of `1, 4, 0, 0`.
+
+### Fixed
+
+- Rational tags without a description function of their own are no longer
+  described as `NaN`. A tag with several values, such as the DNG tags
+  `ColorMatrix1` and `AsShotNeutral`, is described as its quotients separated
+  by commas, a zero denominator as `n/d`, and a value that runs past the data
+  as `<faulty value>`.
+- `SubjectDistance` is described as `Unknown` for numerator 0 and as `Infinity`
+  for numerator 0xFFFFFFFF, as the Exif specification defines them, instead of
+  `0 m` (`NaN m` for 0/0) and `4294967295 m`.
+
 ## [4.55.1] - 2026-11-23
 
 ### Fixed

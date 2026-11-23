@@ -365,7 +365,7 @@ function readTag(
                 tagDescription = getDescriptionFromTagValue(tagValue);
             }
         } else if ((tagType === Types.tagTypes['RATIONAL']) || (tagType === Types.tagTypes['SRATIONAL'])) {
-            tagDescription = '' + (tagValue[0] / tagValue[1]);
+            tagDescription = getQuotientsDescription(getComputedTagValue(tagType, tagValue));
         } else {
             tagDescription = getDescriptionFromTagValue(tagValue);
         }
@@ -509,6 +509,11 @@ function getDescriptionFromTagValue(tagValue) {
 
 function getNumberAsString(value) {
     return typeof value === 'number' ? String(value) : value;
+}
+
+// A zero denominator computes to null.
+function getQuotientsDescription(quotients) {
+    return [].concat(quotients).map((quotient) => (quotient === null ? 'n/d' : quotient)).join(', ');
 }
 
 function getComputedTagValue(tagType, value) {

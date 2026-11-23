@@ -25,6 +25,13 @@ export function getMaxApertureValueDescription(value) {
 }
 
 export function getSubjectDistanceDescription(value) {
+    // The Exif specification reserves these two numerators.
+    if (value[0] === 0) {
+        return 'Unknown';
+    }
+    if (value[0] === 0xffffffff) {
+        return 'Infinity';
+    }
     return (value[0] / value[1]) + ' m';
 }
 

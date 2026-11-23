@@ -171,6 +171,15 @@ describe('tag-names-exif-ifd', () => {
         expect(TagNamesExifIfd[0x9206].description([3, 2])).to.equal('1.5 m');
     });
 
+    it('should describe a SubjectDistance with numerator 0 as unknown', () => {
+        expect(TagNamesExifIfd[0x9206].description([0, 100])).to.equal('Unknown');
+        expect(TagNamesExifIfd[0x9206].description([0, 0])).to.equal('Unknown');
+    });
+
+    it('should describe a SubjectDistance with numerator 0xFFFFFFFF as infinity', () => {
+        expect(TagNamesExifIfd[0x9206].description([0xffffffff, 1])).to.equal('Infinity');
+    });
+
     it('should report correct name and description for MeteringMode', () => {
         expect(TagNamesExifIfd[0x9207].name).to.equal('MeteringMode');
         expect(TagNamesExifIfd[0x9207].description(1)).to.equal('Average');
