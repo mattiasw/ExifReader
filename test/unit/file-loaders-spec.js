@@ -157,6 +157,39 @@ describe('file-loaders', () => {
             expect(destroyCalls).to.equal(1);
         });
 
+        describe('totalSize', () => {
+            async function nodeTotalSize(statusCode, headers) {
+                const response = createStreamingResponse();
+                response.statusCode = statusCode;
+                response.headers = headers;
+                const delivery = stubHttp(response);
+                const pending = nodeGetRange('https://domain.com/image.jpg', {start: 0, end: 10});
+                await delivery;
+                response.emit('end');
+                return (await pending).totalSize;
+            }
+
+            it('should not take the Content-Length of a 206 as the total when there is no Content-Range', async () => {
+                expect(await nodeTotalSize(206, {'content-length': '10'})).to.equal(undefined);
+            });
+
+            it('should not take the Content-Length of a 206 as the total when the Content-Range total is unknown', async () => {
+                expect(await nodeTotalSize(206, {'content-range': 'bytes 0-9/*', 'content-length': '10'})).to.equal(undefined);
+            });
+
+            it('should take the Content-Range total of a 206', async () => {
+                expect(await nodeTotalSize(206, {'content-range': 'bytes 0-9/5000', 'content-length': '10'})).to.equal(5000);
+            });
+
+            it('should take the Content-Length of a 200 as the total', async () => {
+                expect(await nodeTotalSize(200, {'content-length': '5000'})).to.equal(5000);
+            });
+
+            it('should not take the Content-Length of a 416 as the total', async () => {
+                expect(await nodeTotalSize(HTTP_STATUS_RANGE_NOT_SATISFIABLE, {'content-length': '120'})).to.equal(undefined);
+            });
+        });
+
         it('should reject with an Error containing the status on other non-2xx responses and destroy the response', async () => {
             let destroyCalls = 0;
             stubHttp({
@@ -583,6 +616,37 @@ describe('file-loaders', () => {
             expect(stream.state.cancelled).to.equal(true);
             expect(stream.state.reads).to.equal(0);
             expect(arrayBufferCalls).to.equal(0);
+        });
+
+        describe('totalSize', () => {
+            async function fetchTotalSize(status, headers) {
+                stubFetch({
+                    status,
+                    headers: {get: (name) => headers[name.toLowerCase()] || null},
+                    arrayBuffer: () => Promise.resolve(new ArrayBuffer(10)),
+                });
+                return (await fetchRange('https://domain.com/image.jpg', {start: 0, end: 10})).totalSize;
+            }
+
+            it('should not take the Content-Length of a 206 as the total when there is no Content-Range', async () => {
+                expect(await fetchTotalSize(206, {'content-length': '10'})).to.equal(undefined);
+            });
+
+            it('should not take the Content-Length of a 206 as the total when the Content-Range total is unknown', async () => {
+                expect(await fetchTotalSize(206, {'content-range': 'bytes 0-9/*', 'content-length': '10'})).to.equal(undefined);
+            });
+
+            it('should take the Content-Range total of a 206', async () => {
+                expect(await fetchTotalSize(206, {'content-range': 'bytes 0-9/5000', 'content-length': '10'})).to.equal(5000);
+            });
+
+            it('should take the Content-Length of a 200 as the total', async () => {
+                expect(await fetchTotalSize(200, {'content-length': '5000'})).to.equal(5000);
+            });
+
+            it('should not take the Content-Length of a 416 as the total', async () => {
+                expect(await fetchTotalSize(HTTP_STATUS_RANGE_NOT_SATISFIABLE, {'content-length': '120'})).to.equal(undefined);
+            });
         });
 
         it('should read the whole body without maxBytes even when a stream is present', async () => {

@@ -70,6 +70,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   declared size was taken as is, so the profile could run past the data, and
   `metadataRange` could end far past the end of the file, with `complete`
   false.
+- `length: 'auto'` over a URL no longer takes the `Content-Length` of a partial
+  (206) response as the size of the file. When the server sent no total in
+  `Content-Range` or, from another origin, did not expose `Content-Range`,
+  that made it stop after its first read: metadata past it was missing, and a
+  file with no metadata in that read was rejected with the `could not locate
+  metadata` error. When such a server answers a read past the end of a short
+  file with a 416 or an empty 206, `length: 'auto'` then asks once more for
+  everything after the bytes it has, and takes a second such answer as the
+  end of the file, with no warning.
 
 ## [4.55.1] - 2026-11-23
 
