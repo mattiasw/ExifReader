@@ -9,8 +9,8 @@
             "composable-jpeg-floor": 9371,
             "composable-jpeg-iptc-byline": 14314,
             "composable-jpeg-xmp": 19504,
-            "composable-tiff-floor": 7037,
-            "composable-tiff-gps": 10666,
+            "composable-tiff-floor": 7190,
+            "composable-tiff-gps": 10903,
             "legacy-stock": 47389
         },
         "esbuild": {
@@ -21,7 +21,7 @@
             "composable-jpeg-iptc-byline": 14607,
             "composable-jpeg-xmp": 18914,
             "composable-tiff-floor": 7235,
-            "composable-tiff-gps": 10820,
+            "composable-tiff-gps": 11059,
             "legacy-stock": 48640
         }
     }
