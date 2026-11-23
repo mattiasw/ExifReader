@@ -70,10 +70,10 @@ describe('tag-dictionary-shape', () => {
         expect(getShapeViolations(source, 'x.js')).to.deep.equal(['x.js 0x0001.name: Identifier']);
     });
 
-    it('rejects a name arrow with an expression body, which the tag filter cannot read', () => {
-        const source = 'export default {0x0001: {name: (value) => \'A\'}};';
+    it('accepts a name arrow with an expression body', () => {
+        const source = 'export default {0x0001: {name: (value) => (value.length === 2 ? \'A\' : \'B\')}};';
 
-        expect(getShapeViolations(source, 'x.js')).to.deep.equal(['x.js 0x0001.name: ArrowFunctionExpression with an expression body']);
+        expect(getShapeViolations(source, 'x.js')).to.deep.equal([]);
     });
 
     it('rejects a description bound to a variable in the dictionary file', () => {
@@ -134,7 +134,7 @@ function getObjectViolations(objectExpression, keyPath) {
         if (member.value.type === 'ObjectExpression' && !isNameKey(member.key)) {
             violations.push(...getObjectViolations(member.value, memberPath));
         } else if (!isAllowedValue(member)) {
-            violations.push(`${memberPath.join('.')}: ${getViolationType(member)}`);
+            violations.push(`${memberPath.join('.')}: ${member.value.type}`);
         }
     }
     return violations;
@@ -153,9 +153,8 @@ function getKeyText(key) {
 function isAllowedValue(property) {
     const value = property.value;
     if (isNameKey(property.key)) {
-        // bin/TagFilterPlugin.js reads a name arrow's return statements.
-        return value.type === 'StringLiteral'
-            || (value.type === 'ArrowFunctionExpression' && value.body.type === 'BlockStatement');
+        // bin/TagFilterPlugin.js reads a string name and the strings a name arrow evaluates to or returns.
+        return value.type === 'StringLiteral' || value.type === 'ArrowFunctionExpression';
     }
     return LITERAL_TYPES.includes(value.type)
         || value.type === 'Identifier'
@@ -173,11 +172,4 @@ function isStaticMemberExpression(value) {
     }
     const staticKeyType = value.computed ? 'StringLiteral' : 'Identifier';
     return value.property.type === staticKeyType;
-}
-
-function getViolationType(property) {
-    if (isNameKey(property.key) && property.value.type === 'ArrowFunctionExpression') {
-        return 'ArrowFunctionExpression with an expression body';
-    }
-    return property.value.type;
 }
