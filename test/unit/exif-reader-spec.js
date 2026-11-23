@@ -3455,6 +3455,34 @@ describe('exif-reader', function () {
             swapTagsRead(Tags, {MyExifTag: 42});
         }
 
+        function partialContentRange(contentRangeTotal, start, end, total) {
+            if (contentRangeTotal === 'absent') {
+                return undefined;
+            }
+            return `bytes ${start}-${end - 1}/${contentRangeTotal === 'unknown' ? '*' : total}`;
+        }
+
+        const CUT_JPEG_LENGTH = 5000;
+
+        function getCutJpeg({withExif}) {
+            const exifSegment = withExif ? getExifSegment(getTiff({ifd0: [ascii(TAG_MAKE, 'ACME')]})) : '';
+            return getArrayBuffer(
+                ('\xff\xd8' + exifSegment + getAppSegment('\xff\xe5', 'A'.repeat(60000))).slice(0, CUT_JPEG_LENGTH)
+            );
+        }
+
+        function getLongJpeg({withExif, fillerCount = 3}) {
+            const fillers = getAppSegment('\xff\xe5', 'A'.repeat(60000)).repeat(fillerCount);
+            const exifSegment = withExif ? getExifSegment(getTiff({ifd0: [ascii(TAG_MAKE, 'ACME')]})) : '';
+            return getArrayBuffer('\xff\xd8' + fillers + exifSegment + '\xff\xda\x00\x02\x11\x22\xff\xd9');
+        }
+
+        function getRejection(promise) {
+            return promise.then(() => {
+                throw new Error('Expected a rejection.');
+            }, (error) => error);
+        }
+
         function expectAutoToThrow(opts, pattern) {
             expect(() => ExifReader.load(new ArrayBuffer(8), opts)).to.throw(pattern);
         }
@@ -3595,7 +3623,7 @@ describe('exif-reader', function () {
                 console.warn = originalWarn; // eslint-disable-line no-console
             });
 
-            function installFetchMock(fullBufferOrBytes, {alwaysFullBody = false, status416 = false} = {}) {
+            function installFetchMock(fullBufferOrBytes, {alwaysFullBody = false, status416 = false, endPast416 = false, contentRangeTotal = 'known'} = {}) {
                 const full = ensureArrayBuffer(fullBufferOrBytes);
                 global.fetch = (url, options) => {
                     const range = options && options.headers && options.headers.range;
@@ -3621,10 +3649,19 @@ describe('exif-reader', function () {
                     const m = /^bytes=(\d+)-(\d*)$/.exec(range);
                     const start = m ? parseInt(m[1], 10) : 0;
                     const end = m && m[2] ? parseInt(m[2], 10) + 1 : full.byteLength;
+                    if (endPast416 && (end > full.byteLength || start >= full.byteLength)) {
+                        return Promise.resolve({
+                            status: 416,
+                            headers: makeHeaders(undefined, undefined),
+                            arrayBuffer() {
+                                return Promise.resolve(new ArrayBuffer(0));
+                            },
+                        });
+                    }
                     const slice = full.slice(start, end);
                     return Promise.resolve({
                         status: 206,
-                        headers: makeHeaders(`bytes ${start}-${end - 1}/${full.byteLength}`, slice.byteLength),
+                        headers: makeHeaders(partialContentRange(contentRangeTotal, start, end, full.byteLength), slice.byteLength),
                         arrayBuffer() {
                             return Promise.resolve(slice);
                         },
@@ -3674,6 +3711,118 @@ describe('exif-reader', function () {
                 expect(tags.metadataRange.requests).to.equal(2);
                 expect(fetchCalls).to.have.lengthOf(2);
                 expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+            });
+
+            [
+                {name: 'no Content-Range', contentRangeTotal: 'absent'},
+                {name: 'a Content-Range with an unknown total', contentRangeTotal: 'unknown'},
+            ].forEach(({name, contentRangeTotal}) => {
+                it(`should read the Exif and XMP of a WebP in 2 fetches when each 206 carries a Content-Length and ${name}`, async () => {
+                    const fullBuffer = getArrayBuffer(getWebpWithImageData(WEBP_IMAGE_DATA_LENGTH));
+                    const domParser = new XmldomParser();
+                    const fullTags = ExifReader.load(fullBuffer, {expanded: true, includeOffsets: true, domParser});
+                    installFetchMock(fullBuffer, {contentRangeTotal});
+
+                    const tags = await ExifReader.load(URL, {...AUTO_OPTIONS, domParser});
+
+                    expect(tags.exif).to.deep.equal(fullTags.exif);
+                    expect(tags.xmp).to.deep.equal(fullTags.xmp);
+                    expect(tags.metadataRange.complete).to.equal(true);
+                    expect(tags.metadataRange.end).to.equal(fullBuffer.byteLength);
+                    expect(tags.metadataRange.requests).to.equal(2);
+                    expect(fetchCalls).to.have.lengthOf(2);
+                    expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+                });
+            });
+
+            [
+                {
+                    name: 'a 416',
+                    stagesAfterEnd: () => Array.from({length: 2}, () => ({status: 416, body: () => new ArrayBuffer(0)})),
+                },
+                {
+                    name: 'an empty 206',
+                    stagesAfterEnd: () => Array.from({length: 5}, () => ({status: 206, contentLength: 0, body: () => new ArrayBuffer(0)})),
+                },
+            ].forEach(({name, stagesAfterEnd}) => {
+                it(`should take ${name} past the end of a short file as its end once a read to the end confirms it, when the 206 has no Content-Range`, async () => {
+                    const body = () => new Uint8Array(getCutJpeg({withExif: true})).buffer;
+                    installCustomFetchMock([
+                        {status: 206, contentLength: CUT_JPEG_LENGTH, body},
+                        ...stagesAfterEnd(),
+                    ]);
+
+                    const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                    expect(tags.exif.Make.description).to.equal('ACME');
+                    expect(tags.metadataRange.complete).to.equal(false);
+                    expect(tags.metadataRange.fetched).to.equal(CUT_JPEG_LENGTH);
+                    expect(tags.metadataRange.requests).to.equal(3);
+                    expect(fetchCalls.map(({range}) => range)).to.deep.equal(['bytes=0-131071', 'bytes=5000-9999', 'bytes=5000-']);
+                    expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+                });
+
+                it(`should reject a short file without metadata after ${name} past its end and a read to the end confirm it, without a warning`, async () => {
+                    const body = () => new Uint8Array(getCutJpeg({withExif: false})).buffer;
+                    installCustomFetchMock([
+                        {status: 206, contentLength: CUT_JPEG_LENGTH, body},
+                        ...stagesAfterEnd(),
+                    ]);
+
+                    const error = await getRejection(ExifReader.load(URL, AUTO_OPTIONS));
+
+                    expect(error).to.be.an('error');
+                    expect(error.message).to.contain('could not locate metadata');
+                    expect(fetchCalls).to.have.lengthOf(3);
+                    expect(warnings).to.deep.equal([]);
+                });
+            });
+
+            it('should read on with a read to the end when a server answers 416 to a range whose end is past the file', async () => {
+                const full = new Uint8Array(getLongJpeg({withExif: true})).buffer;
+                installFetchMock(full, {endPast416: true, contentRangeTotal: 'absent'});
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(tags.exif.Make.description).to.equal('ACME');
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.fetched).to.equal(full.byteLength);
+                expect(tags.metadataRange.requests).to.equal(3);
+                expect(fetchCalls.map(({range}) => range)).to.deep.equal(['bytes=0-131071', 'bytes=131072-262143', 'bytes=131072-']);
+                expect(warnings).to.deep.equal([]);
+            });
+
+            it('should reject a file without metadata after a read to the end when a server answers 416 to a range whose end is past the file', async () => {
+                installFetchMock(new Uint8Array(getLongJpeg({withExif: false})).buffer, {endPast416: true, contentRangeTotal: 'absent'});
+
+                const error = await getRejection(ExifReader.load(URL, AUTO_OPTIONS));
+
+                expect(error).to.be.an('error');
+                expect(error.message).to.contain('could not locate metadata');
+                expect(fetchCalls.map(({range}) => range)).to.deep.equal(['bytes=0-131071', 'bytes=131072-262143', 'bytes=131072-']);
+                expect(warnings).to.deep.equal([]);
+            });
+
+            it('should read on to the total that a 206 to the read to the end states when it carries only part of the rest', async () => {
+                const full = new Uint8Array(getLongJpeg({withExif: true})).buffer;
+                const length = full.byteLength;
+                const cut = 150000;
+                installCustomFetchMock([
+                    {status: 206, contentLength: 131072, body: () => full.slice(0, 131072)},
+                    {status: 416, body: () => new ArrayBuffer(0)},
+                    {status: 206, contentRange: `bytes 131072-${cut - 1}/${length}`, contentLength: cut - 131072, body: () => full.slice(131072, cut)},
+                    {status: 206, contentRange: `bytes ${cut}-${length - 1}/${length}`, contentLength: length - cut, body: () => full.slice(cut)},
+                ]);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(tags.exif.Make.description).to.equal('ACME');
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(4);
+                expect(fetchCalls.map(({range}) => range)).to.deep.equal([
+                    'bytes=0-131071', 'bytes=131072-262143', 'bytes=131072-', `bytes=${cut}-${length - 1}`,
+                ]);
+                expect(warnings).to.deep.equal([]);
             });
 
             it('should read the Exif and XMP of an animated WebP that come after many frames in 2 fetches', async () => {
@@ -3838,6 +3987,23 @@ describe('exif-reader', function () {
                 expect(tags.metadataRange.fetched).to.equal(262144);
                 expect(tags.metadataRange.requests).to.equal(2);
                 expect(tags.metadataRange.buffer.byteLength).to.equal(200000);
+            });
+
+            it('should take the Content-Length of a 200 on a follow-up Range request as the file size', async () => {
+                const full = new Uint8Array(getLongJpeg({withExif: false, fillerCount: 5})).buffer;
+                const length = full.byteLength;
+                installCustomFetchMock([
+                    {status: 206, contentLength: 131072, body: () => full.slice(0, 131072)},
+                    {status: 200, contentLength: length, body: () => full},
+                    {status: 206, contentRange: `bytes 262144-${length - 1}/${length}`, contentLength: length - 262144, body: () => full.slice(262144)},
+                ]);
+
+                const error = await getRejection(ExifReader.load(URL, AUTO_OPTIONS));
+
+                expect(error).to.be.an('error');
+                expect(error.message).to.contain('could not locate metadata');
+                expect(fetchCalls.map(({range}) => range)).to.deep.equal(['bytes=0-131071', 'bytes=131072-262143', `bytes=262144-${length - 1}`]);
+                expect(warnings).to.deep.equal([]);
             });
 
             it('should fall back to a single full GET when the server returns 416', async () => {
@@ -4041,7 +4207,7 @@ describe('exif-reader', function () {
                 global.__non_webpack_require__ = originalRequire;
             });
 
-            function installHttpMock(fullBuffer, {ignoreRange = false, chunkSize} = {}) {
+            function installHttpMock(fullBuffer, {ignoreRange = false, chunkSize, contentRangeTotal = 'known', pastEnd416 = false, endPast416 = false} = {}) {
                 const full = Buffer.isBuffer(fullBuffer) ? fullBuffer : Buffer.alloc(fullBuffer);
                 global.__non_webpack_require__ = function (moduleName) {
                     if (/^https?$/.test(moduleName)) {
@@ -4055,12 +4221,14 @@ describe('exif-reader', function () {
                                 const start = m ? parseInt(m[1], 10) : 0;
                                 const end = m && m[2] ? parseInt(m[2], 10) + 1 : full.length;
                                 const slice = full.subarray(start, end);
+                                const isPastEnd = honorRange
+                                    && ((pastEnd416 && start >= full.length) || (endPast416 && (end > full.length || start >= full.length)));
                                 const listeners = {};
                                 const response = {
-                                    statusCode: honorRange ? 206 : 200,
-                                    statusMessage: 'OK',
+                                    statusCode: isPastEnd ? 416 : (honorRange ? 206 : 200),
+                                    statusMessage: isPastEnd ? 'Range Not Satisfiable' : 'OK',
                                     headers: {
-                                        'content-range': honorRange ? `bytes ${start}-${end - 1}/${full.length}` : undefined,
+                                        'content-range': honorRange && !isPastEnd ? partialContentRange(contentRangeTotal, start, end, full.length) : undefined,
                                         'content-length': String(slice.length),
                                     },
                                     on(eventName, cb) {
@@ -4116,6 +4284,88 @@ describe('exif-reader', function () {
                 expect(tags.metadataRange.complete).to.equal(true);
                 expect(tags.metadataRange.requests).to.equal(2);
                 expect(Buffer.isBuffer(tags.metadataRange.buffer)).to.equal(true);
+            });
+
+            [
+                {name: 'no Content-Range', contentRangeTotal: 'absent'},
+                {name: 'a Content-Range with an unknown total', contentRangeTotal: 'unknown'},
+            ].forEach(({name, contentRangeTotal}) => {
+                it(`should read the Exif and XMP of a WebP in 2 requests via Node http when each 206 carries a Content-Length and ${name}`, async () => {
+                    const fullBuffer = getArrayBuffer(getWebpWithImageData(WEBP_IMAGE_DATA_LENGTH));
+                    const domParser = new XmldomParser();
+                    const fullTags = ExifReader.load(fullBuffer, {expanded: true, includeOffsets: true, domParser});
+                    installHttpMock(Buffer.from(fullBuffer), {contentRangeTotal});
+
+                    const tags = await ExifReader.load(URL, {...AUTO_OPTIONS, domParser});
+
+                    expect(tags.exif).to.deep.equal(fullTags.exif);
+                    expect(tags.xmp).to.deep.equal(fullTags.xmp);
+                    expect(tags.metadataRange.complete).to.equal(true);
+                    expect(tags.metadataRange.end).to.equal(fullBuffer.byteLength);
+                    expect(tags.metadataRange.requests).to.equal(2);
+                    expect(getCalls).to.have.lengthOf(2);
+                });
+            });
+
+            [
+                {name: 'a 416', options: {contentRangeTotal: 'absent', pastEnd416: true}},
+                {name: 'an empty 206', options: {contentRangeTotal: 'absent'}},
+            ].forEach(({name, options}) => {
+                describe(`${name} past the end of a short file`, () => {
+                    let warnSpy;
+
+                    beforeEach(() => {
+                        warnSpy = getConsoleWarnSpy();
+                    });
+
+                    afterEach(() => {
+                        warnSpy.reset();
+                    });
+
+                    it('should be taken as its end once a read to the end confirms it, when the 206 has no Content-Range', async () => {
+                        installHttpMock(getCutJpeg({withExif: true}), options);
+
+                        const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                        expect(tags.exif.Make.description).to.equal('ACME');
+                        expect(tags.metadataRange.complete).to.equal(false);
+                        expect(tags.metadataRange.fetched).to.equal(CUT_JPEG_LENGTH);
+                        expect(tags.metadataRange.requests).to.equal(3);
+                        expect(getCalls.map(({range}) => range)).to.deep.equal(['bytes=0-131071', 'bytes=5000-9999', 'bytes=5000-']);
+                        expect(warnSpy.hasWarned).to.equal(false);
+                    });
+
+                    it('should reject a file without metadata after a read to the end, without a warning', async () => {
+                        installHttpMock(getCutJpeg({withExif: false}), options);
+
+                        const error = await getRejection(ExifReader.load(URL, AUTO_OPTIONS));
+
+                        expect(error).to.be.an('error');
+                        expect(error.message).to.contain('could not locate metadata');
+                        expect(getCalls).to.have.lengthOf(3);
+                        expect(warnSpy.hasWarned).to.equal(false);
+                    });
+                });
+            });
+
+            it('should read on with a read to the end when a server answers 416 to a range whose end is past the file', async () => {
+                const warnSpy = getConsoleWarnSpy();
+                const full = getLongJpeg({withExif: true});
+                installHttpMock(full, {contentRangeTotal: 'absent', endPast416: true});
+
+                let tags;
+                try {
+                    tags = await ExifReader.load(URL, AUTO_OPTIONS);
+                } finally {
+                    warnSpy.reset();
+                }
+
+                expect(tags.exif.Make.description).to.equal('ACME');
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.fetched).to.equal(full.length);
+                expect(tags.metadataRange.requests).to.equal(3);
+                expect(getCalls.map(({range}) => range)).to.deep.equal(['bytes=0-131071', 'bytes=131072-262143', 'bytes=131072-']);
+                expect(warnSpy.hasWarned).to.equal(false);
             });
 
             it('should stop reading and destroy the response when the server sends more than the requested range', async () => {

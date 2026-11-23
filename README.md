@@ -452,7 +452,12 @@ through Node.js, 2. remote files when passing a URL, and 3. browser File objects
 (e.g., from form file fields). For remote files accessed through a web browser,
 make sure the remote server is either on the same origin (domain) as your script
 or that the server is passing correct CORS headers, specifically allowing the
-`Range` header.
+`Range` header. With `length: 'auto'` the server should also list
+`Content-Range` in `Access-Control-Expose-Headers`. Without it the browser
+hides the file size, so when ExifReader cannot locate the metadata from the
+first part (as in a HEIC or AVIF file with the `meta` box near the end), it
+reads in doubling steps instead of jumping to the end of the file, which takes
+more requests and can end in the 4-iteration fallback described below.
 
 For those inputs a fractional `length` is rounded down, and a `length` that is
 not a finite non-negative number or `'auto'` (such as the string `'1024'`,

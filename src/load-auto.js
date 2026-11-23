@@ -128,15 +128,38 @@ export function makeLoadAuto(loadFromData) {
         return state.readRange(state.fetched, state.need, {totalSize: state.totalSize})
             .then((chunk) => {
                 state.requests++;
-                // Fall back to a full GET when the server cannot satisfy
-                // the requested range.
+                if (isAnswerPastEndOfFile(state, chunk)) {
+                    // A server may answer 416 to a range whose end, not start, is past the file.
+                    return confirmEndOfFile(state).then(() => parseAndDecide(state));
+                }
                 if (chunk.status === HTTP_STATUS_RANGE_NOT_SATISFIABLE) {
+                    // A 416 on the first read: the server refuses ranges,
+                    // so fall back to a full GET.
                     return handleAdaptive416(state);
                 }
                 mergeAdaptiveChunk(state, chunk);
-                return Promise.resolve(loadFromData(state.buffer, state.options))
-                    .then((tags) => decideAdaptiveNext(state, tags));
+                return parseAndDecide(state);
             });
+    }
+
+    function confirmEndOfFile(state) {
+        return state.readRange(state.fetched, Infinity, {totalSize: state.totalSize})
+            .then((chunk) => {
+                state.requests++;
+                if (isAnswerPastEndOfFile(state, chunk)) {
+                    state.totalSize = state.fetched;
+                    return;
+                }
+                mergeAdaptiveChunk(state, chunk);
+                if (chunk.totalSize === undefined) {
+                    state.totalSize = state.fetched;
+                }
+            });
+    }
+
+    function parseAndDecide(state) {
+        return Promise.resolve(loadFromData(state.buffer, state.options))
+            .then((tags) => decideAdaptiveNext(state, tags));
     }
 
     function decideAdaptiveNext(state, tags) {
@@ -233,6 +256,14 @@ function mergeAdaptiveChunk(state, chunk) {
     }
     state.buffer = concatBuffers(state.buffer, chunk.buffer);
     state.fetched = bufferByteLength(state.buffer);
+}
+
+function isAnswerPastEndOfFile(state, chunk) {
+    if (state.fetched === 0) {
+        return false;
+    }
+    return chunk.status === HTTP_STATUS_RANGE_NOT_SATISFIABLE
+        || (chunk.status !== HTTP_STATUS_OK && bufferByteLength(chunk.buffer) === 0);
 }
 
 function attachAdaptiveFields(tags, buffer, fetched, requests) {
