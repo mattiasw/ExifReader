@@ -26,7 +26,10 @@ const FIELDS = [
 function read(dataView) {
     const tags = {};
     for (let i = 0; i < FIELDS.length; i++) {
-        tags[FIELDS[i].name] = getFieldTag(dataView, FIELDS[i]);
+        const tag = getFieldTag(dataView, FIELDS[i]);
+        if (tag !== undefined) {
+            tags[FIELDS[i].name] = tag;
+        }
     }
     return tags;
 }
