@@ -42,6 +42,8 @@ const COMPOSABLE_RESULT_GROUPS = ['gps', 'composite'];
 const COMPOSABLE_GROUPS = ['iptc', 'xmp', 'icc', 'photoshop', 'mpf', 'makerNotes', 'gps', 'composite', 'thumbnail'];
 const DOM_PARSER_COMMENT = '// Outside browsers, xmp needs a domParser in createReader, for example '
     + 'new DOMParser({onError: onErrorStopParsing}) from @xmldom/xmldom.';
+const MAKER_NOTE_COMMENT_END = ' decodes the maker notes in these images but no other make. '
+    + 'Use makerNotes instead to get every maker note decoder, including the ones later releases add.';
 const THUMBNAIL_NON_TAG_KEYS = ['image', 'base64', 'type'];
 const GPS_POINTER = 'GPS Info IFD Pointer';
 const INTEROPERABILITY_POINTER = 'Interoperability IFD Pointer';
@@ -51,6 +53,7 @@ module.exports = {
     loadFullParser,
     loadTagBindingName,
     loadIptcTagExportNames,
+    loadMakerNoteDecoders,
     resolveDomParser,
     analyzeImages,
     deriveConfig,
@@ -144,6 +147,17 @@ function loadTagBindingName() {
 function loadIptcTagExportNames() {
     const sourceUrl = url.pathToFileURL(path.join(EXIFREADER_ROOT_DIR, 'src', 'composable', 'tags', 'iptc.js')).href;
     return import(sourceUrl).then((sourceModule) => Object.keys(sourceModule));
+}
+
+/**
+ * Load the maker note decoders of the composable makerNotes group, in the
+ * order the reader tries them, from the ES module source.
+ *
+ * @returns {Promise<{name: string, matches: function(Object): boolean}[]>}
+ */
+function loadMakerNoteDecoders() {
+    const sourceUrl = url.pathToFileURL(path.join(EXIFREADER_ROOT_DIR, 'src', 'composable', 'groups', 'maker-notes.js')).href;
+    return import(sourceUrl).then((sourceModule) => sourceModule.makerNotes.decoders);
 }
 
 /**
@@ -337,14 +351,19 @@ function missingFormatsWarning(names, product) {
  *   loadTagBindingName resolves to.
  * @param {string[]} iptcTagExportNames The names loadIptcTagExportNames
  *   resolves to.
+ * @param {{name: string, matches: function(Object): boolean}[]} makerNoteDecoders
+ *   The decoders loadMakerNoteDecoders resolves to. The group of the one that
+ *   decodes every maker note found replaces makerNotes.
  * @returns {string} JavaScript import lines and a createReader call.
  */
-function deriveImports(results, getTagBindingName, iptcTagExportNames) {
+function deriveImports(results, getTagBindingName, iptcTagExportNames, makerNoteDecoders) {
     const derived = deriveConfig(results);
     const formats = COMPOSABLE_FORMATS.filter((name) => derived.fileTypes.includes(name));
     const iptcTags = composableIptcTags(results, getTagBindingName, iptcTagExportNames);
+    const makerNoteGroup = singleMakerNoteDecoderName(results, makerNoteDecoders);
     const groups = composableGroups(derived.config.include, results, formats)
-        .filter((name) => name !== 'iptc' || iptcTags.length === 0);
+        .filter((name) => name !== 'iptc' || iptcTags.length === 0)
+        .map((name) => name === 'makerNotes' && makerNoteGroup ? makerNoteGroup : name);
     const tables = [
         {key: 'formats', names: formats, specifier: 'exifreader/formats'},
         {key: 'groups', names: groups, specifier: 'exifreader/groups'},
@@ -357,9 +376,29 @@ function deriveImports(results, getTagBindingName, iptcTagExportNames) {
     if (groups.includes('xmp')) {
         lines.push(DOM_PARSER_COMMENT);
     }
+    if (groups.includes(makerNoteGroup)) {
+        lines.push(`// ${makerNoteGroup}${MAKER_NOTE_COMMENT_END}`);
+    }
     const entries = getEntries(tables).map((entry) => `${entry.key}: [${entry.names.join(', ')}]`);
     lines.push(`const reader = createReader({${entries.join(', ')}});`);
     return lines.join('\n');
+}
+
+// The name of the one decoder that reads every maker note found, or undefined
+// when a maker note has none or the maker notes need more than one. The first
+// decoder to match wins, as in readMakerNoteWithDecoders.
+function singleMakerNoteDecoderName(results, makerNoteDecoders) {
+    const names = new Set();
+    for (const tags of results.filter((result) => 'makerNotes' in result || (result.exif && 'MakerNote' in result.exif))) {
+        const exif = tags.exif || {};
+        const block = {make: exif.Make && exif.Make.value, bytes: exif.MakerNote && exif.MakerNote.value};
+        const decoder = makerNoteDecoders.find((candidate) => candidate.matches(block));
+        if (!decoder) {
+            return undefined;
+        }
+        names.add(decoder.name);
+    }
+    return names.size === 1 ? Array.from(names)[0] : undefined;
 }
 
 // Every iptc name as a tag, or none when exifreader/tags/iptc has no export

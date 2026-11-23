@@ -13,6 +13,7 @@ import {
     loadFullParser,
     loadTagBindingName,
     loadIptcTagExportNames,
+    loadMakerNoteDecoders,
     resolveDomParser,
     analyzeImages,
     deriveConfig,
@@ -259,10 +260,14 @@ describe('analyze', () => {
         const CORE_IMPORT = 'import {createReader} from \'exifreader/core\';';
         const DOM_PARSER_COMMENT = '// Outside browsers, xmp needs a domParser in createReader, for example '
             + 'new DOMParser({onError: onErrorStopParsing}) from @xmldom/xmldom.';
+        const MAKER_NOTE_COMMENT = (name) => `// ${name} decodes the maker notes in these images but no other make. `
+            + 'Use makerNotes instead to get every maker note decoder, including the ones later releases add.';
         let iptcTagExportNames;
+        let makerNoteDecoders;
 
         before(async () => {
             iptcTagExportNames = await loadIptcTagExportNames();
+            makerNoteDecoders = Groups.makerNotes.decoders;
         });
 
         it('imports the xml format and the xmp group for an XMP sidecar file, even without an xmp key', () => {
@@ -345,7 +350,7 @@ describe('analyze', () => {
 
         it('imports an IPTC name as a tag when the given export names hold its binding', () => {
             const results = [image('jpeg', {iptc: {'Record 2 destination': {}}})];
-            const snippet = deriveImports(results, getTagBindingName, ['Record2Destination']);
+            const snippet = deriveImports(results, getTagBindingName, ['Record2Destination'], makerNoteDecoders);
 
             expect(IptcTags).to.not.have.property('Record2Destination');
             expect(snippet).to.contain('import {Record2Destination} from \'exifreader/tags/iptc\';');
@@ -354,7 +359,7 @@ describe('analyze', () => {
         });
 
         it('keeps the iptc group for a name whose binding the given export names lack', () => {
-            const snippet = deriveImports([image('jpeg', {iptc: {'By-line': {}}})], getTagBindingName, ['Keywords']);
+            const snippet = deriveImports([image('jpeg', {iptc: {'By-line': {}}})], getTagBindingName, ['Keywords'], makerNoteDecoders);
 
             expect(IptcTags).to.have.property('ByLine');
             expect(snippet).to.contain('import {iptc} from \'exifreader/groups\';');
@@ -425,6 +430,153 @@ describe('analyze', () => {
         it('says that xmp needs a domParser outside browsers only when xmp is composed', () => {
             expect(snippetOf([image('jpeg', {xmp: {}})]).split('\n')).to.include(DOM_PARSER_COMMENT);
             expect(snippetOf([image('jpeg', {icc: {}})])).to.not.contain('domParser');
+        });
+
+        describe('maker notes', () => {
+            let canonResult;
+            let pentaxResult;
+
+            before(async () => {
+                const parser = await loadFullParser();
+                const analyzed = await analyzeImages(
+                    ['canon', 'pentax'].map((make) => path.join(FIXTURES, `test-maker-note-${make}.jpg`)),
+                    {fs, parser, domParser: resolveDomParser(process.cwd())}
+                );
+                [canonResult, pentaxResult] = analyzed.results.map((entry) => entry.tags);
+            });
+
+            ['canon', 'pentax'].forEach((name) => {
+                it(`imports ${name} in place of makerNotes when it decodes every maker note, and says what that means`, () => {
+                    const snippet = snippetOf([name === 'canon' ? canonResult : pentaxResult]);
+                    const lines = snippet.split('\n');
+
+                    expect(lines).to.include(`import {${name}} from 'exifreader/groups';`);
+                    expect(snippet).to.contain(`groups: [${name}]`);
+                    expect(lines.filter((line) => !line.startsWith('// ')).join('\n')).to.not.contain('makerNotes');
+                    expect(lines.filter((line) => line.startsWith('// '))).to.deep.equal([MAKER_NOTE_COMMENT(name)]);
+                    expect(lines[lines.length - 2]).to.equal(MAKER_NOTE_COMMENT(name));
+                });
+            });
+
+            it('imports one decoder for several images of its make', () => {
+                const snippet = snippetOf([canonResult, canonResult]);
+
+                expect(snippet).to.contain('groups: [canon]');
+                expect(snippet.split('\n')).to.include(MAKER_NOTE_COMMENT('canon'));
+            });
+
+            it('prints the maker note comment after the DOM parser comment', () => {
+                const snippet = snippetOf([image('jpeg', {xmp: {}}), canonResult]);
+                const lines = snippet.split('\n');
+
+                expect(snippet).to.contain('groups: [xmp, canon]');
+                expect(lines.slice(-3, -1)).to.deep.equal([DOM_PARSER_COMMENT, MAKER_NOTE_COMMENT('canon')]);
+                expect(lines[lines.length - 1]).to.match(/^const reader = createReader\(/);
+            });
+
+            it('keeps the position of makerNotes among the groups', () => {
+                const snippet = snippetOf([image('jpeg', {mpf: {}, gps: {}}), canonResult]);
+
+                expect(snippet).to.contain('groups: [mpf, canon, gps]');
+            });
+
+            it('keeps makerNotes, with no comment, when two decoders are needed', () => {
+                const snippet = snippetOf([canonResult, pentaxResult]);
+
+                expect(snippet).to.contain('import {makerNotes} from \'exifreader/groups\';');
+                expect(snippet).to.contain('groups: [makerNotes]');
+                expect(snippet).to.not.contain('canon');
+                expect(snippet).to.not.contain('pentax');
+                expect(snippet).to.not.contain('//');
+            });
+
+            it('keeps makerNotes, with no comment, when a maker note no decoder reads is found too', () => {
+                const snippet = snippetOf([canonResult, undecodedMakerNote()]);
+
+                expect(snippet).to.contain('groups: [makerNotes]');
+                expect(snippet).to.not.contain('//');
+            });
+
+            it('keeps makerNotes when a maker note has no Make tag and no decoder reads its bytes', () => {
+                const snippet = snippetOf([canonResult, image('jpeg', {exif: {MakerNote: {value: [1, 2, 3]}}})]);
+
+                expect(snippet).to.contain('groups: [makerNotes]');
+                expect(snippet).to.not.contain('//');
+            });
+
+            it('keeps makerNotes when a result has makerNotes but no MakerNote tag to tell the make from', () => {
+                const snippet = snippetOf([canonResult, image('jpeg', {makerNotes: {}})]);
+
+                expect(snippet).to.contain('groups: [makerNotes]');
+                expect(snippet).to.not.contain('//');
+            });
+
+            it('adds no maker note group for a maker note no decoder reads when no result has makerNotes', () => {
+                const snippet = snippetOf([undecodedMakerNote(false)]);
+
+                expect(snippet).to.not.contain('makerNotes');
+                expect(snippet).to.not.contain('canon');
+                expect(snippet).to.not.contain('pentax');
+                expect(snippet).to.not.contain('//');
+            });
+
+            it('adds no decoder group for a Canon maker note when no result has makerNotes', () => {
+                const canonTags = {exif: canonResult.exif};
+                const snippet = snippetOf([image('jpeg', canonTags)]);
+
+                expect(snippet).to.not.contain('exifreader/groups');
+                expect(snippet).to.not.contain('//');
+            });
+
+            it('uses the first decoder that matches, as the reader does', () => {
+                const first = {name: 'first', matches: () => true};
+                const second = {name: 'second', matches: () => true};
+
+                expect(deriveImports([canonResult], getTagBindingName, iptcTagExportNames, [first, second]))
+                    .to.contain('groups: [first]');
+            });
+
+            it('reads the same maker notes from a Canon image as the full library', async () => {
+                const snippet = snippetOf([canonResult]);
+                const modules = {
+                    'exifreader/core': Core,
+                    'exifreader/formats': Formats,
+                    'exifreader/groups': Groups,
+                    'exifreader/tags/exif': ExifTags
+                };
+                const bindings = {};
+                for (const [, names, specifier] of snippet.matchAll(/^import \{([^}]+)\} from '([^']+)';$/gm)) {
+                    for (const name of names.split(', ')) {
+                        bindings[name] = modules[specifier][name];
+                    }
+                }
+                const call = /^const reader = createReader\(\{(.+)\}\);$/m.exec(snippet)[1];
+                const tables = {};
+                for (const [, key, names] of call.matchAll(/(\w+): \[([^\]]*)\]/g)) {
+                    tables[key] = names.split(', ').map((name) => bindings[name]);
+                }
+                const bytes = fs.readFileSync(path.join(FIXTURES, 'test-maker-note-canon.jpg'));
+                const parser = await loadFullParser();
+                const expected = await parser.load(bytes, {expanded: true, async: true});
+
+                const tags = await Core.createReader(tables).load(bytes);
+
+                expect(Object.keys(expected.makerNotes)).to.not.be.empty;
+                expect(tags.makerNotes).to.deep.equal(expected.makerNotes);
+            });
+
+            it('names, for every decoder, an exifreader/groups export that decodes the same make', () => {
+                expect(makerNoteDecoders).to.not.be.empty;
+                for (const decoder of makerNoteDecoders) {
+                    expect(Groups, decoder.name).to.have.own.property(decoder.name);
+                    expect(Groups[decoder.name].decoders, decoder.name).to.deep.equal([decoder]);
+                }
+            });
+
+            function undecodedMakerNote(withMakerNotes = true) {
+                const groups = {exif: {Make: {value: ['NIKON CORPORATION']}, MakerNote: {value: [78, 105, 107, 111, 110, 0]}}};
+                return image('jpeg', withMakerNotes ? Object.assign({makerNotes: {}}, groups) : groups);
+            }
         });
 
         describe('every printed import', () => {
@@ -506,7 +658,7 @@ describe('analyze', () => {
         });
 
         function snippetOf(results) {
-            return deriveImports(results, getTagBindingName, iptcTagExportNames);
+            return deriveImports(results, getTagBindingName, iptcTagExportNames, makerNoteDecoders);
         }
     });
 
@@ -609,6 +761,15 @@ describe('analyze', () => {
     describe('loadTagBindingName', () => {
         it('loads the tag binding name function of the composable source', async () => {
             expect(await loadTagBindingName()).to.equal(getTagBindingName);
+        });
+    });
+
+    describe('loadMakerNoteDecoders', () => {
+        it('loads the maker note decoders of the composable makerNotes group, in the order the reader tries them', async () => {
+            const decoders = await loadMakerNoteDecoders();
+
+            expect(decoders).to.equal(Groups.makerNotes.decoders);
+            expect(decoders.map((decoder) => decoder.name)).to.deep.equal(['canon', 'pentax']);
         });
     });
 
