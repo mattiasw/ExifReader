@@ -256,7 +256,7 @@ export interface ExpandedTags {
          */
         _raw: string
     } & XmpTags,
-    icc?: IccTags,
+    icc?: IccExpandedTags,
     mpf?: MPFTags,
     riff?: RiffTags,
     gif?: GifTags,
@@ -919,8 +919,44 @@ interface ExifTags {
     'Thumbnail'?: ThumbnailTags
 }
 
-interface IccTags {
-    [name: string]: ValueTag;
+interface IccLocalizedTexts {
+    [locale: string]: string
+}
+
+interface IccTextTag {
+    description: string,
+    value: string | IccLocalizedTexts
+}
+
+interface IccNamedTags {
+    'Preferred CMM type'?: ValueTag,
+    'Profile Version'?: ValueTag,
+    'Profile/Device class'?: ValueTag,
+    'Color Space'?: ValueTag,
+    'Connection Space'?: ValueTag,
+    'ICC Profile Date'?: ValueTag,
+    'ICC Signature'?: ValueTag,
+    'Primary Platform'?: ValueTag,
+    'Device Manufacturer'?: ValueTag,
+    'Device Model Number'?: ValueTag,
+    'Rendering Intent'?: NumberFileTag,
+    'Profile Creator'?: ValueTag,
+    'ICC Description'?: IccTextTag,
+    'ICC Copyright'?: IccTextTag,
+    'ICC Device Model Description'?: IccTextTag,
+    'ICC Viewing Conditions Description'?: IccTextTag,
+    'ICC Device Manufacturer for Display'?: IccTextTag,
+    'Technology'?: IccTextTag,
+}
+
+type IccExpandedTags = IccNamedTags & {
+    // NumberFileTag lets an object literal with a 'Rendering Intent' be assigned.
+    [name: string]: IccTextTag | NumberFileTag
+}
+
+// Unnamed ICC tags keep a string value here: a wider index type would retype every unnamed flat tag.
+type IccTags = IccNamedTags & {
+    [name: string]: ValueTag
 }
 
 export type Tags = FileTags & XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & PentaxTags & CompositeTags & {

@@ -568,6 +568,56 @@ expandedTags["gif"]?.["Color Resolution Depth"]?.value === 0;
 expandedTags["gif"]?.["Color Resolution Depth"]?.value === 9;
 expandedTags["gif"]?.["Color Resolution Depth"]?.description === "8 bits";
 
+////////
+// ICC
+type IccValue<K extends string> = NonNullable<NonNullable<ExpandedTags["icc"]>[K]>["value"];
+
+const renderingIntent: number = expandedTags["icc"]?.["Rendering Intent"]?.value ?? 0;
+// @ts-expect-error
+const renderingIntentString: string = expandedTags["icc"]?.["Rendering Intent"]?.value ?? "";
+const renderingIntentDescription: string = expandedTags["icc"]?.["Rendering Intent"]?.description ?? "";
+const profileVersion: string = expandedTags["icc"]?.["Profile Version"]?.value ?? "";
+
+const iccDescriptionValue = expandedTags["icc"]?.["ICC Description"]?.value;
+if (typeof iccDescriptionValue === "string") {
+    const iccDescriptionText: string = iccDescriptionValue;
+} else if (iccDescriptionValue) {
+    const iccDescriptionEnUs: string = iccDescriptionValue["en-US"];
+}
+// @ts-expect-error
+const iccDescription: string = expandedTags["icc"]?.["ICC Description"]?.value ?? "";
+const iccDescriptionTexts: IccValue<"ICC Description"> = { "en-US": "Apple", "sv-SE": "Apple" };
+// @ts-expect-error
+const iccDescriptionNumber: IccValue<"ICC Description"> = 0;
+
+// @ts-expect-error
+const dscm: string = expandedTags["icc"]?.["dscm"]?.value ?? "";
+const dscmText: IccValue<"dscm"> = "Apple";
+const dscmTexts: IccValue<"dscm"> = { "en-US": "Apple", "sv-SE": "Apple" };
+const dscmDescription: string = expandedTags["icc"]?.["dscm"]?.description ?? "";
+
+const iccLiteral: NonNullable<ExpandedTags["icc"]> = {
+    "Rendering Intent": { value: 0, description: "Perceptual" },
+    "Profile Version": { value: "4.3.0", description: "4.3.0" },
+    "ICC Description": { value: { "en-US": "Apple", "sv-SE": "Apple" }, description: "Apple" },
+    "dscm": { value: "Apple", description: "Apple" },
+};
+const iccLiteralWrongIntent: NonNullable<ExpandedTags["icc"]> = {
+    // @ts-expect-error
+    "Rendering Intent": { value: "0", description: "Perceptual" },
+};
+
+tags["Rendering Intent"]?.value === 0;
+// @ts-expect-error
+tags["Rendering Intent"]?.value === "Perceptual";
+const flatRenderingIntent: number = tags["Rendering Intent"]?.value ?? 0;
+const flatIccDescriptionTexts: NonNullable<Tags["ICC Description"]>["value"] = { "en-US": "Apple", "sv-SE": "Apple" };
+// @ts-expect-error
+const flatIccDescriptionString: string = tags["ICC Description"]?.value ?? "";
+// The ICC index type must not widen the value of a flat tag that no group names.
+const flatUnnamedValue: string = tags["CreatorTool"].value;
+tags["CreatorTool"].value.toLowerCase();
+
 //////////////
 // Photoshop
 // expandedTags.photoshop?.["CaptionDigest"]?.id === 4711;
