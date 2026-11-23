@@ -141,6 +141,10 @@ export function getCopyrightDescription(value) {
     return value.join('; ');
 }
 
+export function getDngVersionDescription(value) {
+    return value.join('.');
+}
+
 export function getMakerNoteSafetyDescription(value) {
     return getTableDescription({
         0: 'Unsafe',
