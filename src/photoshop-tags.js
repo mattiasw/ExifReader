@@ -74,6 +74,7 @@ function read(bytes, includeUnknown, tagFilter = NOOP_TAG_FILTER) {
                 }
                 setProperty(tags, tagKey, tag);
             } else if (includeUnknown) {
+                tag.description = tag.value;
                 tags[tagKey] = tag;
             }
         }

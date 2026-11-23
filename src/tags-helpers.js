@@ -355,27 +355,11 @@ function readTag(
         tagValue = getAsciiTagValue(tagValue, stringBudget);
     }
 
-    let tagDescription = getNumberAsString(tagValue);
-
-    if (tagNames[ifdType][tagCode] !== undefined) {
-        if ((tagNames[ifdType][tagCode]['name'] !== undefined) && (tagNames[ifdType][tagCode]['description'] !== undefined)) {
-            try {
-                tagDescription = tagNames[ifdType][tagCode]['description'](tagValue);
-            } catch (error) {
-                tagDescription = getDescriptionFromTagValue(tagValue);
-            }
-        } else if ((tagType === Types.tagTypes['RATIONAL']) || (tagType === Types.tagTypes['SRATIONAL'])) {
-            tagDescription = getQuotientsDescription(getComputedTagValue(tagType, tagValue));
-        } else {
-            tagDescription = getDescriptionFromTagValue(tagValue);
-        }
-    }
-
     return {
         id: tagCode,
         name: tagName,
         value: tagValue,
-        description: tagDescription,
+        description: getTagDescription(tagNames[ifdType][tagCode], tagType, tagValue),
         tagType,
         __offset: tagValueOffset
     };
@@ -498,6 +482,21 @@ function drawExtraString(stringBudget) {
     }
     stringBudget.remaining -= BUDGET_BYTES_PER_EXTRA_ASCII_STRING;
     return true;
+}
+
+// A tag the dictionary leaves out is described as one it lists by name only.
+function getTagDescription(tagEntry, tagType, tagValue) {
+    if ((tagEntry !== undefined) && (tagEntry['name'] !== undefined) && (tagEntry['description'] !== undefined)) {
+        try {
+            return tagEntry['description'](tagValue);
+        } catch (error) {
+            return getDescriptionFromTagValue(tagValue);
+        }
+    }
+    if ((tagType === Types.tagTypes['RATIONAL']) || (tagType === Types.tagTypes['SRATIONAL'])) {
+        return getQuotientsDescription(getComputedTagValue(tagType, tagValue));
+    }
+    return getDescriptionFromTagValue(tagValue);
 }
 
 function getDescriptionFromTagValue(tagValue) {

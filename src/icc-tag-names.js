@@ -98,7 +98,7 @@ export const iccProfile = {
                 case 1: return 'Relative Colorimetric';
                 case 2: return 'Saturation';
                 case 3: return 'Absolute Colorimetric';
-                default: return value;
+                default: return String(value);
             }
         }
     },
