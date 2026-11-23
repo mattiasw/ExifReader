@@ -43,6 +43,57 @@ describe('image-header-iso-bmff', () => {
             });
         });
 
+        it('should end an ICC profile that declares more bytes than it has at the end of its colr box', () => {
+            const dataView = getDataView(getBox('colr', 'prof' + getByteStringFromNumber(0x50505050, 4) + '<ICC>') + '<next box>');
+
+            expect(parseBox(dataView, 0).icc).to.deep.equal({offset: 12, length: 9, chunkNumber: 1, chunksTotal: 1});
+        });
+
+        it('should read an ICC profile that runs past its colr box into bytes the data holds', () => {
+            const dataView = getDataView(getBox('colr', 'prof' + getByteStringFromNumber(12, 4) + '<ICC>') + '<next box>');
+
+            expect(parseBox(dataView, 0).icc.length).to.equal(12);
+        });
+
+        it('should end an ICC profile at the end of the container of its colr box', () => {
+            const dataView = getDataView(getBox('colr', 'prof' + getByteStringFromNumber(0x40000000, 4) + '<ICC>'));
+
+            expect(parseBox(dataView, 0, 20).icc.length).to.equal(8);
+        });
+
+        it('should end an ICC profile at the end of a container that ends where the data ends', () => {
+            const colrDeclaringMoreThanItsContainer = getByteStringFromNumber(0x40000000, 4) + 'colr'
+                + 'prof' + getByteStringFromNumber(0x40000000, 4) + '<ICC>';
+            const dataView = getDataView(getBox('ipco', colrDeclaringMoreThanItsContainer));
+
+            expect(parseBox(dataView, 0).properties[0].icc.length).to.equal(9);
+        });
+
+        it('should not end an ICC profile in a container where the data ends, as that can be where a partial read stopped', () => {
+            const ipco = getBox('ipco', getBox('colr', 'prof' + getByteStringFromNumber(9, 4) + '<ICC>'));
+            const dataView = getDataView(ipco.slice(0, 25));
+
+            expect(parseBox(dataView, 0).properties[0].icc.length).to.equal(9);
+        });
+
+        it('should not end an ICC profile where the data ends, as that can be where a partial read stopped', () => {
+            const dataView = getDataView(getBox('colr', 'prof' + getByteStringFromNumber(9, 4) + '<ICC>').slice(0, 17));
+
+            expect(parseBox(dataView, 0).icc.length).to.equal(9);
+        });
+
+        it('should read an ICC profile that is only its size field', () => {
+            const dataView = getDataView(getBox('colr', 'prof' + getByteStringFromNumber(4, 4)));
+
+            expect(parseBox(dataView, 0).icc).to.deep.equal({offset: 12, length: 4, chunkNumber: 1, chunksTotal: 1});
+        });
+
+        it('should read no ICC profile from a colr box too short to hold its size', () => {
+            const dataView = getDataView(getBox('colr', 'prof\x00\x00\x00') + '\x09<next box>');
+
+            expect(parseBox(dataView, 0).icc).to.be.undefined;
+        });
+
         it('should parse box of type ipco', () => {
             const COLOR_TYPE = 'prof';
             const ICC_CONTENT = '<ICC content>';
@@ -978,6 +1029,76 @@ describe('image-header-iso-bmff', () => {
             });
         });
 
+        describe('irot', () => {
+            it('should point at the angle right after the header, as irot has no version and flags', () => {
+                const dataView = getDataView(getBox('irot', '\x03'));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'irot', angleOffset: 8, length: 9});
+            });
+
+            it('should point at the angle after an extended-size header', () => {
+                const dataView = getDataView(asExtendedSizeBox(getBox('irot', '\x03'), 17));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'irot', angleOffset: 16, length: 17});
+            });
+
+            it('should read a box that extends to the end of the data', () => {
+                const dataView = getDataView(withDeclaredLength(getBox('irot', '\x03'), 0));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'irot', angleOffset: 8, length: 9});
+            });
+
+            it('should treat a box with no angle as unknown', () => {
+                const dataView = getDataView(getBox('irot', '') + '\x03');
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 8});
+            });
+
+            it('should treat a box whose angle is past its container as unknown', () => {
+                const dataView = getDataView(getBox('irot', '\x03'));
+
+                expect(parseBox(dataView, 0, 8)).to.deep.equal({type: undefined, length: 9});
+            });
+
+            it('should treat a box whose angle is past the data as unknown', () => {
+                const dataView = getDataView(getBox('irot', '\x03').slice(0, 8));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 9});
+            });
+        });
+
+        describe('imir', () => {
+            it('should point at the mode right after the header, as imir has no version and flags', () => {
+                const dataView = getDataView(getBox('imir', '\x01'));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'imir', modeOffset: 8, length: 9});
+            });
+
+            it('should point at the mode after an extended-size header', () => {
+                const dataView = getDataView(asExtendedSizeBox(getBox('imir', '\x01'), 17));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: 'imir', modeOffset: 16, length: 17});
+            });
+
+            it('should treat a box with no mode as unknown', () => {
+                const dataView = getDataView(getBox('imir', '') + '\x01');
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 8});
+            });
+
+            it('should treat a box whose mode is past its container as unknown', () => {
+                const dataView = getDataView(getBox('imir', '\x01'));
+
+                expect(parseBox(dataView, 0, 8)).to.deep.equal({type: undefined, length: 9});
+            });
+
+            it('should treat a box whose mode is past the data as unknown', () => {
+                const dataView = getDataView(getBox('imir', '\x01').slice(0, 8));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({type: undefined, length: 9});
+            });
+        });
+
         describe('ipma', () => {
             it('should read the version, the flags and where the entry count is', () => {
                 const dataView = getDataView(getFullBoxWithFlags('ipma', 1, 1, getByteStringFromNumber(0, 4)));
@@ -1071,6 +1192,38 @@ describe('image-header-iso-bmff', () => {
                 expect(properties).to.have.lengthOf(2);
                 expect(properties[0].type).to.be.undefined;
                 expect(properties[1].type).to.equal('ispe');
+            });
+
+            it('should keep an irot and an imir at their indexes', () => {
+                const dataView = getDataView(getBox('ipco', getBox('hvcC', '<config>') + getBox('irot', '\x01') + getBox('imir', '\x00')));
+
+                const {properties} = parseBox(dataView, 0);
+
+                expect(properties).to.have.lengthOf(3);
+                expect(properties[1]).to.deep.equal({type: 'irot', angleOffset: 8 + 16 + 8, length: 9});
+                expect(properties[2]).to.deep.equal({type: 'imir', modeOffset: 8 + 16 + 9 + 8, length: 9});
+            });
+
+            it('should keep an irot with no angle as an unknown property', () => {
+                const dataView = getDataView(getBox('ipco', getBox('irot', '') + buildIspeBox(12, 2)));
+
+                const {properties} = parseBox(dataView, 0);
+
+                expect(properties).to.have.lengthOf(2);
+                expect(properties[0].type).to.be.undefined;
+                expect(properties[1].type).to.equal('ispe');
+            });
+
+            it('should treat an irot whose angle is past the end of the ipco as unknown', () => {
+                // The ipco ends at the angle, while the irot and the data hold it.
+                const irot = getBox('irot', '\x03');
+                const ipcoEndingAtTheAngle = withDeclaredLength(getBox('ipco', irot), PLAIN_BOX_HEADER_SIZE * 2);
+                const dataView = getDataView(ipcoEndingAtTheAngle + '\x00');
+
+                const {properties} = parseBox(dataView, 0);
+
+                expect(properties).to.have.lengthOf(1);
+                expect(properties[0].type).to.be.undefined;
             });
 
             it('should still drop unknown boxes from the other containers', () => {
@@ -2008,6 +2161,106 @@ describe('image-header-iso-bmff', () => {
                     expect(offsets).to.not.have.property('imageDimensionsOffset');
                 });
             });
+
+            describe('rotation and mirroring', () => {
+                it('should point at the angle of the irot associated with the primary item', () => {
+                    const ispe = buildIspeBox(12, 2);
+                    const irot = getBox('irot', '\x03');
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [ispe, irot],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
+                    });
+
+                    expect(findOffsets(getDataView(data))).to.deep.equal([{
+                        kind: 'isoBmffFile',
+                        imageDimensionsOffset: getDimensionsOffset(data, ispe),
+                        rotationOffset: getPlainBoxContentOffset(data, irot),
+                    }]);
+                });
+
+                it('should point at the mode of the imir associated with the primary item', () => {
+                    const imir = getBox('imir', '\x01');
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [UNKNOWN_PROPERTY_BOX, imir],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2]}])],
+                    });
+
+                    expect(findOffsets(getDataView(data))).to.deep.equal([{
+                        kind: 'isoBmffFile',
+                        mirrorOffset: getPlainBoxContentOffset(data, imir),
+                    }]);
+                });
+
+                it('should emit a block for an irot alone', () => {
+                    const irot = getBox('irot', '\x03');
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [irot],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}])],
+                    });
+
+                    expect(findOffsets(getDataView(data))).to.deep.equal([{
+                        kind: 'isoBmffFile',
+                        rotationOffset: getPlainBoxContentOffset(data, irot),
+                    }]);
+                });
+
+                it('should set all four offsets in order whatever order the ipma lists them in', () => {
+                    const ispe = buildIspeBox(12, 2);
+                    const pixi = buildPixiBox([8, 8, 8]);
+                    const irot = getBox('irot', '\x01');
+                    const imir = getBox('imir', '\x00');
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [imir, irot, pixi, ispe],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1, 2, 3, 4]}])],
+                    });
+
+                    const block = getFileBlock(data);
+
+                    expect(Object.keys(block)).to.deep.equal(
+                        ['kind', 'imageDimensionsOffset', 'pixelInformationOffset', 'rotationOffset', 'mirrorOffset']
+                    );
+                    expect(block.imageDimensionsOffset).to.equal(getDimensionsOffset(data, ispe));
+                    expect(block.pixelInformationOffset).to.equal(getChannelCountOffset(data, pixi));
+                    expect(block.rotationOffset).to.equal(getPlainBoxContentOffset(data, irot));
+                    expect(block.mirrorOffset).to.equal(getPlainBoxContentOffset(data, imir));
+                });
+
+                it('should not use an irot or an imir associated only with another item', () => {
+                    const ispe = buildIspeBox(12, 2);
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [ispe, getBox('irot', '\x01'), getBox('imir', '\x01')],
+                        ipmas: [buildIpmaBox([
+                            {itemId: PRIMARY_ITEM_ID, associations: [1]},
+                            {itemId: 1, associations: [2, 3]},
+                        ])],
+                    });
+
+                    expect(findOffsets(getDataView(data))).to.deep.equal([{
+                        kind: 'isoBmffFile',
+                        imageDimensionsOffset: getDimensionsOffset(data, ispe),
+                    }]);
+                });
+
+                it('should emit no block when the primary item\'s only irot has no angle', () => {
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [getBox('irot', '')],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [1]}])],
+                    });
+
+                    expect(findOffsets(getDataView(data))).to.deep.equal([]);
+                });
+
+                it('should use the first irot the primary item lists', () => {
+                    const firstIrot = getBox('irot', '\x01');
+                    const secondIrot = getBox('irot', '\x02');
+                    const data = buildPrimaryItemMetaBox({
+                        properties: [secondIrot, firstIrot],
+                        ipmas: [buildIpmaBox([{itemId: PRIMARY_ITEM_ID, associations: [2, 1]}])],
+                    });
+
+                    expect(getFileBlock(data).rotationOffset).to.equal(getPlainBoxContentOffset(data, firstIrot));
+                });
+            });
         });
 
         // The isoBmffFile block, or an empty object when the finder emits none.
@@ -2164,6 +2417,25 @@ describe('image-header-iso-bmff', () => {
                 const dataView = getDataView(box + NON_NUL_TRAILING_BYTES);
 
                 expect(parseBox(dataView, 0).itemUri).to.equal('urn:example');
+            });
+
+            it('should read no content type after an item name cut by the end of the data', () => {
+                const box = getFullBox(
+                    'infe',
+                    2,
+                    ITEM_ID + ITEM_PROTECTION_INDEX + MIME_TYPE + 'A name\x00' + XMP_CONTENT_TYPE + '\x00'
+                );
+                const nameOffset = box.indexOf('A name');
+                const dataView = getDataView(box.slice(0, nameOffset + 2));
+
+                expect(parseBox(dataView, 0)).to.deep.equal({
+                    type: 'infe',
+                    itemId: 2,
+                    itemProtectionIndex: 0,
+                    itemType: ITEM_INFO_TYPE_MIME,
+                    itemName: 'A ',
+                    length: box.length
+                });
             });
 
             it('should stop the item name of an over-declaring infe at the end of its iinf', () => {
@@ -2390,6 +2662,10 @@ function getDimensionsOffset(data, ispeBox) {
 
 function getChannelCountOffset(data, pixiBox) {
     return data.indexOf(pixiBox) + FULL_BOX_HEADER_SIZE;
+}
+
+function getPlainBoxContentOffset(data, box) {
+    return data.indexOf(box) + PLAIN_BOX_HEADER_SIZE;
 }
 
 // Full-box header is 4 (length) + 4 (type) + 1 (version) + 3 (flags) = 12 bytes.

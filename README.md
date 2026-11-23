@@ -1442,6 +1442,16 @@ Notes
     `Orientation` value of `3` will have `Rotate 180` in the `description`
     property. If you would like more XMP tags to have a processed description,
     please file an issue or create a pull request.
+-   For HEIC/HEIF and AVIF, the `file` tags `Rotation` and `Mirror` come from
+    the primary image's `irot` and `imir` properties, which define how the image
+    is displayed. The `Rotation` value is the angle in degrees anticlockwise, as
+    `irot` stores it, and its description names the same turn clockwise, so a
+    value of `270` is described as `Rotate 90 CW`. `Image Width` and
+    `Image Height` are the size before they apply. An Exif `Orientation` in the
+    same file may describe the same turn, so applying both rotates the image
+    twice (iPhone HEIC files commonly have `irot` and may also carry
+    `Orientation`). When a file has both `irot` and `imir`, the order they apply
+    in is stored in the file, and these two tags do not carry it.
 -   Some text tags use TextDecoder to decode their content. If your specific
     environment does not support it at all or a specific encoding, you will not
     be able to see the decoded value. One example is when [Node.js wasn't

@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The DNG tag `DNGVersion`, described as a dotted version such as `1.4.0.0`,
   and its descriptor in `exifreader/tags/exif`.
+- The `file` tags `Rotation` and `Mirror` for HEIC/HEIF and AVIF, read from
+  the primary image's `irot` and `imir` properties. They are not merged with
+  an Exif `Orientation`.
 
 ### Changed
 
@@ -59,6 +62,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reports `metadataRange.complete` false, with `metadataRange.end` at the
   end the RIFF header declares, so the next read reaches the Exif and XMP
   whatever chunks come before them.
+- An ICC profile in a HEIC/HEIF or AVIF `colr` box that declares more bytes
+  than the box and the rest of the data hold now ends with the box. Its
+  declared size was taken as is, so the profile could run past the data, and
+  `metadataRange` could end far past the end of the file, with `complete`
+  false.
 
 ## [4.55.1] - 2026-11-23
 

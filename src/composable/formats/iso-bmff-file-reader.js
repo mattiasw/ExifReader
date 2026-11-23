@@ -9,6 +9,6 @@ export const isoBmffFile = {
     key: 'file',
     consumes: ['isoBmffFile'],
     emits: [],
-    read: (block, ctx) => parsedTags('file', IsoBmffFileTags.read(ctx.dataView, block.imageDimensionsOffset, block.pixelInformationOffset), ctx),
+    read: (block, ctx) => parsedTags('file', IsoBmffFileTags.read(ctx.dataView, block), ctx),
     merge: () => ({slot: 'isoBmffFile', mode: 'assign'}),
 };

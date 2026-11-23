@@ -21,14 +21,16 @@ describe('composable/formats/iso-bmff-file-reader', () => {
         expect(isoBmffFile.merge({})).to.deep.equal({slot: 'isoBmffFile', mode: 'assign'});
     });
 
-    it('should read the image dimensions and pixel information and filter them', () => {
+    it('should read the tags at the offsets of the block and filter them', () => {
         const {calls, restore} = recordCalls(IsoBmffFileTags, 'read', {ImageWidth: {value: 1}, BitsPerSample: {value: 8}});
         restores.push(restore);
         const ctx = getContext({tagFilter: createTagFilter({includeTags: {file: ['ImageWidth']}})});
 
-        const result = isoBmffFile.read({imageDimensionsOffset: 10, pixelInformationOffset: 20}, ctx);
+        const block = {kind: 'isoBmffFile', imageDimensionsOffset: 10, pixelInformationOffset: 20, rotationOffset: 30, mirrorOffset: 40};
+
+        const result = isoBmffFile.read(block, ctx);
 
         expect(result).to.deep.equal({tags: {ImageWidth: {value: 1}}});
-        expect(calls).to.deep.equal([[ctx.dataView, 10, 20]]);
+        expect(calls).to.deep.equal([[ctx.dataView, block]]);
     });
 });
