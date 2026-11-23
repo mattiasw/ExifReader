@@ -9,15 +9,23 @@ export default {
 };
 
 function read(dataView, fileDataOffset) {
+    const tags = {};
     const length = getLength(dataView, fileDataOffset);
     const numberOfColorComponents = getNumberOfColorComponents(dataView, fileDataOffset, length);
-    return {
-        'Bits Per Sample': getDataPrecision(dataView, fileDataOffset, length),
-        'Image Height': getImageHeight(dataView, fileDataOffset, length),
-        'Image Width': getImageWidth(dataView, fileDataOffset, length),
-        'Color Components': numberOfColorComponents,
-        'Subsampling': numberOfColorComponents && getSubsampling(dataView, fileDataOffset, numberOfColorComponents.value, length)
-    };
+    addTagIfDefined(tags, 'Bits Per Sample', getDataPrecision(dataView, fileDataOffset, length));
+    addTagIfDefined(tags, 'Image Height', getImageHeight(dataView, fileDataOffset, length));
+    addTagIfDefined(tags, 'Image Width', getImageWidth(dataView, fileDataOffset, length));
+    addTagIfDefined(tags, 'Color Components', numberOfColorComponents);
+    if (numberOfColorComponents !== undefined) {
+        addTagIfDefined(tags, 'Subsampling', getSubsampling(dataView, fileDataOffset, numberOfColorComponents.value, length));
+    }
+    return tags;
+}
+
+function addTagIfDefined(tags, name, tag) {
+    if (tag !== undefined) {
+        tags[name] = tag;
+    }
 }
 
 function getLength(dataView, fileDataOffset) {

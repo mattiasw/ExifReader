@@ -71,17 +71,18 @@ describe('file-tags', () => {
     });
 
     it('should handle when marker is shorter than specification dictates', () => {
-        expect(FileTags.read(getDataView(FILE_DATA_CONTENT_ONLY_LENGTH), OFFSET)).to.deep.equal({
-            'Bits Per Sample': undefined,
-            'Image Height': undefined,
-            'Image Width': undefined,
-            'Color Components': undefined,
-            'Subsampling': undefined
-        });
+        expect(FileTags.read(getDataView(FILE_DATA_CONTENT_ONLY_LENGTH), OFFSET)).to.deep.equal({});
         expect(FileTags.read(getDataView(FILE_DATA_CONTENT_ONLY_DATA_PRECISION), OFFSET)['Bits Per Sample']).to.not.be.undefined;
         expect(FileTags.read(getDataView(FILE_DATA_CONTENT_ONLY_IMAGE_HEIGHT), OFFSET)['Image Height']).to.not.be.undefined;
         expect(FileTags.read(getDataView(FILE_DATA_CONTENT_ONLY_IMAGE_WIDTH), OFFSET)['Image Width']).to.not.be.undefined;
         expect(FileTags.read(getDataView(FILE_DATA_CONTENT_ONLY_COLOR_COMPONENTS), OFFSET)['Color Components']).to.not.be.undefined;
+    });
+
+    it('should leave out the tags that the declared length does not cover', () => {
+        expect(FileTags.read(getDataView(FILE_DATA_CONTENT_ONLY_IMAGE_HEIGHT), OFFSET)).to.deep.equal({
+            'Bits Per Sample': {value: 8, description: '8'},
+            'Image Height': {value: 0x0102, description: '258px'}
+        });
     });
 
     it('should only read the fields that fit when the declared length is larger than the data', () => {
@@ -90,16 +91,10 @@ describe('file-tags', () => {
         expect(tags['Image Height']).to.deep.equal({value: 100, description: '100px'});
         expect(tags['Image Width']).to.deep.equal({value: 100, description: '100px'});
         expect(tags['Color Components']).to.deep.equal({value: 3, description: '3'});
-        expect(tags['Subsampling']).to.be.undefined;
+        expect(tags).to.not.have.property('Subsampling');
     });
 
     it('should read no fields when the data ends right after the length field', () => {
-        expect(FileTags.read(getDataView(FILE_DATA_CONTENT_TRUNCATED_AFTER_LENGTH), OFFSET)).to.deep.equal({
-            'Bits Per Sample': undefined,
-            'Image Height': undefined,
-            'Image Width': undefined,
-            'Color Components': undefined,
-            'Subsampling': undefined
-        });
+        expect(FileTags.read(getDataView(FILE_DATA_CONTENT_TRUNCATED_AFTER_LENGTH), OFFSET)).to.deep.equal({});
     });
 });

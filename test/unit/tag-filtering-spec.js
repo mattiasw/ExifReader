@@ -15,7 +15,7 @@ import IccTags from '../../src/icc-tags.js';
 import FileTags from '../../src/file-tags.js';
 import Thumbnail from '../../src/thumbnail.js';
 import Composite from '../../src/composite.js';
-import {createTagFilter} from '../../src/tag-filter.js';
+import {createTagFilter, filterTags} from '../../src/tag-filter.js';
 
 const restoreFunctions = [];
 
@@ -848,6 +848,21 @@ describe('createTagFilter with a falsy includeTags group value', () => {
         expect(filter.shouldParseGroup('gps')).to.equal(true);
         expect(filter.shouldReturnTag('gps', 'GPSLatitude', 0x0002)).to.equal(true);
         expect(filter.shouldParseTag('gps', 'GPSLatitude', 0x0002)).to.equal(true);
+    });
+});
+
+describe('filterTags with a tag that has no value', () => {
+    it('should match the tag by its name, with no id', () => {
+        const matchCalls = [];
+        const matchesTag = (groupKey, tagName, tagId) => {
+            matchCalls.push([groupKey, tagName, tagId]);
+            return true;
+        };
+
+        const filteredTags = filterTags('file', {'Color Components': undefined}, matchesTag);
+
+        expect(matchCalls).to.deep.equal([['file', 'Color Components', undefined]]);
+        expect(Object.keys(filteredTags)).to.deep.equal(['Color Components']);
     });
 });
 

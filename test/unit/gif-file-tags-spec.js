@@ -33,7 +33,15 @@ describe('gif-file-tags', () => {
 
     it('should handle when data view is too small', () => {
         const dataView = getDataView('\x01');
-        expect(GifFileTags.read(dataView)['Image Width']).to.equal(undefined);
+        expect(GifFileTags.read(dataView)).to.deep.equal({});
+    });
+
+    it('should leave out the tags whose bytes are cut off', () => {
+        const dataView = getDataView(FILE_DATA_CONTENT.substring(0, GIF_SIGNATURE.length + 2));
+        expect(GifFileTags.read(dataView)).to.deep.equal({
+            'GIF Version': {value: '87a', description: '87a'},
+            'Image Width': {value: 0x0102, description: '258px'}
+        });
     });
 
     it('should read image height', () => {

@@ -34,7 +34,10 @@ const FIELDS = [
 function read(dataView, fileDataOffset) {
     const tags = {};
     for (let i = 0; i < FIELDS.length; i++) {
-        tags[FIELDS[i].name] = getFieldTag(dataView, fileDataOffset, FIELDS[i]);
+        const tag = getFieldTag(dataView, fileDataOffset, FIELDS[i]);
+        if (tag !== undefined) {
+            tags[FIELDS[i].name] = tag;
+        }
     }
     return tags;
 }

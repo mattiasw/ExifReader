@@ -117,4 +117,18 @@ describe('png-file-tags', () => {
             });
         }
     });
+
+    it('should leave out all tags when no data follows the offset', () => {
+        const dataView = getDataView(FILE_DATA_CONTENT);
+        expect(PngFileTags.read(dataView, FILE_DATA_CONTENT.length)).to.deep.equal({});
+    });
+
+    it('should leave out the tags whose bytes are cut off', () => {
+        const dataView = getDataView(FILE_DATA_CONTENT.substring(0, FILE_DATA_COLOR_TYPE_OFFSET));
+        expect(PngFileTags.read(dataView, 0)).to.deep.equal({
+            'Image Width': {value: 0x01020304, description: '16909060px'},
+            'Image Height': {value: 0x04030201, description: '67305985px'},
+            'Bit Depth': {value: 0x08, description: '8'}
+        });
+    });
 });
