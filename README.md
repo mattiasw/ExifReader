@@ -196,8 +196,8 @@ synchronous unless specified.
 
 ```javascript
 const tags = await ExifReader.load(file);
-const imageDate = tags['DateTimeOriginal'].description;
-const unprocessedTagValue = tags['DateTimeOriginal'].value;
+const imageDate = tags['DateTimeOriginal'].description; // e.g. '2011:03:01 10:53:40'
+const unprocessedTagValue = tags['DateTimeOriginal'].value; // e.g. ['2011:03:01 10:53:40']
 ```
 
 Where `file` is one of
@@ -206,6 +206,20 @@ Where `file` is one of
 *  File path on a local file system (Node.js)
 *  URL (browser or Node.js; remember that in a browser context the remote server
    has to set CORS headers that allow for remote loading of the file)
+
+For an Exif tag, `value` keeps the form the tag is stored in. ASCII text is an
+array of strings, so `DateTimeOriginal` is `['2011:03:01 10:53:40']`. A
+rational is a `[numerator, denominator]` pair and a tag with several rationals
+is an array of such pairs, so `GPSLatitude` is `[[32, 1], [3, 1], [3780, 100]]`
+(degrees, minutes and seconds). `description` is display text, except for
+`GPSLatitude` and `GPSLongitude`, where it is the unsigned decimal coordinate
+as a number (`32.0605`). For plain strings and numbers, pass
+[`computed: true`](#computed-tag-values-opt-in) and read `computed`
+(`'2011:03:01 10:53:40'` and `[32, 3, 37.8]`), or, for signed decimal
+coordinates, use the [`gps` group](#gps) of `expanded: true`. In the flat
+result an XMP tag of the same name replaces the Exif one, and the `value` of an
+XMP `DateTimeOriginal` or `GPSLatitude` is a string; with
+[`expanded: true`](#grouping) the Exif tags stay in `tags.exif`.
 
 **Security:** When the argument is a string, ExifReader treats it as a URL or a
 local file path and will make a network request or read from the file system.
