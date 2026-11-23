@@ -236,7 +236,7 @@ export function parseTags(dataView) {
                 for (let valIndex = 0; valIndex < val.length; valIndex++) {
                     valObj[`${val[valIndex].languageCode}-${val[valIndex].countryCode}`] = val[valIndex].text;
                 }
-                addTag(tags, tagSignature, valObj);
+                addTag(tags, tagSignature, valObj, getLocalizedText(val));
             }
         } else if (tagType === TAG_TYPE_TEXT) {
             const val = readBoundedString(dataView, tagOffset + 8, tagSize - 8, decodeBudget);
@@ -258,10 +258,26 @@ function readBoundedString(dataView, start, requestedLength, budget) {
     return sliceToString(dataView.buffer.slice(start, start + length));
 }
 
-function addTag(tags, tagSignature, value) {
+function addTag(tags, tagSignature, value, description = value) {
     if (iccTags[tagSignature]) {
-        tags[iccTags[tagSignature].name] = {value, description: value};
+        tags[iccTags[tagSignature].name] = {value, description};
     } else {
-        tags[tagSignature] = {value, description: value};
+        tags[tagSignature] = {value, description};
     }
+}
+
+// The record choice of ICC.1:2022 section 10.15, with US English as the desired language.
+function getLocalizedText(records) {
+    const record = findRecord(records, 'en', 'US') || findRecord(records, 'en') || records[0];
+    return record ? record.text : '';
+}
+
+function findRecord(records, languageCode, countryCode) {
+    for (let i = 0; i < records.length; i++) {
+        if ((records[i].languageCode === languageCode)
+            && ((countryCode === undefined) || (records[i].countryCode === countryCode))) {
+            return records[i];
+        }
+    }
+    return undefined;
 }
