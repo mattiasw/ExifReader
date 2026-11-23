@@ -1,6 +1,6 @@
 {
     "gzip": "gzip -9 -n (the gzip command), bytes",
-    "dist": {"version": "4.54.0", "raw": 156197, "gzip": 46919, "maxRatio": 1.04},
+    "dist": {"version": "4.55.1", "raw": 161089, "gzip": 48538, "maxRatio": 1.04},
     "consumers": {
         "webpack": {
             "composable-jpeg-datetime": 12737,
