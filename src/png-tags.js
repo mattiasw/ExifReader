@@ -18,15 +18,21 @@ function read(dataView, chunkOffsets) {
         const chunkType = getStringFromDataView(dataView, chunkOffsets[i] + PNG_CHUNK_TYPE_OFFSET, PNG_CHUNK_TYPE_SIZE);
 
         if (chunkType === TYPE_PHYS) {
-            tags['Pixels Per Unit X'] = getPixelsPerUnitX(dataView, chunkOffsets[i], chunkLength);
-            tags['Pixels Per Unit Y'] = getPixelsPerUnitY(dataView, chunkOffsets[i], chunkLength);
-            tags['Pixel Units'] = getPixelUnits(dataView, chunkOffsets[i], chunkLength);
+            addTagIfDefined(tags, 'Pixels Per Unit X', getPixelsPerUnitX(dataView, chunkOffsets[i], chunkLength));
+            addTagIfDefined(tags, 'Pixels Per Unit Y', getPixelsPerUnitY(dataView, chunkOffsets[i], chunkLength));
+            addTagIfDefined(tags, 'Pixel Units', getPixelUnits(dataView, chunkOffsets[i], chunkLength));
         } else if (chunkType === TYPE_TIME) {
-            tags['Modify Date'] = getModifyDate(dataView, chunkOffsets[i], chunkLength);
+            addTagIfDefined(tags, 'Modify Date', getModifyDate(dataView, chunkOffsets[i], chunkLength));
         }
     }
 
     return tags;
+}
+
+function addTagIfDefined(tags, name, tag) {
+    if (tag !== undefined) {
+        tags[name] = tag;
+    }
 }
 
 function getPixelsPerUnitX(dataView, chunkOffset, chunkLength) {

@@ -40,12 +40,27 @@ describe('png-tags', () => {
         it('should handle when chunk size is smaller than it should', () => {
             const SHORT_CHUNK_LENGTH = '\x00\x00\x00\x06';
             const dataView = getDataView(SHORT_CHUNK_LENGTH + CHUNK_TYPE + '\x01\x02\x03\x04\x00\x00');
-            expect(PngTags.read(dataView, [0])['Pixels Per Unit X']).to.deep.equal({
-                value: 0x01020304,
-                description: '' + parseInt('01020304', 16)
+            expect(PngTags.read(dataView, [0])).to.deep.equal({
+                'Pixels Per Unit X': {
+                    value: 0x01020304,
+                    description: '' + parseInt('01020304', 16)
+                }
             });
-            expect(PngTags.read(dataView, [0])['Pixels Per Unit Y']).to.be.undefined;
-            expect(PngTags.read(dataView, [0])['Pixel Units']).to.be.undefined;
+        });
+
+        it('should give no tags for a chunk with no data', () => {
+            const dataView = getDataView('\x00\x00\x00\x00' + CHUNK_TYPE + '\x00\x00\x00\x00');
+            expect(PngTags.read(dataView, [0])).to.deep.equal({});
+        });
+
+        it('should leave out tags that the buffer ends before', () => {
+            const dataView = getDataView(CHUNK_PREFIX + '\x01\x02\x03\x04');
+            expect(PngTags.read(dataView, [0])).to.deep.equal({
+                'Pixels Per Unit X': {
+                    value: 0x01020304,
+                    description: '' + parseInt('01020304', 16)
+                }
+            });
         });
     });
 
@@ -75,6 +90,17 @@ describe('png-tags', () => {
                 value: [65535, 1, 2, 3, 4, 5],
                 description: '65535-01-02 03:04:05'
             });
+        });
+
+        it('should give no tags for a chunk shorter than a date', () => {
+            const SHORT_CHUNK_LENGTH = '\x00\x00\x00\x06';
+            const dataView = getDataView(SHORT_CHUNK_LENGTH + TYPE_TIME + '\x07\xe7\x03\x0c\x0d\x0e\x1a');
+            expect(PngTags.read(dataView, [0])).to.deep.equal({});
+        });
+
+        it('should give no tags when the buffer ends before the date does', () => {
+            const dataView = getDataView(CHUNK_PREFIX + '\x07\xe7\x03\x0c\x0d\x0e');
+            expect(PngTags.read(dataView, [0])).to.deep.equal({});
         });
     });
 });
