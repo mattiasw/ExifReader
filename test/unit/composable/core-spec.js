@@ -391,7 +391,10 @@ describe('composable/core', () => {
             ]);
         });
 
-        describe('with values from separately bundled copies of the library', () => {
+        describe('with values from separately bundled copies of the library', function () {
+            // The hooks create and remove several hundred files, which takes seconds on a Windows runner.
+            this.timeout(30000);
+
             let copiesPath;
             let copied;
 
