@@ -97,6 +97,26 @@ expandedTags["file"]?.["FileType"]?.value === "pcx";
 // @ts-expect-error
 expandedTags["file"]?.["FileType"]?.description === "PCX";
 
+// HEIC and AVIF rotation and mirroring
+expandedTags["file"]?.["Rotation"]?.value === 270;
+expandedTags["file"]?.["Rotation"]?.description === "Rotate 90 CW";
+expandedTags["file"]?.["Mirror"]?.value === 1;
+expandedTags["file"]?.["Mirror"]?.description === "Mirror horizontal";
+tags["Rotation"]?.value === 90;
+tags["Rotation"]?.description === "Rotate 270 CW";
+tags["Mirror"]?.value === 0;
+tags["Mirror"]?.description === "Mirror vertical";
+// @ts-expect-error
+expandedTags["file"]?.["Rotation"]?.value === 45;
+// @ts-expect-error
+expandedTags["file"]?.["Rotation"]?.description === "Rotate 90 CCW";
+// @ts-expect-error
+expandedTags["file"]?.["Mirror"]?.value === 2;
+// @ts-expect-error
+expandedTags["file"]?.["Mirror"]?.description === "Mirror diagonal";
+// @ts-expect-error
+tags["Rotation"]?.description === "Rotate 90 CCW";
+
 /////////
 // Exif
 if (tags["DateTimeOriginal"]) {

@@ -61,7 +61,7 @@ const MODULE_MARKERS = {
     'dom-parser.js': 'Warning: DOMParser is not available.',
     'xmp-tags.js': 'application/xml',
     'xmp-namespaces.js': 'prefix not bound to a namespace',
-    'xmp-tag-names.js': 'Mirror horizontal',
+    'xmp-tag-names.js': 'Mirror horizontal and rotate',
     'image-header-iso-bmff.js:parseItemInformationBox': 'iinf',
     'image-header-iso-bmff.js:findIinfXmpItemId': 'application/rdf+xml',
     'icc-tags.js': 'mluc',

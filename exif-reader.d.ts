@@ -40,7 +40,9 @@ interface FileTags {
     'Image Height'?: NumberFileTag,
     'Image Width'?: NumberFileTag,
     'Color Components'?: NumberFileTag,
-    'Subsampling'?: NumberArrayFileTag
+    'Subsampling'?: NumberArrayFileTag,
+    'Rotation'?: RotationFileTag,
+    'Mirror'?: MirrorFileTag
 }
 
 interface JfifTags {
@@ -162,6 +164,17 @@ interface GifTags {
 interface NumberFileTag {
     description: string,
     value: number
+}
+
+interface RotationFileTag {
+    /** Degrees anticlockwise, as irot stores them; `description` names the same turn clockwise. */
+    value: 0 | 90 | 180 | 270,
+    description: 'None' | 'Rotate 270 CW' | 'Rotate 180' | 'Rotate 90 CW'
+}
+
+interface MirrorFileTag {
+    value: 0 | 1,
+    description: 'Mirror horizontal' | 'Mirror vertical'
 }
 
 interface NumberArrayFileTag {

@@ -12,27 +12,38 @@ export default {
 const DIMENSIONS_SIZE = 8;
 const HEIGHT_OFFSET = 4;
 const CHANNEL_COUNT_SIZE = 1;
+const TRANSFORM_SIZE = 1;
 
 /**
- * Reads the image width and height of an ispe property and the color
- * components and bits per sample of a pixi property.
+ * Reads the primary image's properties: the width and height of an ispe,
+ * the color components and bits per sample of a pixi, the rotation of an
+ * irot and the mirroring of an imir.
  *
  * @param {DataView} dataView
- * @param {number=} dimensionsOffset Offset of the ispe width field; the
+ * @param {Object} offsets
+ * @param {number=} offsets.imageDimensionsOffset The ispe width field; the
  *     height follows it.
- * @param {number=} pixelInformationOffset Offset of the pixi num_channels
+ * @param {number=} offsets.pixelInformationOffset The pixi num_channels
  *     field; the per-channel bit depths follow it.
- * @returns {Object} Image Width and Image Height, then Color Components and
- *     Bits Per Sample, each part left out when its offset is not given or
- *     its bytes are not there.
+ * @param {number=} offsets.rotationOffset The irot byte holding the angle.
+ * @param {number=} offsets.mirrorOffset The imir byte holding the mode.
+ * @returns {Object} Image Width, Image Height, Color Components, Bits Per
+ *     Sample, Rotation and Mirror, in that order, each part left out when
+ *     its offset is not given or its bytes are not there.
  */
-function read(dataView, dimensionsOffset, pixelInformationOffset) {
+function read(dataView, offsets) {
     const tags = {};
-    if (dimensionsOffset !== undefined) {
-        objectAssign(tags, readImageDimensions(dataView, dimensionsOffset));
+    if (offsets.imageDimensionsOffset !== undefined) {
+        objectAssign(tags, readImageDimensions(dataView, offsets.imageDimensionsOffset));
     }
-    if (pixelInformationOffset !== undefined) {
-        objectAssign(tags, readPixelInformation(dataView, pixelInformationOffset));
+    if (offsets.pixelInformationOffset !== undefined) {
+        objectAssign(tags, readPixelInformation(dataView, offsets.pixelInformationOffset));
+    }
+    if (offsets.rotationOffset !== undefined) {
+        objectAssign(tags, readRotation(dataView, offsets.rotationOffset));
+    }
+    if (offsets.mirrorOffset !== undefined) {
+        objectAssign(tags, readMirror(dataView, offsets.mirrorOffset));
     }
     return tags;
 }
@@ -83,4 +94,32 @@ function getSharedBitDepth(dataView, offset, channelCount) {
         }
     }
     return firstDepth;
+}
+
+function readRotation(dataView, offset) {
+    if (!hasBytes(dataView, offset, TRANSFORM_SIZE)) {
+        return {};
+    }
+    const angle = dataView.getUint8(offset) & 0x03;
+    return {
+        'Rotation': {value: angle * 90, description: getRotationDescription(angle)},
+    };
+}
+
+// irot's angle turns anticlockwise; the descriptions name the same turn
+// clockwise, as Exif Orientation does.
+function getRotationDescription(angle) {
+    return ['None', 'Rotate 270 CW', 'Rotate 180', 'Rotate 90 CW'][angle];
+}
+
+function readMirror(dataView, offset) {
+    if (!hasBytes(dataView, offset, TRANSFORM_SIZE)) {
+        return {};
+    }
+    // 0 exchanges top and bottom, 1 left and right. The first edition of
+    // ISO/IEC 23008-12 words it as an axis, which reads the other way.
+    const mode = dataView.getUint8(offset) & 0x01;
+    return {
+        'Mirror': {value: mode, description: mode === 0 ? 'Mirror vertical' : 'Mirror horizontal'},
+    };
 }

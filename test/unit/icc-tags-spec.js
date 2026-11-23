@@ -909,12 +909,14 @@ describe('icc-tags', () => {
 
         it('should stay bounded for an ISO-BMFF colr box that over-declares its size', () => {
             const dataView = getOverDeclaringIsoBmffDataView();
+            // The profile ends with its colr box: the size field and the 60 bytes after it.
+            const BOXED_PROFILE_LENGTH = 64;
             const {chunks: iccChunks} = findIsoBmffOffsets(dataView).find((block) => block.kind === 'icc');
-            expect(iccChunks[0].length).to.equal(OVER_DECLARED_LENGTH);
+            expect(iccChunks[0].length).to.equal(BOXED_PROFILE_LENGTH);
 
             const {requestedLengths, result} = readAndRecordAllocations(dataView, iccChunks);
 
-            expect(requestedLengths).to.deep.equal([dataView.byteLength]);
+            expect(requestedLengths).to.deep.equal([BOXED_PROFILE_LENGTH]);
             expect(result).to.deep.equal({});
         });
 

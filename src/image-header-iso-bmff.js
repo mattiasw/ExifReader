@@ -35,6 +35,8 @@ const TYPE_PITM = 0x7069746d;
 const TYPE_IPMA = 0x69706d61;
 const TYPE_ISPE = 0x69737065;
 const TYPE_PIXI = 0x70697869;
+const TYPE_IROT = 0x69726f74;
+const TYPE_IMIR = 0x696d6972;
 
 // const EXTENSION_TYPE_FDEL = 0x6664656c;
 
@@ -62,10 +64,11 @@ const UNKNOWN_PROPERTY = {type: undefined};
  * @param {number} offset - The offset at which to start parsing.
  * @param {number} [containerEnd] - The end of the box that declares this one.
  *     A box may not read past it, whatever length it declares for itself.
- *     Defaults to the end of the data, which is what the outermost boxes get.
+ *     The outermost boxes have none: the end of the data can be where a
+ *     partial read stopped, not where the file ends.
  * @returns {Object} The parsed box.
  */
-export function parseBox(dataView, offset, containerEnd = dataView.byteLength) {
+export function parseBox(dataView, offset, containerEnd = Infinity) {
     const VERSION_SIZE = 1;
 
     if (!hasBytes(dataView, offset, BOX_MIN_LENGTH)) {
@@ -93,12 +96,19 @@ export function parseBox(dataView, offset, containerEnd = dataView.byteLength) {
             return parseItemPropertyContainerBox(dataView, offset, contentOffset, length, containerEnd);
         }
         if (type === TYPE_COLR) {
-            return parseColorInformationBox(dataView, contentOffset, length);
+            return parseColorInformationBox(dataView, offset, contentOffset, length, containerEnd);
         }
         if (type === TYPE_IDAT) {
             // idat is a plain box (no version/flags); its data starts directly
             // after the box header.
             return parseItemDataBox(contentOffset, length);
+        }
+        // irot and imir are plain boxes too; their one byte follows the header.
+        if (type === TYPE_IROT) {
+            return parseImageRotationBox(dataView, offset, contentOffset, length, containerEnd);
+        }
+        if (type === TYPE_IMIR) {
+            return parseImageMirrorBox(dataView, offset, contentOffset, length, containerEnd);
         }
 
         // The following are full boxes, also containing version and flags.
@@ -111,7 +121,7 @@ export function parseBox(dataView, offset, containerEnd = dataView.byteLength) {
             return parseMetadataBox(dataView, offset, contentOffset + VERSION_SIZE, length, containerEnd);
         }
         if (type === TYPE_ILOC) {
-            return parseItemLocationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length, containerEnd);
+            return parseItemLocationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length, Math.min(containerEnd, dataView.byteLength));
         }
         if (type === TYPE_IINF) {
             return parseItemInformationBox(dataView, offset, version, contentOffset + VERSION_SIZE, length, containerEnd);
@@ -226,8 +236,10 @@ function hasEmptyHighBits(dataView, offset) {
  * item spans several extents), `xmp` with `chunks` (and `dataView` likewise),
  * `icc` with the first colr profile as its one chunk, and `isoBmffFile` with
  * the primary item's `imageDimensionsOffset` (the width and height fields of
- * its ispe property) and `pixelInformationOffset` (the num_channels field of
- * its pixi property), each present only when it resolves.
+ * its ispe property), `pixelInformationOffset` (the num_channels field of
+ * its pixi property), `rotationOffset` (the byte of its irot property) and
+ * `mirrorOffset` (the byte of its imir property), each present only when it
+ * resolves.
  *
  * @param {DataView} dataView The data view to find blocks in.
  * @param {Array<Object>=} ranges Optional out-array. When provided, receives
@@ -462,20 +474,20 @@ function findIccBlock(metaBox, ranges) {
 }
 
 // Resolves meta > pitm (the primary item) through meta > iprp > ipma (its
-// property indexes) to the ispe and pixi among meta > iprp > ipco's children.
+// property indexes) to the ispe, pixi, irot and imir among meta > iprp >
+// ipco's children.
 function findPrimaryItemPropertyBlock(dataView, metaBox) {
-    const {imageDimensionsOffset, pixelInformationOffset} = findPrimaryItemPropertyOffsets(dataView, metaBox);
-    if (imageDimensionsOffset === undefined && pixelInformationOffset === undefined) {
-        return undefined;
-    }
+    const OFFSET_NAMES = ['imageDimensionsOffset', 'pixelInformationOffset', 'rotationOffset', 'mirrorOffset'];
+    const offsets = findPrimaryItemPropertyOffsets(dataView, metaBox);
     const block = {kind: 'isoBmffFile'};
-    if (imageDimensionsOffset !== undefined) {
-        block.imageDimensionsOffset = imageDimensionsOffset;
+    let hasOffset = false;
+    for (let i = 0; i < OFFSET_NAMES.length; i++) {
+        if (offsets[OFFSET_NAMES[i]] !== undefined) {
+            block[OFFSET_NAMES[i]] = offsets[OFFSET_NAMES[i]];
+            hasOffset = true;
+        }
     }
-    if (pixelInformationOffset !== undefined) {
-        block.pixelInformationOffset = pixelInformationOffset;
-    }
-    return block;
+    return hasOffset ? block : undefined;
 }
 
 function findPrimaryItemPropertyOffsets(dataView, metaBox) {
@@ -500,9 +512,13 @@ function findPrimaryItemPropertyOffsets(dataView, metaBox) {
         }
         const ispe = findProperty(propertyIndexes, ipco.properties, 'ispe');
         const pixi = findProperty(propertyIndexes, ipco.properties, 'pixi');
+        const irot = findProperty(propertyIndexes, ipco.properties, 'irot');
+        const imir = findProperty(propertyIndexes, ipco.properties, 'imir');
         return {
             imageDimensionsOffset: ispe && ispe.dimensionsOffset,
             pixelInformationOffset: pixi && pixi.channelCountOffset,
+            rotationOffset: irot && irot.angleOffset,
+            mirrorOffset: imir && imir.modeOffset,
         };
     } catch (error) {
         return {};
@@ -602,16 +618,27 @@ function parseProperties(dataView, offset, length, containerEnd) {
     return properties;
 }
 
-function parseColorInformationBox(dataView, contentOffset, length) {
+function parseColorInformationBox(dataView, startOffset, contentOffset, length, containerEnd) {
     return {
         type: 'colr',
-        icc: parseIcc(dataView, contentOffset),
+        icc: parseIcc(dataView, contentOffset, getDeclaredBoxEnd(startOffset, length, containerEnd)),
         length,
     };
 }
 
-function parseIcc(dataView, contentOffset) {
+// Unlike getBoxEnd, not bounded by the end of the data, which can be where a
+// partial read stopped.
+function getDeclaredBoxEnd(startOffset, length, containerEnd) {
+    return Math.min(startOffset + length, containerEnd);
+}
+
+function parseIcc(dataView, contentOffset, boxEnd) {
     const COLOR_TYPE_SIZE = 4;
+    const PROFILE_SIZE_SIZE = 4;
+    const profileOffset = contentOffset + COLOR_TYPE_SIZE;
+    if (profileOffset + PROFILE_SIZE_SIZE > boxEnd) {
+        return undefined;
+    }
 
     const colorType = getStringFromDataView(dataView, contentOffset, COLOR_TYPE_SIZE);
     if (colorType !== 'prof' && colorType !== 'rICC') {
@@ -622,11 +649,22 @@ function parseIcc(dataView, contentOffset) {
     }
 
     return {
-        offset: contentOffset + COLOR_TYPE_SIZE,
-        length: dataView.getUint32(contentOffset + COLOR_TYPE_SIZE),
+        offset: profileOffset,
+        length: getProfileLength(dataView, profileOffset, boxEnd),
         chunkNumber: 1,
         chunksTotal: 1
     };
+}
+
+// A profile that runs past its box into bytes the data holds is read as
+// declared, as its tags can still be read. One that claims more ends with its
+// box, so the metadata range does not claim bytes past the end of the file.
+function getProfileLength(dataView, profileOffset, boxEnd) {
+    const declaredLength = dataView.getUint32(profileOffset);
+    if (profileOffset + declaredLength <= dataView.byteLength) {
+        return declaredLength;
+    }
+    return Math.min(declaredLength, boxEnd - profileOffset);
 }
 
 function parseMetadataBox(dataView, startOffset, contentOffset, length, containerEnd) {
@@ -644,6 +682,32 @@ function parseItemDataBox(contentOffset, length) {
         type: 'idat',
         contentOffset,
         length,
+    };
+}
+
+function parseImageRotationBox(dataView, startOffset, contentOffset, length, containerEnd) {
+    const ANGLE_SIZE = 1;
+    if (contentOffset + ANGLE_SIZE > getBoxEnd(dataView, startOffset, length, containerEnd)) {
+        return getUnknownBox(length);
+    }
+
+    return {
+        type: 'irot',
+        angleOffset: contentOffset,
+        length
+    };
+}
+
+function parseImageMirrorBox(dataView, startOffset, contentOffset, length, containerEnd) {
+    const MODE_SIZE = 1;
+    if (contentOffset + MODE_SIZE > getBoxEnd(dataView, startOffset, length, containerEnd)) {
+        return getUnknownBox(length);
+    }
+
+    return {
+        type: 'imir',
+        modeOffset: contentOffset,
+        length
     };
 }
 
@@ -750,9 +814,9 @@ function parseSubBoxes(dataView, offset, length, containerEnd) {
 
 function walkSubBoxes(dataView, offset, length, containerEnd, onBox) {
     // A sub box may declare any length it likes, so bound it by the bytes this
-    // container has, and by the ones that are really there when the file is
-    // truncated. An overrunning box still gets parsed for what fits, which is
-    // what keeps a cut-off file returning the metadata it does contain.
+    // container has; each read is also bounded by the end of the data. An
+    // overrunning box still gets parsed for what fits, which is what keeps a
+    // cut-off file returning the metadata it does contain.
     const subBoxesEnd = Math.min(offset + length, containerEnd);
 
     let currentOffset = offset;
@@ -785,7 +849,7 @@ function parseItemInformationEntryBox(dataView, startOffset, version, contentOff
 
     contentOffset += FLAGS_SIZE;
     const entry = {type: 'infe', length};
-    const entryEnd = Math.min(startOffset + length, containerEnd);
+    const entryEnd = getBoxEnd(dataView, startOffset, length, containerEnd);
 
     if (version === 0 || version === 1) {
         entry.itemId = dataView.getUint16(contentOffset);

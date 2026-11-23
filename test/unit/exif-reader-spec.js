@@ -593,7 +593,7 @@ describe('exif-reader', function () {
 
     it('should read the ISO-BMFF file block with HEIC or AVIF support, not without both', () => {
         swapImageHeader({blocks: [{kind: 'isoBmffFile', imageDimensionsOffset: OFFSET_TEST_VALUE}]});
-        swapTagsRead(IsoBmffFileTags, {MyTag: 42});
+        swapIsoBmffFileTagsRead({MyTag: 42});
 
         expect(ExifReader.loadView()).to.deep.equal({MyTag: 42});
 
@@ -2105,7 +2105,7 @@ describe('exif-reader', function () {
 
         beforeEach(() => {
             swapImageHeader({fileType: FILE_TYPE, blocks: [{kind: 'isoBmffFile', imageDimensionsOffset: OFFSET_TEST_VALUE}]});
-            swapTagsRead(IsoBmffFileTags, myTags);
+            swapIsoBmffFileTagsRead(myTags);
         });
 
         it('should be able to find them', () => {
@@ -2180,7 +2180,7 @@ describe('exif-reader', function () {
             it('should read them when only the pixel information offset is set', () => {
                 swapImageHeader({fileType: FILE_TYPE, blocks: [{kind: 'isoBmffFile', pixelInformationOffset: OFFSET_TEST_VALUE}]});
                 const result = ExifReader.loadView(undefined, {expanded: true});
-                expect(readCalls.map((args) => args.slice(1))).to.deep.equal([[undefined, OFFSET_TEST_VALUE]]);
+                expect(readCalls.map((args) => args[1])).to.deep.equal([{kind: 'isoBmffFile', pixelInformationOffset: OFFSET_TEST_VALUE}]);
                 expect(result.file).to.deep.equal({...pixiTags, FileType: FILE_TYPE});
             });
 
@@ -2192,7 +2192,9 @@ describe('exif-reader', function () {
                     ],
                 });
                 ExifReader.loadView();
-                expect(readCalls.map((args) => args.slice(1))).to.deep.equal([[OFFSET_TEST_VALUE, SECOND_OFFSET_TEST_VALUE]]);
+                expect(readCalls.map((args) => args[1])).to.deep.equal([
+                    {kind: 'isoBmffFile', imageDimensionsOffset: OFFSET_TEST_VALUE, pixelInformationOffset: SECOND_OFFSET_TEST_VALUE},
+                ]);
             });
 
             it('should not read them when a tag filter leaves out the file group', () => {
@@ -2207,6 +2209,25 @@ describe('exif-reader', function () {
                 expect(readCalls).to.have.lengthOf(0);
                 expect(result.file).to.deep.equal({FileType: FILE_TYPE});
             });
+        });
+    });
+
+    describe('HEIC and AVIF rotation and mirroring', () => {
+        const FILE_TYPE = {value: 'heic', description: 'HEIC'};
+
+        it('should read the rotation into the file group and the flat result', () => {
+            swapImageHeader({fileType: FILE_TYPE, blocks: [{kind: 'isoBmffFile', rotationOffset: 0}]});
+            const rotation = {value: 270, description: 'Rotate 90 CW'};
+
+            expect(ExifReader.loadView(getDataView('\x03'), {expanded: true}).file).to.deep.equal({Rotation: rotation, FileType: FILE_TYPE});
+            expect(ExifReader.loadView(getDataView('\x03')).Rotation).to.deep.equal(rotation);
+        });
+
+        it('should read the mirroring into the file group', () => {
+            swapImageHeader({fileType: FILE_TYPE, blocks: [{kind: 'isoBmffFile', mirrorOffset: 0}]});
+
+            expect(ExifReader.loadView(getDataView('\x01'), {expanded: true}).file)
+                .to.deep.equal({Mirror: {value: 1, description: 'Mirror horizontal'}, FileType: FILE_TYPE});
         });
     });
 
@@ -5588,6 +5609,17 @@ function swapTagsRead(tagsModule, tagsValue, makerNoteOffset = undefined) {
             }
             return {};
         },
+    });
+}
+
+function swapIsoBmffFileTagsRead(tagsValue) {
+    swap(IsoBmffFileTags, {
+        read(dataView, offsets) {
+            if (offsets.imageDimensionsOffset === OFFSET_TEST_VALUE) {
+                return tagsValue;
+            }
+            return {};
+        }
     });
 }
 
