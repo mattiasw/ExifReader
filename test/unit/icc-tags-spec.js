@@ -217,6 +217,39 @@ describe('icc-tags', () => {
         expect(tags['ICC Description'].value).to.deep.equal({'en-US': 'Hi', 'sv-SE': 'Hi'});
     });
 
+    it('should describe an mluc tag with several records by its en-US text', () => {
+        const tags = parseTags(getMlucProfile([['hr', 'HR', 'a'], ['en', 'GB', 'b'], ['en', 'US', 'c']]));
+
+        expect(tags.dscm.value).to.deep.equal({'hr-HR': 'a', 'en-GB': 'b', 'en-US': 'c'});
+        expect(tags.dscm.description).to.equal('c');
+    });
+
+    it('should describe an mluc tag without an en-US record by its first English text', () => {
+        const tags = parseTags(getMlucProfile([['hr', 'HR', 'a'], ['en', 'GB', 'b'], ['en', 'AU', 'c']]));
+
+        expect(tags.dscm.description).to.equal('b');
+    });
+
+    it('should describe an mluc tag without an English record by its first record', () => {
+        const tags = parseTags(getMlucProfile([['hr', 'HR', 'a'], ['fr', 'FR', 'b']]));
+
+        expect(tags.dscm.description).to.equal('a');
+    });
+
+    it('should describe an mluc tag by the text of its first record when a later record repeats its locale', () => {
+        const tags = parseTags(getMlucProfile([['fr', 'FR', 'a'], ['fr', 'FR', 'b']]));
+
+        expect(tags.dscm.value).to.deep.equal({'fr-FR': 'b'});
+        expect(tags.dscm.description).to.equal('a');
+    });
+
+    it('should describe an mluc tag without records as empty text', () => {
+        const tags = parseTags(getMlucProfile([]));
+
+        expect(tags.dscm.value).to.deep.equal({});
+        expect(tags.dscm.description).to.equal('');
+    });
+
     it('should bound total text across text tags sharing one region', () => {
         const SIZE = 4096;
         const TEXT_OFFSET = 2600;
@@ -1161,6 +1194,28 @@ function getCraftedIccProfile(size) {
     dataView.setUint32(0, size);
     writeString(36, 'acsp');
     return {dataView, writeString, addTagEntry};
+}
+
+// One 'dscm' mluc tag whose records are [languageCode, countryCode, text], each text one character.
+function getMlucProfile(records) {
+    const MLUC_OFFSET = 200;
+    const RECORDS_OFFSET = 16;
+    const RECORD_SIZE = 12;
+    const textsOffset = RECORDS_OFFSET + records.length * RECORD_SIZE;
+    const profile = getCraftedIccProfile(400);
+    profile.writeString(MLUC_OFFSET, 'mluc');
+    profile.dataView.setUint32(MLUC_OFFSET + 8, records.length);
+    profile.dataView.setUint32(MLUC_OFFSET + 12, RECORD_SIZE);
+    records.forEach(([languageCode, countryCode, text], index) => {
+        const recordOffset = MLUC_OFFSET + RECORDS_OFFSET + index * RECORD_SIZE;
+        const textOffset = textsOffset + index * 2;
+        profile.writeString(recordOffset, languageCode + countryCode);
+        profile.dataView.setUint32(recordOffset + 4, 2);
+        profile.dataView.setUint32(recordOffset + 8, textOffset);
+        profile.dataView.setUint16(MLUC_OFFSET + textOffset, text.charCodeAt(0));
+    });
+    profile.addTagEntry('dscm', MLUC_OFFSET, textsOffset + records.length * 2);
+    return profile.dataView;
 }
 
 function getSignatures(prefix, count) {

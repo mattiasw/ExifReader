@@ -232,13 +232,21 @@ describe('tags-helpers', () => {
         expect(tags['undefined-18193'].value).to.equal(0x42);
     });
 
-    it('keeps the array value of an unknown tag as its description', () => {
+    it('should describe an unknown tag with several values as its values separated by commas', () => {
         // Field count + field with two SHORTs + offset to next IFD.
         const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x03\x00\x00\x00\x02\x00\x42\x00\x43' + '\x00\x00\x00\x00');
         restoreTagNames = swapProperties(TagNames, {'0th': {}});
         const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, true);
         expect(tags['undefined-18193'].value).to.deep.equal([0x42, 0x43]);
-        expect(tags['undefined-18193'].description).to.deep.equal([0x42, 0x43]);
+        expect(tags['undefined-18193'].description).to.equal('66, 67');
+    });
+
+    it('should describe an unknown RATIONAL tag by its quotients separated by commas', () => {
+        // Field count + offsetted RATIONAL field + offset to next IFD + values 9/2 and 0/0 at offset 0x12.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x05\x00\x00\x00\x02\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\x00\x00\x00\x09\x00\x00\x00\x02' + '\x00\x00\x00\x00\x00\x00\x00\x00');
+        restoreTagNames = swapProperties(TagNames, {'0th': {}});
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, true);
+        expect(tags['undefined-18193'].description).to.equal('4.5, n/d');
     });
 
     it('should ignore undefined IFDs', () => {

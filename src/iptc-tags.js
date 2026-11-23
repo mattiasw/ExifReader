@@ -295,14 +295,7 @@ function getTagDescription(tag, tagValue, tags, encoding) {
             // Fall through to next handler.
         }
     }
-    if (tagValueIsText(tag, tagValue)) {
-        return TagDecoder.decode(encoding, tagValue);
-    }
-    return tagValue;
-}
-
-function tagValueIsText(tag, tagValue) {
-    return tag && tagValue instanceof Array;
+    return TagDecoder.decode(encoding, tagValue);
 }
 
 function hasDescriptionProperty(tag) {

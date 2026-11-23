@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `DNGBackwardVersion` is described as a dotted version such as `1.4.0.0`
   instead of `1, 4, 0, 0`.
+- The descriptions that were still not strings, apart from the decimal
+  `GPSLatitude` and `GPSLongitude`, are strings now. A tag the build has no
+  name for (`undefined-<id>`, with `includeUnknown` or in a custom
+  build that leaves its tag names out) is described like a named tag without a
+  description function: its values separated by commas, rationals as their
+  quotients, so `undefined-282` with the value `[72, 1]` is described as `72`,
+  and an IPTC dataset as its text. An ICC tag with texts in several languages,
+  such as `dscm`, is described by its `en-US` text, else its first English
+  text, else its first text. Its value is still the object of all of them. An
+  ICC `Rendering Intent` other than the four the specification defines is
+  described as its number in a string, and an unknown Photoshop resource, which
+  had no description, is described as its value.
 
 ### Fixed
 

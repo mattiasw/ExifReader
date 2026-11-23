@@ -149,12 +149,12 @@ describe('iptc-tags', function () {
         expect(tags['MyIptcTag'].description).to.equal('B');
     });
 
-    it('should read included undefined IPTC NAA resource tag', () => {
+    it('should read included undefined IPTC NAA resource tag and describe it as text', () => {
         const dataView = getNaaBlockDataView('\x1c\x47\x11\x00\x02\x42\x43');
         const tags = IptcTags.read(dataView, 0, true);
         expect(tags['undefined-18193'].id).to.equal(0x4711);
         expect(tags['undefined-18193'].value).to.deep.equal([0x42, 0x43]);
-        expect(tags['undefined-18193'].description).to.deep.equal([0x42, 0x43]);
+        expect(tags['undefined-18193'].description).to.equal('BC');
     });
 
     it('should ignore excluded undefined IPTC NAA resource tag', () => {
@@ -520,6 +520,14 @@ describe('iptc-tags', function () {
 
                 expect(tags['Headline'].description).to.equal('Я могу');
                 expect(tags['Coded Character Set']).to.be.undefined;
+            });
+
+            it('should decode an unknown dataset with it', () => {
+                restores.push(swapProperties(IptcTagNames.iptc, {0x0269: undefined}));
+
+                const tags = IptcTags.read(dataView, 0, true);
+
+                expect(tags['undefined-617'].description).to.equal('Я могу');
             });
 
             it('should decode with it when the tag names lack it and unknown tags are included', () => {

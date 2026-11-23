@@ -185,9 +185,9 @@ describe('photoshop-tags', () => {
         expect(PhotoshopTags.read(bytes)).to.deep.equal({});
     });
 
-    it('should include unknown tags if specified', () => {
+    it('should include unknown tags if specified, described as their value', () => {
         const bytes = getPhotoshopBytes({id: 0x4711, resource: '\x42\x43'});
-        expect(PhotoshopTags.read(bytes, true)).to.deep.equal({'undefined-18193': {id: 0x4711, value: '\x42\x43'}});
+        expect(PhotoshopTags.read(bytes, true)).to.deep.equal({'undefined-18193': {id: 0x4711, value: '\x42\x43', description: '\x42\x43'}});
     });
 
     it('should match an unknown tag by its returned name when filtering', () => {
@@ -195,7 +195,7 @@ describe('photoshop-tags', () => {
 
         const tags = PhotoshopTags.read(bytes, true, createTagFilter({includeTags: {photoshop: ['undefined-18193']}}));
 
-        expect(tags).to.deep.equal({'undefined-18193': {id: 0x4711, value: '\x42\x43'}});
+        expect(tags).to.deep.equal({'undefined-18193': {id: 0x4711, value: '\x42\x43', description: '\x42\x43'}});
     });
 
     it('should not match an unknown tag by its encoded name when filtering', () => {

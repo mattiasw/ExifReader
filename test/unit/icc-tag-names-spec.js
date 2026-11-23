@@ -96,6 +96,10 @@ describe('icc-tag-names', () => {
         expect(iccProfile[64].description(1)).to.equal('Relative Colorimetric');
     });
 
+    it('should describe a Rendering Intent outside the defined ones as its number in a string', () => {
+        expect(iccProfile[64].description(7)).to.equal('7');
+    });
+
     it('should report Profile Creator at position 80', () => {
         expect(iccProfile[80].name).to.equal('Profile Creator');
         expect(iccProfile[80].value(dataViewFromString('1234'), 0)).to.equal('1234');
