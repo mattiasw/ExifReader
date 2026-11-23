@@ -39,7 +39,7 @@ Users can configure custom builds (via `package.json` `"exifreader"` key) to inc
 | All tests (E2Es need the local server running with `npm run start`) | `npm run test:all` |
 | Bundle-size gate (a CI job, not part of the pre-push hook) | `npm run test:bundle-size` |
 
-`test/bundle-size/baseline.json` holds fixed numbers: the v4.54.0 full bundle and each consumer's gzip floor. The gate fails when a bundle is more than a few percent over its number. Changing the file is a commit of its own and needs no CHANGELOG entry. Never re-baseline against the previous commit.
+`test/bundle-size/baseline.json` holds fixed numbers: the v4.55.1 full bundle and each consumer's gzip floor. The gate fails when a bundle is more than a few percent over its number. Changing the file is a commit of its own and needs no CHANGELOG entry. Never re-baseline against the previous commit.
 
 ## Before Committing
 
