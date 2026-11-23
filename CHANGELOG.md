@@ -41,9 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SubjectDistance` is described as `Unknown` for numerator 0 and as `Infinity`
   for numerator 0xFFFFFFFF, as the Exif specification defines them, instead of
   `0 m` (`NaN m` for 0/0) and `4294967295 m`.
-- A PNG, GIF or JPEG file cut off inside its image header, and a JPEG whose
-  frame header is shorter than its fields, no longer give the header tags they
-  lack as keys with an undefined value. The tags are left out of the result.
+- A PNG, GIF or JPEG file cut off inside its image header, a JPEG whose frame
+  header is shorter than its fields, and a PNG `pHYs` or `tIME` chunk shorter
+  than its fields no longer give the tags they lack as keys with an undefined
+  value. The tags are left out of the result.
 - The TypeScript type of the ICC `Rendering Intent` value is a number, and that
   of an ICC tag with texts in several languages, such as `ICC Description` or,
   with `expanded: true`, `dscm`, admits an object of locale to text as well as
