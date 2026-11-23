@@ -14,12 +14,14 @@ export default {
  * @param {DataView} dataView The data view to inspect.
  * @param {boolean=} includeRanges When true, the finder also records where
  *     each block's bytes sit in the file. The result then gains `ranges`, a
- *     list of `{block, start, end}` in file order, and `truncated`, true when
- *     the finder never reached the end of the file's metadata.
+ *     list of `{block, start, end}` in file order, `truncated`, true when
+ *     the finder never reached the end of the file's metadata, and, only from
+ *     a finder that reports one, `resumeEnd`, how far the buffer must reach
+ *     for the finder to read on.
  * @param {Array<{header: {fileType: {value: string, description: string}, detect: function, find: function}}>} formats
  *     The composed formats in detection order; the first whose `detect`
  *     matches runs its `find`.
- * @returns {{fileType: {value: string, description: string}, blocks: Array<Object>, ranges: (Array<Object>|undefined), truncated: (boolean|undefined)}}
+ * @returns {{fileType: {value: string, description: string}, blocks: Array<Object>, ranges: (Array<Object>|undefined), truncated: (boolean|undefined), resumeEnd: (number|undefined)}}
  *     The blocks the finder found, each `{kind, ...payload}`.
  * @throws {UnsupportedFormatError} When the data view is not a recognized
  *     image format.
@@ -44,6 +46,9 @@ function finalize(blocks, fileType, fileTypeDescription, ranges) {
         // Surface the finder's .truncated array convention as a sibling
         // field so consumers don't depend on properties on the array.
         result.truncated = !!ranges.truncated;
+        if (ranges.resumeEnd) {
+            result.resumeEnd = ranges.resumeEnd;
+        }
     }
     return result;
 }

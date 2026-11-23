@@ -95,6 +95,7 @@ const OFFSET_TEST_VALUE_ICC2_1 = 27110;
 const OFFSET_TEST_VALUE_ICC2_2 = 47110;
 const OFFSET_TEST_VALUE_ICC2_3 = 67110;
 const OFFSET_TEST_VALUE_MAKER_NOTE = 4812;
+const WEBP_IMAGE_DATA_LENGTH = 2 * 1024 * 1024;
 
 const restoreFunctions = [];
 
@@ -3006,6 +3007,16 @@ describe('exif-reader', function () {
             expect(tags.metadataRange.end).to.equal(5000);
         });
 
+        it('should mark a WebP prefix that ends inside the image data incomplete and point its end at the RIFF end', () => {
+            const fullBuffer = getArrayBuffer(getWebpWithImageData(WEBP_IMAGE_DATA_LENGTH));
+
+            const tags = ExifReader.load(fullBuffer.slice(0, 128 * 1024), {expanded: true, includeOffsets: true});
+
+            expect(tags.exif).to.equal(undefined);
+            expect(tags.metadataRange.complete).to.equal(false);
+            expect(tags.metadataRange.end).to.equal(fullBuffer.byteLength);
+        });
+
         it('should omit metadataRange when there are no blocks (e.g. plain TIFF)', () => {
             swapImageHeader({
                 ranges: [],
@@ -3624,6 +3635,84 @@ describe('exif-reader', function () {
                     },
                 };
             }
+
+            it('should read the Exif and XMP of a WebP that come after a large image chunk in 2 fetches', async () => {
+                const fullBuffer = getArrayBuffer(getWebpWithImageData(WEBP_IMAGE_DATA_LENGTH));
+                const domParser = new XmldomParser();
+                const fullTags = ExifReader.load(fullBuffer, {expanded: true, includeOffsets: true, domParser});
+                installFetchMock(fullBuffer);
+
+                const tags = await ExifReader.load(URL, {...AUTO_OPTIONS, domParser});
+
+                expect(tags.exif.Make.description).to.equal('Make');
+                expect(tags.xmp.Label.description).to.equal('webp');
+                expect(tags.exif).to.deep.equal(fullTags.exif);
+                expect(tags.xmp).to.deep.equal(fullTags.xmp);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.end).to.equal(fullBuffer.byteLength);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(fetchCalls).to.have.lengthOf(2);
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+            });
+
+            it('should read the Exif and XMP of an animated WebP that come after many frames in 2 fetches', async () => {
+                const fullBuffer = getArrayBuffer(getAnimatedWebpWithMetadata(20, 100 * 1024));
+                const domParser = new XmldomParser();
+                const fullTags = ExifReader.load(fullBuffer, {expanded: true, includeOffsets: true, domParser});
+                installFetchMock(fullBuffer);
+
+                const tags = await ExifReader.load(URL, {...AUTO_OPTIONS, domParser});
+
+                expect(tags.exif.Make.description).to.equal('Make');
+                expect(tags.xmp.Label.description).to.equal('webp');
+                expect(tags.exif).to.deep.equal(fullTags.exif);
+                expect(tags.xmp).to.deep.equal(fullTags.xmp);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.end).to.equal(fullBuffer.byteLength);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(fetchCalls).to.have.lengthOf(2);
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+            });
+
+            it('should read the Exif of a WebP that comes after unknown chunks in 2 fetches', async () => {
+                const fullBuffer = getArrayBuffer(getWebpWithUnknownChunks(200000, [500000, 1100000, 2300000]));
+                const fullTags = ExifReader.load(fullBuffer, {expanded: true, includeOffsets: true});
+                installFetchMock(fullBuffer);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(tags.exif.Make.description).to.equal('Make');
+                expect(tags.exif).to.deep.equal(fullTags.exif);
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.end).to.equal(fullBuffer.byteLength);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(fetchCalls).to.have.lengthOf(2);
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+            });
+
+            it('should stop after 2 fetches with complete false on a WebP cut off before its RIFF end when the server reports the file size', async () => {
+                const fullBuffer = getArrayBuffer(getAnimatedWebpWithMetadata(20, 100 * 1024));
+                installFetchMock(fullBuffer.slice(0, 1000 * 1000));
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(tags.metadataRange.complete).to.equal(false);
+                expect(tags.metadataRange.end).to.equal(fullBuffer.byteLength);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(fetchCalls).to.have.lengthOf(2);
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+            });
+
+            it('should read an animated WebP that declares no Exif or XMP in 1 fetch when its first frame runs past the first read', async () => {
+                installFetchMock(getArrayBuffer(getAnimatedWebpWithoutMetadata(200 * 1024)));
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(tags.metadataRange.complete).to.equal(true);
+                expect(tags.metadataRange.requests).to.equal(1);
+                expect(fetchCalls).to.have.lengthOf(1);
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+            });
 
             it('should converge in 1 fetch when metadata fits in the initial 128 KiB', async () => {
                 swapForAutoTest({end: 4000});
@@ -5713,6 +5802,43 @@ function getWebpWithMetadata() {
         + getWebpChunk('EXIF', getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]}))
         + getWebpChunk('XMP ', getXmpPacket({Label: 'webp'}))
         + getWebpChunk('ICCP', getIccProfile('TEST'));
+    return 'RIFF' + getLittleEndianByteString(4 + chunks.length) + 'WEBP' + chunks;
+}
+
+// A WebP whose VP8X chunk declares Exif and XMP, an image chunk of the given data length, then EXIF and XMP chunks.
+function getWebpWithImageData(imageDataLength) {
+    const chunks = getWebpChunk('VP8X', '\x0c' + '\x00'.repeat(9))
+        + getWebpChunk('VP8 ', '\x00'.repeat(imageDataLength))
+        + getWebpChunk('EXIF', getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]}))
+        + getWebpChunk('XMP ', getXmpPacket({Label: 'webp'}));
+    return 'RIFF' + getLittleEndianByteString(4 + chunks.length) + 'WEBP' + chunks;
+}
+
+// An animated WebP whose VP8X chunk declares neither Exif nor XMP, with two frames of the given data length.
+function getAnimatedWebpWithoutMetadata(frameDataLength) {
+    const chunks = getWebpChunk('VP8X', '\x02' + '\x00'.repeat(9))
+        + getWebpChunk('ANIM', '\x00'.repeat(6))
+        + getWebpChunk('ANMF', '\x00'.repeat(frameDataLength))
+        + getWebpChunk('ANMF', '\x00'.repeat(frameDataLength));
+    return 'RIFF' + getLittleEndianByteString(4 + chunks.length) + 'WEBP' + chunks;
+}
+
+// An animated WebP whose VP8X chunk declares Exif and XMP, with frames of the given data length, then EXIF and XMP chunks.
+function getAnimatedWebpWithMetadata(frameCount, frameDataLength) {
+    const chunks = getWebpChunk('VP8X', '\x0e' + '\x00'.repeat(9))
+        + getWebpChunk('ANIM', '\x00'.repeat(6))
+        + getWebpChunk('ANMF', '\x00'.repeat(frameDataLength)).repeat(frameCount)
+        + getWebpChunk('EXIF', getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]}))
+        + getWebpChunk('XMP ', getXmpPacket({Label: 'webp'}));
+    return 'RIFF' + getLittleEndianByteString(4 + chunks.length) + 'WEBP' + chunks;
+}
+
+// A WebP whose VP8X chunk declares Exif, an image chunk, chunks of an unknown id with the given data lengths, then an EXIF chunk.
+function getWebpWithUnknownChunks(imageDataLength, unknownChunkDataLengths) {
+    const chunks = getWebpChunk('VP8X', '\x08' + '\x00'.repeat(9))
+        + getWebpChunk('VP8 ', '\x00'.repeat(imageDataLength))
+        + unknownChunkDataLengths.map((length) => getWebpChunk('abcd', '\x00'.repeat(length))).join('')
+        + getWebpChunk('EXIF', getTiff({ifd0: [ascii(TAG_MAKE, 'Make')]}));
     return 'RIFF' + getLittleEndianByteString(4 + chunks.length) + 'WEBP' + chunks;
 }
 

@@ -116,6 +116,132 @@ describe('image-header-webp', () => {
             findBlocks({missingMetaData: true}, ranges);
             expect(ranges).to.deep.equal([]);
         });
+
+        it('should not mark a complete file as truncated', () => {
+            const ranges = [];
+            ImageHeaderWebp.findOffsets(getDataView(
+                'RIFF\x22\x00\x00\x00WEBP'
+                + 'VP8X\x0a\x00\x00\x00\x3e\x00\x00\x00\x03\x02\x01\x04\x03\x02'
+                + 'EXIF\x04\x00\x00\x00abcd'
+            ), ranges);
+            expect(ranges.truncated).to.equal(false);
+            expect(ranges).to.not.have.property('resumeEnd');
+        });
+
+        it('should mark the walk truncated and resume at the RIFF end when an image chunk overruns the view and more chunks follow it', () => {
+            const ranges = [];
+            ImageHeaderWebp.findOffsets(getDataView(
+                'RIFF\x28\x00\x00\x00WEBP'
+                + 'VP8 \x0f\x00\x00\x00abcd'
+            ), ranges);
+            expect(ranges.truncated).to.equal(true);
+            expect(ranges.resumeEnd).to.equal(8 + 0x28);
+        });
+
+        it('should mark the walk truncated when the view ends between chunks before the RIFF end', () => {
+            const ranges = [];
+            ImageHeaderWebp.findOffsets(getDataView(
+                'RIFF\x40\x00\x00\x00WEBP'
+                + 'VP8 \x04\x00\x00\x00abcd'
+            ), ranges);
+            expect(ranges.truncated).to.equal(true);
+            expect(ranges.resumeEnd).to.equal(8 + 0x40);
+        });
+
+        it('should resume at the RIFF end when the view ends right after a chunk header', () => {
+            const head = 'RIFF\x1c\x00\x00\x00WEBP'
+                + 'VP8 \x04\x00\x00\x00abcd'
+                + 'EXIF\x04\x00\x00\x00';
+            const cutRanges = [];
+            ImageHeaderWebp.findOffsets(getDataView(head), cutRanges);
+            expect(cutRanges.truncated).to.equal(true);
+            expect(cutRanges.resumeEnd).to.equal(8 + 0x1c);
+
+            const resumedView = getDataView(head + 'abcd');
+            const resumedRanges = [];
+            const blocks = ImageHeaderWebp.findOffsets(resumedView, resumedRanges);
+            expect(resumedView.byteLength).to.equal(cutRanges.resumeEnd);
+            expect(resumedRanges).to.deep.equal([{block: blocks[0], start: 24, end: 36}]);
+            expect(resumedRanges.truncated).to.equal(false);
+        });
+
+        it('should not mark the walk truncated when the chunk that overruns the view is the last one the RIFF size declares', () => {
+            const ranges = [];
+            ImageHeaderWebp.findOffsets(getDataView(
+                'RIFF\x2e\x00\x00\x00WEBP'
+                + 'VP8X\x0a\x00\x00\x00\x3e\x00\x00\x00\x03\x02\x01\x04\x03\x02'
+                + 'VP8 \x10\x00\x00\x00abcd'
+            ), ranges);
+            expect(ranges.truncated).to.equal(false);
+            expect(ranges).to.not.have.property('resumeEnd');
+        });
+
+        it('should not mark a file that ends in an empty chunk as truncated', () => {
+            const ranges = [];
+            ImageHeaderWebp.findOffsets(getDataView(
+                'RIFF\x18\x00\x00\x00WEBP'
+                + 'VP8 \x04\x00\x00\x00abcd'
+                + 'EXIF\x00\x00\x00\x00'
+            ), ranges);
+            expect(ranges.truncated).to.equal(false);
+        });
+
+        it('should not mark the walk truncated when the RIFF size is smaller than the data', () => {
+            const ranges = [];
+            ImageHeaderWebp.findOffsets(getDataView(
+                'RIFF\x10\x00\x00\x00WEBP'
+                + 'VP8X\x0a\x00\x00\x00\x3e\x00\x00\x00\x03\x02\x01\x04\x03\x02'
+                + 'EXIF\x04\x00\x00\x00abcd'
+            ), ranges);
+            expect(ranges.truncated).to.equal(false);
+        });
+
+        it('should mark a cut-off file truncated only when a chunk header fits before the RIFF end', () => {
+            const chunks = 'WEBP' + 'VP8 \x04\x00\x00\x00abcd';
+            const noRoomRanges = [];
+            ImageHeaderWebp.findOffsets(getDataView('RIFF\x18\x00\x00\x00' + chunks), noRoomRanges);
+            expect(noRoomRanges.truncated).to.equal(false);
+
+            const roomRanges = [];
+            ImageHeaderWebp.findOffsets(getDataView('RIFF\x19\x00\x00\x00' + chunks), roomRanges);
+            expect(roomRanges.truncated).to.equal(true);
+            expect(roomRanges.resumeEnd).to.equal(8 + 0x19);
+        });
+
+        it('should not mark the walk truncated when the VP8X flags declare neither Exif nor XMP', () => {
+            const ranges = [];
+            ImageHeaderWebp.findOffsets(getDataView(getAnimatedWebpPrefix('\x32')), ranges);
+            expect(ranges.truncated).to.equal(false);
+            expect(ranges).to.not.have.property('resumeEnd');
+        });
+
+        it('should mark the walk truncated when the VP8X flags declare Exif or XMP', () => {
+            for (const flags of ['\x08', '\x04']) {
+                const ranges = [];
+                ImageHeaderWebp.findOffsets(getDataView(getAnimatedWebpPrefix(flags)), ranges);
+                expect(ranges.truncated).to.equal(true);
+                expect(ranges.resumeEnd).to.equal(8 + 0x46);
+            }
+        });
+
+        it('should resume at the RIFF end, not past the next chunk header, when the view ends inside one of several chunks', () => {
+            const ranges = [];
+            ImageHeaderWebp.findOffsets(getDataView(
+                'RIFF\x46\x00\x00\x00WEBP'
+                + 'VP8X\x0a\x00\x00\x00\x08\x00\x00\x00\x03\x02\x01\x04\x03\x02'
+                + 'ANMF\x04\x00\x00\x00abcd'
+                + 'ANMF\x10\x00\x00\x00abcd'
+            ), ranges);
+            expect(ranges.truncated).to.equal(true);
+            expect(ranges.resumeEnd).to.equal(8 + 0x46);
+        });
+
+        // The RIFF size declares 24 bytes after the ANMF chunk, which runs past the view.
+        function getAnimatedWebpPrefix(flags) {
+            return 'RIFF\x46\x00\x00\x00WEBP'
+                + 'VP8X\x0a\x00\x00\x00' + flags + '\x00\x00\x00\x03\x02\x01\x04\x03\x02'
+                + 'ANMF\x10\x00\x00\x00abcd';
+        }
     });
 
     function findBlocks(options, ranges) {

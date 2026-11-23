@@ -539,6 +539,55 @@ describe('loadView pipeline module', function () {
             expect(tags.metadataRange.end).to.equal(100);
         });
 
+        it('should raise end to metadataResumeEnd when the step is truncated and the resume end lies further', function () {
+            const tags = mergeMetadataRangeBlock({
+                metadataBlocks: [{type: 'riff', start: 12, end: 30}],
+                metadataTruncated: true,
+                metadataResumeEnd: 2097245,
+            });
+
+            expect(tags.metadataRange).to.deep.equal({
+                start: 12,
+                end: 2097245,
+                complete: false,
+                blocks: [{type: 'riff', start: 12, end: 30}],
+            });
+        });
+
+        it('should not raise end to metadataResumeEnd when the step is not truncated', function () {
+            const tags = mergeMetadataRangeBlock({
+                metadataBlocks: [{type: 'riff', start: 12, end: 30}],
+                metadataResumeEnd: 2097245,
+            });
+
+            expect(tags.metadataRange.end).to.equal(30);
+            expect(tags.metadataRange.complete).to.equal(true);
+        });
+
+        it('should keep the largest block end when metadataResumeEnd lies before it', function () {
+            const tags = mergeMetadataRangeBlock({
+                metadataBlocks: [{type: 'exif', start: 12, end: 5000}],
+                metadataTruncated: true,
+                metadataResumeEnd: 45,
+            });
+
+            expect(tags.metadataRange.end).to.equal(5000);
+            expect(tags.metadataRange.complete).to.equal(false);
+        });
+
+        function mergeMetadataRangeBlock(fields) {
+            return mergeBlock({
+                block: {slot: 'metadataRange', mode: 'metadataRange', ...fields},
+                parsedGroups: {},
+                expanded: true,
+                tagFilter: createTagFilter({}),
+                dataView: {byteLength: 1024},
+                fileType: undefined,
+                tags: {},
+                deps: createPipelineDeps(),
+            });
+        }
+
         it('should mark complete:false when a block end exceeds dataView.byteLength', function () {
             const tags = mergeBlock({
                 block: {

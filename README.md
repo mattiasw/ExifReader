@@ -500,6 +500,11 @@ Requirements and caveats:
 - Not supported for plain TIFF or bare JPEG XL codestreams. They have no
   leading metadata container, so the loop has no convergence signal and
   will reject with an error.
+- For WebP, `length: 'auto'` looks for metadata up to the end the RIFF
+  header declares, which takes at most two requests when that end is the
+  end of the file. It can miss a chunk past that end, from a writer that
+  appended it without updating the RIFF size. A full read finds such a
+  chunk.
 - If the loop fails to converge in 4 iterations (very rare, defensive
   bound for unknown-size HTTP responses or files whose parsers can't
   bootstrap from a small prefix), ExifReader reads the rest of the file
@@ -572,14 +577,17 @@ Notes and limitations:
   the `jxlc`/`jxlp` codestream box (encoded image data, not metadata).
 - `complete: true` means ExifReader did not detect truncation. For JPEG and
   PNG it observed `SOS` or `IEND`, for standalone XMP it observed an
-  `<?xpacket end=?>` or `</x:xmpmeta>` token. For other formats it is
+  `<?xpacket end=?>` or `</x:xmpmeta>` token, for WebP it walked the chunks
+  up to the end the RIFF header declares or the VP8X chunk declares no Exif
+  or XMP. For other formats it is
   best-effort, a buffer ending cleanly between metadata segments can still
   report `complete: true`. Non-standard trailers (JPEG-XT, post-SOS markers)
   are never detected. Note the converse: re-parsing a slice produced by
   `buffer.slice(0, metadataRange.end)` may report `complete: false` for
-  JPEG/PNG even though every metadata segment is intact, because the
-  slice ends before `SOS`/`IEND`. The block list and `tags.exif` etc. are
-  still complete in that case.
+  JPEG/PNG/WebP even though every metadata segment is intact, because the
+  slice ends before `SOS`/`IEND` or before the end the RIFF header
+  declares. The block list and `tags.exif` etc. are still complete in that
+  case.
 - Only the metadata segments ExifReader actively parses are present in
   `blocks`. JPEG segments ExifReader does not currently extract tags from
   (APP3-APP12, `COM` comments, JPEG-XT extensions) do not appear and are
