@@ -498,8 +498,14 @@ describe('tag-names-0th-ifd', () => {
         expect(TagNames0thIfd[0xc4a5]).to.equal('PrintIM');
     });
 
+    it('should have tag DNGVersion', () => {
+        expect(TagNames0thIfd[0xc612].name).to.equal('DNGVersion');
+        expect(TagNames0thIfd[0xc612].description([1, 4, 0, 0])).to.equal('1.4.0.0');
+    });
+
     it('should have tag DNGBackwardVersion', () => {
-        expect(TagNames0thIfd[0xc613]).to.equal('DNGBackwardVersion');
+        expect(TagNames0thIfd[0xc613].name).to.equal('DNGBackwardVersion');
+        expect(TagNames0thIfd[0xc613].description([1, 1, 0, 0])).to.equal('1.1.0.0');
     });
 
     it('should have tag UniqueCameraModel', () => {

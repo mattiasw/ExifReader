@@ -608,6 +608,7 @@ interface ExifTags {
     'GDALMetadata'?: AnyFieldTypeTag,
     'GDALNoData'?: AnyFieldTypeTag,
     'PrintIM'?: AnyFieldTypeTag,
+    'DNGVersion'?: NumberArrayTag,
     'DNGBackwardVersion'?: NumberArrayTag,
     'UniqueCameraModel'?: StringArrayTag,
     'LocalizedCameraModel'?: StringArrayTag | NumberTag | NumberArrayTag,

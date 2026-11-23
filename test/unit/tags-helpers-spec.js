@@ -409,6 +409,38 @@ describe('tags-helpers', () => {
         expect(tags['MyRationalTag'].description).to.equal('4.5');
     });
 
+    it('should describe a RATIONAL tag with several values as its quotients separated by commas', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyRationalTag'}});
+        // Field count + offsetted RATIONAL field + offset to next IFD + values 9/2 and 1/4 at offset 0x12.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x05\x00\x00\x00\x02\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\x00\x00\x00\x09\x00\x00\x00\x02' + '\x00\x00\x00\x01\x00\x00\x00\x04');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyRationalTag'].description).to.equal('4.5, 0.25');
+    });
+
+    it('should describe an SRATIONAL tag with several values as its quotients separated by commas', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MySrationalTag'}});
+        // Field count + offsetted SRATIONAL field + offset to next IFD + values -9/2 and 1/4 at offset 0x12.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x0a\x00\x00\x00\x02\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\xff\xff\xff\xf7\x00\x00\x00\x02' + '\x00\x00\x00\x01\x00\x00\x00\x04');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MySrationalTag'].description).to.equal('-4.5, 0.25');
+    });
+
+    it('should describe a RATIONAL tag with a zero denominator as n/d', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyRationalTag'}});
+        // Field count + offsetted RATIONAL field + offset to next IFD + value 0/0 at offset 0x12.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x05\x00\x00\x00\x01\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00\x00\x00\x00\x00');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyRationalTag'].description).to.equal('n/d');
+    });
+
+    it('should describe a RATIONAL tag whose value runs past the data as the faulty value', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyRationalTag'}});
+        // Field count + RATIONAL field whose offset 0x12 has only four bytes after it.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x05\x00\x00\x00\x01\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\x00\x00\x00\x09');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN);
+        expect(tags['MyRationalTag'].description).to.equal('<faulty value>');
+    });
+
     it('should be able to read SRATIONAL tag', () => {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MySrationalTag'}});
         // Field count + offsetted SRATIONAL field + offset to next IFD + value -9/2 at offset 0x12.
@@ -928,7 +960,7 @@ describe('tags-helpers', () => {
         expect(tags['MyRationalTag']).to.deep.equal({
             id: 0x4711,
             value: [[9, 2], [1, 0]],
-            description: 'NaN',
+            description: '4.5, n/d',
             computed: [4.5, null],
         });
     });

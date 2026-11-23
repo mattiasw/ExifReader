@@ -191,7 +191,7 @@ describe('exif-tag-table', () => {
         for (const ifd of IFD_ORDER) {
             counts[ifd] = tags.filter((entry) => (entry.ifd === ifd) && !isWritable(entry)).length;
         }
-        expect(counts).to.deep.equal({'0th': 117, exif: 23, gps: 0, interoperability: 4});
+        expect(counts).to.deep.equal({'0th': 118, exif: 23, gps: 0, interoperability: 4});
     });
 });
 

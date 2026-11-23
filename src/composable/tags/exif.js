@@ -8,6 +8,7 @@ import {
     decodeXPValue,
     getCopyrightDescription,
     getDefaultBlackRenderDescription,
+    getDngVersionDescription,
     getExtraSamplesDescription,
     getFillOrderDescription,
     getGrayResponseUnitDescription,
@@ -186,7 +187,8 @@ export const XPSubject = {name: 'XPSubject', ids: [0x9c9f], group: 'exif', dicti
 export const GDALMetadata = {name: 'GDALMetadata', ids: [0xa480], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const GDALNoData = {name: 'GDALNoData', ids: [0xa481], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const PrintIM = {name: 'PrintIM', ids: [0xc4a5], group: 'exif', dictionary: '0th', reader: exifBlockReader};
-export const DNGBackwardVersion = {name: 'DNGBackwardVersion', ids: [0xc613], group: 'exif', dictionary: '0th', reader: exifBlockReader};
+export const DNGVersion = {name: 'DNGVersion', ids: [0xc612], group: 'exif', dictionary: '0th', description: getDngVersionDescription, reader: exifBlockReader};
+export const DNGBackwardVersion = {name: 'DNGBackwardVersion', ids: [0xc613], group: 'exif', dictionary: '0th', description: getDngVersionDescription, reader: exifBlockReader};
 export const UniqueCameraModel = {name: 'UniqueCameraModel', ids: [0xc614], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const LocalizedCameraModel = {name: 'LocalizedCameraModel', ids: [0xc615], group: 'exif', dictionary: '0th', reader: exifBlockReader};
 export const ColorMatrix1 = {name: 'ColorMatrix1', ids: [0xc621], group: 'exif', dictionary: '0th', reader: exifBlockReader};
