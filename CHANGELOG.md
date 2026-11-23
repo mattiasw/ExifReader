@@ -44,6 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A PNG, GIF or JPEG file cut off inside its image header, and a JPEG whose
   frame header is shorter than its fields, no longer give the header tags they
   lack as keys with an undefined value. The tags are left out of the result.
+- The TypeScript type of the ICC `Rendering Intent` value is a number, and that
+  of an ICC tag with texts in several languages, such as `ICC Description` or,
+  with `expanded: true`, `dscm`, admits an object of locale to text as well as
+  a string, as they are read. Both were typed as strings. The ICC tags with a
+  name, such as these two and `Profile Version`, are now typed as optional,
+  like the named tags of the other groups, so code compiled with `strict`
+  reads one with `?.` or after checking that it is there.
 
 ## [4.55.1] - 2026-11-23
 
