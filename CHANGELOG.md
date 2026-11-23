@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ICC `Rendering Intent` other than the four the specification defines is
   described as its number in a string, and an unknown Photoshop resource, which
   had no description, is described as its value.
+- `npx exifreader analyze --imports` imports `canon` or `pentax` instead of
+  `makerNotes` when every maker note in the images is of that one make, and
+  says in a comment that the group decodes no other make.
 
 ### Fixed
 

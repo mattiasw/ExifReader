@@ -15,6 +15,7 @@ const {
     loadFullParser,
     loadTagBindingName,
     loadIptcTagExportNames,
+    loadMakerNoteDecoders,
     resolveDomParser,
     analyzeImages,
     deriveConfig,
@@ -45,6 +46,7 @@ if (require.main === module) {
         loadFullParser,
         loadTagBindingName,
         loadIptcTagExportNames,
+        loadMakerNoteDecoders,
         loadCustomParser,
         resolveDomParser,
         log: console.log,
@@ -439,12 +441,12 @@ function analyzeForCommand(args, imagePaths, cwd, deps) {
     if (!args.imports) {
         return analyzeSample(imagePaths, cwd, deps, renderConfig);
     }
-    return Promise.all([deps.loadTagBindingName(), deps.loadIptcTagExportNames()])
-        .then(([getTagBindingName, iptcTagExportNames]) => analyzeSample(
+    return Promise.all([deps.loadTagBindingName(), deps.loadIptcTagExportNames(), deps.loadMakerNoteDecoders()])
+        .then(([getTagBindingName, iptcTagExportNames, makerNoteDecoders]) => analyzeSample(
             imagePaths,
             cwd,
             deps,
-            (derived, results) => deriveImports(results, getTagBindingName, iptcTagExportNames),
+            (derived, results) => deriveImports(results, getTagBindingName, iptcTagExportNames, makerNoteDecoders),
             'reader'
         ));
 }

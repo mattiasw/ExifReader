@@ -1314,8 +1314,10 @@ and IPTC tags, and the XMP, ICC, Photoshop, maker note, MPF and thumbnail
 groups. Add `--write` to put it in your `package.json`, replacing any
 `include` or `exclude` section there, then run `npx exifreader build`. Add
 `--imports` instead to print the equivalent `createReader` imports of the
-[composable API](#composable-api) in place of the configuration. To
-analyze and build in one step, and then check the result:
+[composable API](#composable-api) in place of the configuration. When every
+maker note in the images is of one make that `canon` or `pentax` decodes, it
+imports that group instead of `makerNotes`. To analyze and build in one step,
+and then check the result:
 
 ```bash
 npx exifreader build --auto ./samples --verify

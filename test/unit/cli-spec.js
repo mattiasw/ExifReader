@@ -571,7 +571,8 @@ describe('cli', () => {
                 it('prints only the createReader imports on stdout and the summary, warnings and hint on stderr', async () => {
                     const {deps, calls} = imageDeps({
                         loadTagBindingName: () => Promise.resolve(getTagBindingName),
-                        loadIptcTagExportNames: () => Promise.resolve([])
+                        loadIptcTagExportNames: () => Promise.resolve([]),
+                        loadMakerNoteDecoders: () => Promise.resolve([])
                     });
                     await run(['node', 'cli', 'analyze', 'samples', '--imports'], deps);
                     expect(calls.log).to.deep.equal([[
@@ -600,7 +601,8 @@ describe('cli', () => {
                     const {deps, calls} = imageDeps({
                         loadFullParser: () => Promise.resolve(fakeParser(results, [])),
                         loadTagBindingName: () => Promise.resolve(getTagBindingName),
-                        loadIptcTagExportNames: () => Promise.resolve(['Record2Destination'])
+                        loadIptcTagExportNames: () => Promise.resolve(['Record2Destination']),
+                        loadMakerNoteDecoders: () => Promise.resolve([])
                     });
                     await run(['node', 'cli', 'analyze', 'samples/a.jpg', '--imports'], deps);
                     expect(calls.log).to.deep.equal([[
@@ -616,7 +618,8 @@ describe('cli', () => {
                 it('errors when the tag binding name function cannot be loaded, printing nothing on stdout', async () => {
                     const {deps, calls, parsed} = imageDeps({
                         loadTagBindingName: () => Promise.reject(new Error('Cannot find module')),
-                        loadIptcTagExportNames: () => Promise.resolve([])
+                        loadIptcTagExportNames: () => Promise.resolve([]),
+                        loadMakerNoteDecoders: () => Promise.resolve([])
                     });
                     await run(['node', 'cli', 'analyze', 'samples', '--imports'], deps);
                     expect(calls.error).to.deep.equal(['Cannot find module']);
@@ -628,13 +631,46 @@ describe('cli', () => {
                 it('errors when the IPTC tag export names cannot be loaded, printing nothing on stdout', async () => {
                     const {deps, calls, parsed} = imageDeps({
                         loadTagBindingName: () => Promise.resolve(getTagBindingName),
-                        loadIptcTagExportNames: () => Promise.reject(new Error('Cannot find the iptc module'))
+                        loadIptcTagExportNames: () => Promise.reject(new Error('Cannot find the iptc module')),
+                        loadMakerNoteDecoders: () => Promise.resolve([])
                     });
                     await run(['node', 'cli', 'analyze', 'samples', '--imports'], deps);
                     expect(calls.error).to.deep.equal(['Cannot find the iptc module']);
                     expect(calls.exit).to.deep.equal([1]);
                     expect(calls.log).to.deep.equal([]);
                     expect(parsed).to.deep.equal([]);
+                });
+
+                it('errors when the maker note decoders cannot be loaded, printing nothing on stdout', async () => {
+                    const {deps, calls, parsed} = imageDeps({
+                        loadTagBindingName: () => Promise.resolve(getTagBindingName),
+                        loadIptcTagExportNames: () => Promise.resolve([]),
+                        loadMakerNoteDecoders: () => Promise.reject(new Error('Cannot find the maker notes module'))
+                    });
+                    await run(['node', 'cli', 'analyze', 'samples', '--imports'], deps);
+                    expect(calls.error).to.deep.equal(['Cannot find the maker notes module']);
+                    expect(calls.exit).to.deep.equal([1]);
+                    expect(calls.log).to.deep.equal([]);
+                    expect(parsed).to.deep.equal([]);
+                });
+
+                it('prints a decoder group for the one make the loaded decoders read', async () => {
+                    const results = {jpeg: {
+                        file: {FileType: {value: 'jpeg'}},
+                        exif: {Make: {value: ['Canon']}, MakerNote: {value: [1, 2, 3]}},
+                        makerNotes: {}
+                    }};
+                    const {deps, calls} = imageDeps({
+                        loadFullParser: () => Promise.resolve(fakeParser(results, [])),
+                        loadTagBindingName: () => Promise.resolve(getTagBindingName),
+                        loadIptcTagExportNames: () => Promise.resolve([]),
+                        loadMakerNoteDecoders: () => Promise.resolve([{name: 'canon', matches: (block) => block.make[0] === 'Canon'}])
+                    });
+                    await run(['node', 'cli', 'analyze', 'samples/a.jpg', '--imports'], deps);
+                    expect(calls.log).to.have.lengthOf(1);
+                    expect(calls.log[0].split('\n')).to.include('import {canon} from \'exifreader/groups\';');
+                    expect(calls.log[0]).to.contain('groups: [canon]');
+                    expect(calls.exit).to.deep.equal([]);
                 });
 
                 it('errors with --write before reading any image or package.json', async () => {
@@ -1459,6 +1495,7 @@ describe('cli', () => {
             loadFullParser: () => Promise.reject(new Error('loadFullParser not stubbed')),
             loadTagBindingName: () => Promise.reject(new Error('loadTagBindingName not stubbed')),
             loadIptcTagExportNames: () => Promise.reject(new Error('loadIptcTagExportNames not stubbed')),
+            loadMakerNoteDecoders: () => Promise.reject(new Error('loadMakerNoteDecoders not stubbed')),
             loadCustomParser: () => {
                 throw new Error('loadCustomParser not stubbed');
             },
