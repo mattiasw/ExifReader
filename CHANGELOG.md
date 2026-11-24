@@ -62,6 +62,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name, such as these two and `Profile Version`, are now typed as optional,
   like the named tags of the other groups, so code compiled with `strict`
   reads one with `?.` or after checking that it is there.
+- The TypeScript types of the flat `ImageWidth`, `Compression` and `LensModel`
+  now admit each tag that can hold the name: the Exif tag, the RIFF, PNG or
+  Canon tag, or an XMP tag of the same name, which replaces the Exif one in the
+  flat result. The key holds one of these tags, but it was typed as the RIFF,
+  PNG and Canon tags combined with the Exif one, so
+  `tags.LensModel?.value.join()` compiled and threw on an XMP `LensModel`, and
+  the description of an Exif `Compression`, its number as text, was typed as
+  `'Deflate/Inflate'` or `'Unknown'`. TypeScript code now narrows `value` (with
+  `typeof`, or by checking for `id`) before using it as a number or an array,
+  or reads `tags.exif` with `expanded: true`.
 - With `length: 'auto'`, the Exif and XMP of a WebP whose image data runs past
   the first read are now read. They were left out, with
   `metadataRange.complete` true. A WebP whose VP8X chunk declares Exif or XMP
