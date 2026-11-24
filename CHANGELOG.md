@@ -93,6 +93,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file with a 416 or an empty 206, `length: 'auto'` then asks once more for
   everything after the bytes it has, and takes a second such answer as the
   end of the file, with no warning.
+- With `length: 'auto'` over a URL, a server that ignores `Range` and sends no
+  `Content-Length` no longer gets the same file asked for again, ending in the
+  `did not converge` warning, when its 200 is shorter than the read: that
+  body is taken as the whole file. An empty 200 to a read past the bytes
+  already read is taken as the end of the file as well once a request for
+  everything after them gets no bytes either, instead of dropping the metadata
+  read so far and rejecting the file as an invalid image.
 
 ## [4.55.1] - 2026-11-23
 

@@ -137,7 +137,7 @@ export function makeLoadAuto(loadFromData) {
                     // so fall back to a full GET.
                     return handleAdaptive416(state);
                 }
-                mergeAdaptiveChunk(state, chunk);
+                mergeAdaptiveChunk(state, chunk, state.need);
                 return parseAndDecide(state);
             });
     }
@@ -150,7 +150,7 @@ export function makeLoadAuto(loadFromData) {
                     state.totalSize = state.fetched;
                     return;
                 }
-                mergeAdaptiveChunk(state, chunk);
+                mergeAdaptiveChunk(state, chunk, Infinity);
                 if (chunk.totalSize === undefined) {
                     state.totalSize = state.fetched;
                 }
@@ -214,17 +214,9 @@ export function makeLoadAuto(loadFromData) {
         );
         let chunkPromise;
         if (state.totalSize !== undefined && state.fetched < state.totalSize) {
-            chunkPromise = state.readRange(state.fetched, state.totalSize, {totalSize: state.totalSize})
-                .then((chunk) => {
-                    state.requests++;
-                    mergeAdaptiveChunk(state, chunk);
-                });
+            chunkPromise = readFallbackChunk(state, state.totalSize);
         } else if (state.totalSize === undefined) {
-            chunkPromise = state.readRange(state.fetched, Infinity, {totalSize: state.totalSize})
-                .then((chunk) => {
-                    state.requests++;
-                    mergeAdaptiveChunk(state, chunk);
-                });
+            chunkPromise = readFallbackChunk(state, Infinity);
         } else {
             chunkPromise = Promise.resolve();
         }
@@ -237,9 +229,19 @@ export function makeLoadAuto(loadFromData) {
                 return attachAdaptiveFields(tags, state.buffer, state.fetched, state.requests);
             });
     }
+
+    function readFallbackChunk(state, end) {
+        return state.readRange(state.fetched, end, {totalSize: state.totalSize})
+            .then((chunk) => {
+                state.requests++;
+                if (!isAnswerPastEndOfFile(state, chunk)) {
+                    mergeAdaptiveChunk(state, chunk, end);
+                }
+            });
+    }
 }
 
-function mergeAdaptiveChunk(state, chunk) {
+function mergeAdaptiveChunk(state, chunk, requestedEnd) {
     // HTTP 200 on a Range request means the server ignored Range and
     // sent the full body. Replace the buffer instead of concatenating to
     // avoid corrupting offsets.
@@ -249,21 +251,30 @@ function mergeAdaptiveChunk(state, chunk) {
         if (chunk.totalSize !== undefined) {
             state.totalSize = chunk.totalSize;
         }
-        return;
+    } else {
+        if (chunk.totalSize !== undefined && state.totalSize === undefined) {
+            state.totalSize = chunk.totalSize;
+        }
+        state.buffer = concatBuffers(state.buffer, chunk.buffer);
+        state.fetched = bufferByteLength(state.buffer);
     }
-    if (chunk.totalSize !== undefined && state.totalSize === undefined) {
-        state.totalSize = chunk.totalSize;
+    if (isWholeBodyWithNoSize(chunk, requestedEnd)) {
+        state.totalSize = state.fetched;
     }
-    state.buffer = concatBuffers(state.buffer, chunk.buffer);
-    state.fetched = bufferByteLength(state.buffer);
+}
+
+function isWholeBodyWithNoSize(chunk, requestedEnd) {
+    // The body was cut at `requestedEnd`, so a shorter 200 is the whole file.
+    return chunk.status === HTTP_STATUS_OK
+        && chunk.totalSize === undefined
+        && bufferByteLength(chunk.buffer) < requestedEnd;
 }
 
 function isAnswerPastEndOfFile(state, chunk) {
     if (state.fetched === 0) {
         return false;
     }
-    return chunk.status === HTTP_STATUS_RANGE_NOT_SATISFIABLE
-        || (chunk.status !== HTTP_STATUS_OK && bufferByteLength(chunk.buffer) === 0);
+    return chunk.status === HTTP_STATUS_RANGE_NOT_SATISFIABLE || bufferByteLength(chunk.buffer) === 0;
 }
 
 function attachAdaptiveFields(tags, buffer, fetched, requests) {
