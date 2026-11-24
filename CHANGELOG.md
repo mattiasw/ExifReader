@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ColorMatrix1` and `AsShotNeutral`, is described as its quotients separated
   by commas, a zero denominator as `n/d`, and a value that runs past the data
   as `<faulty value>`.
+- A tag whose value runs past the data is now described as `<faulty value>`, as
+  its value is, also when the tag has a description function of its own. Such
+  tags were described as the text their function made of it, such as `NaN`,
+  `1/NaN`, `f/NaN`, `NaN mm` or `Unknown`. The decimal GPS coordinates, whose
+  description is a number, keep the number `NaN`.
 - `SubjectDistance` is described as `Unknown` for numerator 0 and as `Infinity`
   for numerator 0xFFFFFFFF, as the Exif specification defines them, instead of
   `0 m` (`NaN m` for 0/0) and `4294967295 m`.
