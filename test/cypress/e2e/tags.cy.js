@@ -124,7 +124,7 @@ const images = [
         name: 'test-not-an-image.txt',
         hasThumbnail: false,
         tags: {},
-        error: 'Error: Invalid image format'
+        error: 'UnsupportedFormatError: Invalid image format'
     },
     {
         name: 'test-no-meta-data.heic',
