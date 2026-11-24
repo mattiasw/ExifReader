@@ -3762,6 +3762,10 @@ describe('exif-reader', function () {
                     name: 'an empty 206',
                     stagesAfterEnd: () => Array.from({length: 5}, () => ({status: 206, contentLength: 0, body: () => new ArrayBuffer(0)})),
                 },
+                {
+                    name: 'an empty 200',
+                    stagesAfterEnd: () => Array.from({length: 5}, () => ({status: 200, contentLength: 0, body: () => new ArrayBuffer(0)})),
+                },
             ].forEach(({name, stagesAfterEnd}) => {
                 it(`should take ${name} past the end of a short file as its end once a read to the end confirms it, when the 206 has no Content-Range`, async () => {
                     const body = () => new Uint8Array(getCutJpeg({withExif: true})).buffer;
@@ -3841,6 +3845,60 @@ describe('exif-reader', function () {
                     'bytes=0-131071', 'bytes=131072-262143', 'bytes=131072-', `bytes=${cut}-${length - 1}`,
                 ]);
                 expect(warnings).to.deep.equal([]);
+            });
+
+            it('should take a 200 with no size that is shorter than the read as the whole file', async () => {
+                const body = () => new Uint8Array(getCutJpeg({withExif: true})).buffer;
+                installCustomFetchMock(Array.from({length: 5}, () => ({status: 200, body})));
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(tags.exif.Make.description).to.equal('ACME');
+                expect(tags.metadataRange.complete).to.equal(false);
+                expect(tags.metadataRange.fetched).to.equal(CUT_JPEG_LENGTH);
+                expect(tags.metadataRange.requests).to.equal(1);
+                expect(fetchCalls.map(({range}) => range)).to.deep.equal(['bytes=0-131071']);
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+            });
+
+            it('should reject a file without metadata after 1 fetch when a 200 with no size is shorter than the read', async () => {
+                const body = () => new Uint8Array(getCutJpeg({withExif: false})).buffer;
+                installCustomFetchMock(Array.from({length: 5}, () => ({status: 200, body})));
+
+                const error = await getRejection(ExifReader.load(URL, AUTO_OPTIONS));
+
+                expect(error).to.be.an('error');
+                expect(error.message).to.contain('could not locate metadata');
+                expect(fetchCalls).to.have.lengthOf(1);
+                expect(warnings).to.deep.equal([]);
+            });
+
+            it('should take a 200 with no size after a first read as the whole file when it is shorter than the read', async () => {
+                swapForAutoTest({end: 200000});
+                installCustomFetchMock([
+                    {status: 206, contentLength: 131072, body: () => new ArrayBuffer(131072)},
+                    ...Array.from({length: 4}, () => ({status: 200, body: () => new ArrayBuffer(150000)})),
+                ]);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(fetchCalls.map(({range}) => range)).to.deep.equal(['bytes=0-131071', 'bytes=131072-262143']);
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(tags.metadataRange.fetched).to.equal(150000);
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(false);
+            });
+
+            it('should keep the first size a 206 gives when a later 206 gives another', async () => {
+                swapForAutoTest({end: 400000});
+                installCustomFetchMock([
+                    {status: 206, contentRange: 'bytes 0-131071/200000', body: () => new ArrayBuffer(131072)},
+                    {status: 206, contentRange: 'bytes 131072-199999/999999', body: () => new ArrayBuffer(68928)},
+                ]);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(tags.metadataRange.requests).to.equal(2);
+                expect(tags.metadataRange.fetched).to.equal(200000);
             });
 
             it('should read the Exif and XMP of an animated WebP that come after many frames in 2 fetches', async () => {
@@ -4111,35 +4169,7 @@ describe('exif-reader', function () {
                 expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(true);
                 expect(tags.metadataRange).to.exist;
                 expect(tags.metadataRange.requests).to.be.at.least(4);
-            });
-
-            it('should not double the buffer in the fallback when a Range-ignoring server returns 200 with no size', async () => {
-                // The parse never reports complete (its block always extends
-                // past the buffer), so the loop exhausts its iterations and
-                // falls back. The server ignores Range and returns the whole
-                // body each time with no Content-Length, so totalSize is never
-                // learned. The fallback must replace the buffer like the main
-                // loop, not concatenate it (which would double it).
-                const BODY_SIZE = 1000;
-                swapImageHeaderDynamic((dataView) => {
-                    const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
-                    return {
-                        blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}],
-                        ranges: [{block: {kind: 'exif'}, start: 2, end: len + 1000}],
-                    };
-                });
-                swapTagsRead(Tags, {MyExifTag: 42});
-                installCustomFetchMock([
-                    {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
-                    {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
-                    {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
-                    {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
-                    {status: 200, body: () => new ArrayBuffer(BODY_SIZE)},
-                ]);
-
-                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
-
-                expect(tags.metadataRange.fetched).to.equal(BODY_SIZE);
+                expect(tags.metadataRange.fetched).to.equal(10 * 1024 * 1024);
             });
 
             it('should read the whole body in the fallback when a Range-ignoring server sends no size', async () => {
@@ -4164,6 +4194,34 @@ describe('exif-reader', function () {
                 expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(true);
                 expect(tags.metadataRange.requests).to.equal(5);
                 expect(tags.metadataRange.fetched).to.equal(BODY_SIZE);
+            });
+
+            it('should keep the bytes read when the fallback gets an empty 200 past them', async () => {
+                swapImageHeaderDynamic((dataView) => {
+                    const len = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;
+                    return {
+                        blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}],
+                        ranges: [{block: {kind: 'exif'}, start: 2, end: len + 1000}],
+                    };
+                });
+                swapTagsRead(Tags, {MyExifTag: 42});
+                installCustomFetchMock([
+                    ...[131072, 131072, 262144, 524288].map((length) => ({
+                        status: 206,
+                        contentLength: length,
+                        body: () => new ArrayBuffer(length),
+                    })),
+                    {status: 200, body: () => new ArrayBuffer(0)},
+                ]);
+
+                const tags = await ExifReader.load(URL, AUTO_OPTIONS);
+
+                expect(warnings.some((w) => /did not converge/i.test(w))).to.equal(true);
+                expect(fetchCalls.map(({range}) => range)).to.deep.equal([
+                    'bytes=0-131071', 'bytes=131072-262143', 'bytes=262144-524287', 'bytes=524288-1048575', 'bytes=1048576-',
+                ]);
+                expect(tags.metadataRange.requests).to.equal(5);
+                expect(tags.metadataRange.fetched).to.equal(1048576);
             });
 
             function installCustomFetchMock(stages) {
