@@ -41,7 +41,7 @@ describe('image-header-png', () => {
         const blocks = findBlocks(otherChunk + getChunk('IHDR', '\x47\x11'));
 
         expect(blocks).to.deep.equal([
-            {kind: 'pngFile', dataOffset: PNG_IMAGE_START.length + otherChunk.length + CHUNK_HEADER_SIZE},
+            {kind: 'pngFile', dataOffset: PNG_IMAGE_START.length + otherChunk.length + CHUNK_HEADER_SIZE, length: 2},
         ]);
     });
 
@@ -49,12 +49,20 @@ describe('image-header-png', () => {
         const firstChunk = getChunk('IHDR', '\x47\x11');
         const ranges = [];
 
-        const blocks = findBlocks(firstChunk + getChunk('IHDR', '\x47\x12'), ranges);
+        const blocks = findBlocks(firstChunk + getChunk('IHDR', '\x47\x12\x13'), ranges);
 
         expect(blocks).to.deep.equal([
-            {kind: 'pngFile', dataOffset: PNG_IMAGE_START.length + firstChunk.length + CHUNK_HEADER_SIZE},
+            {kind: 'pngFile', dataOffset: PNG_IMAGE_START.length + firstChunk.length + CHUNK_HEADER_SIZE, length: 3},
         ]);
         expect(ranges.map((range) => range.block)).to.deep.equal([blocks[0], blocks[0]]);
+    });
+
+    it('should give the image header block the chunk\'s declared data length', () => {
+        const blocks = findBlocks(getChunk('IHDR', '\x00\x00\x00\x64\x00\x00\x00\x32'));
+
+        expect(blocks).to.deep.equal([
+            {kind: 'pngFile', dataOffset: FIRST_CHUNK_DATA_OFFSET, length: 8},
+        ]);
     });
 
     it('should find the XMP iTXt chunk as an xmp block', () => {
@@ -536,7 +544,7 @@ describe('image-header-png', () => {
         const otherChunk = getChunk('abcd', '\x48\x12\x49\x13');
 
         expect(findBlocks(otherChunk + getChunk('IHDR', '\x47\x11'))).to.deep.equal([
-            {kind: 'pngFile', dataOffset: PNG_IMAGE_START.length + otherChunk.length + CHUNK_HEADER_SIZE},
+            {kind: 'pngFile', dataOffset: PNG_IMAGE_START.length + otherChunk.length + CHUNK_HEADER_SIZE, length: 2},
         ]);
     });
 

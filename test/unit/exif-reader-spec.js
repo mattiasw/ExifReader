@@ -579,6 +579,24 @@ describe('exif-reader', function () {
         expect(tags.metadataRange.end).to.equal(png.length - 12);
     });
 
+    it('should leave out the PNG header fields that a short IHDR chunk does not hold', () => {
+        const png = '\x89PNG\r\n\x1a\n'
+            + getPngChunk('IHDR', getByteStringFromNumber(100, 4) + getByteStringFromNumber(50, 4))
+            + getPngChunk('tEXt', 'k\x00v')
+            + getPngChunk('IEND', '');
+
+        const expandedTags = ExifReader.load(getArrayBuffer(png), {expanded: true});
+        const flatTags = ExifReader.load(getArrayBuffer(png));
+
+        expect(expandedTags.pngFile).to.deep.equal({
+            'Image Width': {value: 100, description: '100px'},
+            'Image Height': {value: 50, description: '50px'}
+        });
+        expect(expandedTags.pngText.k.value).to.equal('v');
+        expect(flatTags).to.include.keys('Image Width', 'Image Height', 'k');
+        expect(flatTags).to.not.have.any.keys('Bit Depth', 'Color Type', 'Compression', 'Filter', 'Interlace');
+    });
+
     it('should keep the widened last entry of a capped metadataRange in sync mode when its own chunk is a zTXt', () => {
         // IHDR takes the first of the 4096 entries, so the tEXt chunk widens the last zTXt entry.
         const png = getPngWithChunks(getPngChunk('zTXt', 'k\x00\x00v').repeat(4095), getPngChunk('tEXt', 'last\x00v'));

@@ -106,6 +106,7 @@ function findPngOffsets(dataView, ranges) {
         } else if (chunkType === TYPE_IHDR) {
             fileBlock = fileBlock || addBlock(blocks, {kind: 'pngFile'});
             fileBlock.dataOffset = offset + PNG_CHUNK_DATA_OFFSET;
+            fileBlock.length = chunkDataLength;
             block = fileBlock;
         } else if (isPngXmpChunk(dataView, chunkType, offset)) {
             const dataOffset = getPngXmpDataOffset(dataView, offset);
