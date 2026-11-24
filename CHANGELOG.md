@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   header is shorter than its fields, and a PNG `pHYs` or `tIME` chunk shorter
   than its fields no longer give the tags they lack as keys with an undefined
   value. The tags are left out of the result.
+- A PNG whose `IHDR` chunk declares fewer than its 13 bytes no longer gives the
+  header fields the chunk does not hold, such as `Bit Depth` and `Color Type`,
+  with values read from the bytes after the chunk. They are left out of the
+  result.
 - The TypeScript type of the ICC `Rendering Intent` value is a number, and that
   of an ICC tag with texts in several languages, such as `ICC Description` or,
   with `expanded: true`, `dscm`, admits an object of locale to text as well as

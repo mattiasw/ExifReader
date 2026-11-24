@@ -31,10 +31,11 @@ const FIELDS = [
     {name: 'Interlace', offset: 12, size: 1, read: Types.getByteAt, description: (value) => INTERLACE_TYPES[value] || 'Unknown'}
 ];
 
-function read(dataView, fileDataOffset) {
+function read(dataView, fileDataOffset, chunkDataLength) {
     const tags = {};
+    const dataEnd = Math.min(fileDataOffset + chunkDataLength, dataView.byteLength);
     for (let i = 0; i < FIELDS.length; i++) {
-        const tag = getFieldTag(dataView, fileDataOffset, FIELDS[i]);
+        const tag = getFieldTag(dataView, fileDataOffset, dataEnd, FIELDS[i]);
         if (tag !== undefined) {
             tags[FIELDS[i].name] = tag;
         }
@@ -42,12 +43,14 @@ function read(dataView, fileDataOffset) {
     return tags;
 }
 
-function getFieldTag(dataView, fileDataOffset, field) {
-    if (fileDataOffset + field.offset + field.size > dataView.byteLength) {
+function getFieldTag(dataView, fileDataOffset, dataEnd, field) {
+    const fieldOffset = fileDataOffset + field.offset;
+    // Negated so that a missing chunk length (a NaN dataEnd) reads no field.
+    if (!(fieldOffset + field.size <= dataEnd)) {
         return undefined;
     }
 
-    const value = field.read(dataView, fileDataOffset + field.offset);
+    const value = field.read(dataView, fieldOffset);
     return {
         value,
         description: field.description(value)

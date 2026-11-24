@@ -24,7 +24,7 @@ export const pngFile = {
     key: 'png',
     consumes: ['pngFile'],
     emits: [],
-    read: (block, ctx) => parsedTags('png', PngFileTags.read(ctx.dataView, block.dataOffset), ctx),
+    read: (block, ctx) => parsedTags('png', PngFileTags.read(ctx.dataView, block.dataOffset, block.length), ctx),
     merge: () => ({slot: 'pngFile', mode: 'pngFile'}),
     mergeModes: {pngFile: mergePngFileTags},
 };

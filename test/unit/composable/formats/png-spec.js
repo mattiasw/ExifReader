@@ -78,10 +78,10 @@ describe('composable/formats/png', () => {
             restores.push(restore);
             const ctx = getContext({tagFilter: createTagFilter({includeTags: {png: ['ImageWidth']}})});
 
-            const result = pngFile.read({dataOffset: 16}, ctx);
+            const result = pngFile.read({dataOffset: 16, length: 13}, ctx);
 
             expect(result).to.deep.equal({tags: {ImageWidth: {value: 1}}});
-            expect(calls).to.deep.equal([[ctx.dataView, 16]]);
+            expect(calls).to.deep.equal([[ctx.dataView, 16, 13]]);
         });
     });
 
