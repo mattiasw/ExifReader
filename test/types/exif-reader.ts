@@ -528,6 +528,26 @@ expandedTags["riff"]?.["Animation"]?.description === "Maybe";
 
 tags["ImageWidth"]?.value === 100;
 tags["ImageWidth"]?.description === "100px";
+// @ts-expect-error
+const flatImageWidthNumber: number = tags["ImageWidth"]?.value ?? 0;
+// @ts-expect-error
+(tags["ImageWidth"]?.value ?? 0) * 2;
+const flatImageWidthValue = tags["ImageWidth"]?.value;
+if (typeof flatImageWidthValue === "number") {
+    const flatImageWidthNarrowed: number = flatImageWidthValue;
+}
+const flatRiffImageWidth: Tags["ImageWidth"] = {value: 100, description: "100px"};
+// @ts-expect-error
+const flatCompressionNumber: number = tags["Compression"]?.value ?? 0;
+// @ts-expect-error
+const flatCompressionPngDescription: "Deflate/Inflate" | "Unknown" | undefined = tags["Compression"]?.description;
+tags["Compression"]?.description === "6";
+tags["Compression"]?.description === "Deflate/Inflate";
+const flatCompressionValue = tags["Compression"]?.value;
+if (typeof flatCompressionValue === "number") {
+    const flatCompressionNarrowed: number = flatCompressionValue;
+}
+const flatPngCompression: Tags["Compression"] = {value: 0, description: "Deflate/Inflate"};
 expandedTags["riff"]?.["ImageWidth"]?.value === 100;
 expandedTags["riff"]?.["ImageWidth"]?.description === "100px";
 
@@ -665,8 +685,16 @@ tags["LensType"]?.value === 48;
 tags["LensType"]?.description === '48';
 expandedTags.makerNotes?.["LensModel"]?.value[0] === 'EF-S18-55mm f/3.5-5.6 IS';
 expandedTags.makerNotes?.["LensModel"]?.description === 'EF-S18-55mm f/3.5-5.6 IS';
-tags["LensModel"]?.value[0] === 'EF-S18-55mm f/3.5-5.6 IS';
 tags["LensModel"]?.description === 'EF-S18-55mm f/3.5-5.6 IS';
+// @ts-expect-error
+tags["LensModel"]?.value.join(", ");
+const flatLensModel = tags["LensModel"];
+if (flatLensModel && "id" in flatLensModel) {
+    flatLensModel.value.join(", ");
+    flatLensModel.value[0] === 'EF-S18-55mm f/3.5-5.6 IS';
+}
+expandedTags["exif"]?.["LensModel"]?.value.join(", ");
+const flatCanonLensModel: Tags["LensModel"] = {value: ["EF-S18-55mm f/3.5-5.6 IS"], description: "EF-S18-55mm f/3.5-5.6 IS"};
 expandedTags.makerNotes?.["RollAngle"]?.value === 42;
 expandedTags.makerNotes?.["RollAngle"]?.description === '-21';
 tags["RollAngle"]?.value === 42;

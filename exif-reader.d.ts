@@ -972,12 +972,15 @@ type IccTags = IccNamedTags & {
     [name: string]: ValueTag
 }
 
-export type Tags = FileTags & XmpTags & IccTags & PngTags & RiffTags & GifTags & PhotoshopTags & CanonTags & PentaxTags & CompositeTags & {
+// The flat property holds one of these tags, never all of them at once.
+type FlatCollision<K> = K extends 'Compression' ? PngFileTags['Compression'] : K extends 'ImageWidth' ? RiffTags['ImageWidth'] : K extends 'LensModel' ? CanonTags['LensModel'] : never;
+
+export type Tags = FileTags & XmpTags & IccTags & Omit<PngFileTags, 'Compression'> & PngPhysTags & {[name: string]: PngTag} & Omit<RiffTags, 'ImageWidth'> & GifTags & PhotoshopTags & Omit<CanonTags, 'LensModel'> & PentaxTags & CompositeTags & {
     /** @deprecated Use `thumbnail`. `Thumbnail` is removed in v5. */
     'Thumbnail'?: ThumbnailTags;
     /** Can instead be a PNG text or XMP tag named `thumbnail` when the file has one. */
     'thumbnail'?: ThumbnailTags;
     'Images'?: MPFImageTags[],
 } & {
-    [K in keyof Omit<ExifTags, 'Thumbnail'>]: ExifTags[K] | XmpTag;
+    [K in keyof Omit<ExifTags, 'Thumbnail'>]: ExifTags[K] | XmpTag | FlatCollision<K>;
 }

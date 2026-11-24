@@ -127,6 +127,14 @@ Toolchains in [the composable API](#composable-api)). `exifreader/core` also
 exports the types of the arguments to `load`, `LoadInput` and `LoadOptions`, and
 of its result, `Tags` and `ExpandedTags`.
 
+The TypeScript types of the flat result are not exact for tags they do not
+name: `value` is typed as a string, but an XMP list or structure, or an ICC
+text in several languages, is an array or an object. The grouped result types
+these correctly, so read such tags from `tags.xmp` or `tags.icc` with
+`expanded: true`. A tag that [`includeUnknown: true`](#unknown-tags) adds can
+be a number or an array, and the types of the grouped result do not name it
+either.
+
 Usage
 -----
 
@@ -219,7 +227,11 @@ as a number (`32.0605`). For plain strings and numbers, pass
 coordinates, use the [`gps` group](#gps) of `expanded: true`. In the flat
 result an XMP tag of the same name replaces the Exif one, and the `value` of an
 XMP `DateTimeOriginal` or `GPSLatitude` is a string; with
-[`expanded: true`](#grouping) the Exif tags stay in `tags.exif`.
+[`expanded: true`](#grouping) the Exif tags stay in `tags.exif`. When a tag's
+value lies outside the file's bytes, as in a damaged file, `value` and
+`computed` are the string `'<faulty value>'` whatever type the tag has, except
+that the `value` of ASCII text is `['<faulty value>']`. The TypeScript types do
+not include it.
 
 **Security:** When the argument is a string, ExifReader treats it as a URL or a
 local file path and will make a network request or read from the file system.
