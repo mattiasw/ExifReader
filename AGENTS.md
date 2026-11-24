@@ -12,6 +12,7 @@ JavaScript library that parses Exif/IPTC/XMP/ICC/MPF metadata from JPEG, TIFF, P
 - `dist/` - Webpack UMD bundle (**committed** - required by Bower)
 - `bin/` - Build scripts
 - `exif-reader.d.ts` - TypeScript type definitions (root level)
+- `CLAUDE.md` - only imports `AGENTS.md` (the single line `@AGENTS.md`); `test/unit/agent-instructions-spec.js` keeps it that way, so put instructions for agents and contributors in `AGENTS.md`
 
 Tag definitions live in `src/tag-names-*.js` (keyed by hex tag ID). Each image format has its own `*-tags.js` parser. `src/constants.js` has feature flags for tree-shaking.
 
