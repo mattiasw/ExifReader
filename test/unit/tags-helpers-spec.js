@@ -449,6 +449,14 @@ describe('tags-helpers', () => {
         expect(tags['MyRationalTag'].description).to.equal('<faulty value>');
     });
 
+    it('should compute a RATIONAL tag whose value runs past the data as the faulty value', () => {
+        restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MyRationalTag'}});
+        // Field count + RATIONAL field whose offset 0x12 has only four bytes after it.
+        const dataView = getDataView('\x00\x01' + '\x47\x11\x00\x05\x00\x00\x00\x01\x00\x00\x00\x12' + '\x00\x00\x00\x00' + '\x00\x00\x00\x09');
+        const tags = readIfd(dataView, '0th', 0, 0, ByteOrder.BIG_ENDIAN, false, true);
+        expect(tags['MyRationalTag'].computed).to.equal('<faulty value>');
+    });
+
     it('should be able to read SRATIONAL tag', () => {
         restoreTagNames = swapProperties(TagNames, {'0th': {0x4711: 'MySrationalTag'}});
         // Field count + offsetted SRATIONAL field + offset to next IFD + value -9/2 at offset 0x12.
@@ -863,6 +871,59 @@ describe('tags-helpers', () => {
         const tags = readIfd(dataView, 'exif', 0, 0, ByteOrder.BIG_ENDIAN);
         expect(tags.ExifVersion.value).to.equal('<faulty value>');
         expect(tags.ExifVersion.description).to.equal('<faulty value>');
+    });
+
+    describe('a tag with a description function and a value past the data', () => {
+        function readFaultyTag(ifdType, tagCode, tagType, tagCount) {
+            const dataView = getDataView(
+                '\x00\x01' // Number of fields.
+                + getByteStringFromNumber(tagCode, 2)
+                + getByteStringFromNumber(tagType, 2)
+                + getByteStringFromNumber(tagCount, 4)
+                + '\x00\x00\x01\x00' // Offset past the end of the data.
+                + '\x00\x00\x00\x00' // Offset to next IFD.
+            );
+            return readIfd(dataView, ifdType, 0, 0, ByteOrder.BIG_ENDIAN);
+        }
+
+        it('should describe a RATIONAL tag as the faulty value', () => {
+            const tags = readFaultyTag('exif', 0x829a, 5, 1);
+            expect(tags.ExposureTime.value).to.equal('<faulty value>');
+            expect(tags.ExposureTime.description).to.equal('<faulty value>');
+        });
+
+        it('should describe a second RATIONAL tag as the faulty value', () => {
+            const tags = readFaultyTag('0th', 0x011a, 5, 1);
+            expect(tags.XResolution.value).to.equal('<faulty value>');
+            expect(tags.XResolution.description).to.equal('<faulty value>');
+        });
+
+        it('should describe a SHORT tag as the faulty value', () => {
+            const tags = readFaultyTag('0th', 0x0112, 3, 4);
+            expect(tags.Orientation.value).to.equal('<faulty value>');
+            expect(tags.Orientation.description).to.equal('<faulty value>');
+        });
+
+        it('should describe an ASCII tag as the faulty value', () => {
+            const tags = readFaultyTag(IFD_TYPE_GPS, 0x0001, 2, 8);
+            expect(tags.GPSLatitudeRef.value).to.deep.equal(['<faulty value>']);
+            expect(tags.GPSLatitudeRef.description).to.equal('<faulty value>');
+        });
+
+        it('should keep the description of a decimal GPS coordinate a number', () => {
+            const coordinates = {GPSLatitude: 0x0002, GPSLongitude: 0x0004, GPSDestLatitude: 0x0014, GPSDestLongitude: 0x0016};
+            for (const name of Object.keys(coordinates)) {
+                const tags = readFaultyTag(IFD_TYPE_GPS, coordinates[name], 5, 3);
+                expect(tags[name].value, name).to.equal('<faulty value>');
+                expect(tags[name].description, name).to.be.NaN;
+            }
+        });
+
+        it('should describe a BYTE tag as the faulty value', () => {
+            const tags = readFaultyTag('0th', 0x9c9b, 1, 8);
+            expect(tags.XPTitle.value).to.equal('<faulty value>');
+            expect(tags.XPTitle.description).to.equal('<faulty value>');
+        });
     });
 
     it('should add a computed value for an ASCII tag when enabled', function () {

@@ -228,10 +228,12 @@ coordinates, use the [`gps` group](#gps) of `expanded: true`. In the flat
 result an XMP tag of the same name replaces the Exif one, and the `value` of an
 XMP `DateTimeOriginal` or `GPSLatitude` is a string; with
 [`expanded: true`](#grouping) the Exif tags stay in `tags.exif`. When a tag's
-value lies outside the file's bytes, as in a damaged file, `value` and
-`computed` are the string `'<faulty value>'` whatever type the tag has, except
-that the `value` of ASCII text is `['<faulty value>']`. The TypeScript types do
-not include it.
+value lies outside the file's bytes, as in a damaged file, `value`, `computed`
+and `description` are the string `'<faulty value>'` whatever type the tag has,
+except that the `value` of ASCII text is `['<faulty value>']` and that the
+`description` of a decimal GPS coordinate (`GPSLatitude`, `GPSLongitude`,
+`GPSDestLatitude`, `GPSDestLongitude`) stays a number, `NaN`. The TypeScript
+types do not include the string.
 
 **Security:** When the argument is a string, ExifReader treats it as a URL or a
 local file path and will make a network request or read from the file system.
