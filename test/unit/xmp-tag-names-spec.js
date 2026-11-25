@@ -32,20 +32,35 @@ describe('xmp-tag-names', () => {
 
     it('should report correct description for exif:GPSLatitude', () => {
         expect(XmpTagNames['exif:GPSLatitude']('48,28.800000N')).to.equal('48.48N');
+        expect(XmpTagNames['exif:GPSLatitude']('48,28.800000S')).to.equal('48.48S');
+    });
+
+    it('should include seconds and direction in exif:GPSLatitude descriptions', () => {
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,36N')).to.equal('48.51N');
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,36S')).to.equal('48.51S');
+        expect(XmpTagNames['exif:GPSLatitude']('0,0,0N')).to.equal('0N');
     });
 
     it('should handle faulty value for exif:GPSLatitude', () => {
         expect(XmpTagNames['exif:GPSLatitude']('faulty')).to.equal('faulty');
         expect(XmpTagNames['exif:GPSLatitude']('faulty0,faulty1')).to.equal('faulty0,faulty1');
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,faultyN')).to.equal('48,30,faultyN');
     });
 
     it('should report correct description for exif:GPSLongitude', () => {
         expect(XmpTagNames['exif:GPSLongitude']('17,18.600000E')).to.equal('17.31E');
+        expect(XmpTagNames['exif:GPSLongitude']('17,18.600000W')).to.equal('17.31W');
+    });
+
+    it('should include seconds and direction in exif:GPSLongitude descriptions', () => {
+        expect(XmpTagNames['exif:GPSLongitude']('17,15,0E')).to.equal('17.25E');
+        expect(XmpTagNames['exif:GPSLongitude']('17,15,0W')).to.equal('17.25W');
     });
 
     it('should handle faulty value for exif:GPSLongitude', () => {
         expect(XmpTagNames['exif:GPSLongitude']('faulty')).to.equal('faulty');
         expect(XmpTagNames['exif:GPSLongitude']('faulty0,faulty1')).to.equal('faulty0,faulty1');
+        expect(XmpTagNames['exif:GPSLongitude']('17,15,')).to.equal('17,15,');
     });
 
     it('should report correct description for exif:FNumber', () => {

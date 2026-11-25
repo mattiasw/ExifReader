@@ -1199,6 +1199,21 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should describe XMP GPS coordinates with seconds when loading a packet', () => {
+        const packet = '<?xpacket begin=""?><x:xmpmeta xmlns:x="adobe:ns:meta/">'
+            + '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">'
+            + '<rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/"'
+            + ' exif:GPSLatitude="48,30,36N" exif:GPSLongitude="17,15,0W"/>'
+            + '</rdf:RDF></x:xmpmeta><?xpacket end="w"?>';
+
+        const tags = ExifReader.load(getArrayBuffer(packet), {domParser: new XmldomParser(), expanded: true});
+
+        expect(tags.xmp.GPSLatitude.value).to.equal('48,30,36N');
+        expect(tags.xmp.GPSLatitude.description).to.equal('48.51N');
+        expect(tags.xmp.GPSLongitude.value).to.equal('17,15,0W');
+        expect(tags.xmp.GPSLongitude.description).to.equal('17.25W');
+    });
+
     it('should be able to find ICC APP segment', () => {
         const myTags = {MyIccTag: 42};
 

@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- XMP GPS coordinates in degrees, minutes and seconds now include the seconds
+  and keep their compass direction in the description.
 - Rational tags without a description function of their own are no longer
   described as `NaN`. A tag with several values, such as the DNG tags
   `ColorMatrix1` and `AsShotNeutral`, is described as its quotients separated
