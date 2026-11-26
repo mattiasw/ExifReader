@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-export function getMakerNoteBlock({make, bytes = [0, 1, 2, 3, 4, 5, 6, 7, 8]}) {
+export function getMakerNoteBlock({make, model, bytes = [0, 1, 2, 3, 4, 5, 6, 7, 8]}) {
     return {
         kind: 'makerNote',
         tiffView: {},
@@ -10,6 +10,7 @@ export function getMakerNoteBlock({make, bytes = [0, 1, 2, 3, 4, 5, 6, 7, 8]}) {
         makerNoteOffset: 100,
         byteOrder: 'byte order',
         make,
+        model,
         bytes,
     };
 }

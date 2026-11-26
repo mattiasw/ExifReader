@@ -536,6 +536,35 @@ describe('analyze', () => {
                     .to.contain('groups: [first]');
             });
 
+            it('gives each decoder the first strings of Make and Model and the MakerNote value, and takes only true as a match', () => {
+                const inputs = [];
+                const truthy = {name: 'truthy', matches: (input) => {
+                    inputs.push(input);
+                    return 1;
+                }};
+                const claiming = {name: 'claiming', matches: ({make, model}) => make === 'Canon' && model === 'EOS'};
+                const result = image('jpeg', {exif: {Make: {value: ['Canon', 'Other']}, Model: {value: ['EOS']}, MakerNote: {value: [1, 2]}}, makerNotes: {}});
+
+                expect(deriveImports([result], getTagBindingName, iptcTagExportNames, [truthy, claiming])).to.contain('groups: [claiming]');
+                expect(inputs).to.deep.equal([{make: 'Canon', model: 'EOS', bytes: [1, 2]}]);
+            });
+
+            it('gives undefined for a Make or Model that is absent or does not start with a string', () => {
+                const inputs = [];
+                const recording = {name: 'recording', matches: (input) => {
+                    inputs.push(input);
+                    return true;
+                }};
+                const results = [
+                    image('jpeg', {exif: {MakerNote: {value: [1]}}, makerNotes: {}}),
+                    image('jpeg', {exif: {Make: {value: 'Canon'}, Model: {value: [5]}, MakerNote: {value: [1]}}, makerNotes: {}}),
+                ];
+
+                deriveImports(results, getTagBindingName, iptcTagExportNames, [recording]);
+
+                expect(inputs.map(({make, model}) => [make, model])).to.deep.equal([[undefined, undefined], [undefined, undefined]]);
+            });
+
             it('reads the same maker notes from a Canon image as the full library', async () => {
                 const snippet = snippetOf([canonResult]);
                 const modules = {

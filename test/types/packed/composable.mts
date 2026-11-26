@@ -4,13 +4,13 @@
 
 import type { Tags, ExpandedTags, NumberArrayTag } from "exifreader";
 import { createReader, errors, tagFilter } from "exifreader/core";
-import type { Format, Group, TagDescriptor, TagFilter, Reader } from "exifreader/core";
+import type { Format, Group, TagDescriptor, TagFilter, Reader, Decoder } from "exifreader/core";
 import type { Tags as CoreTags, ExpandedTags as CoreExpandedTags, LoadInput, LoadOptions } from "exifreader/core";
 // The brand symbols are private.
 // @ts-expect-error
 import type { formatBrand } from "exifreader/core";
 import { jpeg, png, jxl, allFormats } from "exifreader/formats";
-import { exif, iptc, xmp, mpf, canon, pentax, makerNotes, gps, thumbnail, allGroups } from "exifreader/groups";
+import { exif, iptc, xmp, mpf, canon, pentax, makerNotes, gps, thumbnail, allGroups, createMakerNoteDecoder } from "exifreader/groups";
 import { DateTimeOriginal, LensSpecification, ApplicationNotes } from "exifreader/tags/exif";
 import { ModelVersion, Keywords, Headline } from "exifreader/tags/iptc";
 import type * as ExifTagModule from "exifreader/tags/exif";
@@ -287,6 +287,92 @@ const makerNoteGroupsNotes = await createReader({ formats: [jpeg], groups: maker
 makerNoteGroupsNotes.makerNotes?.LensModel;
 makerNoteGroupsNotes.makerNotes?.PentaxVersion;
 
+// A decoder from createMakerNoteDecoder types makerNotes by the tags its read returns.
+const exampleDecoder = createMakerNoteDecoder({
+    matches: ({ make, model, bytes }) => make === "ExampleCam" && model !== "Old" && bytes.length >= 2,
+    read: ({ tiffView, tiffHeaderOffset, makerNoteOffset, byteOrder, context }) => ({
+        ExampleVersion: { value: tiffView.getUint16(tiffHeaderOffset + makerNoteOffset, byteOrder === 0x4949), description: context.computed ? "computed" : "version" },
+    }),
+});
+const exampleDecoderValue: Decoder<{ ExampleVersion: { value: number, description: string } }> = exampleDecoder;
+const decoderAsGroup: Group = exampleDecoder;
+const decoderNotes = await createReader({ formats: [jpeg], groups: [exampleDecoder] }).load(new ArrayBuffer(0));
+const decoderNotesType: Equal<NonNullable<typeof decoderNotes.makerNotes>, { ExampleVersion?: { value: number, description: string } }> = true;
+const decoderNotesKeys: Equal<keyof typeof decoderNotes, "file" | "jfif" | "makerNotes"> = true;
+// @ts-expect-error
+decoderNotes.makerNotes?.LensModel;
+const decoderAndCanon = await createReader({ formats: [jpeg], groups: [exampleDecoder, canon] }).load(new ArrayBuffer(0));
+const decoderAndCanonVersion: number | undefined = decoderAndCanon.makerNotes?.ExampleVersion?.value;
+decoderAndCanon.makerNotes?.LensModel;
+// @ts-expect-error
+decoderAndCanon.makerNotes?.PentaxVersion;
+const canonAndDecoder = await createReader({ formats: [jpeg], groups: [canon, exampleDecoder] }).load(new ArrayBuffer(0));
+const canonAndDecoderVersion: number | undefined = canonAndDecoder.makerNotes?.ExampleVersion?.value;
+canonAndDecoder.makerNotes?.LensModel;
+const asyncDecoder = createMakerNoteDecoder({
+    matches: () => true,
+    read: () => Promise.resolve({ Later: { value: "later", description: "later" } }),
+});
+const asyncDecoderNotes = await createReader({ formats: [jpeg], groups: [asyncDecoder, makerNotes] }).load(new ArrayBuffer(0));
+const asyncDecoderLater: string | undefined = asyncDecoderNotes.makerNotes?.Later?.value;
+asyncDecoderNotes.makerNotes?.PentaxVersion;
+// A tag keeps only value, description, computed and a numeric id.
+const fieldsDecoder = createMakerNoteDecoder({
+    matches: () => true,
+    read: () => ({ Numbered: { value: 1, description: "1", id: 7, computed: 1 }, Named: { value: 2, description: "2", id: "8", raw: "2" } }),
+});
+const fieldsNotes = await createReader({ formats: [jpeg], groups: [fieldsDecoder] }).load(new ArrayBuffer(0));
+const fieldsNotesType: Equal<NonNullable<typeof fieldsNotes.makerNotes>, { Numbered?: { value: number, description: string, id: number, computed: number }, Named?: { value: number, description: string } }> = true;
+// @ts-expect-error
+fieldsNotes.makerNotes?.Named?.raw;
+// @ts-expect-error
+fieldsNotes.makerNotes?.Named?.id;
+// A read may return other tags, or none, on some paths, and its tags may be typed by an interface.
+const boundedDecoder = createMakerNoteDecoder({
+    matches: () => true,
+    read: ({ tiffView, tiffHeaderOffset, makerNoteOffset, byteOrder }) => {
+        if (tiffHeaderOffset + makerNoteOffset + 2 > tiffView.byteLength) {
+            return {};
+        }
+        return { ExampleVersion: { value: tiffView.getUint16(tiffHeaderOffset + makerNoteOffset, byteOrder === 0x4949), description: "version" } };
+    },
+});
+const boundedNotes = await createReader({ formats: [jpeg], groups: [boundedDecoder] }).load(new ArrayBuffer(0));
+const boundedVersion: number | undefined = boundedNotes.makerNotes?.ExampleVersion?.value;
+// @ts-expect-error
+boundedNotes.makerNotes?.Other;
+const branchDecoder = createMakerNoteDecoder({
+    matches: () => true,
+    read: ({ byteOrder }) => byteOrder === 0x4949 ? { Little: { value: 1, description: "1" } } : { Big: { value: "2", description: "2" } },
+});
+const branchNotes = await createReader({ formats: [jpeg], groups: [branchDecoder] }).load(new ArrayBuffer(0));
+const branchLittle: number | undefined = branchNotes.makerNotes?.Little?.value;
+const branchBig: string | undefined = branchNotes.makerNotes?.Big?.value;
+const asyncBoundedDecoder = createMakerNoteDecoder({
+    matches: () => true,
+    read: async ({ tiffView }) => tiffView.byteLength < 2 ? {} : { Later: { value: "later", description: "later" } },
+});
+const asyncBoundedNotes = await createReader({ formats: [jpeg], groups: [asyncBoundedDecoder] }).load(new ArrayBuffer(0));
+const asyncBoundedLater: string | undefined = asyncBoundedNotes.makerNotes?.Later?.value;
+interface InterfaceTags {
+    Named: { value: number, description: string };
+}
+const interfaceDecoder = createMakerNoteDecoder({ matches: () => true, read: (): InterfaceTags => ({ Named: { value: 1, description: "1" } }) });
+const interfaceNotes = await createReader({ formats: [jpeg], groups: [interfaceDecoder] }).load(new ArrayBuffer(0));
+const interfaceNamed: number | undefined = interfaceNotes.makerNotes?.Named?.value;
+// @ts-expect-error
+createReader({ formats: [jpeg], groups: [{ key: "makerNotes" }] });
+// @ts-expect-error
+createMakerNoteDecoder({ matches: () => Promise.resolve(true), read: () => ({}) });
+// @ts-expect-error
+createMakerNoteDecoder({ matches: () => true, read: () => 5 });
+// @ts-expect-error
+createMakerNoteDecoder({ matches: () => true, read: () => ({ Foo: 5 }) });
+// @ts-expect-error
+createMakerNoteDecoder({ matches: () => true });
+// @ts-expect-error
+const canonAsDecoder: Decoder = canon;
+
 // includeTags and excludeTags need the tag filter.
 // @ts-expect-error
 jpegExifReader.load(new ArrayBuffer(0), { includeTags: { exif: ["Make"] } });
@@ -474,5 +560,19 @@ export {
     syncTags,
     withDomParser,
     withDecompress,
-    narrowedDescriptor
+    narrowedDescriptor,
+    exampleDecoderValue,
+    decoderAsGroup,
+    decoderNotesType,
+    decoderNotesKeys,
+    decoderAndCanonVersion,
+    canonAndDecoderVersion,
+    asyncDecoderLater,
+    fieldsNotesType,
+    boundedVersion,
+    branchLittle,
+    branchBig,
+    asyncBoundedLater,
+    interfaceNamed,
+    canonAsDecoder
 };

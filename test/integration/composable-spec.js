@@ -28,6 +28,10 @@
 //   thumbnail, with or without the thumbnail group, which the default entry
 //   keeps, so the expected value drops it. No fixture has such a tag; the core
 //   unit tests cover that case.
+//
+// A reader composed with the Canon and Pentax readers in decoders from
+// createMakerNoteDecoder has to return what a reader composed with makerNotes
+// returns: a decoder of the caller's sees what the built-in ones see.
 
 const {expect} = require('chai');
 const fs = require('fs');
@@ -41,6 +45,8 @@ const Groups = require('../../src/composable/groups.js');
 const {DateTimeOriginal} = require('../../src/composable/tags/exif.js');
 const Composite = require('../../src/composite.js').default;
 const IptcTagNames = require('../../src/iptc-tag-names.js').default;
+const CanonTags = require('../../src/canon-tags.js').default;
+const PentaxTags = require('../../src/pentax-tags.js').default;
 
 const IMAGES_PATH = path.join(__dirname, '..', 'fixtures', 'images');
 const TRACKED_IMAGES = ['test.jpg', 'test.png', 'test.tiff', 'test.heic', 'test.avif', 'test.jxl', 'test.gif', 'test-maker-note-canon.jpg', 'test-maker-note-pentax.jpg'];
@@ -71,6 +77,7 @@ const FORMAT_READER_KEYS = {
     xml: [],
 };
 const COMPOSITE_TAG_NAMES = ['FocalLength35efl', 'ScaleFactorTo35mmEquivalent', 'FieldOfView'];
+const PENTAX_TYPE_1_PREFIX = Array.from('PENTAX ', (character) => character.charCodeAt(0));
 const REPEATABLE_IPTC_IDS = getRepeatableIptcIds();
 
 const ALL_GROUPS_OPTION_SETS = [
@@ -108,6 +115,8 @@ describe('composable reader against the default entry', function () {
         canon: createReader({formats: ALL_FORMATS_BUT_XML, groups: [Groups.canon], domParser}),
         pentax: createReader({formats: ALL_FORMATS_BUT_XML, groups: [Groups.pentax], domParser}),
     };
+    const builtInDecodersReader = createReader({formats: ALL_FORMATS_BUT_XML, groups: [Groups.makerNotes]});
+    const callerDecodersReader = createReader({formats: ALL_FORMATS_BUT_XML, groups: [getCanonCallerDecoder(), getPentaxCallerDecoder()]});
 
     it('runs over the fixture set', () => {
         // eslint-disable-next-line no-console
@@ -158,6 +167,13 @@ describe('composable reader against the default entry', function () {
 
             it('gives the expanded output by default', async () => {
                 expect(await getOutcome(() => allReader.load(bytes))).to.deep.equal(await getOutcome(() => allReader.load(bytes, {expanded: true})));
+            });
+
+            it('reads the same maker notes with decoders from createMakerNoteDecoder as with the built-in ones', async () => {
+                for (const options of [{}, BASE]) {
+                    expect(await getOutcome(() => callerDecodersReader.load(bytes, options)), JSON.stringify(options))
+                        .to.deep.equal(await getOutcome(() => builtInDecodersReader.load(bytes, options)));
+                }
             });
 
             it('matches with every other whole-group composition, expanded', async () => {
@@ -271,6 +287,24 @@ function withReader(composition) {
     return Object.assign({excludeTags: []}, composition, {
         reader: createReader({formats: composition.formats, groups: composition.groups, domParser}),
         filteredReader: createReader({formats: composition.formats, groups: composition.groups, tagFilter, domParser}),
+    });
+}
+
+// The Canon and Pentax readers in decoders written against the published
+// contract alone, as a caller would write them.
+function getCanonCallerDecoder() {
+    return Groups.createMakerNoteDecoder({
+        matches: ({make}) => make === 'Canon',
+        read: ({tiffView, tiffHeaderOffset, makerNoteOffset, byteOrder, context}) =>
+            CanonTags.read(tiffView, tiffHeaderOffset, makerNoteOffset, byteOrder, context.includeUnknown, context.computed),
+    });
+}
+
+function getPentaxCallerDecoder() {
+    return Groups.createMakerNoteDecoder({
+        matches: ({bytes}) => bytes.length > PENTAX_TYPE_1_PREFIX.length && PENTAX_TYPE_1_PREFIX.every((code, index) => bytes[index] === code),
+        read: ({tiffView, tiffHeaderOffset, makerNoteOffset, context}) =>
+            PentaxTags.read(tiffView, tiffHeaderOffset, makerNoteOffset, context.includeUnknown, context.computed),
     });
 }
 

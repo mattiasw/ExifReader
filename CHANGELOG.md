@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Maker note decoders of your own for the composable API:
+  `createMakerNoteDecoder` in `exifreader/groups` takes a `matches` and a
+  `read` function and returns a decoder to pass in `groups`, typed as
+  `Decoder` in `exifreader/core`. Such decoders are tried before `canon` and
+  `pentax`, in the order of `groups`, and their tags go to `makerNotes`. See
+  the README section on maker note decoders.
+
 ## [4.56.0] - 2026-11-26
 
 ### Added

@@ -163,15 +163,50 @@ describe('composable/group-helpers', () => {
             const pentaxReads = recordCalls(PentaxTags, 'read', {Pentax: {value: 1}});
             restores.push(canonReads.restore, pentaxReads.restore);
 
-            expect(merged.read(getMakerNoteBlock({make: ['Canon'], bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Canon: {value: 1}}});
-            expect(merged.read(getMakerNoteBlock({make: ['PENTAX'], bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Pentax: {value: 1}}});
-            expect(merged.read(getMakerNoteBlock({make: ['Nikon']}), getContext())).to.equal(undefined);
+            expect(merged.read(getMakerNoteBlock({make: 'Canon', bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Canon: {value: 1}}});
+            expect(merged.read(getMakerNoteBlock({make: 'PENTAX', bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Pentax: {value: 1}}});
+            expect(merged.read(getMakerNoteBlock({make: 'Nikon'}), getContext())).to.equal(undefined);
             expect(canonReads.calls).to.have.lengthOf(1);
             expect(pentaxReads.calls).to.have.lengthOf(1);
         });
 
+        it('should put the decoders without a built-in name first, in the order of the groups, then the built-in ones in their order', () => {
+            const first = getCallerGroup();
+            const second = getCallerGroup();
+            const third = getCallerGroup();
+
+            const [merged] = mergeMakerNoteGroups([pentax, first, makerNotes, second, canon, third]);
+
+            expect(merged.decoders).to.deep.equal([first.decoders[0], second.decoders[0], third.decoders[0], canonDecoder, pentaxDecoder]);
+            expect(merged.decoders[0]).to.equal(first.decoders[0]);
+            expect(merged.decoders[1]).to.equal(second.decoders[0]);
+            expect(merged.decoders[2]).to.equal(third.decoders[0]);
+        });
+
+        it('should try a decoder without a built-in name before the built-in ones also when it is listed last', () => {
+            const caller = getCallerGroup();
+
+            const [merged] = mergeMakerNoteGroups([canon, pentax, caller]);
+
+            expect(merged.decoders).to.have.ordered.members([caller.decoders[0], canonDecoder, pentaxDecoder]);
+        });
+
+        it('should keep a decoder listed by two groups once, at its first place', () => {
+            const caller = getCallerGroup();
+            const other = getCallerGroup();
+            const twin = {key: 'makerNotes', consumes: ['makerNote'], decoders: [other.decoders[0], caller.decoders[0]]};
+
+            const [merged] = mergeMakerNoteGroups([caller, canon, twin]);
+
+            expect(merged.decoders).to.have.ordered.members([caller.decoders[0], other.decoders[0], canonDecoder]);
+        });
+
         function getOtherGroup(key) {
             return {key, consumes: ['exif'], emits: [], read: () => undefined, merge: () => ({})};
+        }
+
+        function getCallerGroup() {
+            return {key: 'makerNotes', consumes: ['makerNote'], emits: [], decoders: [{matches: () => false, read: () => ({})}], merge: () => ({})};
         }
     });
 
@@ -179,8 +214,8 @@ describe('composable/group-helpers', () => {
         const VIEW = getDataView('\x00'.repeat(16));
         const MAKER_NOTE_BYTES = [1, 2, 3];
 
-        it('should build the maker note block from MakerNote, Make and the Exif facts', () => {
-            const parsed = {MakerNote: {value: MAKER_NOTE_BYTES}, Make: {value: ['Canon']}};
+        it('should build the maker note block from MakerNote, Make, Model and the Exif facts', () => {
+            const parsed = {MakerNote: {value: MAKER_NOTE_BYTES}, Make: {value: ['Canon']}, Model: {value: ['EOS']}};
 
             expect(getMakerNoteBlockFromExif(parsed, getExif({carried: 'rawProfile'}))).to.deep.equal({
                 kind: 'makerNote',
@@ -188,17 +223,42 @@ describe('composable/group-helpers', () => {
                 tiffHeaderOffset: 6,
                 makerNoteOffset: 100,
                 byteOrder: ByteOrder.LITTLE_ENDIAN,
-                make: ['Canon'],
+                make: 'Canon',
+                model: 'EOS',
                 bytes: MAKER_NOTE_BYTES,
                 carried: 'rawProfile',
             });
         });
 
-        it('should leave make undefined without a Make', () => {
+        it('should leave make and model undefined without Make and Model', () => {
             const block = getMakerNoteBlockFromExif({MakerNote: {value: MAKER_NOTE_BYTES}}, getExif());
 
             expect(block).to.have.property('make', undefined);
+            expect(block).to.have.property('model', undefined);
             expect(block.bytes).to.equal(MAKER_NOTE_BYTES);
+        });
+
+        it('should take the first string of Make and Model, and undefined when the value does not start with one', () => {
+            const cases = [
+                [['Canon', 'Other'], 'Canon'],
+                ['Canon', undefined],
+                [[5, 'Canon'], undefined],
+                [[], undefined],
+                [undefined, undefined],
+            ];
+            for (const [value, expected] of cases) {
+                const block = getMakerNoteBlockFromExif({MakerNote: {value: MAKER_NOTE_BYTES}, Make: {value}, Model: {value}}, getExif());
+
+                expect(block.make, JSON.stringify(value)).to.equal(expected);
+                expect(block.model, JSON.stringify(value)).to.equal(expected);
+            }
+        });
+
+        it('should give the MakerNote value as it is, whatever it holds', () => {
+            const values = [[0, 128, 255], [], [80, -1], [1, 256], 7, 'PENTAX '];
+            for (const value of values) {
+                expect(getMakerNoteBlockFromExif({MakerNote: {value}}, getExif()).bytes, JSON.stringify(value)).to.equal(value);
+            }
         });
 
         it('should build a block for a maker note offset of 0', () => {
@@ -223,24 +283,87 @@ describe('composable/group-helpers', () => {
                 getDecoder('b', true, log),
                 getDecoder('c', true, log),
             ];
-            const block = {};
             const ctx = getContext();
 
-            expect(readMakerNoteWithDecoders(block, ctx, decoders)).to.deep.equal({tags: {b: true}});
+            expect(readMakerNoteWithDecoders(getMakerNoteBlock({}), ctx, decoders)).to.deep.equal({tags: {b: true}});
             expect(log).to.deep.equal(['matches a', 'matches b', 'read b']);
         });
 
         it('should read nothing when no decoder matches', () => {
-            expect(readMakerNoteWithDecoders({}, getContext(), [getDecoder('a', false, [])])).to.equal(undefined);
-            expect(readMakerNoteWithDecoders({}, getContext(), [])).to.equal(undefined);
+            expect(readMakerNoteWithDecoders(getMakerNoteBlock({}), getContext(), [getDecoder('a', false, [])])).to.equal(undefined);
+            expect(readMakerNoteWithDecoders(getMakerNoteBlock({}), getContext(), [])).to.equal(undefined);
         });
 
-        function getDecoder(name, isMatch, log) {
+        it('should take only true from matches as a match', () => {
+            const log = [];
+            const decoders = [1, 'yes', {}, Promise.resolve(true)]
+                .map((matchResult, index) => getDecoder(String(index), matchResult, log))
+                .concat([getDecoder('true', true, log)]);
+
+            expect(readMakerNoteWithDecoders(getMakerNoteBlock({}), getContext(), decoders)).to.deep.equal({tags: {true: true}});
+            expect(log).to.deep.equal(['matches 0', 'matches 1', 'matches 2', 'matches 3', 'matches true', 'read true']);
+        });
+
+        it('should give matches the make, model and bytes of the block in a new object for each decoder', () => {
+            const inputs = [];
+            const recording = {matches: (input) => {
+                inputs.push(input);
+                return false;
+            }, read: () => ({})};
+            const block = getMakerNoteBlock({make: 'Make', model: 'Model', bytes: [1, 2]});
+
+            readMakerNoteWithDecoders(block, getContext(), [recording, recording]);
+
+            expect(inputs).to.deep.equal([{make: 'Make', model: 'Model', bytes: [1, 2]}, {make: 'Make', model: 'Model', bytes: [1, 2]}]);
+            expect(inputs[0]).to.not.equal(inputs[1]);
+            expect(inputs[0].bytes).to.equal(block.bytes);
+        });
+
+        it('should give read the view fields of the block and a context with the options and the engine context', () => {
+            const inputs = [];
+            const recording = {matches: () => true, read: (input) => {
+                inputs.push(input);
+                return {};
+            }};
+            const block = getMakerNoteBlock({});
+            const ctx = getContext({options: {includeUnknown: 'unknown', computed: 'computed'}});
+
+            readMakerNoteWithDecoders(block, ctx, [recording]);
+
+            expect(inputs).to.deep.equal([{
+                tiffView: block.tiffView,
+                tiffHeaderOffset: 6,
+                makerNoteOffset: 100,
+                byteOrder: 'byte order',
+                context: {includeUnknown: 'unknown', computed: 'computed', engineContext: ctx},
+            }]);
+            expect(inputs[0].tiffView).to.equal(block.tiffView);
+            expect(inputs[0].context.engineContext).to.equal(ctx);
+        });
+
+        it('should give the tags a read returns as they are, undefined included', () => {
+            const tags = {Tag: {value: 1}};
+
+            expect(readMakerNoteWithDecoders(getMakerNoteBlock({}), getContext(), [{matches: () => true, read: () => tags}]).tags).to.equal(tags);
+            expect(readMakerNoteWithDecoders(getMakerNoteBlock({}), getContext(), [{matches: () => true, read: () => undefined}])).to.deep.equal({tags: undefined});
+        });
+
+        it('should give a Promise of the tags when read gives a thenable', async () => {
+            const tags = {Tag: {value: 1}};
+            const thenable = {then: (resolve) => resolve(tags)};
+
+            const result = readMakerNoteWithDecoders(getMakerNoteBlock({}), getContext(), [{matches: () => true, read: () => thenable}]);
+
+            expect(result).to.be.an.instanceOf(Promise);
+            expect((await result).tags).to.equal(tags);
+        });
+
+        function getDecoder(name, matchResult, log) {
             return {
                 name,
                 matches: () => {
                     log.push('matches ' + name);
-                    return isMatch;
+                    return matchResult;
                 },
                 read: () => {
                     log.push('read ' + name);

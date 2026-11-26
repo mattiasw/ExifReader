@@ -1126,6 +1126,19 @@ describe('exif-reader', function () {
         expect(ExifReader.loadView()).to.deep.equal(myTags);
     });
 
+    it('should find a Pentax Type 1 MakerNote segment stored as signed bytes', () => {
+        const myExifTags = {
+            MakerNote: {
+                value: getCharacterArray('PENTAX \x00').concat([-1])
+            }
+        };
+        const myPentaxTags = {Artist: 'Arty'};
+        const myTags = {...myExifTags, ...myPentaxTags};
+        swapForLoadView({blocks: [{kind: 'exif', tiffHeaderOffset: OFFSET_TEST_VALUE}]}, Tags, myExifTags, OFFSET_TEST_VALUE_MAKER_NOTE);
+        swapMakerNoteTagsRead(myPentaxTags, PentaxTags);
+        expect(ExifReader.loadView()).to.deep.equal(myTags);
+    });
+
     it('should skip a MakerNote whose value lies outside the file', () => {
         const myExifTags = {
             MakerNote: {

@@ -109,6 +109,13 @@ describe('composable/composition-tag-filter', () => {
             expect(filter.shouldParseTag('exif', 'DateTime', 0x0132)).to.equal(false);
             expect(filter.shouldReturnTag('exif', 'IPTC-NAA', 0x83bb)).to.equal(false);
         });
+
+        it('should parse the Model Exif tag for makerNotes but not return it', () => {
+            const filter = createCompositionTagFilter({file: true, makerNotes: true}, makerNotes.exifDependencies.map((descriptor) => descriptor.name));
+
+            expect(filter.shouldParseTag('exif', 'Model', 0x0110)).to.equal(true);
+            expect(filter.shouldReturnTag('exif', 'Model', 0x0110)).to.equal(false);
+        });
     });
 });
 

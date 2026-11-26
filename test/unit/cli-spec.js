@@ -664,7 +664,7 @@ describe('cli', () => {
                         loadFullParser: () => Promise.resolve(fakeParser(results, [])),
                         loadTagBindingName: () => Promise.resolve(getTagBindingName),
                         loadIptcTagExportNames: () => Promise.resolve([]),
-                        loadMakerNoteDecoders: () => Promise.resolve([{name: 'canon', matches: (block) => block.make[0] === 'Canon'}])
+                        loadMakerNoteDecoders: () => Promise.resolve([{name: 'canon', matches: ({make}) => make === 'Canon'}])
                     });
                     await run(['node', 'cli', 'analyze', 'samples/a.jpg', '--imports'], deps);
                     expect(calls.log).to.have.lengthOf(1);

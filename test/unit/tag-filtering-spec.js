@@ -732,6 +732,16 @@ describe('tag filtering options', function () {
         expect(tags.makerNotes.LensType).to.not.equal(undefined);
         expect(tags.makerNotes.LensModel).to.equal(undefined);
     });
+
+    it('includeTags.makerNotes should parse MakerNote, Make and Model but not return them', function () {
+        const filter = createTagFilter({includeTags: {makerNotes: true}});
+
+        for (const [name, id] of [['MakerNote', 0x927c], ['Make', 0x010f], ['Model', 0x0110]]) {
+            expect(filter.shouldParseTag('exif', name, id), name).to.equal(true);
+            expect(filter.shouldReturnTag('exif', name, id), name).to.equal(false);
+        }
+        expect(filter.shouldParseTag('exif', 'DateTime', 0x0132)).to.equal(false);
+    });
 });
 
 describe('createTagFilter includeTagsIsLimit', () => {

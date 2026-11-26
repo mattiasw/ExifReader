@@ -969,9 +969,10 @@ A group or tag the file does not hold is absent from the result, so
 **What a group brings.** Each group reads the Exif tags it needs: `gps` the six
 GPS tags its values come from, `xmp` `ApplicationNotes`, `iptc` `IPTC-NAA`,
 `icc` `ICC_Profile`, `photoshop` `ImageSourceData` and `PhotoshopSettings`,
-`makerNotes`, `canon` and `pentax` `MakerNote` and `Make`, `thumbnail`
-`JPEGInterchangeFormat` and `JPEGInterchangeFormatLength`, and `composite` the
-focal length and pixel dimension tags it computes its values from. The reader
+`makerNotes`, `canon`, `pentax` and a decoder from `createMakerNoteDecoder`
+`MakerNote`, `Make` and `Model`, `thumbnail` `JPEGInterchangeFormat` and
+`JPEGInterchangeFormatLength`, and `composite` the focal length and pixel
+dimension tags it computes its values from. The reader
 reads those tags but returns them only when they are also in `tags` or the
 whole `exif` group is composed: with `makerNotes`, for example, add `Make` to
 `tags` to get `exif.Make`. A format brings its own tags: every format gives
@@ -1002,14 +1003,73 @@ XMP tag of the same name replaces it, as it does in `ExifReader.load`.
 |---|---|
 | `exifreader/core` | `createReader`, `errors` (`UnsupportedFormatError`), `tagFilter` |
 | `exifreader/formats` | `tiff`, `jpeg`, `png`, `heic`, `avif`, `jxl`, `webp`, `gif`, `xml` (XMP sidecar files; returns only `FileType` without `xmp` in `groups`), `allFormats` |
-| `exifreader/groups` | `exif`, `iptc`, `xmp`, `icc`, `photoshop`, `mpf`, `makerNotes`, `canon`, `pentax`, `gps`, `composite`, `thumbnail`, `allGroups` |
+| `exifreader/groups` | `exif`, `iptc`, `xmp`, `icc`, `photoshop`, `mpf`, `makerNotes`, `canon`, `pentax`, `gps`, `composite`, `thumbnail`, `allGroups`, `createMakerNoteDecoder` |
 | `exifreader/tags/exif`, `exifreader/tags/iptc` | One export per tag, named after the tag with every character that cannot be in a JavaScript name removed and the letter after it upper-cased (`By-line` becomes `ByLine`, `GPS Info IFD Pointer` becomes `GPSInfoIFDPointer`) |
 
 `makerNotes` holds every maker note decoder and grows with new releases.
 `canon` and `pentax` hold one each.
 
-Pass these values as they are imported. A copy or an altered copy of a format,
+Pass these values as they are imported, and a maker note decoder of your own as
+`createMakerNoteDecoder` returns it. A copy or an altered copy of a format,
 group or tag is not supported.
+
+**Maker note decoders.** `createMakerNoteDecoder` from `exifreader/groups`
+makes a decoder for a maker note that `canon` and `pentax` do not read. Pass it
+in `groups` like them:
+
+```javascript
+import {createReader} from 'exifreader/core';
+import {jpeg, tiff} from 'exifreader/formats';
+import {createMakerNoteDecoder} from 'exifreader/groups';
+
+// A made-up camera whose maker note starts with a 16-bit version number.
+const exampleCam = createMakerNoteDecoder({
+    matches: ({make, bytes}) => make === 'ExampleCam' && bytes.length >= 2,
+    read: ({tiffView, tiffHeaderOffset, makerNoteOffset, byteOrder}) => {
+        const version = tiffView.getUint16(tiffHeaderOffset + makerNoteOffset, byteOrder === 0x4949);
+        return {ExampleVersion: {value: version, description: `Version ${version}`}};
+    },
+});
+
+const reader = createReader({formats: [jpeg, tiff], groups: [exampleCam]});
+const tags = await reader.load(file);
+// tags.makerNotes.ExampleVersion
+```
+
+`createMakerNoteDecoder` takes an object with two functions and nothing else:
+
+- `matches({make, model, bytes})` returns `true` to claim the maker note. It
+  must be synchronous and cheap. `make` and `model` are the first string of the
+  `Make` and `Model` tags, or `undefined`. A tag that `excludeTags` leaves out
+  is `undefined` here too. `bytes` is the `MakerNote` value as an array of
+  numbers from 0 to 255, empty when the value holds anything else, such as
+  text. Leave it unchanged: later decoders and the returned `MakerNote` tag
+  share it. A `matches` that throws counts as no match.
+- `read({tiffView, tiffHeaderOffset, makerNoteOffset, byteOrder, context})`
+  returns the tags, an object of `{Name: {value, description}}`, or a Promise
+  of one. `tiffView` is the `DataView` the TIFF data was found in, often the
+  whole file, with the TIFF header at byte `tiffHeaderOffset`. The maker note
+  starts at byte `tiffHeaderOffset + makerNoteOffset`, and offsets inside an
+  IFD-style maker note usually count from the TIFF header. `byteOrder` is
+  `0x4949` (`II`, little-endian) or `0x4d4d` (`MM`, big-endian), so
+  `tiffView.getUint16(offset, byteOrder === 0x4949)` reads in the file's
+  order. `context.includeUnknown` and `context.computed` are the load's
+  options of those names.
+
+Both functions are called without a `this`. Each tag keeps its `value`,
+`description`, a numeric `id` and `computed`; entries that are not objects are
+left out, and a name such as `constructor` gets `_` appended, as for names read
+from a file. `includeTags` and `excludeTags` apply to `makerNotes`. A `read`
+that throws, or a Promise from it that rejects, leaves the maker note out, and
+the rest of the file still loads. The bytes come from the file, so check each
+offset and count read from them before using it.
+
+Decoders from `createMakerNoteDecoder` are tried first, in the order of
+`groups`, then `canon` and `pentax`, so a decoder of your own can take over a
+make the built-in ones read. A reader composed with only a decoder of your own
+returns only that decoder's tags under `makerNotes`. The first decoder that
+matches reads the maker note alone, so a decoder that also wants the tags
+`canon` or `pentax` read has to read them itself.
 
 **Everything.** `createReader({formats: allFormats, groups: allGroups})` reads
 everything (`allGroups` has `makerNotes`, not `canon` or `pentax`). Filtering

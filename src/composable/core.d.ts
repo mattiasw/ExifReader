@@ -11,6 +11,8 @@ declare const formatKeys: unique symbol;
 declare const groupBrand: unique symbol;
 declare const groupKeys: unique symbol;
 declare const groupMakerNotes: unique symbol;
+declare const groupDecoderTags: unique symbol;
+declare const decoderBrand: unique symbol;
 declare const tagDescriptorBrand: unique symbol;
 declare const tagDescriptorName: unique symbol;
 declare const tagFilterBrand: unique symbol;
@@ -38,10 +40,43 @@ export interface Format<Keys extends string = string> {
     readonly [formatKeys]?: Keys;
 }
 
-export interface Group<Keys extends string = string, MakerNotes extends MakerNoteMake = MakerNoteMake> {
+// DecoderTags is the tag type of a decoder from createMakerNoteDecoder; canon, pentax and makerNotes have never.
+export interface Group<Keys extends string = string, MakerNotes extends MakerNoteMake = MakerNoteMake, DecoderTags = unknown> {
     readonly [groupBrand]: true;
     readonly [groupKeys]?: Keys;
     readonly [groupMakerNotes]?: MakerNotes;
+    readonly [groupDecoderTags]?: DecoderTags;
+}
+
+export interface MakerNoteTag {
+    readonly value: unknown;
+    readonly description: string;
+}
+
+export type MakerNoteTags = {readonly [name: string]: MakerNoteTag};
+
+export interface MakerNoteMatchInput {
+    /** The first string of the Make tag. */
+    readonly make: string | undefined;
+    /** The first string of the Model tag. */
+    readonly model: string | undefined;
+    /** The MakerNote value as numbers from 0 to 255, empty when it holds anything else. Later decoders and the returned MakerNote tag share it. */
+    readonly bytes: readonly number[];
+}
+
+export interface MakerNoteReadInput {
+    /** The view the TIFF data was found in, often the whole file. The TIFF header is at byte tiffHeaderOffset of it and the maker note at tiffHeaderOffset + makerNoteOffset. */
+    readonly tiffView: DataView;
+    readonly tiffHeaderOffset: number;
+    readonly makerNoteOffset: number;
+    /** 0x4949 (II) for little-endian, 0x4d4d (MM) for big-endian. */
+    readonly byteOrder: 0x4949 | 0x4d4d;
+    /** The load's options of these names. */
+    readonly context: {readonly includeUnknown: boolean, readonly computed: boolean};
+}
+
+export interface Decoder<DecoderTags = {}> extends Group<'makerNotes', never, DecoderTags> {
+    readonly [decoderBrand]: true;
 }
 
 export interface TagDescriptor<TagGroup extends string = ReaderTagGroup, Name extends string = string> {
@@ -79,7 +114,18 @@ type DescriptorGroups<T> = T extends TagDescriptor<infer TagGroup, string> ? Tag
 type DescriptorNames<T, TagGroup extends string> = T extends TagDescriptor<infer DescriptorGroup, infer Name>
     ? (TagGroup extends DescriptorGroup ? Name : never)
     : never;
-type MakerNotesOf<G> = G extends Group<infer Keys, infer MakerNotes> ? ('makerNotes' extends Keys ? MakerNotes : never) : never;
+type MakerNotesOf<G> = G extends Decoder<unknown> ? never
+    : G extends Group<infer Keys, infer MakerNotes> ? ('makerNotes' extends Keys ? MakerNotes : never) : never;
+// Optional, since another decoder may read the maker note instead and a tag filter may drop tags.
+type DecoderTagsOf<G> = G extends Decoder<infer DecoderTags> ? KeptDecoderTags<DecoderTags> : never;
+// One object type per path of read; a name with only undefined on a path is left out of that path's type.
+type KeptDecoderTags<Tags> = Tags extends unknown ? {[Name in keyof Tags as KeptDecoderTagName<Tags, Name>]?: KeptDecoderTag<NonNullable<Tags[Name]>>} : never;
+type KeptDecoderTagName<Tags, Name extends keyof Tags> = [NonNullable<Tags[Name]>] extends [never] ? never : Name;
+// The fields createMakerNoteDecoder keeps of a tag: value, description, computed and a numeric id.
+type KeptDecoderTag<Tag> = {[Field in keyof Tag as KeptDecoderTagField<Tag, Field>]: Tag[Field]};
+type KeptDecoderTagField<Tag, Field extends keyof Tag> = Field extends 'value' | 'description' | 'computed' ? Field
+    : Field extends 'id' ? (NonNullable<Tag[Field]> extends number ? Field : never)
+    : never;
 type HasUnknown<F, G, T> = (F extends Format<infer Keys> ? (string extends Keys ? true : never) : never)
     | (G extends Group<infer Keys, MakerNoteMake> ? (string extends Keys ? true : never) : never)
     | (T extends TagDescriptor<string, infer Name> ? (string extends Name ? true : never) : never);
@@ -88,7 +134,7 @@ type UnionToIntersection<U> = (U extends unknown ? (u: U) => void : never) exten
 type ComposedKeys<F, G, T> = Extract<FormatKeys<F> | GroupKeys<G> | DescriptorGroups<T>, keyof ComposedExpandedTags>;
 // TypeScript 5.4.5 without skipLibCheck rejects ComposedExpandedTags[K] in the group branch (TS2536); the intersection avoids it.
 type GroupedTags<Keys extends keyof ComposedExpandedTags, F, G, T> = {
-    [K in Keys]?: K extends 'makerNotes' ? UnionToIntersection<MakerNoteTagsByMake[MakerNotesOf<G>]>
+    [K in Keys]?: K extends 'makerNotes' ? UnionToIntersection<MakerNoteTagsByMake[MakerNotesOf<G>] | DecoderTagsOf<G>>
         : K extends FormatKeys<F> | GroupKeys<G> ? ComposedExpandedTags[K & keyof ComposedExpandedTags]
         : K extends 'iptc' ? Pick<ComposedIptcTags, Extract<DescriptorNames<T, K>, keyof ComposedIptcTags>>
         : K extends ReaderTagGroup ? Pick<ExifTags, Extract<DescriptorNames<T, K>, keyof ExifTags>>

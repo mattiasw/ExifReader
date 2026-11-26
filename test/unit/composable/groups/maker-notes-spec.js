@@ -26,7 +26,7 @@ describe('composable/groups/maker-notes', () => {
     it('should read a Pentax type-1 maker note with the Pentax decoder', () => {
         const {canonReads, pentaxReads} = swapReads();
 
-        expect(makerNotes.read(getMakerNoteBlock({make: ['PENTAX'], bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Pentax: {value: 1}}});
+        expect(makerNotes.read(getMakerNoteBlock({make: 'PENTAX', bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Pentax: {value: 1}}});
         expect(canonReads).to.have.lengthOf(0);
         expect(pentaxReads).to.have.lengthOf(1);
     });
@@ -34,7 +34,7 @@ describe('composable/groups/maker-notes', () => {
     it('should try Canon by Make before Pentax by prefix', () => {
         const {canonReads, pentaxReads} = swapReads();
 
-        expect(makerNotes.read(getMakerNoteBlock({make: ['Canon'], bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Canon: {value: 1}}});
+        expect(makerNotes.read(getMakerNoteBlock({make: 'Canon', bytes: getPentaxType1Bytes()}), getContext())).to.deep.equal({tags: {Canon: {value: 1}}});
         expect(canonReads).to.have.lengthOf(1);
         expect(pentaxReads).to.have.lengthOf(0);
     });
