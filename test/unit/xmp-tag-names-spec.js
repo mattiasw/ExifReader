@@ -63,6 +63,74 @@ describe('xmp-tag-names', () => {
         expect(XmpTagNames['exif:GPSLongitude']('17,15,')).to.equal('17,15,');
     });
 
+    it('should keep the fractions of degrees and seconds in exif:GPSLatitude descriptions', () => {
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,36.5N')).to.equal('48.51013888888889N');
+        expect(XmpTagNames['exif:GPSLatitude']('48.5,0N')).to.equal('48.5N');
+    });
+
+    it('should return an exif:GPSLatitude value without a direction unchanged', () => {
+        expect(XmpTagNames['exif:GPSLatitude']('48,28.8')).to.equal('48,28.8');
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,36')).to.equal('48,30,36');
+    });
+
+    it('should return a GPS coordinate value with four parts unchanged', () => {
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,36,99N')).to.equal('48,30,36,99N');
+        expect(XmpTagNames['exif:GPSLongitude'](' 9, 30, 38,15')).to.equal(' 9, 30, 38,15');
+    });
+
+    it('should ignore whitespace around an exif:GPSLatitude value', () => {
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,36N ')).to.equal('48.51N');
+        expect(XmpTagNames['exif:GPSLatitude'](' 48,30,36N')).to.equal('48.51N');
+    });
+
+    it('should describe a lower-case GPS coordinate direction in upper case', () => {
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,36n')).to.equal('48.51N');
+        expect(XmpTagNames['exif:GPSLongitude']('17,15,0w')).to.equal('17.25W');
+    });
+
+    it('should return an exif:GPSLatitude value that does not end in a direction unchanged', () => {
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,36X')).to.equal('48,30,36X');
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,36N5')).to.equal('48,30,36N5');
+        expect(XmpTagNames['exif:GPSLatitude']('48,30,36NE')).to.equal('48,30,36NE');
+    });
+
+    it('should return an exif:GPSLatitude value with parts that are not plain decimals unchanged', () => {
+        const values = [
+            '-48,30,36N',
+            '1,2,3e5N',
+            '0x10,0x20,0x30N',
+            '48,30,1e999N',
+            '48, 30, 36N',
+            '48,30.,36N',
+            '.5,30,36N',
+            '48.,30,36N',
+            '48,.5N',
+            '48,30,.5N',
+            '48,30,36.N',
+            ',30,36N'
+        ];
+        for (const value of values) {
+            expect(XmpTagNames['exif:GPSLatitude'](value), value).to.equal(value);
+        }
+    });
+
+    it('should return an exif:GPSLatitude value that is not a finite number unchanged', () => {
+        const value = '1' + '0'.repeat(400) + ',0N';
+        expect(XmpTagNames['exif:GPSLatitude'](value)).to.equal(value);
+    });
+
+    it('should report correct description for exif:GPSDestLatitude', () => {
+        expect(XmpTagNames['exif:GPSDestLatitude']('48,28.8N')).to.equal('48.48N');
+        expect(XmpTagNames['exif:GPSDestLatitude']('faulty')).to.equal('faulty');
+        expect(XmpTagNames['exif:GPSDestLatitude']('17,15,30')).to.equal('17,15,30');
+    });
+
+    it('should report correct description for exif:GPSDestLongitude', () => {
+        expect(XmpTagNames['exif:GPSDestLongitude']('17,15,30W')).to.equal('17.258333333333333W');
+        expect(XmpTagNames['exif:GPSDestLongitude']('faulty')).to.equal('faulty');
+        expect(XmpTagNames['exif:GPSDestLongitude']('17,15,30')).to.equal('17,15,30');
+    });
+
     it('should report correct description for exif:FNumber', () => {
         expect(XmpTagNames['exif:FNumber']('71/10')).to.equal('f/7.1');
     });
