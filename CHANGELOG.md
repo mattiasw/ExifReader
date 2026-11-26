@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.56.0] - 2026-11-26
+
 ### Added
 
 - The DNG tag `DNGVersion`, described as a dotted version such as `1.4.0.0`,
@@ -2618,7 +2620,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.55.1...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.56.0...HEAD
+[4.56.0]: https://github.com/mattiasw/ExifReader/compare/v4.55.1...v4.56.0
 [4.55.1]: https://github.com/mattiasw/ExifReader/compare/v4.55.0...v4.55.1
 [4.55.0]: https://github.com/mattiasw/ExifReader/compare/v4.54.0...v4.55.0
 [4.54.0]: https://github.com/mattiasw/ExifReader/compare/v4.53.0...v4.54.0
