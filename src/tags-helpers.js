@@ -30,6 +30,8 @@ const MAX_DECOMPRESSED_VALUE_ALLOWANCE = 1024 * 1024;
 // visit at most about as many entries as the buffer holds.
 const MAX_IFD_ENTRY_READS_PER_BUFFER_ENTRY = 4;
 
+const FAULTY_VALUE = '<faulty value>';
+
 // Each string after the first of an out-of-slot ASCII or UTF-8 value costs
 // this much budget. 4 MiB files whose tags use the budget up on short strings
 // peaked at up to 107 times their size in RSS without it, 88 with 1 and 76
@@ -325,6 +327,7 @@ function readTag(
     let tagValue;
     let tagValueOffset;
     let stringBudget;
+    let isFaultyValue = false;
 
     if (Types.typeSizes[tagType] === undefined || (!includeUnknown && tagNames[ifdType][tagCode] === undefined)) {
         return undefined;
@@ -347,7 +350,8 @@ function readTag(
             stringBudget = valueBudget;
             tagValue = getTagValue(dataView, offsetOrigin + tagValueOffset, tagType, boundedTagCount, byteOrder, forceByteType);
         } else {
-            tagValue = '<faulty value>';
+            tagValue = FAULTY_VALUE;
+            isFaultyValue = true;
         }
     }
 
@@ -359,7 +363,7 @@ function readTag(
         id: tagCode,
         name: tagName,
         value: tagValue,
-        description: getTagDescription(tagNames[ifdType][tagCode], tagType, tagValue),
+        description: isFaultyValue ? getFaultyValueDescription(tagNames[ifdType][tagCode], tagType) : getTagDescription(tagNames[ifdType][tagCode], tagType, tagValue),
         tagType,
         __offset: tagValueOffset
     };
@@ -484,6 +488,13 @@ function drawExtraString(stringBudget) {
     return true;
 }
 
+// A description that is a number, as that of a decimal GPS coordinate, stays
+// one (NaN). Every other description is text.
+function getFaultyValueDescription(tagEntry, tagType) {
+    const description = getTagDescription(tagEntry, tagType, FAULTY_VALUE);
+    return typeof description === 'number' ? description : FAULTY_VALUE;
+}
+
 // A tag the dictionary leaves out is described as one it lists by name only.
 function getTagDescription(tagEntry, tagType, tagValue) {
     if ((tagEntry !== undefined) && (tagEntry['name'] !== undefined) && (tagEntry['description'] !== undefined)) {
@@ -503,11 +514,7 @@ function getDescriptionFromTagValue(tagValue) {
     if (tagValue instanceof Array) {
         return tagValue.join(', ');
     }
-    return getNumberAsString(tagValue);
-}
-
-function getNumberAsString(value) {
-    return typeof value === 'number' ? String(value) : value;
+    return String(tagValue);
 }
 
 // A zero denominator computes to null.

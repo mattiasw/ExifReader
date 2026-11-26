@@ -41,7 +41,8 @@ export const CORE_MERGE_MODES = {
  * `modes` or of CORE_MERGE_MODES). A tag block also has the `group` it merges
  * into and its parsed `tags`; a `nested` container has `blocks`, merged among
  * themselves in slot order at the container's position. A metadataRange block
- * carries `metadataBlocks` and `metadataTruncated`.
+ * carries `metadataBlocks`, `metadataTruncated` and, when the finder reported
+ * one, `metadataResumeEnd`.
  *
  * `modes` holds the modes the composed formats and groups bring, each
  * `(tags, block, context) => tags`; one of them wins over a core mode of the
@@ -261,6 +262,7 @@ function addMetadataRange(tags, block, context) {
     const metadataRange = buildMetadataRange(
         block.metadataBlocks,
         block.metadataTruncated,
+        block.metadataResumeEnd,
         context.dataView,
         context.parsedGroups
     );
@@ -306,7 +308,7 @@ function createInPlaceMerge(deps) {
     }
 }
 
-function buildMetadataRange(metadataBlocks, metadataTruncated, dataView, parsedGroups) {
+function buildMetadataRange(metadataBlocks, metadataTruncated, metadataResumeEnd, dataView, parsedGroups) {
     const blocks = (metadataBlocks || []).slice();
     const finderTruncated = !!metadataTruncated;
 
@@ -344,6 +346,9 @@ function buildMetadataRange(metadataBlocks, metadataTruncated, dataView, parsedG
         if (blocks[i].end > end) {
             end = blocks[i].end;
         }
+    }
+    if (finderTruncated && metadataResumeEnd > end) {
+        end = metadataResumeEnd;
     }
 
     const byteLength = dataView && typeof dataView.byteLength === 'number' ? dataView.byteLength : 0;

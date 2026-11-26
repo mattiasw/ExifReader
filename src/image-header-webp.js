@@ -31,7 +31,11 @@ function isWebpFile(dataView) {
  * @param {DataView} dataView The data view to find blocks in.
  * @param {Array<Object>=} ranges Optional out-array. When provided, receives
  *     one `{block, start, end}` span per recognized chunk (EXIF/XMP/ICCP/VP8X)
- *     with `start` and `end` covering the full RIFF chunk header and content.
+ *     with `start` and `end` covering the full RIFF chunk header and content,
+ *     and gets `truncated` set to true if the walk stopped before the end the
+ *     RIFF header declares with room for another chunk header left, unless the
+ *     VP8X flags declare neither Exif nor XMP. Then it also gets `resumeEnd`,
+ *     the end the RIFF header declares.
  * @returns {Array<Object>} The blocks, in the order their first chunk was met.
  */
 function findOffsets(dataView, ranges) {
@@ -39,6 +43,8 @@ function findOffsets(dataView, ranges) {
     const CHUNK_SIZE_OFFSET = 4;
     const EXIF_IDENTIFIER = 'Exif\x00\x00';
     const CHUNK_HEADER_SIZE = 8;
+    const RIFF_SIZE_OFFSET = 4;
+    const RIFF_DATA_OFFSET = 8;
 
     const blocks = [];
     let offset = SUB_CHUNK_START_OFFSET;
@@ -89,5 +95,22 @@ function findOffsets(dataView, ranges) {
         offset += chunkTotalSize;
     }
 
+    if (ranges) {
+        const riffEnd = RIFF_DATA_OFFSET + dataView.getUint32(RIFF_SIZE_OFFSET, true);
+        // Another chunk header fits before the RIFF end.
+        ranges.truncated = offset + CHUNK_HEADER_SIZE < riffEnd && mayHaveExifOrXmp(dataView, riffBlock);
+        if (ranges.truncated) {
+            ranges.resumeEnd = riffEnd;
+        }
+    }
+
     return blocks;
+}
+
+// Without a VP8X chunk there are no flags to go by.
+function mayHaveExifOrXmp(dataView, riffBlock) {
+    const EXIF_FLAG = 0x08;
+    const XMP_FLAG = 0x04;
+
+    return !riffBlock || (dataView.getUint8(riffBlock.dataOffset) & (EXIF_FLAG | XMP_FLAG)) !== 0;
 }

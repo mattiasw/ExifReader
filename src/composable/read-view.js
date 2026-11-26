@@ -43,7 +43,7 @@ export function readView(composition, dataView, options, environment) {
     } = options;
     dataView = getSelfContainedDataView(dataView);
 
-    const {fileType, blocks: allBlocks, ranges, truncated} = ImageHeader.parseAppMarkers(dataView, expanded && includeOffsets, composition.formats);
+    const {fileType, blocks: allBlocks, ranges, truncated, resumeEnd} = ImageHeader.parseAppMarkers(dataView, expanded && includeOffsets, composition.formats);
     if (async) {
         assertPromiseSupport();
     }
@@ -70,7 +70,7 @@ export function readView(composition, dataView, options, environment) {
             mergeBlocks = composition.prepareMergeBlocks[i](mergeBlocks);
         }
         let tags = buildTagsFromMergeBlocks({
-            mergeBlocks: mergeBlocks.concat(getDerivedBlocks(composition, {expanded, includeOffsets, async, ranges, truncated})),
+            mergeBlocks: mergeBlocks.concat(getDerivedBlocks(composition, {expanded, includeOffsets, async, ranges, truncated, resumeEnd})),
             parsedGroups: Object.create(null),
             expanded,
             tagFilter,
@@ -113,7 +113,7 @@ function isDataViewLike(dataView) {
         && (typeof dataView.buffer.slice === 'function');
 }
 
-function getDerivedBlocks(composition, {expanded, includeOffsets, async, ranges, truncated}) {
+function getDerivedBlocks(composition, {expanded, includeOffsets, async, ranges, truncated, resumeEnd}) {
     const blocks = composition.derived.map((group) => group.merge());
     blocks.push({slot: 'thumbnail', mode: 'thumbnail'});
     blocks.push({slot: 'fileType', mode: 'fileType'});
@@ -123,6 +123,7 @@ function getDerivedBlocks(composition, {expanded, includeOffsets, async, ranges,
             mode: 'metadataRange',
             metadataBlocks: getMetadataRangeBlocks(composition, ranges, async),
             metadataTruncated: !!truncated,
+            metadataResumeEnd: resumeEnd,
         });
     }
     return blocks;

@@ -175,9 +175,9 @@ function rejectInvalidLength() {
  *        response; where the response body is a `ReadableStream` the transfer is stopped once they have arrived,
  *        otherwise the whole body is read and cut.
  * @returns {Promise<{buffer: ArrayBuffer, totalSize: number|undefined, status: number|undefined}>}
- *          `totalSize` is taken from the `Content-Range` or `Content-Length` response header when present.
+ *          `totalSize` is taken from the `Content-Range` total, or from `Content-Length` on a 200 response, when present.
  *          Rejects with `Could not fetch file: <status>` on non-2xx responses, except 416 which the
- *          `length: 'auto'` loop consumes as a fall-back signal and which resolves with an empty buffer.
+ *          `length: 'auto'` loop consumes and which resolves with an empty buffer.
  *          The body of a 416 or a rejected status is never read; a `ReadableStream` body is cancelled.
  *          An empty range (`end <= start`) resolves with an empty buffer without a request.
  *          Mirrors `nodeGetRange`.
@@ -310,15 +310,21 @@ function totalSizeFromFetchResponse(response) {
     if (!response || !response.headers || typeof response.headers.get !== 'function') {
         return undefined;
     }
-    return totalSizeFromRangeHeaders(response.headers.get('Content-Range'), response.headers.get('Content-Length'));
+    return totalSizeFromRangeHeaders(
+        response.status,
+        response.headers.get('Content-Range'),
+        response.headers.get('Content-Length')
+    );
 }
 
 function isAcceptableFetchStatus(status) {
     if ((status >= HTTP_STATUS_OK) && (status <= HTTP_STATUS_SUCCESS_MAX)) {
         return true;
     }
-    // 416 is consumed by the `length: 'auto'` adaptive loop (it falls back
-    // to a full read), so it must not be surfaced as a fetch error.
+    // 416 is consumed by the `length: 'auto'` adaptive loop (on its first
+    // read it means a full read, on a later read a read to the end, and on
+    // that read the end of the file), so it must not be surfaced as a fetch
+    // error.
     return status === HTTP_STATUS_RANGE_NOT_SATISFIABLE;
 }
 
@@ -369,7 +375,7 @@ export function nodeGetRange(url, {start = 0, end, maxBytes} = {}) {
                 }
             } else if (response.statusCode === HTTP_STATUS_RANGE_NOT_SATISFIABLE) {
                 // Resolve (rather than reject) so the adaptive `length: 'auto'`
-                // loop can fall back to a full read, mirroring the fetch path.
+                // loop can consume it, mirroring the fetch path.
                 const totalSize = totalSizeFromNodeResponse(response);
                 response.destroy();
                 resolve({buffer: Buffer.alloc(0), totalSize, status: response.statusCode});
@@ -415,17 +421,22 @@ function totalSizeFromNodeResponse(response) {
     if (!response || !response.headers) {
         return undefined;
     }
-    return totalSizeFromRangeHeaders(response.headers['content-range'], response.headers['content-length']);
+    return totalSizeFromRangeHeaders(
+        response.statusCode,
+        response.headers['content-range'],
+        response.headers['content-length']
+    );
 }
 
-function totalSizeFromRangeHeaders(contentRange, contentLength) {
+function totalSizeFromRangeHeaders(status, contentRange, contentLength) {
     if (contentRange) {
         const match = /\/(\d+|\*)$/.exec(contentRange);
         if (match && match[1] !== '*') {
             return parseInt(match[1], 10);
         }
     }
-    if (contentLength) {
+    // On a 206 or a 416 `Content-Length` is the size of the part or of the error body, not of the file.
+    if (status === HTTP_STATUS_OK && contentLength) {
         const n = parseInt(contentLength, 10);
         if (Number.isFinite(n)) {
             return n;

@@ -128,15 +128,38 @@ export function makeLoadAuto(loadFromData) {
         return state.readRange(state.fetched, state.need, {totalSize: state.totalSize})
             .then((chunk) => {
                 state.requests++;
-                // Fall back to a full GET when the server cannot satisfy
-                // the requested range.
+                if (isAnswerPastEndOfFile(state, chunk)) {
+                    // A server may answer 416 to a range whose end, not start, is past the file.
+                    return confirmEndOfFile(state).then(() => parseAndDecide(state));
+                }
                 if (chunk.status === HTTP_STATUS_RANGE_NOT_SATISFIABLE) {
+                    // A 416 on the first read: the server refuses ranges,
+                    // so fall back to a full GET.
                     return handleAdaptive416(state);
                 }
-                mergeAdaptiveChunk(state, chunk);
-                return Promise.resolve(loadFromData(state.buffer, state.options))
-                    .then((tags) => decideAdaptiveNext(state, tags));
+                mergeAdaptiveChunk(state, chunk, state.need);
+                return parseAndDecide(state);
             });
+    }
+
+    function confirmEndOfFile(state) {
+        return state.readRange(state.fetched, Infinity, {totalSize: state.totalSize})
+            .then((chunk) => {
+                state.requests++;
+                if (isAnswerPastEndOfFile(state, chunk)) {
+                    state.totalSize = state.fetched;
+                    return;
+                }
+                mergeAdaptiveChunk(state, chunk, Infinity);
+                if (chunk.totalSize === undefined) {
+                    state.totalSize = state.fetched;
+                }
+            });
+    }
+
+    function parseAndDecide(state) {
+        return Promise.resolve(loadFromData(state.buffer, state.options))
+            .then((tags) => decideAdaptiveNext(state, tags));
     }
 
     function decideAdaptiveNext(state, tags) {
@@ -191,17 +214,9 @@ export function makeLoadAuto(loadFromData) {
         );
         let chunkPromise;
         if (state.totalSize !== undefined && state.fetched < state.totalSize) {
-            chunkPromise = state.readRange(state.fetched, state.totalSize, {totalSize: state.totalSize})
-                .then((chunk) => {
-                    state.requests++;
-                    mergeAdaptiveChunk(state, chunk);
-                });
+            chunkPromise = readFallbackChunk(state, state.totalSize);
         } else if (state.totalSize === undefined) {
-            chunkPromise = state.readRange(state.fetched, Infinity, {totalSize: state.totalSize})
-                .then((chunk) => {
-                    state.requests++;
-                    mergeAdaptiveChunk(state, chunk);
-                });
+            chunkPromise = readFallbackChunk(state, Infinity);
         } else {
             chunkPromise = Promise.resolve();
         }
@@ -214,9 +229,19 @@ export function makeLoadAuto(loadFromData) {
                 return attachAdaptiveFields(tags, state.buffer, state.fetched, state.requests);
             });
     }
+
+    function readFallbackChunk(state, end) {
+        return state.readRange(state.fetched, end, {totalSize: state.totalSize})
+            .then((chunk) => {
+                state.requests++;
+                if (!isAnswerPastEndOfFile(state, chunk)) {
+                    mergeAdaptiveChunk(state, chunk, end);
+                }
+            });
+    }
 }
 
-function mergeAdaptiveChunk(state, chunk) {
+function mergeAdaptiveChunk(state, chunk, requestedEnd) {
     // HTTP 200 on a Range request means the server ignored Range and
     // sent the full body. Replace the buffer instead of concatenating to
     // avoid corrupting offsets.
@@ -226,13 +251,30 @@ function mergeAdaptiveChunk(state, chunk) {
         if (chunk.totalSize !== undefined) {
             state.totalSize = chunk.totalSize;
         }
-        return;
+    } else {
+        if (chunk.totalSize !== undefined && state.totalSize === undefined) {
+            state.totalSize = chunk.totalSize;
+        }
+        state.buffer = concatBuffers(state.buffer, chunk.buffer);
+        state.fetched = bufferByteLength(state.buffer);
     }
-    if (chunk.totalSize !== undefined && state.totalSize === undefined) {
-        state.totalSize = chunk.totalSize;
+    if (isWholeBodyWithNoSize(chunk, requestedEnd)) {
+        state.totalSize = state.fetched;
     }
-    state.buffer = concatBuffers(state.buffer, chunk.buffer);
-    state.fetched = bufferByteLength(state.buffer);
+}
+
+function isWholeBodyWithNoSize(chunk, requestedEnd) {
+    // The body was cut at `requestedEnd`, so a shorter 200 is the whole file.
+    return chunk.status === HTTP_STATUS_OK
+        && chunk.totalSize === undefined
+        && bufferByteLength(chunk.buffer) < requestedEnd;
+}
+
+function isAnswerPastEndOfFile(state, chunk) {
+    if (state.fetched === 0) {
+        return false;
+    }
+    return chunk.status === HTTP_STATUS_RANGE_NOT_SATISFIABLE || bufferByteLength(chunk.buffer) === 0;
 }
 
 function attachAdaptiveFields(tags, buffer, fetched, requests) {
