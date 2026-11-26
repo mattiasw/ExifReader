@@ -118,6 +118,16 @@ Use `npm run test` to run the unit tests and make use of `describe.only` and `it
 
 Mocha prints only the closing summary locally (`spec` on CI), configured in `.mocharc.cjs`; failures always print in full. Set `EXIFREADER_MOCHA_REPORTER=spec` for per-test output. The coverage table hides files at 100%; pass `--skip-full=false` to `c8` to see them.
 
+### Platform differences
+
+The tests have to pass on every platform CI runs them on, today Linux and Windows, and a contributor may develop on any of them. A test written on one platform can fail on another. What has gone wrong so far:
+
+- **Line endings.** A checkout can have CRLF line endings, as the Windows CI job has. A test that reads a file of the repository as text replaces `\r\n` by `\n` before it compares (see `readCommittedText` in `test/unit/generate-tag-modules-spec.js`).
+- **Paths.** Separators and roots differ. A file name handed to a tool that resolves it, such as Babel or webpack, comes back as that platform's absolute path, on Windows with a drive letter and backslashes. Build such a name with `path.resolve`, not `path.join`, and do not compare against a path written by hand with `/`.
+- **Speed.** File operations can be far slower than on the machine a test was written on: creating files is more than 20 times slower on the Windows CI job. A test or hook that creates many files sets a timeout of its own.
+
+Add to this list when a new kind of failure shows up.
+
 ### TDD: red-green-refactor
 
 Write code test-first. For each new behavior:
