@@ -36,7 +36,7 @@ Users can configure custom builds (via `package.json` `"exifreader"` key) to inc
 | Type tests | `npm run test:types` |
 | Coverage | `npm run coverage` |
 | Build | `npm run build` |
-| Validate (what the pre-push hook runs) | `npm run validate` (lint + types + coverage + build test) |
+| Validate (what the pre-push hook runs) | `npm run validate` (lint + types + coverage + build test + integration test) |
 | All tests (E2Es need the local server running with `npm run start`) | `npm run test:all` |
 | Bundle-size gate (a CI job, not part of the pre-push hook) | `npm run test:bundle-size` |
 

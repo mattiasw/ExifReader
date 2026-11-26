@@ -149,7 +149,7 @@
     "test:packaging:install": "npm install --prefix test/packaging/tools --no-package-lock --no-audit --no-fund --ignore-scripts",
     "test:packaging": "node test/packaging/resolver-matrix.mjs",
     "test:all": "npm-run-all2 lint test:types coverage test:e2e:chrome test:integration test:build test:build:custom",
-    "validate": "npm-run-all2 lint test:types coverage test:build",
+    "validate": "npm-run-all2 lint test:types coverage test:build test:integration",
     "postinstall": "node bin/build.js --only-with-config",
     "prepare": "husky"
   },
