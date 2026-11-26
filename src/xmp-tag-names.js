@@ -59,6 +59,8 @@ export default {
     'exif:ApertureValue': (value) => fraction(getApertureValueDescription, value),
     'exif:GPSLatitude': calculateGPSValue,
     'exif:GPSLongitude': calculateGPSValue,
+    'exif:GPSDestLatitude': calculateGPSValue,
+    'exif:GPSDestLongitude': calculateGPSValue,
     'exif:FNumber': (value) => fraction(getFNumberDescription, value),
     'exif:FocalLength': (value) => fraction(getFocalLengthDescription, value),
     'exif:FocalPlaneResolutionUnit': (value) => getFocalPlaneResolutionUnitDescription(parseInt(value, 10)),
@@ -107,15 +109,15 @@ function isFraction(value) {
 }
 
 function calculateGPSValue(value) {
-    const [degreesString, minutesString, secondsString] = value.split(',');
-    if ((degreesString !== undefined) && (minutesString !== undefined)) {
-        const degrees = parseFloat(degreesString);
-        const minutes = parseFloat(minutesString);
-        const seconds = secondsString === undefined ? 0 : parseFloat(secondsString);
-        const lastPart = secondsString === undefined ? minutesString : secondsString;
-        const ref = lastPart.charAt(lastPart.length - 1);
-        if ((!Number.isNaN(degrees)) && (!Number.isNaN(minutes)) && (!Number.isNaN(seconds))) {
-            return '' + (degrees + minutes / 60 + seconds / 3600) + ref;
+    // XMP GPSCoordinate: DDD,MM,SSk or DDD,MM.mmk, with k one of N, S, E or W.
+    const match = /^(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)(?:,(\d+(?:\.\d+)?))?([NSEW])$/i.exec(value.trim());
+    if (match) {
+        const degrees = parseFloat(match[1]);
+        const minutes = parseFloat(match[2]);
+        const seconds = match[3] === undefined ? 0 : parseFloat(match[3]);
+        const decimal = degrees + minutes / 60 + seconds / 3600;
+        if (Number.isFinite(decimal)) {
+            return '' + decimal + match[4].toUpperCase();
         }
     }
     return value;

@@ -34,11 +34,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `npx exifreader analyze --imports` imports `canon` or `pentax` instead of
   `makerNotes` when every maker note in the images is of that one make, and
   says in a comment that the group decodes no other make.
+- The XMP `GPSDestLatitude` and `GPSDestLongitude` are described like the XMP
+  `GPSLatitude` and `GPSLongitude`, as the decimal coordinate with its
+  direction (`17.258333333333333W` for `17,15,30W`), instead of as their text.
 
 ### Fixed
 
-- XMP GPS coordinates in degrees, minutes and seconds now include the seconds
-  and keep their compass direction in the description.
+- The XMP `GPSLatitude` and `GPSLongitude` in degrees, minutes and seconds are
+  described with the seconds and the compass direction, such as `48.51N` for
+  `48,30,36N`. The description was a number with the last digit of the minutes
+  appended (`48.50`). A value in neither form of the XMP GPS coordinate
+  (`DDD,MM,SSk` or `DDD,MM.mmk`, with `k` one of `N`, `S`, `E` or `W`), such as
+  one with no direction or with four parts, is now described as its text. It
+  was a number with a digit of the value appended, which read as another
+  coordinate. A lower-case direction is accepted and described in upper case.
 - Rational tags without a description function of their own are no longer
   described as `NaN`. A tag with several values, such as the DNG tags
   `ColorMatrix1` and `AsShotNeutral`, is described as its quotients separated
