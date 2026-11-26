@@ -10,8 +10,8 @@ import {GROUP_BRAND} from '../brand.js';
 
 export const pentaxDecoder = {
     name: 'pentax',
-    matches: (block) => hasPentaxType1Prefix(block.bytes),
-    read: (block, ctx) => PentaxTags.read(block.tiffView, block.tiffHeaderOffset, block.makerNoteOffset, ctx.options.includeUnknown, ctx.options.computed, ctx.tagFilter, getSharedValueBudget(ctx)),
+    matches: ({bytes}) => hasPentaxType1Prefix(bytes),
+    read: ({tiffView, tiffHeaderOffset, makerNoteOffset, context}) => PentaxTags.read(tiffView, tiffHeaderOffset, makerNoteOffset, context.includeUnknown, context.computed, context.engineContext.tagFilter, getSharedValueBudget(context.engineContext)),
 };
 
 export const pentax = {

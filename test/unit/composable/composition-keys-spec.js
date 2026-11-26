@@ -42,7 +42,7 @@ const TRACKED_IMAGES = [
 ];
 const ALL_TABLES = ['allFormats', 'allGroups'];
 const FORMAT_NAMES = Object.keys(Formats).filter((name) => !ALL_TABLES.includes(name));
-const GROUP_NAMES = Object.keys(Groups).filter((name) => !ALL_TABLES.includes(name));
+const GROUP_NAMES = Object.keys(Groups).filter((name) => !ALL_TABLES.includes(name) && typeof Groups[name] !== 'function');
 const METADATA_RANGE = 'metadataRange';
 const OPTION_SETS = [{}, {includeOffsets: true}];
 const DESCRIPTOR_OPTION_SETS = [{}, {includeUnknown: true}];

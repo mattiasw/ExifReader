@@ -391,14 +391,18 @@ function singleMakerNoteDecoderName(results, makerNoteDecoders) {
     const names = new Set();
     for (const tags of results.filter((result) => 'makerNotes' in result || (result.exif && 'MakerNote' in result.exif))) {
         const exif = tags.exif || {};
-        const block = {make: exif.Make && exif.Make.value, bytes: exif.MakerNote && exif.MakerNote.value};
-        const decoder = makerNoteDecoders.find((candidate) => candidate.matches(block));
+        const input = {make: firstString(exif.Make), model: firstString(exif.Model), bytes: exif.MakerNote && exif.MakerNote.value};
+        const decoder = makerNoteDecoders.find((candidate) => candidate.matches(input) === true);
         if (!decoder) {
             return undefined;
         }
         names.add(decoder.name);
     }
     return names.size === 1 ? Array.from(names)[0] : undefined;
+}
+
+function firstString(tag) {
+    return tag && Array.isArray(tag.value) && typeof tag.value[0] === 'string' ? tag.value[0] : undefined;
 }
 
 // Every iptc name as a tag, or none when exifreader/tags/iptc has no export

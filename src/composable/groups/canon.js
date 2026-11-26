@@ -9,8 +9,8 @@ import {GROUP_BRAND} from '../brand.js';
 
 export const canonDecoder = {
     name: 'canon',
-    matches: (block) => Array.isArray(block.make) && block.make[0] === 'Canon',
-    read: (block, ctx) => CanonTags.read(block.tiffView, block.tiffHeaderOffset, block.makerNoteOffset, block.byteOrder, ctx.options.includeUnknown, ctx.options.computed, ctx.tagFilter, getSharedValueBudget(ctx)),
+    matches: ({make}) => make === 'Canon',
+    read: ({tiffView, tiffHeaderOffset, makerNoteOffset, byteOrder, context}) => CanonTags.read(tiffView, tiffHeaderOffset, makerNoteOffset, byteOrder, context.includeUnknown, context.computed, context.engineContext.tagFilter, getSharedValueBudget(context.engineContext)),
 };
 
 export const canon = {

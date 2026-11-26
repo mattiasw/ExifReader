@@ -109,7 +109,7 @@ describe('composable/composition', () => {
                 restores.push(restore);
 
                 expect(composition.groups).to.have.lengthOf(1);
-                const {mergeBlocks} = run(composition, [getMakerNoteBlock({make: ['Canon']})], getContext({composed: composition.composed}));
+                const {mergeBlocks} = run(composition, [getMakerNoteBlock({make: 'Canon'})], getContext({composed: composition.composed}));
 
                 expect(calls).to.have.lengthOf(1);
                 expect(mergeBlocks).to.have.lengthOf(1);
@@ -458,5 +458,5 @@ function createComposition({formats = [], groups = []}) {
 }
 
 function getExportedGroups() {
-    return Object.keys(Groups).filter((name) => !Array.isArray(Groups[name])).map((name) => Groups[name]);
+    return Object.keys(Groups).filter((name) => !Array.isArray(Groups[name]) && typeof Groups[name] !== 'function').map((name) => Groups[name]);
 }
