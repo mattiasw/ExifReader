@@ -58,7 +58,7 @@ export const EXIF_DEPENDENCY_TAGS = {
     xmp: ['ApplicationNotes'],
     icc: ['ICC_Profile'],
     photoshop: ['ImageSourceData', 'PhotoshopSettings'],
-    makerNotes: ['MakerNote', 'Make'],
+    makerNotes: ['MakerNote', 'Make', 'Model'],
     gps: [
         'GPSLatitude',
         'GPSLatitudeRef',

@@ -2,8 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-import {objectAssign, getByteString} from '../utils.js';
+import {objectAssign, getByteString, isThenable, setProperty, getTagKey} from '../utils.js';
+import {filterTagsForParse} from '../tag-filter.js';
 import TagNames0thIfd from '../tag-names-0th-ifd.js';
+import {GROUP_BRAND} from './brand.js';
+import {getEmbeddableMergeDescriptor, mergeMakerNoteGroups, readMakerNoteWithDecoders, getMakerNoteBlockFromExif} from './group-helpers.js';
 import {exif} from './groups/exif.js';
 import {composedIptc as iptcGroup} from './groups/iptc.js';
 import {xmp as xmpGroup} from './groups/xmp.js';
@@ -26,6 +29,7 @@ import {
     PhotoshopSettings,
     MakerNote,
     Make,
+    Model,
     GPSLatitude,
     GPSLatitudeRef,
     GPSLongitude,
@@ -53,9 +57,9 @@ export const xmp = /* #__PURE__ */ withAdditions(xmpGroup, {
 });
 export const icc = /* #__PURE__ */ withAdditions(iccGroup, {exifDependencies: [ICC_Profile]});
 export const photoshop = /* #__PURE__ */ withAdditions(photoshopGroup, {exifDependencies: [ImageSourceData, PhotoshopSettings]});
-export const canon = /* #__PURE__ */ withAdditions(canonGroup, {exifDependencies: [MakerNote, Make]});
-export const pentax = /* #__PURE__ */ withAdditions(pentaxGroup, {exifDependencies: [MakerNote, Make]});
-export const makerNotes = /* #__PURE__ */ withAdditions(makerNotesGroup, {exifDependencies: [MakerNote, Make]});
+export const canon = /* #__PURE__ */ withAdditions(canonGroup, {exifDependencies: [MakerNote, Make, Model]});
+export const pentax = /* #__PURE__ */ withAdditions(pentaxGroup, {exifDependencies: [MakerNote, Make, Model]});
+export const makerNotes = /* #__PURE__ */ withAdditions(makerNotesGroup, {exifDependencies: [MakerNote, Make, Model]});
 export const gps = /* #__PURE__ */ withAdditions(gpsGroup, {
     exifDependencies: [GPSLatitude, GPSLatitudeRef, GPSLongitude, GPSLongitudeRef, GPSAltitude, GPSAltitudeRef],
 });
@@ -82,6 +86,149 @@ export {exif};
 // Without canon and pentax, since makerNotes is their union: leaving makerNotes
 // out of this list leaves out every maker note.
 export const allGroups = [exif, iptc, xmp, icc, photoshop, mpf, makerNotes, gps, composite, thumbnail];
+
+const DECODER_DEFINITION_MESSAGE = 'createMakerNoteDecoder: takes {matches, read}, two functions';
+
+/**
+ * Makes a maker note decoder to pass in `groups`. Decoders made here are tried
+ * before canon and pentax, in the order of `groups`, and the first whose
+ * `matches` returns true reads the maker note into `makerNotes`.
+ *
+ * @param {{matches: function({make, model, bytes}): boolean, read: function({tiffView, tiffHeaderOffset, makerNoteOffset, byteOrder, context}): (object|Promise<object>)}} definition
+ *     Both functions are read once, here, and called without a `this`. A
+ *     `matches` that throws counts as no match. `read` returns the tags
+ *     (`{Name: {value, description}}`) or a Promise of them; each tag keeps
+ *     `value`, `description`, a numeric `id` and `computed`.
+ * @returns {object} The decoder, a group value.
+ * @throws {TypeError} When `definition` is not an object holding the two
+ *     functions and nothing else.
+ */
+export function createMakerNoteDecoder(definition) {
+    if (typeof definition !== 'object' || definition === null) {
+        throw new TypeError(DECODER_DEFINITION_MESSAGE);
+    }
+    const matches = definition.matches;
+    const read = definition.read;
+    if (typeof matches !== 'function' || typeof read !== 'function') {
+        throw new TypeError(DECODER_DEFINITION_MESSAGE);
+    }
+    assertDecoderDefinitionKeys(definition);
+
+    const group = {
+        key: 'makerNotes',
+        consumes: ['makerNote'],
+        emits: [],
+        decoders: [{
+            matches: (input) => matchesWithoutThrowing(matches, input),
+            read: (input) => readCallerTags(read, input),
+        }],
+        read: (block, ctx) => readMakerNoteWithDecoders(block, ctx, group.decoders),
+        merge: (block) => getEmbeddableMergeDescriptor(block, 'makerNotes', 'carriedMakerNotes'),
+        combine: mergeMakerNoteGroups,
+        fromExif: getMakerNoteBlockFromExif,
+        exifDependencies: [MakerNote, Make, Model],
+        brand: GROUP_BRAND,
+    };
+    return group;
+}
+
+function assertDecoderDefinitionKeys(definition) {
+    for (const key in definition) {
+        if (key !== 'matches' && key !== 'read') {
+            throw new TypeError('createMakerNoteDecoder: unknown key \'' + key + '\': the keys are matches and read');
+        }
+    }
+}
+
+function matchesWithoutThrowing(matches, input) {
+    try {
+        return matches({make: input.make, model: input.model, bytes: getMakerNoteBytes(input.bytes)}) === true;
+    } catch (error) {
+        return false;
+    }
+}
+
+// The Exif reader gives a one-value tag as the value alone and the bytes of a
+// MakerNote stored as SBYTE as numbers from -128, and a MakerNote stored with
+// another type can hold other values.
+function getMakerNoteBytes(value) {
+    if (!Array.isArray(value)) {
+        return isByteValue(value) ? [getUnsignedByte(value)] : [];
+    }
+    let hasSignedByte = false;
+    for (let i = 0; i < value.length; i++) {
+        if (!isByteValue(value[i])) {
+            return [];
+        }
+        hasSignedByte = hasSignedByte || value[i] < 0;
+    }
+    return hasSignedByte ? value.map(getUnsignedByte) : value;
+}
+
+function isByteValue(value) {
+    return typeof value === 'number' && value >= -128 && value <= 255 && Math.floor(value) === value;
+}
+
+function getUnsignedByte(value) {
+    return value < 0 ? value + 256 : value;
+}
+
+// The caller's read gets a context without the engine context, so it cannot
+// reach the shared value budget or the tag filter.
+function readCallerTags(read, input) {
+    const engineContext = input.context.engineContext;
+    const result = read({
+        tiffView: input.tiffView,
+        tiffHeaderOffset: input.tiffHeaderOffset,
+        makerNoteOffset: input.makerNoteOffset,
+        byteOrder: input.byteOrder,
+        context: {includeUnknown: input.context.includeUnknown, computed: input.context.computed},
+    });
+    if (isThenable(result)) {
+        return Promise.resolve(result).then((resolvedResult) => getCallerTags(resolvedResult, engineContext));
+    }
+    return getCallerTags(result, engineContext);
+}
+
+function getCallerTags(result, engineContext) {
+    return filterTagsForParse('makerNotes', copyCallerTags(result), engineContext.tagFilter);
+}
+
+// Each entry is rebuilt from fields read once, so a getter or a Proxy in the
+// caller's result cannot throw or change later, in the merge or the filters.
+function copyCallerTags(result) {
+    if (!isTagObject(result)) {
+        return undefined;
+    }
+    const tags = {};
+    const names = Object.keys(result);
+    for (let i = 0; i < names.length; i++) {
+        const entry = result[names[i]];
+        if (isTagObject(entry)) {
+            setProperty(tags, getTagKey(names[i]), copyCallerTag(entry));
+        }
+    }
+    return tags;
+}
+
+function isTagObject(value) {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function copyCallerTag(entry) {
+    const value = entry.value;
+    const description = entry.description;
+    const id = entry.id;
+    const computed = entry.computed;
+    const tag = {value, description};
+    if (typeof id === 'number') {
+        tag.id = id;
+    }
+    if (computed !== undefined) {
+        tag.computed = computed;
+    }
+    return tag;
+}
 
 function withAdditions(group, additions) {
     return objectAssign({}, group, additions);
