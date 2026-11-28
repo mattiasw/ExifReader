@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.57.0] - 2026-11-28
+
 ### Added
 
 - Maker note decoders of your own for the composable API:
@@ -2629,7 +2631,8 @@ in the browser.
 - Parse Exif tags from JPEG files using the FileReader API.
 - Text descriptions for the 0th IFD, Exif IFD, and GPS IFD tags.
 
-[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.56.0...HEAD
+[Unreleased]: https://github.com/mattiasw/ExifReader/compare/v4.57.0...HEAD
+[4.57.0]: https://github.com/mattiasw/ExifReader/compare/v4.56.0...v4.57.0
 [4.56.0]: https://github.com/mattiasw/ExifReader/compare/v4.55.1...v4.56.0
 [4.55.1]: https://github.com/mattiasw/ExifReader/compare/v4.55.0...v4.55.1
 [4.55.0]: https://github.com/mattiasw/ExifReader/compare/v4.54.0...v4.55.0
